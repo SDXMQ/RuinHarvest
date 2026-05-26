@@ -24,11 +24,15 @@ class CombatSystem:
     def __init__(self):
         self.hit_effects = []   # [(x, y, timer)]
         self.damage_numbers = []  # [(x, y, damage, timer, color)]
+        self.tracers = []       # [{"start": (x,y), "end": (x,y), "color": (r,g,b), "timer": t, "max_timer": t}]
 
     def update(self, dt):
         self.hit_effects = [(x, y, t - dt) for x, y, t in self.hit_effects if t > 0]
         self.damage_numbers = [(x, y - dt * 30, d, t - dt, c)
                                for x, y, d, t, c in self.damage_numbers if t > 0]
+        for tr in self.tracers:
+            tr["timer"] -= dt
+        self.tracers = [tr for tr in self.tracers if tr["timer"] > 0]
 
     def player_attack(self, player, entity_manager, world, camera=None):
         """플레이어 공격 (camera 필요: 마우스→월드 좌표 변환)"""
@@ -108,8 +112,11 @@ class CombatSystem:
                     if angle_diff(t_angle, attack_angle) <= RANGED_ARC:
                         valid.append(z)
 
+                start_x, start_y = center_x, center_y
                 if valid:
                     target = min(valid, key=lambda z: distance(z.x + 0.5, z.y + 0.5, center_x, center_y))
+                    end_x, end_y = target.x + 0.5, target.y + 0.5
+                    
                     actual_damage = damage + random.randint(-3, 5)
                     kb_dir = direction_to(center_x, center_y, target.x, target.y)
                     target.take_damage(actual_damage, kb_dir)
@@ -121,6 +128,17 @@ class CombatSystem:
                     if target.is_dead:
                         player.killed_zombies += 1
                         results.append(("kill", target, 0))
+                else:
+                    end_x = center_x + math.cos(attack_angle) * attack_range
+                    end_y = center_y + math.sin(attack_angle) * attack_range
+
+                self.tracers.append({
+                    "start": (start_x, start_y),
+                    "end": (end_x, end_y),
+                    "color": (255, 220, 100),
+                    "timer": 0.2,
+                    "max_timer": 0.2
+                })
 
         attack_speed = weapon_data.get("attack_speed", 0.5)
         player.attack_cooldown.set_cooldown("attack", attack_speed)
@@ -152,14 +170,37 @@ class CombatSystem:
                     if player.moving:
                         miss_chance += 0.15
                         
+                    start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
+                    tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
+
                     if random.random() < miss_chance:
                         # 빗나감 표시
                         self.damage_numbers.append(
                             (player.x, player.y - 0.7, "Miss", 1.0, (200, 200, 200))
                         )
                         results.append(("player_miss", zombie, 0))
+                        
+                        end_x = player.x + 0.5 + random.uniform(-1.5, 1.5)
+                        end_y = player.y + 0.5 + random.uniform(-1.5, 1.5)
+                        self.tracers.append({
+                            "start": (start_x, start_y),
+                            "end": (end_x, end_y),
+                            "color": tracer_color,
+                            "timer": 0.2,
+                            "max_timer": 0.2
+                        })
                         continue
                     
+                    # 명중
+                    end_x, end_y = player.x + 0.5, player.y + 0.5
+                    self.tracers.append({
+                        "start": (start_x, start_y),
+                        "end": (end_x, end_y),
+                        "color": tracer_color,
+                        "timer": 0.2,
+                        "max_timer": 0.2
+                    })
+
                     # 거리 비례 대미지 감쇄 (지수 감쇄 공식)
                     base_damage = zombie.damage
                     actual_damage = base_damage * math.exp(-0.04 * dist)
@@ -194,11 +235,34 @@ class CombatSystem:
                 zombie.do_attack()
                 is_pmc = getattr(zombie, 'faction', 'scav') == "pmc"
                 miss_chance = 0.15 if is_pmc else 0.30
+                
+                start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
+                tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
+
                 if random.random() < miss_chance:
                     self.damage_numbers.append(
                         (target.x, target.y - 0.7, "Miss", 1.0, (200, 200, 200))
                     )
+                    end_x = target.x + 0.5 + random.uniform(-1.5, 1.5)
+                    end_y = target.y + 0.5 + random.uniform(-1.5, 1.5)
+                    self.tracers.append({
+                        "start": (start_x, start_y),
+                        "end": (end_x, end_y),
+                        "color": tracer_color,
+                        "timer": 0.2,
+                        "max_timer": 0.2
+                    })
                     continue
+                
+                end_x, end_y = target.x + 0.5, target.y + 0.5
+                self.tracers.append({
+                    "start": (start_x, start_y),
+                    "end": (end_x, end_y),
+                    "color": tracer_color,
+                    "timer": 0.2,
+                    "max_timer": 0.2
+                })
+
                 base_damage = zombie.damage
                 actual_damage = base_damage * math.exp(-0.04 * d)
                 actual_damage = max(1.0, actual_damage)

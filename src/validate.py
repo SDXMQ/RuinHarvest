@@ -58,7 +58,7 @@ print("\n[2] 다국어 시스템")
 def test_i18n():
     from i18n import t, set_language, get_language, get_available_languages
     assert get_language() == "ko"
-    assert t("game_title") == "30일간의 생존"
+    assert t("game_title") == "RuinHarvest"
     set_language("en")
     assert t("game_title") == "30 Days to Survive"
     set_language("ko")
@@ -233,6 +233,168 @@ def test_tactical_ai_helpers():
     fx, fy = z._calculate_flank_pos(6, 6, world)
     assert fx is not None and fy is not None
 check("전술 AI 엄폐/우회 알고리즘", test_tactical_ai_helpers)
+
+# 11. 총기 궤적 및 AI 조준선 시각화 시스템 검증
+print("\n[11] 총기 궤적 및 AI 조준선 검증")
+def test_combat_tracers_and_aiming():
+    from combat import CombatSystem
+    from entities import Zombie, EntityManager
+    from player import Player
+    
+    # 1. 궤적 초기화 및 등록 테스트
+    cs = CombatSystem()
+    assert len(cs.tracers) == 0
+    
+    # 궤적 추가
+    cs.tracers.append({
+        "start": (0, 0),
+        "end": (10, 10),
+        "color": (255, 220, 100),
+        "timer": 0.2,
+        "max_timer": 0.2
+    })
+    assert len(cs.tracers) == 1
+    
+    # 업데이트 타이머 소모 검증
+    cs.update(0.1)
+    assert len(cs.tracers) == 1
+    assert abs(cs.tracers[0]["timer"] - 0.1) < 0.001
+    
+    # 타이머 만료 후 제거 검증
+    cs.update(0.15)
+    assert len(cs.tracers) == 0
+    
+    # 2. AI 조준 대상 인지 검증 (entity_manager 전달 확인)
+    em = EntityManager()
+    p = Player(0, 0)
+    scav = Zombie(2, 2, "normal")
+    pmc = Zombie(4, 4, "tank")
+    
+    em.zombies.extend([scav, pmc])
+    
+    # 팩션 확인
+    assert scav.faction == "scav"
+    assert pmc.faction == "pmc"
+    
+    class DummyWorld:
+        def is_walkable(self, x, y):
+            return True
+        def get_biome(self, x, y):
+            return "도시"
+            
+    world = DummyWorld()
+    
+    # zombie.update 호출 시 entity_manager가 잘 넘어가서 적대 팩션 타겟을 인지하는지 확인
+    # pmc가 2타일 거리의 scav를 탐지해야 함
+    pmc.ai_timer = 0.2  # AI 의사결정이 즉시 이루어지도록 타이머 조절
+    pmc.update(0.1, p.x, p.y, world, player_crouching=False, entity_manager=em)
+    assert pmc.target is not None
+
+check("총기 궤적 및 AI 조준선 시스템", test_combat_tracers_and_aiming)
+
+# 12. 건물 내부 시스템 리팩토링 검증 (OOP)
+print("\n[12] 건물 내부 시스템 리팩토링 검증 (OOP)")
+def test_interior_system_refactoring():
+    import os
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    import pygame
+    pygame.init()
+    
+    from main import Game
+    g = Game()
+    assert g.interior_system is not None
+    assert g.current_interior is None
+    assert g.interior_system.current_interior is None
+    
+    # 프로퍼티 위임 쓰기/읽기 테스트
+    g.current_interior = "TestInteriorValue"
+    assert g.interior_system.current_interior == "TestInteriorValue"
+    assert g.current_interior == "TestInteriorValue"
+
+check("건물 내부 시스템 OOP 위임", test_interior_system_refactoring)
+
+# 13. 4차 편의성 및 지도 확장 검증
+print("\n[13] 4차 편의성 및 지도 확장 검증")
+def test_convenience_and_map():
+    from main import Game, GameState
+    import pygame
+    
+    # 1. 인벤토리 단축키 B 및 M 지도 토글 테스트
+    g = Game()
+    g.state = GameState.PLAYING
+    assert g.inventory_ui.visible == False
+    assert g.map_visible == False
+    
+    # B키 누름 시뮬레이션
+    event_b = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_b)
+    g._process_global_inputs(event_b)
+    assert g.inventory_ui.visible == True
+
+    # 1.5 은신처 로비에서 ESC 누름 시 포즈 화면(pause_game) 리턴 테스트
+    from player import Player
+    p = Player(0, 0)
+    class DummyEventSystem:
+        def add_log(self, text):
+            pass
+    p.event_system = DummyEventSystem()
+    event_esc = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_ESCAPE)
+    res_esc = g.hideout_ui.handle_event(event_esc, p)
+    assert res_esc == "pause_game"
+    
+    # M키 누름 시뮬레이션
+    event_m = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_m)
+    g._process_global_inputs(event_m)
+    # M키를 누르면 인벤토리가 닫히고 지도가 켜져야 함
+    assert g.inventory_ui.visible == False
+    assert g.map_visible == True
+    
+    # 2. 상인 클릭 좌표 검증
+    # Stash 탭에 "생수" 1개 배치하여 상점에 판매
+    from player import Player
+    p = Player(0, 0)
+    class DummyEventSystem:
+        def add_log(self, text):
+            pass
+    p.event_system = DummyEventSystem()
+    p.rubles = 10000
+    p.stash.add_item("생수", 1)
+    
+    # sell 액션
+    g.hideout_ui.active_tab = "traders"
+    g.hideout_ui.trader_sub_tab = "sell"
+    g.hideout_ui.selected_shop_item = {
+        "name": "생수",
+        "price": 250,
+        "action": "sell",
+        "index": 0
+    }
+    # buy/sell 액션 좌표는 470 <= mx <= 730, 490 <= my <= 525
+    # mx = 500, my = 500 (클릭 좌표가 범위 내에 들어옴)
+    click_event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(500, 500))
+    g.hideout_ui.handle_event(click_event, p)
+    # 판매 처리 후 rubles가 증가하고 Stash 아이템이 비어있어야 함
+    assert p.rubles == 10250
+    assert len(p.stash.items) == 0
+
+    # 3. 전장의 안개 및 지도 직렬화 검증
+    # 플레이어가 (10, 10)에 위치할 때 탐색 범위 확인
+    p.x, p.y = 10.0, 10.0
+    
+    class DummyWorld:
+        def is_walkable(self, x, y):
+            return True
+    
+    p.update(0.1, DummyWorld()) # world를 전달하여 _handle_movement가 에러 나지 않게 함
+    assert (10, 10) in p.explored_tiles
+    assert (6, 6) not in p.explored_tiles # 반경 4를 벗어나므로 없어야 함
+    
+    # 직렬화 / 역직렬화
+    p_dict = p.to_dict()
+    p_loaded = Player.from_dict(p_dict)
+    assert (10, 10) in p_loaded.explored_tiles
+    assert (6, 6) not in p_loaded.explored_tiles
+
+check("4차 편의성 및 안개 지도 시스템", test_convenience_and_map)
 
 # 결과 요약
 print("\n" + "=" * 60)

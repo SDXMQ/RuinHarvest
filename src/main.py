@@ -44,6 +44,8 @@ from building_interior import BuildingInterior
 from i18n import t, set_language, get_language
 from flea_market import FleaMarket
 from ui.hideout_ui import HideoutUI
+from interior_system import InteriorSystem
+from ui.map_ui import MapUI
 
 
 # ============================================================
@@ -130,27 +132,25 @@ class Game:
         self.chunk_unload_timer = 0.0
         self.loading_progress = 0
 
-        # 건물 내부 상태
-        self.current_interior = None     # BuildingInterior 객체
-        self.interior_camera = None      # 내부용 카메라
-        self.interior_building_ref = None # 외부 건물 참조
-        self.interior_zombies = []       # 내부 은신형 좀비
-        self.explored_interiors = {}     # 건물_id -> BuildingInterior (delta 저장)
-        self.zombie_intrusion_timer = 0  # 야외 좀비 건물 침입 주기 타이머
-        self.window_vision = None        # 창문 시야 데이터 (None 또는 dict)
-        self.last_window_angle = None    # 창문의 마지막 유효 시야 각도
-        self.active_window_pos = None    # 현재 주시 중인 창문 위치 (x, y)
+        # 건물 내부 시스템 모듈화 (OOP 리팩토링)
+        self.interior_system = InteriorSystem(self)
 
         # 레이드 및 탈출 시스템 상태
         self.raid_time_left = 600.0   # 레이드 제한시간 (10분 = 600초)
         self.extract_timer = 0.0      # 탈출 대기 타이머
         self.extract_target = None    # 현재 서있는 탈출구 정보
+        self.map_visible = False
+        self.map_ui = None
+        self.prev_state = None
 
     def _create_window(self):
         """창 생성"""
         flags = pygame.RESIZABLE
         if self.game_settings.fullscreen:
-            flags = pygame.FULLSCREEN | pygame.SCALED
+            flags = pygame.FULLSCREEN
+            info = pygame.display.Info()
+            self.screen_w = info.current_w
+            self.screen_h = info.current_h
         self.screen = pygame.display.set_mode(
             (self.screen_w, self.screen_h), flags
         )
@@ -169,6 +169,7 @@ class Game:
         self.pause_ui = PauseUI(w, h)
         self.ending_ui = EndingUI(w, h)
         self.hideout_ui = HideoutUI(w, h, self.flea_market)
+        self.map_ui = MapUI(w, h)
 
     def _apply_resolution(self):
         """해상도 변경 적용"""
@@ -228,6 +229,7 @@ class Game:
         weather_var = world_settings.get("weather_variability", 1.0)
         self.weather_system = WeatherSystem(weather_var)
         self.event_system = EventSystem(self.difficulty)
+        self.player.event_system = self.event_system
         self.game_particles = ParticleSystem()
 
         self.current_day = 1
@@ -261,6 +263,7 @@ class Game:
 
         if GameSaveManager.deserialize_game(self, data):
             self.state = GameState.HIDEOUT
+            self.player.event_system = self.event_system
             self.event_system.add_log(t("log_game_loaded", self.current_day))
             return True
         return False
@@ -349,8 +352,9 @@ class Game:
                 if result == "apply":
                     self._apply_resolution()
                 elif result == "back":
+                    next_state = GameState.PAUSED if self.prev_state in (GameState.PLAYING, GameState.BUILDING_INTERIOR, GameState.HIDEOUT) else GameState.MAIN_MENU
                     self.transition.start("fade", 0.4,
-                        on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
+                        on_mid=lambda: setattr(self, 'state', next_state))
 
             elif self.state == GameState.HIDEOUT:
                 result = self.hideout_ui.handle_event(event, self.player)
@@ -383,6 +387,9 @@ class Game:
                 elif result == "main_menu":
                     self.transition.start("fade", 0.6,
                         on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
+                elif result == "pause_game":
+                    self.prev_state = GameState.HIDEOUT
+                    self.state = GameState.PAUSED
 
             elif self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
                 self._process_global_inputs(event)
@@ -390,7 +397,7 @@ class Game:
             elif self.state == GameState.PAUSED:
                 result = self.pause_ui.handle_event(event)
                 if result == "resume":
-                    self.state = GameState.PLAYING
+                    self.state = self.prev_state if self.prev_state else GameState.PLAYING
                 elif result == "save":
                     self.save_current_game()
                 elif result == "settings":
@@ -410,8 +417,8 @@ class Game:
         """게임플레이 중 이벤트"""
         # 인벤토리/크래프팅이 열려있으면 우선 처리
         if self.inventory_ui.visible:
-            # 단축키(I, ESC, C) 입력은 아래쪽 글로벌 단축키 처리로 통과시킴
-            if not (event.type == pygame.KEYDOWN and event.key in (pygame.K_i, pygame.K_ESCAPE, pygame.K_c)):
+            # 단축키(B, ESC, C, M) 입력은 아래쪽 글로벌 단축키 처리로 통과시킴
+            if not (event.type == pygame.KEYDOWN and event.key in (pygame.K_b, pygame.K_ESCAPE, pygame.K_c, pygame.K_m)):
                 result = self.inventory_ui.handle_event(event, self.player)
                 if result:
                     action, value = result
@@ -447,8 +454,8 @@ class Game:
                 return
 
         if self.crafting_ui.visible:
-            # 단축키(I, ESC, C) 입력은 아래쪽 글로벌 단축키 처리로 통과시킴
-            if not (event.type == pygame.KEYDOWN and event.key in (pygame.K_i, pygame.K_ESCAPE, pygame.K_c)):
+            # 단축키(B, ESC, C, M) 입력은 아래쪽 글로벌 단축키 처리로 통과시킴
+            if not (event.type == pygame.KEYDOWN and event.key in (pygame.K_b, pygame.K_ESCAPE, pygame.K_c, pygame.K_m)):
                 result = self.crafting_ui.handle_event(event, self.player)
                 if result:
                     action, recipe_name = result
@@ -468,16 +475,28 @@ class Game:
                     self.inventory_ui.toggle()
                 elif self.crafting_ui.visible:
                     self.crafting_ui.toggle()
+                elif self.map_visible:
+                    self.map_visible = False
                 else:
+                    self.prev_state = self.state
                     self.state = GameState.PAUSED
-            elif event.key == pygame.K_i:
+            elif event.key == pygame.K_b:
                 self.inventory_ui.toggle()
                 if self.crafting_ui.visible:
                     self.crafting_ui.toggle()
+                self.map_visible = False
             elif event.key == pygame.K_c:
                 self.crafting_ui.toggle()
                 if self.inventory_ui.visible:
                     self.inventory_ui.toggle()
+                self.map_visible = False
+            elif event.key == pygame.K_m:
+                if self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
+                    self.map_visible = not self.map_visible
+                    if self.inventory_ui.visible:
+                        self.inventory_ui.toggle()
+                    if self.crafting_ui.visible:
+                        self.crafting_ui.toggle()
             elif event.key == pygame.K_e:
                 if self.state == GameState.BUILDING_INTERIOR:
                     self.interaction_handler.handle_interior_interaction()
@@ -550,185 +569,14 @@ class Game:
     # ============================================================
     def _enter_building(self, building):
         """건물 내부로 진입"""
-        building_id = f"{building.x}_{building.y}"
-
-        # 이미 탐색한 건물이면 기존 내부 복원
-        if building_id in self.explored_interiors:
-            self.current_interior = self.explored_interiors[building_id]
-        else:
-            self.current_interior = BuildingInterior(
-                building.building_type,
-                building.width, building.height,
-                seed=hash(building_id) + (self.world.seed if self.world else 0)
-            )
-            self.explored_interiors[building_id] = self.current_interior
-
-        self.interior_building_ref = building
-        self.player.enter_interior(float(self.current_interior.door_pos[0]), float(self.current_interior.door_pos[1] - 1))
-
-        # 내부 카메라
-        self.interior_camera = Camera()
-        self.interior_camera.resize(self.screen_w, self.screen_h)
-
-        # 내부 좀비 (type과 hp를 복원)
-        self.interior_zombies = []
-        for zdata in self.current_interior.zombies:
-            z_type = zdata.get("type", "normal")
-            z = Zombie(zdata["x"], zdata["y"], z_type, self.difficulty)
-            z.speed *= 0.5  # 은신형 좀비는 느림
-            z.detection_range = 3
-            if "hp" in zdata:
-                z.hp = zdata["hp"]
-            self.interior_zombies.append(z)
-
-        # 야외 chase 상태 좀비가 건물 안으로 따라옴
-        MAX_INTERIOR_ZOMBIES = 8
-        if self.entity_manager:
-            door_x, door_y = building.door_x, building.door_y
-            nearby_outdoor = self.entity_manager.get_nearby_zombies(door_x, door_y, 8)
-            for oz in nearby_outdoor:
-                if len(self.interior_zombies) >= MAX_INTERIOR_ZOMBIES:
-                    break
-                if oz.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT):
-                    # 내부 문 근처에 스폰
-                    ix = float(self.current_interior.door_pos[0])
-                    iy = float(self.current_interior.door_pos[1] - 2)
-                    iz = Zombie(ix, iy, oz.zombie_type, self.difficulty)
-                    iz.hp = oz.hp
-                    iz.state = ZombieState.ENGAGE
-                    self.interior_zombies.append(iz)
-                    oz.active = False  # 야외에서 제거
-            if len(self.interior_zombies) > len(self.current_interior.zombies):
-                self.event_system.add_log(t("zombie_followed"))
-
-        self.zombie_intrusion_timer = 0
-
-        if not building.explored:
-            building.explored = True
-            self.player.buildings_explored += 1
-
-        SoundGenerator.play("door_open")
-        self.event_system.add_log(t("entering_building"))
-
-        self.transition.start("fade", 0.5,
-            on_mid=lambda: setattr(self, 'state', GameState.BUILDING_INTERIOR))
+        self.interior_system.enter_building(building)
 
     def _exit_building(self):
         """건물에서 나가기"""
-        b = self.interior_building_ref
-        followed_zombies = []
-        remaining_interior_zombies = []
-
-        for z in self.interior_zombies:
-            if not z.is_dead and z.active:
-                if z.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT) and b:
-                    followed_zombies.append(z)
-                else:
-                    remaining_interior_zombies.append(z)
-
-        # 살아있는 좀비만 건물 내부 상태에 동기화
-        if self.current_interior is not None:
-            self.current_interior.zombies = [
-                {"x": z.x, "y": z.y, "hp": z.hp, "type": z.zombie_type}
-                for z in remaining_interior_zombies
-            ]
-        self.player.exit_interior()
-        self.current_interior = None
-        self.interior_building_ref = None
-        self.interior_zombies = []
-
-        # 야외에 따라 나온 좀비 추가
-        if b and self.entity_manager and followed_zombies:
-            for fz in followed_zombies:
-                spawn_x = float(b.door_x) + random.uniform(-0.5, 0.5)
-                spawn_y = float(b.door_y) + 1.2
-                oz = Zombie(spawn_x, spawn_y, fz.zombie_type, self.difficulty)
-                oz.hp = fz.hp
-                oz.state = ZombieState.ENGAGE
-                self.entity_manager.zombies.append(oz)
-            self.event_system.add_log(t("zombie_followed_outside"))
-
-        SoundGenerator.play("door_open")
-        self.event_system.add_log(t("exiting_building"))
-
-        self.transition.start("fade", 0.5,
-            on_mid=lambda: setattr(self, 'state', GameState.PLAYING))
+        self.interior_system.exit_building()
 
     def _handle_interior_attack(self):
-        if not self.player.attack_cooldown.is_ready("attack"):
-            return
-
-        weapon = self.player.equipped.get("weapon")
-        weapon_data = ITEM_DATABASE.get(weapon, {}) if weapon else {}
-        weapon_type = weapon_data.get("type", "melee")
-        speed = weapon_data.get("speed", 1.0)
-        self.player.attack_cooldown.set_cooldown("attack", speed)
-
-        damage = self.player.get_attack_damage()
-        attack_range = self.player.get_attack_range()
-
-        mouse_sx, mouse_sy = pygame.mouse.get_pos()
-        mouse_wx, mouse_wy = self.interior_camera.screen_to_world(mouse_sx, mouse_sy)
-
-        px, py = self.player.x, self.player.y
-        attack_angle = math.atan2(mouse_wy - py, mouse_wx - px)
-        
-        hit_zombies = []
-        from combat import angle_diff
-
-        if weapon_type == "melee":
-            for z in self.interior_zombies:
-                if z.is_dead or not z.active: continue
-                dist = math.sqrt((z.x - px)**2 + (z.y - py)**2)
-                if dist <= attack_range:
-                    angle_to_target = math.atan2(z.y - py, z.x - px)
-                    if abs(angle_diff(attack_angle, angle_to_target)) <= math.pi / 6:
-                        hit_zombies.append(z)
-        else:
-            closest_z = None
-            min_dist = 999
-            for z in self.interior_zombies:
-                if z.is_dead or not z.active: continue
-                dist = math.sqrt((z.x - px)**2 + (z.y - py)**2)
-                if dist <= attack_range:
-                    angle_to_target = math.atan2(z.y - py, z.x - px)
-                    if abs(angle_diff(attack_angle, angle_to_target)) <= math.pi / 12:
-                        if dist < min_dist:
-                            min_dist = dist
-                            closest_z = z
-            if closest_z:
-                hit_zombies.append(closest_z)
-
-        if weapon_type == "melee":
-            SoundGenerator.play("melee_swing")
-            self.player.stamina = max(0, self.player.stamina - 5)
-        else:
-            SoundGenerator.play("gunshot")
-            self._trigger_gunshot_noise(px, py, True)
-
-        for z in hit_zombies:
-            z.take_damage(damage)
-            actual_damage = damage
-            self.combat_system.damage_numbers.append((z.x, z.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
-            if weapon_type == "melee":
-                SoundGenerator.play("hit_melee")
-                self.interior_camera.shake(3, 0.15)
-            self.game_particles.emit(lambda: ParticleEmitters.blood(z.x * TILE_SIZE, z.y * TILE_SIZE))
-            
-            kb_dist = 1.0 if weapon_type == "melee" else 0.5
-            angle = math.atan2(z.y - py, z.x - px)
-            z.x += math.cos(angle) * kb_dist
-            z.y += math.sin(angle) * kb_dist
-            
-            if z.is_dead:
-                self.player.killed_zombies += 1
-                self.event_system.add_log(t("zombie_killed"))
-                # 건물 내부 좀비 전리품 드롭 (내부 바닥에)
-                loot = z.get_loot() if hasattr(z, 'get_loot') else []
-                for item_name in loot:
-                    if self.current_interior:
-                        self.current_interior.drop_item(item_name, z.x, z.y)
-                    self.event_system.add_log(f"  [{item_name}] 드롭!")
+        self.interior_system.handle_interior_attack()
 
 
     def _update(self, dt):
@@ -807,115 +655,7 @@ class Game:
 
         # 엔티티 (외부 vs 내부)
         if is_interior:
-            for z in self.interior_zombies:
-                if not z.is_dead and z.active:
-                    z.update(dt, self.player.x, self.player.y, current_world, self.player.is_crouching)
-                    if z.state == ZombieState.ENGAGE and z.can_attack():
-                        damage = z.do_attack()
-                        actual = self.player.take_damage(damage, t("stealth_zombie"))
-                        if actual > 0:
-                            self.combat_system.damage_numbers.append((self.player.x, self.player.y - 0.5, actual, 1.0, (255, 60, 60)))
-                            self.event_system.add_log(t("log_stealth_zombie_damage", int(actual)))
-                            if self.camera: self.camera.shake(3, 0.2)
-                            self.interior_camera.shake(3, 0.2)
-
-            # 야외 좀비 주기적 건물 침입 (3초 주기)
-            MAX_INTERIOR_ZOMBIES = 8
-            self.zombie_intrusion_timer += dt
-            if self.zombie_intrusion_timer >= 3.0 and self.interior_building_ref and self.entity_manager:
-                self.zombie_intrusion_timer = 0
-                bref = self.interior_building_ref
-                door_x, door_y = bref.door_x, bref.door_y
-                nearby = self.entity_manager.get_nearby_zombies(door_x, door_y, 5)
-                for oz in nearby:
-                    if len(self.interior_zombies) >= MAX_INTERIOR_ZOMBIES:
-                        break
-                    if oz.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT):
-                        ix = float(self.current_interior.door_pos[0])
-                        iy = float(self.current_interior.door_pos[1] - 2)
-                        iz = Zombie(ix, iy, oz.zombie_type, self.difficulty)
-                        iz.hp = oz.hp
-                        iz.state = ZombieState.ENGAGE
-                        self.interior_zombies.append(iz)
-                        oz.active = False
-                        self.event_system.add_log(t("zombie_intrusion"))
-                        SoundGenerator.play("zombie_die")  # 문 두드리는 효과음
-                        if self.interior_camera:
-                            self.interior_camera.shake(5, 0.3)
-
-            # 창문 시야 계산
-            self.window_vision = None
-            if self.current_interior and self.interior_building_ref:
-                win = self.current_interior.get_nearby_window(self.player.x, self.player.y, 1.5)
-                if win:
-                    bref = self.interior_building_ref
-                    # 창문 위치를 외부 월드 좌표로 변환
-                    # 내부 좌표 비율 계산: 내부 타일 / 내부 전체 크기 * 외부 크기
-                    ratio_x = win["x"] / max(1, self.current_interior.width)
-                    ratio_y = win["y"] / max(1, self.current_interior.height)
-                    world_x = bref.x + ratio_x * bref.width
-                    world_y = bref.y + ratio_y * bref.height
-                    # 창문 기본 방향
-                    base_angle = math.atan2(win["dir_y"], win["dir_x"])
-                    
-                    # 현재 바라보는 창문 상태 업데이트 및 각도 초기화
-                    win_pos = (win["x"], win["y"])
-                    if self.active_window_pos != win_pos:
-                        self.active_window_pos = win_pos
-                        self.last_window_angle = base_angle
-
-                    # 마우스 방향으로 시야 각도 계산 (60도 밖으로 나가면 마지막 각도로 고정)
-                    import pygame
-                    mouse_sx, mouse_sy = pygame.mouse.get_pos()
-                    if self.interior_camera:
-                        mouse_wx, mouse_wy = self.interior_camera.screen_to_world(mouse_sx, mouse_sy)
-                        mouse_angle = math.atan2(mouse_wy - win["y"], mouse_wx - win["x"])
-                        
-                        max_diff = math.pi / 3  # 60도
-                        diff = (mouse_angle - base_angle + math.pi) % (2 * math.pi) - math.pi
-                        if abs(diff) <= max_diff:
-                            self.last_window_angle = mouse_angle
-                        
-                        final_angle = self.last_window_angle if self.last_window_angle is not None else base_angle
-                    else:
-                        final_angle = base_angle
-                        
-                    view_dir_x = math.cos(final_angle)
-                    view_dir_y = math.sin(final_angle)
-
-                    # 창문 방향으로 8타일 시야
-                    vision_range = 8
-                    look_x = world_x + view_dir_x * vision_range * 0.5
-                    look_y = world_y + view_dir_y * vision_range * 0.5
-                    
-                    # 시야 범위 내 야외 좀비 조회
-                    visible_zombies = []
-                    if self.entity_manager:
-                        outdoor_z = self.entity_manager.get_nearby_zombies(look_x, look_y, vision_range)
-                        for oz in outdoor_z:
-                            # 부채꼴 60도 필터
-                            dx = oz.x - world_x
-                            dy = oz.y - world_y
-                            angle_to = math.atan2(dy, dx)
-                            z_diff = abs((angle_to - final_angle + math.pi) % (2 * math.pi) - math.pi)
-                            if z_diff <= math.pi / 6:  # 30도 반경 = 60도 부채꼴
-                                visible_zombies.append({"x": oz.x, "y": oz.y, "type": oz.zombie_type, "state": oz.state})
-
-                    self.window_vision = {
-                        "win": win,
-                        "world_x": world_x,
-                        "world_y": world_y,
-                        "dir_x": view_dir_x,
-                        "dir_y": view_dir_y,
-                        "range": vision_range,
-                        "zombies": visible_zombies,
-                    }
-                else:
-                    self.active_window_pos = None
-                    self.last_window_angle = None
-            else:
-                self.active_window_pos = None
-                self.last_window_angle = None
+            self.interior_system.update(dt, current_world)
         else:
             self.entity_manager.update(dt, self.player, self.world)
             combat_results = self.combat_system.process_zombie_attacks(self.player, self.entity_manager, self.world)
@@ -1064,7 +804,9 @@ class Game:
             self._draw_interior_gameplay()
 
         elif self.state == GameState.PAUSED:
-            if self.current_interior:
+            if self.prev_state == GameState.HIDEOUT:
+                self.hideout_ui.draw(self.screen, self.player)
+            elif self.current_interior:
                 self._draw_interior_gameplay()
             else:
                 self._draw_gameplay()
@@ -1075,6 +817,10 @@ class Game:
 
         elif self.state == GameState.HIDEOUT:
             self.hideout_ui.draw(self.screen, self.player)
+
+        # 지도 오버레이 렌더링
+        if self.map_visible and self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
+            self.map_ui.draw(self.screen, self.player, self.world)
 
         # 전환 효과
         self.transition.draw(self.screen)
@@ -1222,6 +968,82 @@ class Game:
         if len(active_quests) > max_display:
             more_surf = font.render(f"...외 {len(active_quests) - max_display}개", True, (150, 150, 150))
             surface.blit(more_surf, (start_x, start_y + 18 + max_display * 16))
+
+
+    # ============================================================
+    # 건물 내부 위임 프로퍼티 (하위 호환성 유지용)
+    # ============================================================
+    @property
+    def current_interior(self):
+        return self.interior_system.current_interior
+
+    @current_interior.setter
+    def current_interior(self, value):
+        self.interior_system.current_interior = value
+
+    @property
+    def interior_camera(self):
+        return self.interior_system.interior_camera
+
+    @interior_camera.setter
+    def interior_camera(self, value):
+        self.interior_system.interior_camera = value
+
+    @property
+    def interior_building_ref(self):
+        return self.interior_system.interior_building_ref
+
+    @interior_building_ref.setter
+    def interior_building_ref(self, value):
+        self.interior_system.interior_building_ref = value
+
+    @property
+    def interior_zombies(self):
+        return self.interior_system.interior_zombies
+
+    @interior_zombies.setter
+    def interior_zombies(self, value):
+        self.interior_system.interior_zombies = value
+
+    @property
+    def explored_interiors(self):
+        return self.interior_system.explored_interiors
+
+    @explored_interiors.setter
+    def explored_interiors(self, value):
+        self.interior_system.explored_interiors = value
+
+    @property
+    def zombie_intrusion_timer(self):
+        return self.interior_system.zombie_intrusion_timer
+
+    @zombie_intrusion_timer.setter
+    def zombie_intrusion_timer(self, value):
+        self.interior_system.zombie_intrusion_timer = value
+
+    @property
+    def window_vision(self):
+        return self.interior_system.window_vision
+
+    @window_vision.setter
+    def window_vision(self, value):
+        self.interior_system.window_vision = value
+
+    @property
+    def last_window_angle(self):
+        return self.interior_system.last_window_angle
+
+    @last_window_angle.setter
+    def last_window_angle(self, value):
+        self.interior_system.last_window_angle = value
+
+    @property
+    def active_window_pos(self):
+        return self.interior_system.active_window_pos
+
+    @active_window_pos.setter
+    def active_window_pos(self, value):
+        self.interior_system.active_window_pos = value
 
 
 # ============================================================

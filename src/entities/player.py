@@ -84,6 +84,30 @@ class Player:
         self.stat_timer = 0.0  # 스탯 업데이트 주기 제한용 타이머
         self.damage_taken_this_frame = False  # 현재 프레임 피격 여부
 
+        # 상태이상
+        self.bleeding = False
+        self.broken_bone = False
+
+        # 버프 타이머
+        self.stamina_buff_timer = 0.0
+        self.aim_buff_timer = 0.0
+
+        # 장비 내구도 (100.0 기준)
+        self.equipped_durability = {
+            "head": 100.0,
+            "body": 100.0,
+            "feet": 100.0,
+            "weapon": 100.0,
+        }
+
+        # 보험 가입 여부
+        self.equipped_insured = {
+            "head": False,
+            "body": False,
+            "feet": False,
+            "weapon": False,
+        }
+
         # 퀘스트/진행 추적
         self.discovered_biomes = set()
         self.killed_zombies = 0
@@ -91,6 +115,8 @@ class Player:
         self.items_crafted = 0
         self.days_survived = 0
         self.raid_status = "NONE"  # NONE, IN_RAID, HIDEOUT
+        self.explored_tiles = set()  # set of (x, y)
+        self.event_system = None
 
     def enter_interior(self, ix, iy):
         """건물 내부 진입 시 좌표 전환"""
@@ -116,6 +142,12 @@ class Player:
 
         # 피격 프레임 플래그 초기화
         self.damage_taken_this_frame = False
+
+        # 버프 타이머 갱신
+        if self.stamina_buff_timer > 0:
+            self.stamina_buff_timer = max(0.0, self.stamina_buff_timer - dt)
+        if self.aim_buff_timer > 0:
+            self.aim_buff_timer = max(0.0, self.aim_buff_timer - dt)
 
         # 이동 처리
         self._handle_movement(dt, current_world)
@@ -149,6 +181,14 @@ class Player:
         # 발자국 타이머
         if self.moving:
             self.footstep_timer += dt
+
+        # 전장의 안개 갱신: 현재 타일 기준 반경 4타일 내
+        px, py = int(self.x), int(self.y)
+        radius = 4
+        for dy in range(-radius, radius + 1):
+            for dx in range(-radius, radius + 1):
+                if dx*dx + dy*dy <= radius*radius:
+                    self.explored_tiles.add((px + dx, py + dy))
 
         return result
 
@@ -198,6 +238,10 @@ class Player:
         current_speed = self.sprint_speed if self.is_sprinting else self.speed
         if self.is_crouching:
             current_speed *= 0.5  # 은신 시 50% 감속
+
+        # 골절(broken_bone) 상태 페널티
+        if self.broken_bone:
+            current_speed *= 0.5
 
         # 장비 보너스 (속도 및 가방 무게)
         if self.equipped.get("feet"):
@@ -260,28 +304,39 @@ class Player:
         self.hunger -= hunger_rate * dt
         self.thirst -= thirst_rate * dt
 
-        # 배고픔/갈증에 의한 체력 감소
+        # 출혈 상태이상 피해 (초당 4.0 피해)
+        if self.bleeding:
+            self.hp -= 4.0 * dt
+            self.stress += 2 * dt
+
+        # 배고픔/갈증 0 하한선 제한만 적용 (아사/탈수 사망은 제거됨)
         if self.hunger <= 0:
             self.hunger = 0
-            self.hp -= 2 * dt
-            self.stress += 3 * dt
-
         if self.thirst <= 0:
             self.thirst = 0
-            self.hp -= 3 * dt
-            self.stress += 4 * dt
 
         # 날씨 페널티 (야외에서 비/폭우/폭풍 노출 시)
         bad_weather = weather_type in ("비", "폭우", "폭풍") if weather_type else False
         is_outside = not self.is_interior
 
-        # 스태미나 자연 회복 (배고픔 연동)
+        # 스태미나 자연 회복 (배고픔/갈증 및 버프 연동)
         if not self.is_sprinting:
             recovery_rate = 10  # 기본 10/초
-            if self.hunger < PLAYER_MAX_HUNGER * 0.2:
-                recovery_rate *= 0.5  # 배고프면 회복 50% 감소
+            
+            # 스태미나 버프 활성화 시 회복 속도 2배
+            if self.stamina_buff_timer > 0:
+                recovery_rate *= 2.0
+            else:
+                # 허기 20% 이하 시 50% 감속 디버프
+                if self.hunger < PLAYER_MAX_HUNGER * 0.2:
+                    recovery_rate *= 0.5
+                # 갈증 20% 이하 시 50% 감속 디버프 (중첩 가능)
+                if self.thirst < PLAYER_MAX_THIRST * 0.2:
+                    recovery_rate *= 0.5
+                    
             if bad_weather and is_outside:
                 recovery_rate *= 0.5  # 악천후 야외 시 회복 50% 추가 감소
+                
             old_stamina = self.stamina
             self.stamina = min(PLAYER_MAX_STAMINA, self.stamina + recovery_rate * dt)
             recovered = self.stamina - old_stamina
@@ -320,13 +375,28 @@ class Player:
         # 방어력 적용
         defense = self.defense
         if self.equipped.get("body"):
-            data = ITEM_DATABASE.get(self.equipped["body"], {})
-            defense += data.get("defense", 0)
+            if self.equipped_durability.get("body", 100.0) > 0:
+                data = ITEM_DATABASE.get(self.equipped["body"], {})
+                defense += data.get("defense", 0)
+                # 방탄조끼 내구도 소모
+                self.equipped_durability["body"] = max(0.0, self.equipped_durability["body"] - amount * 0.2)
+        
+        if self.equipped.get("head"):
+            if self.equipped_durability.get("head", 100.0) > 0:
+                # 머리 장비 내구도 소모
+                self.equipped_durability["head"] = max(0.0, self.equipped_durability["head"] - amount * 0.1)
 
         actual_damage = max(1, amount * self.diff.get("damage_multiplier", 1.0) - defense * 0.5)
         self.hp -= actual_damage
         self.invincible_timer = 0.5
         self.damage_taken_this_frame = True
+
+        # 상태이상 판정 (피격 시 15% 출혈, 10% 골절)
+        import random
+        if random.random() < 0.15:
+            self.bleeding = True
+        if random.random() < 0.10:
+            self.broken_bone = True
 
         # 스트레스 증가
         self.stress += actual_damage * 0.3
@@ -344,8 +414,9 @@ class Player:
 
         data = ITEM_DATABASE.get(item_name, {})
         effects = data.get("effects", {})
+        category = data.get("category")
 
-        if not effects:
+        if not effects and item_name not in ("수류탄", "조명탄"):
             return False
 
         # 효과 적용
@@ -359,6 +430,21 @@ class Player:
             self.stress = max(0, self.stress + effects["stress"])
         if "stamina" in effects:
             self.stamina = min(PLAYER_MAX_STAMINA, self.stamina + effects["stamina"])
+
+        # 식료품 버프 활성화
+        from items import ItemCategory
+        if category in (ItemCategory.FOOD, ItemCategory.WATER):
+            self.stamina_buff_timer = 30.0
+            self.aim_buff_timer = 30.0
+
+        # 상태이상 치료
+        if item_name == "붕대":
+            self.bleeding = False
+        elif item_name in ("구급상자", "고급 치료킷"):
+            self.bleeding = False
+            self.broken_bone = False
+        elif item_name == "진통제":
+            self.broken_bone = False
 
         self.inventory.remove_item(item_name, 1)
         return True
@@ -465,12 +551,17 @@ class Player:
             "spent_money": dict(self.spent_money),
             "crafting": self.crafting.to_dict(),
             "equipped": dict(self.equipped),
+            "equipped_durability": dict(self.equipped_durability),
+            "equipped_insured": dict(self.equipped_insured),
+            "bleeding": self.bleeding,
+            "broken_bone": self.broken_bone,
             "killed_zombies": self.killed_zombies,
             "buildings_explored": self.buildings_explored,
             "items_crafted": self.items_crafted,
             "days_survived": self.days_survived,
             "discovered_biomes": list(self.discovered_biomes),
             "raid_status": self.raid_status,
+            "explored_tiles": [list(t) for t in self.explored_tiles],
         }
 
     @classmethod
@@ -493,10 +584,15 @@ class Player:
         p.spent_money = data.get("spent_money", {"prapor": 0, "therapist": 0, "fence": 0})
         p.crafting = CraftingSystem.from_dict(data.get("crafting", {}))
         p.equipped = data.get("equipped", {"head": None, "body": None, "feet": None, "weapon": None})
+        p.equipped_durability = data.get("equipped_durability", {"head": 100.0, "body": 100.0, "feet": 100.0, "weapon": 100.0})
+        p.equipped_insured = data.get("equipped_insured", {"head": False, "body": False, "feet": False, "weapon": False})
+        p.bleeding = data.get("bleeding", False)
+        p.broken_bone = data.get("broken_bone", False)
         p.killed_zombies = data.get("killed_zombies", 0)
         p.buildings_explored = data.get("buildings_explored", 0)
         p.items_crafted = data.get("items_crafted", 0)
         p.days_survived = data.get("days_survived", 0)
         p.discovered_biomes = set(data.get("discovered_biomes", []))
         p.raid_status = data.get("raid_status", "NONE")
+        p.explored_tiles = set(tuple(item) for item in data.get("explored_tiles", []))
         return p

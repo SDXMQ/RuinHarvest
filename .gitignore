@@ -186,3 +186,4 @@ src/core/saves/
 *.json.tmp
 *.json.bak
 game_settings.json
+next.txt

@@ -70,7 +70,7 @@ STRINGS = {
         "press_e_enter": "E: 건물 진입",
         "press_e_exit": "E: 나가기",
         "press_e_search": "E: 탐색",
-        "controls_hint": "E:상호작용  I:인벤토리  C:크래프팅  Tab:지도  ESC:메뉴",
+        "controls_hint": "E:상호작용  B:인벤토리  C:크래프팅  M:지도  ESC:메뉴",
 
         # 건물 내부
         "entering_building": "건물에 진입합니다...",
@@ -130,7 +130,7 @@ STRINGS = {
         "kills_label": "처치: {}",
         "stealth_mode": "◆ 은신 중 ◆",
         "weather_label": "날씨: {}",
-        "hud_controls_hint": "E:상호작용  I:인벤토리  C:크래프팅  Tab:지도  LCTRL:앉기  ESC:메뉴",
+        "hud_controls_hint": "E:상호작용  B:인벤토리  C:크래프팅  M:지도  LCTRL:앉기  ESC:메뉴",
         "click_to_main": "클릭하여 메인 메뉴로 돌아가기",
         "sandbox_mode": "🔧 샌드박스 모드 (모든 아이템 지급)",
         "world_name_default": "월드 1",
@@ -385,7 +385,7 @@ STRINGS = {
         "press_e_enter": "E: Enter",
         "press_e_exit": "E: Exit",
         "press_e_search": "E: Search",
-        "controls_hint": "E:Interact  I:Inventory  C:Craft  Tab:Map  ESC:Menu",
+        "controls_hint": "E:Interact  B:Inventory  C:Craft  M:Map  ESC:Menu",
 
         # Building Interior
         "entering_building": "Entering building...",
@@ -445,7 +445,7 @@ STRINGS = {
         "kills_label": "Kills: {}",
         "stealth_mode": "◆ Stealth ◆",
         "weather_label": "Weather: {}",
-        "hud_controls_hint": "E:Interact  I:Inventory  C:Craft  Tab:Map  LCTRL:Sneak  ESC:Menu",
+        "hud_controls_hint": "E:Interact  B:Inventory  C:Craft  M:Map  LCTRL:Sneak  ESC:Menu",
         "click_to_main": "Click to return to main menu",
         "sandbox_mode": "🔧 Sandbox Mode (All Items Granted)",
         "world_name_default": "World 1",

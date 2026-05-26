@@ -60,9 +60,23 @@ CRAFTING_RECIPES = {
     "함정": {
         "ingredients": {"고철": 3, "못": 5, "나무": 2},
         "result_count": 1,
-        "description": "좀비를 잡는 트랩.",
-        "category": "건축",
+        "description": "수제 함정 메커니즘. 투척용 무기 등의 제작 재료로 쓰인다.",
+        "category": "재료",
         "craft_time": 3.0,
+    },
+    "수류탄": {
+        "ingredients": {"함정": 1, "화약": 1},
+        "result_count": 1,
+        "description": "투척용 대인 파편 수류탄.",
+        "category": "무기",
+        "craft_time": 4.0,
+    },
+    "조명탄": {
+        "ingredients": {"약초": 1, "화약": 1, "천": 1},
+        "result_count": 1,
+        "description": "밤 시야를 밝히는 고광도 조명탄.",
+        "category": "도구",
+        "craft_time": 2.0,
     },
     "방탄조끼 수리": {
         "ingredients": {"천": 3, "고철": 2},

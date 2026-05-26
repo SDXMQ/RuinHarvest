@@ -620,7 +620,7 @@ class EntityManager:
         # 좀비 업데이트 (활성 상태만)
         for zombie in self.zombies:
             if zombie.active:
-                zombie.update(dt, player.x, player.y, world, player.is_crouching)
+                zombie.update(dt, player.x, player.y, world, player.is_crouching, self)
 
         # 비활성 좀비 제거
         self.zombies = [z for z in self.zombies if z.active]

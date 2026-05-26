@@ -44,7 +44,7 @@ class HUD:
         self._draw_stat_bars(surface, player)
         self._draw_time_info(surface, time_system, current_day, total_days, game)
         self._draw_weather_info(surface, weather_system)
-        self._draw_minimap(surface, player)
+        self._draw_minimap(surface, player, game.world if game else None)
         self._draw_notifications(surface)
         self._draw_equipped_weapon(surface, player)
         self._draw_quick_info(surface, player)
@@ -167,25 +167,84 @@ class HUD:
         weather_text = font.render(t("weather_label", t(weather_key)), True, Colors.UI_TEXT_DIM)
         surface.blit(weather_text, (px + 10, py))
 
-    def _draw_minimap(self, surface, player):
+    def _draw_minimap(self, surface, player, world=None):
         """미니맵 (우측 하단)"""
         size = 120
         mx = self.sw - size - 15
         my = self.sh - size - 15
 
-        # 미니맵 배경
-        minimap_surf = pygame.Surface((size, size), pygame.SRCALPHA)
-        pygame.draw.rect(minimap_surf, (20, 22, 30, 200), (0, 0, size, size), border_radius=6)
-        pygame.draw.rect(minimap_surf, (60, 65, 80, 150), (0, 0, size, size), 1, border_radius=6)
+        # 미니맵 서피스 생성
+        minimap_surf = pygame.Surface((size, size))
+        minimap_surf.fill((10, 12, 18))  # 기본 검은 안개색
+
+        # 플레이어 주변 타일 그리기 (1타일 = 4픽셀, 30x30 타일)
+        if player and world:
+            grid_size = 4
+            px, py = int(player.x), int(player.y)
+            start_wx = px - 15
+            start_wy = py - 15
+
+            for r in range(30):
+                wy = start_wy + r
+                cy = wy // 16
+                ly = wy % 16
+                for c in range(30):
+                    wx = start_wx + c
+                    cx = wx // 16
+                    lx = wx % 16
+
+                    # 탐색된 타일만 지형을 그림
+                    if (wx, wy) in player.explored_tiles:
+                        chunk_key = (cx, cy)
+                        tile_type = None
+                        if chunk_key in world.chunks:
+                            tile_type = world.chunks[chunk_key].get_tile(lx, ly)
+
+                        # 지형 타입별 색상 결정
+                        color = (35, 75, 40)  # 디폴트 풀밭
+                        if tile_type:
+                            from world.world import TileType
+                            if tile_type == TileType.ROAD:
+                                color = (70, 70, 75)
+                            elif tile_type == TileType.CONCRETE:
+                                color = (130, 130, 135)
+                            elif tile_type == TileType.WATER:
+                                color = (40, 90, 170)
+                            elif tile_type == TileType.SAND:
+                                color = (200, 180, 130)
+                            elif tile_type == TileType.DIRT:
+                                color = (120, 95, 65)
+                            elif tile_type in (TileType.FLOOR_WOOD, TileType.FLOOR_TILE):
+                                color = (160, 110, 80)
+                        else:
+                            # 로드되지 않은 탐색 타일은 바이옴 추정
+                            biome = world.get_biome(wx, wy)
+                            if biome == "도시":
+                                color = (100, 100, 105)
+                            elif biome == "공장단지":
+                                color = (75, 75, 80)
+                            elif biome == "호수":
+                                color = (35, 75, 140)
+                            elif biome == "황무지":
+                                color = (130, 115, 85)
+
+                        pygame.draw.rect(minimap_surf, color, (c * grid_size, r * grid_size, grid_size, grid_size))
+
+        # 테두리 및 마스크 오버레이
+        pygame.draw.rect(minimap_surf, Colors.UI_BORDER, (0, 0, size, size), 1, border_radius=6)
 
         # 플레이어 위치 (중앙)
         center = size // 2
         pygame.draw.circle(minimap_surf, (80, 200, 255), (center, center), 3)
-        pygame.draw.circle(minimap_surf, (80, 200, 255), (center, center), 6, 1)
+        pygame.draw.circle(minimap_surf, (80, 200, 255), (center, center), 5, 1)
 
         # 좌표 표시
-        font = FontManager.get(10)
-        coord = font.render(f"({int(player.x)}, {int(player.y)})", True, Colors.UI_TEXT_DIM)
+        font = FontManager.get(9)
+        coord = font.render(f"({int(player.x)}, {int(player.y)})", True, Colors.WHITE)
+        # 텍스트 가독성을 위해 작은 검은색 배경 패널
+        coord_bg = pygame.Surface((coord.get_width() + 6, coord.get_height() + 2), pygame.SRCALPHA)
+        coord_bg.fill((10, 12, 18, 180))
+        minimap_surf.blit(coord_bg, (4 - 3, size - 14 - 1))
         minimap_surf.blit(coord, (4, size - 14))
 
         surface.blit(minimap_surf, (mx, my))

@@ -283,6 +283,75 @@ class WorldSceneRenderer:
         cam = camera or self.game.camera
         font = FontManager.get(14)
 
+        # 투명도 드로잉을 위한 임시 알파 서피스 생성
+        temp_alpha_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+
+        # 1. 탄막 궤적 (Bullet Tracers)
+        for tr in self.game.combat_system.tracers:
+            if tr["timer"] <= 0:
+                continue
+            
+            sx1, sy1 = cam.world_to_screen(tr["start"][0], tr["start"][1])
+            sx2, sy2 = cam.world_to_screen(tr["end"][0], tr["end"][1])
+            
+            # 남은 시간에 따라 페이드 아웃
+            alpha_ratio = tr["timer"] / tr["max_timer"]
+            alpha = max(0, min(255, int(200 * alpha_ratio)))
+            color = tr["color"]
+            rgba_color = (color[0], color[1], color[2], alpha)
+            
+            # 점점 얇아지는 궤적선
+            width = max(1, int(3 * alpha_ratio))
+            pygame.draw.line(temp_alpha_surf, rgba_color, (sx1, sy1), (sx2, sy2), width)
+
+        # 2. AI 조준선 / 레이저 사이트 (Laser Sights)
+        # 플레이어 시야 내의 적이나 교전 상태의 적의 조준선을 실시간 렌더링
+        zombies = []
+        if self.game.current_interior:
+            zombies = self.game.interior_zombies
+        else:
+            zombies = self.game.entity_manager.zombies
+
+        t_val = pytime.time()
+        for zombie in zombies:
+            if not zombie.active or zombie.is_dead:
+                continue
+            
+            target = getattr(zombie, "target", None)
+            if zombie.state == "engage" and zombie.can_see_target and target is not None:
+                # 타겟 위치 좌표 획득
+                if hasattr(target, "x"):
+                    tx, ty = target.x + 0.5, target.y + 0.5
+                elif isinstance(target, tuple):
+                    tx, ty = target[0], target[1]
+                else:
+                    tx, ty = self.game.player.x + 0.5, self.game.player.y + 0.5
+                
+                sx1, sy1 = cam.world_to_screen(zombie.x + 0.5, zombie.y + 0.5)
+                sx2, sy2 = cam.world_to_screen(tx, ty)
+                
+                # 팩션 종류에 따라 레이저 빔 연출 차별화
+                is_pmc = getattr(zombie, "faction", "scav") == "pmc"
+                
+                # 실시간으로 밝기가 깜빡여 보이게 함 (펄싱 효과)
+                pulse = 100 + int(math.sin(t_val * 25) * 50)
+                
+                if is_pmc:
+                    # PMC: 정밀한 연두빛 레이저
+                    laser_color = (100, 255, 100, min(255, pulse + 20))
+                    width = 1
+                else:
+                    # Scav: 투박하고 어두운 붉은색 레이저
+                    laser_color = (255, 80, 50, max(40, pulse - 30))
+                    width = 1
+                
+                pygame.draw.line(temp_alpha_surf, laser_color, (sx1, sy1), (sx2, sy2), width)
+                # 레이저 끝점의 조준 도트 렌더링
+                pygame.draw.circle(temp_alpha_surf, (laser_color[0], laser_color[1], laser_color[2], min(255, laser_color[3] + 60)), (int(sx2), int(sy2)), 2)
+
+        surface.blit(temp_alpha_surf, (0, 0))
+
+        # 대미지 데칼 텍스트 렌더링
         for x, y, dmg, timer, color in self.game.combat_system.get_damage_numbers():
             sx, sy = cam.world_to_screen(x, y)
             alpha = max(0, min(255, int(255 * min(1, timer))))

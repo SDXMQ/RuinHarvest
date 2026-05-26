@@ -94,8 +94,8 @@ class FleaMarket:
             item_name = random.choice(all_items)
             data = ITEM_DATABASE[item_name]
             
-            # 퀘스트 전용 조립템 등 비등록 대상 제외
-            if data.get("crafted") and item_name == "장거리 무전기":
+            # 플리마켓 거래 불가 물품 제외
+            if item_name == "Scav 식별줄(Dogtag)":
                 continue
                 
             current_price = self.get_current_price(item_name)
@@ -179,6 +179,8 @@ class FleaMarket:
 
     def register_item(self, item_name, count, price):
         """플레이어가 플리마켓에 매물 등록"""
+        if item_name == "Scav 식별줄(Dogtag)":
+            return False
         # 기본 등록 기한 2.0 (레이드 2회 분량)
         self.player_listings.append({
             "id": self.next_player_listing_id,

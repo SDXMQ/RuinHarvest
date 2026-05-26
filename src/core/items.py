@@ -354,12 +354,11 @@ ITEM_DATABASE = {
     },
     "바리케이드 재료": {
         "category": ItemCategory.MATERIAL,
-        "description": "바리케이드 구축에 사용되는 재료 묶음.",
+        "description": "은신처 창고(Stash) 슬롯 확장 및 제작대 레벨업에 사용되는 강철 프레임 바리케이드 재료.",
         "stackable": True,
-        "max_stack": 5,
-        "weight": 3.0,
-        "rarity": 0.15,
-        "crafted": True,
+        "max_stack": 10,
+        "weight": 2.0,
+        "rarity": 0.2,
     },
 
     # === 퀘스트 아이템 ===
@@ -373,11 +372,11 @@ ITEM_DATABASE = {
     },
     "장거리 무전기": {
         "category": ItemCategory.QUEST,
-        "description": "조립 완료된 장거리 무전기! 구조 신호를 보낼 수 있다.",
+        "description": "극히 드물게 발견되는 고가치 군용 통신기. 상인 우호도 퀘스트 및 최고가 전리품.",
         "stackable": False,
-        "weight": 2.0,
-        "rarity": 0.0,
-        "crafted": True,
+        "weight": 1.5,
+        "rarity": 0.01,
+        "value": 80000,
     },
     "군사 문서": {
         "category": ItemCategory.QUEST,
@@ -411,7 +410,7 @@ ITEM_DATABASE = {
         "rarity": 0.2,
     },
 
-    # === 크래프팅 전용 ===
+    # === 크래프팅 전용 및 신규 아이템 ===
     "횃불": {
         "category": ItemCategory.TOOL,
         "description": "나무와 천으로 만든 횃불. 주변을 밝혀준다.",
@@ -423,13 +422,103 @@ ITEM_DATABASE = {
         "crafted": True,
     },
     "함정": {
-        "category": ItemCategory.TOOL,
-        "description": "고철과 못으로 만든 트랩. 좀비를 잡을 수 있다.",
+        "category": ItemCategory.MATERIAL,
+        "description": "고철 and 못으로 조립된 함정 메커니즘. 투척용 무기를 만드는 크래프팅 재료.",
+        "stackable": True,
+        "max_stack": 10,
+        "weight": 1.0,
+        "rarity": 0.1,
+    },
+    "CPU": {
+        "category": ItemCategory.MATERIAL,
+        "description": "오피스 또는 제어실 등 컴퓨터 파밍에서 발견되는 정밀 가공 프로세서 전리품.",
+        "stackable": True,
+        "max_stack": 5,
+        "weight": 0.2,
+        "rarity": 0.15,
+        "value": 8000,
+    },
+    "그래픽카드": {
+        "category": ItemCategory.MATERIAL,
+        "description": "파밍 구역 컴퓨터 본체에서 극히 희박하게 입수되는 최고가 정밀 가구 전자 전리품.",
+        "stackable": True,
+        "max_stack": 2,
+        "weight": 1.0,
+        "rarity": 0.04,
+        "value": 25000,
+    },
+    "폐전선": {
+        "category": ItemCategory.MATERIAL,
+        "description": "공장 또는 주거지 전자 제품 등에서 나오는 흔한 기계용 구리 전선.",
+        "stackable": True,
+        "max_stack": 15,
+        "weight": 0.4,
+        "rarity": 0.5,
+        "value": 1200,
+    },
+    "금시계": {
+        "category": ItemCategory.MISC,
+        "description": "고급 주거지 또는 금고 등에서 발견되는 고풍스러운 장식용 귀금속 시계.",
+        "stackable": True,
+        "max_stack": 5,
+        "weight": 0.1,
+        "rarity": 0.1,
+        "value": 12000,
+    },
+    "銀반지": {
+        "category": ItemCategory.MISC,
+        "description": "주거지 침실 화장대나 금고 등에서 발견되는 은빛 귀금속 전리품.",
+        "stackable": True,
+        "max_stack": 10,
+        "weight": 0.05,
+        "rarity": 0.25,
+        "value": 6000,
+    },
+    "골동품": {
+        "category": ItemCategory.MISC,
+        "description": "주거지 깊숙한 금고나 상점 등에서 발견되는 상당히 묵직하고 가치 높은 골동품 도자기.",
+        "stackable": True,
+        "max_stack": 2,
+        "weight": 2.0,
+        "rarity": 0.08,
+        "value": 18000,
+    },
+    "Scav 식별줄(Dogtag)": {
+        "category": ItemCategory.QUEST,
+        "description": "쓰러진 스캐브의 신원을 확인할 수 있는 식별용 금속 표식. 플리마켓 거래 불가.",
+        "stackable": True,
+        "max_stack": 20,
+        "weight": 0.01,
+        "rarity": 0.0,
+        "value": 5000,
+    },
+    "화약": {
+        "category": ItemCategory.MATERIAL,
+        "description": "화력 병기를 조립하기 위한 군용 등급 화약. 수류탄 및 조명탄의 핵심 제작 재료.",
+        "stackable": True,
+        "max_stack": 10,
+        "weight": 0.2,
+        "rarity": 0.15,
+        "value": 2000,
+    },
+    "수류탄": {
+        "category": ItemCategory.WEAPON,
+        "description": "신관 안전핀을 뽑아 투척하는 강력한 대량 살상용 대인 수류탄. 사용 시 10타일 내 적들에게 큰 피해.",
         "stackable": True,
         "max_stack": 3,
-        "weight": 2.0,
-        "effects": {"trap_damage": 30},
-        "rarity": 0.0,
+        "weight": 0.5,
+        "rarity": 0.05,
+        "value": 4000,
+        "crafted": True,
+    },
+    "조명탄": {
+        "category": ItemCategory.TOOL,
+        "description": "안전핀을 뽑아 작동시키는 고광도 조명탄. 밤 시야 보정 등 유용한 유틸리티 도구.",
+        "stackable": True,
+        "max_stack": 5,
+        "weight": 0.3,
+        "rarity": 0.1,
+        "value": 1500,
         "crafted": True,
     },
 }
@@ -440,29 +529,31 @@ ITEM_DATABASE = {
 # ============================================================
 LOOT_TABLES = {
     "house": [
-        ("식량통조림", 0.4), ("생수", 0.4), ("마른 빵", 0.3),
-        ("나이프", 0.15), ("천", 0.3), ("붕대", 0.2),
-        ("못", 0.2), ("탄산음료", 0.15), ("손전등", 0.1),
-        ("사진", 0.05),
+        ("식량통조림", 0.3), ("생수", 0.3), ("마른 빵", 0.2),
+        ("나이프", 0.1), ("천", 0.2), ("붕대", 0.15),
+        ("못", 0.15), ("탄산음료", 0.1), ("손전등", 0.08),
+        ("사진", 0.04), ("은반지", 0.15), ("금시계", 0.05), ("골동품", 0.03), ("폐전선", 0.1),
     ],
     "store": [
-        ("식량통조림", 0.5), ("생수", 0.5), ("에너지바", 0.3),
-        ("탄산음료", 0.3), ("마른 빵", 0.4), ("천", 0.2),
-        ("야구방망이", 0.1), ("커피", 0.15), ("에너지 드링크", 0.2),
+        ("식량통조림", 0.4), ("생수", 0.4), ("에너지바", 0.2),
+        ("탄산음료", 0.2), ("마른 빵", 0.3), ("천", 0.15),
+        ("야구방망이", 0.08), ("커피", 0.1), ("에너지 드링크", 0.15),
+        ("은반지", 0.1), ("폐전선", 0.2),
     ],
     "hospital": [
-        ("구급상자", 0.5), ("진통제", 0.4), ("붕대", 0.5),
-        ("약초", 0.2), ("방독면", 0.1), ("생수", 0.2),
+        ("구급상자", 0.4), ("진통제", 0.3), ("붕대", 0.4),
+        ("약초", 0.15), ("방독면", 0.08), ("생수", 0.15),
     ],
     "police": [
-        ("권총", 0.15), ("탄약", 0.3), ("방탄조끼", 0.1),
-        ("무기", 0.2), ("손전등", 0.2), ("비상용 배터리", 0.15),
-        ("지도", 0.1),
+        ("권총", 0.1), ("탄약", 0.25), ("방탄조끼", 0.08),
+        ("무기", 0.15), ("손전등", 0.15), ("비상용 배터리", 0.1),
+        ("지도", 0.08), ("화약", 0.15),
     ],
     "military": [
-        ("탄약", 0.4), ("권총", 0.1), ("방탄조끼", 0.15),
-        ("구급상자", 0.3), ("비상용 배터리", 0.2), ("라디오 부품", 0.08),
-        ("군사 문서", 0.05), ("에너지바", 0.2), ("전투 식량", 0.2), ("에너지 드링크", 0.25),
+        ("탄약", 0.35), ("권총", 0.08), ("방탄조끼", 0.12),
+        ("구급상자", 0.2), ("비상용 배터리", 0.15), ("라디오 부품", 0.05),
+        ("군사 문서", 0.03), ("에너지바", 0.15), ("전투 식량", 0.15), ("에너지 드링크", 0.2),
+        ("화약", 0.25), ("장거리 무전기", 0.01), ("수류탄", 0.1),
     ],
     "shelter": [
         ("나무", 0.5), ("못", 0.4), ("천", 0.3),
@@ -472,28 +563,29 @@ LOOT_TABLES = {
         ("나무", 0.6), ("약초", 0.4),
     ],
     "car": [
-        ("고철", 0.4), ("비상용 배터리", 0.15), ("생수", 0.1),
-        ("에너지바", 0.1), ("지도", 0.05),
+        ("고철", 0.35), ("비상용 배터리", 0.12), ("생수", 0.08),
+        ("에너지바", 0.08), ("지도", 0.04), ("폐전선", 0.15),
     ],
     "radio_tower": [
-        ("라디오 부품", 0.4), ("비상용 배터리", 0.3),
-        ("고철", 0.3), ("손전등", 0.15),
+        ("라디오 부품", 0.3), ("비상용 배터리", 0.25),
+        ("고철", 0.25), ("손전등", 0.12), ("CPU", 0.1),
     ],
     "factory": [
-        ("기계 부품", 0.6), ("고철", 0.5), ("못", 0.4),
-        ("비상용 배터리", 0.3), ("가방", 0.1),
+        ("기계 부품", 0.5), ("고철", 0.4), ("못", 0.3),
+        ("비상용 배터리", 0.2), ("가방", 0.08), ("폐전선", 0.35),
+        ("CPU", 0.15), ("그래픽카드", 0.03), ("화약", 0.1),
     ],
     "warehouse": [
-        ("나무", 0.5), ("고철", 0.5), ("천", 0.3),
-        ("야구방망이", 0.2), ("못", 0.4),
+        ("나무", 0.4), ("고철", 0.4), ("천", 0.25),
+        ("야구방망이", 0.15), ("못", 0.3), ("바리케이드 재료", 0.1),
     ],
     "school": [
-        ("마른 빵", 0.4), ("생수", 0.4), ("가방", 0.2),
-        ("천", 0.3), ("사진", 0.15),
+        ("마른 빵", 0.3), ("생수", 0.3), ("가방", 0.15),
+        ("천", 0.25), ("사진", 0.1), ("은반지", 0.05),
     ],
     "barn": [
-        ("농작물", 0.6), ("나무", 0.5), ("고철", 0.2),
-        ("생수", 0.3),
+        ("농작물", 0.5), ("나무", 0.4), ("고철", 0.15),
+        ("생수", 0.2),
     ],
 }
 
@@ -684,6 +776,56 @@ class Inventory:
         inv = cls(data.get("slots", 24))
         inv.items = [tuple(item) for item in data.get("items", [])]
         return inv
+
+    def merge_items(self):
+        """인벤토리 내부의 중복된 스택 아이템 병합"""
+        merged_items = []
+        for name, count in self.items:
+            data = ITEM_DATABASE.get(name, {})
+            if data.get("stackable"):
+                max_stack = data.get("max_stack", 99)
+                placed = False
+                for i, (m_name, m_cnt) in enumerate(merged_items):
+                    if m_name == name and m_cnt < max_stack:
+                        add = min(count, max_stack - m_cnt)
+                        merged_items[i] = (m_name, m_cnt + add)
+                        count -= add
+                        if count <= 0:
+                            placed = True
+                            break
+                while count > 0:
+                    add = min(count, max_stack)
+                    merged_items.append((name, add))
+                    count -= add
+            else:
+                merged_items.append((name, count))
+        self.items = merged_items
+
+    def auto_sort(self):
+        """카테고리 및 가치, 이름 순으로 자동 정렬"""
+        self.merge_items()
+        
+        category_order = {
+            ItemCategory.WEAPON: 0,
+            ItemCategory.EQUIPMENT: 1,
+            ItemCategory.MEDICAL: 2,
+            ItemCategory.FOOD: 3,
+            ItemCategory.WATER: 4,
+            ItemCategory.TOOL: 5,
+            ItemCategory.MATERIAL: 6,
+            ItemCategory.QUEST: 7,
+            ItemCategory.MISC: 8
+        }
+        
+        def sort_key(item_tuple):
+            name, count = item_tuple
+            data = ITEM_DATABASE.get(name, {})
+            cat = data.get("category", ItemCategory.MISC)
+            cat_val = category_order.get(cat, 9)
+            val = data.get("value", 0)
+            return (cat_val, -val, name)
+            
+        self.items.sort(key=sort_key)
 
 
 # ============================================================

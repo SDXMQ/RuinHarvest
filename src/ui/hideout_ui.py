@@ -63,6 +63,10 @@ class HideoutUI:
         self.sw = w
         self.sh = h
 
+    def _add_log(self, player, text):
+        if player and getattr(player, 'event_system', None):
+            player.event_system.add_log(text)
+
     def update(self, dt):
         pass
 
@@ -84,6 +88,13 @@ class HideoutUI:
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = event.pos
             
+            # 나가기 버튼 클릭 검사 (오른쪽 끝에 배치)
+            ex = 20 + len(self.tabs) * 130
+            ey = 15
+            ew, eh = 100, 35
+            if ex <= mx <= ex + ew and ey <= my <= ey + eh:
+                return "main_menu"
+
             # 탭 클릭 검사
             for i, tab in enumerate(self.tabs):
                 tx = 20 + i * 130
@@ -126,10 +137,15 @@ class HideoutUI:
 
         elif event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
-                self.selected_item = None
-                self.selected_shop_item = None
                 if self.dragging:
                     self._cancel_drag(player)
+                    return None
+                if self.selected_item or self.selected_shop_item:
+                    self.selected_item = None
+                    self.selected_shop_item = None
+                    return None
+                # 아무것도 활성화되지 않은 상태에서 ESC 입력 시 포즈 화면 요청
+                return "pause_game"
                 
         return None
 
@@ -295,7 +311,7 @@ class HideoutUI:
                         item_name, count = inv.items[idx]
                         if self.flea_market.register_item(item_name, count, price):
                             inv.remove_item(item_name, count)
-                            player.event_system.add_log(f"플리마켓에 {item_name} {count}개 등록 완료!")
+                            self._add_log(player, f"플리마켓에 {item_name} {count}개 등록 완료!")
                     
                     self.show_register_dialog = False
                     self.register_price_input = ""
@@ -322,6 +338,19 @@ class HideoutUI:
         """각 탭 내부의 클릭 비즈니스 로직"""
         # === 1. STASH 탭 클릭 ===
         if self.active_tab == "stash":
+            # 인벤토리 정렬 버튼 클릭 (160 <= mx <= 215, 220 <= my <= 240)
+            if 160 <= mx <= 215 and 220 <= my <= 240:
+                player.inventory.auto_sort()
+                self.selected_item = None
+                return None
+
+            # Stash 정렬 버튼 클릭 (stash_start_x + 280 <= mx <= stash_start_x + 335, stash_start_y - 35 <= my <= stash_start_y - 15)
+            stash_start_x = self.sw // 2 + 10
+            stash_start_y = 110
+            if stash_start_x + 280 <= mx <= stash_start_x + 335 and stash_start_y - 35 <= my <= stash_start_y - 15:
+                player.stash.auto_sort()
+                self.selected_item = None
+                return None
             # 인벤토리 슬롯 클릭 (좌측)
             inv_start_x = 30
             inv_start_y = 230
@@ -411,9 +440,44 @@ class HideoutUI:
                     self.show_register_dialog = True
                     self.register_price_input = str(ITEM_DATABASE.get(self.selected_item["item_name"], {}).get("value", 1000))
                     self.register_target_item = (src, self.selected_item["index"], self.selected_item["item_name"])
+                # 장비 개별 보험 가입
+                elif src == "equipped" and 210 <= mx <= 350 and 130 <= my <= 165:
+                    # 장비 해제 대신 보험 가입 버튼이 따로 있음 (y=410 부근)
+                    pass
+                elif src == "equipped" and 210 <= mx <= 350 and 410 <= my <= 445:
+                    slot = self.selected_item["slot_name"]
+                    name = player.equipped[slot]
+                    if name and not player.equipped_insured.get(slot):
+                        cost = int(ITEM_DATABASE.get(name, {}).get("value", 1000) * 0.1)
+                        if player.rubles >= cost:
+                            player.rubles -= cost
+                            player.equipped_insured[slot] = True
+                            self._add_log(player, f"[{name}]에 보험(10% 비용)을 가입했습니다.")
+                            SoundGenerator.play("craft_complete")
 
         # === 2. TRADERS 탭 클릭 ===
         elif self.active_tab == "traders":
+            # 프라포 수리 버튼 클릭 판정
+            if self.active_trader == "prapor" and not self.selected_shop_item:
+                info_x = 450
+                info_y = 180
+                if info_x + 180 <= mx <= info_x + 280:
+                    repairable_slots = ["head", "body", "weapon"]
+                    for r_idx, r_slot in enumerate(repairable_slots):
+                        ry = info_y + 195 + r_idx * 45
+                        if ry - 3 <= my <= ry + 19:
+                            eq_name = player.equipped.get(r_slot)
+                            if eq_name:
+                                dur = player.equipped_durability.get(r_slot, 100.0)
+                                base_val = ITEM_DATABASE.get(eq_name, {}).get("value", 1000)
+                                cost = int(base_val * (1.0 - dur / 100.0) * 1.2)
+                                if cost > 0 and player.rubles >= cost:
+                                    player.rubles -= cost
+                                    player.equipped_durability[r_slot] = 100.0
+                                    player.spent_money["prapor"] = player.spent_money.get("prapor", 0) + cost
+                                    self._add_log(player, f"[{eq_name}]을(를) {cost}루블에 수리했습니다.")
+                                    SoundGenerator.play("craft_complete")
+
             # 상인 탭 전환
             for i, tid in enumerate(self.traders.keys()):
                 tx = 30 + i * 140
@@ -461,7 +525,7 @@ class HideoutUI:
                 price = self.selected_shop_item["price"]
                 
                 # 상인 아이템 구매
-                if action == "buy" and 460 <= mx <= 600 and 240 <= my <= 275:
+                if action == "buy" and 470 <= mx <= 730 and 490 <= my <= 525:
                     if player.rubles >= price:
                         if player.stash.add_item(item_name):
                             player.rubles -= price
@@ -469,15 +533,15 @@ class HideoutUI:
                             player.spent_money[self.active_trader] = player.spent_money.get(self.active_trader, 0) + price
                             # 우호도 소폭 상승 (0.01)
                             player.reputation[self.active_trader] = min(1.0, player.reputation.get(self.active_trader, 0) + 0.005)
-                            player.event_system.add_log(f"{item_name}을(를) {price}루블에 구매했습니다.")
+                            self._add_log(player, f"{item_name}을(를) {price}루블에 구매했습니다.")
                             self.selected_shop_item = None
                         else:
-                            player.event_system.add_log("Stash 창고가 가득 찼습니다.")
+                            self._add_log(player, "Stash 창고가 가득 찼습니다.")
                     else:
-                        player.event_system.add_log("루블이 부족합니다.")
+                        self._add_log(player, "루블이 부족합니다.")
                 
                 # 내 Stash 아이템 상인 판매
-                elif action == "sell" and 460 <= mx <= 600 and 240 <= my <= 275:
+                elif action == "sell" and 470 <= mx <= 730 and 490 <= my <= 525:
                     idx = self.selected_shop_item["index"]
                     if idx < len(player.stash.items):
                         name, count = player.stash.items[idx]
@@ -486,7 +550,7 @@ class HideoutUI:
                             player.stash.remove_item(name, 1)
                             player.rubles += price
                             player.spent_money[self.active_trader] = player.spent_money.get(self.active_trader, 0) + price
-                            player.event_system.add_log(f"{name} 1개를 {price}루블에 판매했습니다.")
+                            self._add_log(player, f"{name} 1개를 {price}루블에 판매했습니다.")
                             self.selected_shop_item = None
 
         # === 3. FLEA MARKET 탭 클릭 ===
@@ -528,14 +592,14 @@ class HideoutUI:
                             if player.stash.add_item(name, count):
                                 player.rubles -= total_cost
                                 self.flea_market.listings.remove(match_listing)
-                                player.event_system.add_log(f"플리마켓에서 {name} {count}개를 {total_cost}루블에 낙찰했습니다.")
+                                self._add_log(player, f"플리마켓에서 {name} {count}개를 {total_cost}루블에 낙찰했습니다.")
                                 self.selected_shop_item = None
                             else:
-                                player.event_system.add_log("Stash 창고가 가득 찼습니다.")
+                                self._add_log(player, "Stash 창고가 가득 찼습니다.")
                         else:
-                            player.event_system.add_log("루블이 부족합니다.")
+                            self._add_log(player, "루블이 부족합니다.")
                     else:
-                        player.event_system.add_log("이미 다른 바이어가 사간 매물입니다.")
+                        self._add_log(player, "이미 다른 바이어가 사간 매물입니다.")
                         self.selected_shop_item = None
 
         # === 4. RAID 탭 클릭 ===
@@ -546,6 +610,25 @@ class HideoutUI:
             px = (self.sw - panel_w) // 2
             py = (self.sh - panel_h) // 2
             
+            # 일괄 보험 가입 버튼 클릭 판정
+            ins_btn_w, ins_btn_h = 240, 35
+            ins_bx = px + (panel_w - ins_btn_w) // 2
+            ins_by = py + panel_h - 130
+            if ins_bx <= mx <= ins_bx + ins_btn_w and ins_by <= my <= ins_by + ins_btn_h:
+                total_cost = 0
+                to_insure = []
+                for slot, name in player.equipped.items():
+                    if name and not player.equipped_insured.get(slot):
+                        cost = int(ITEM_DATABASE.get(name, {}).get("value", 1000) * 0.1)
+                        total_cost += cost
+                        to_insure.append(slot)
+                if total_cost > 0 and player.rubles >= total_cost:
+                    player.rubles -= total_cost
+                    for slot in to_insure:
+                        player.equipped_insured[slot] = True
+                    self._add_log(player, f"총 {total_cost}루블을 소모해 모든 장비의 보험에 가입했습니다.")
+                    SoundGenerator.play("craft_complete")
+
             btn_w, btn_h = 240, 50
             bx = px + (panel_w - btn_w) // 2
             by = py + panel_h - 75
@@ -591,6 +674,15 @@ class HideoutUI:
             label_map = {"stash": "창고 정리", "traders": "상인 거래", "market": "가상 플리마켓", "raid": "레이드 진입"}
             tab_label = font_btn.render(label_map.get(tab, tab), True, text_color)
             surface.blit(tab_label, (tx + (tw - tab_label.get_width()) // 2, ty + (th - tab_label.get_height()) // 2))
+
+        # 나가기 버튼 그리기 (오른쪽 끝에 배치)
+        ex = 20 + len(self.tabs) * 130
+        ey = 15
+        ew, eh = 100, 35
+        draw_rounded_rect(surface, (180, 50, 50, 160), (ex, ey, ew, eh), radius=6)
+        pygame.draw.rect(surface, (230, 80, 80), (ex, ey, ew, eh), 1, border_radius=6)
+        exit_label = font_btn.render("로비 나가기", True, Colors.WHITE)
+        surface.blit(exit_label, (ex + (ew - exit_label.get_width()) // 2, ey + (eh - exit_label.get_height()) // 2))
 
         # 2. 활성화된 탭 내용 렌더링
         if self.active_tab == "stash":
@@ -638,6 +730,12 @@ class HideoutUI:
         
         inv_label = FontManager.get(12).render(f"보안 & 가방 인벤토리 ({len(player.inventory.items)}/{player.inventory.slots})", True, Colors.UI_ACCENT)
         surface.blit(inv_label, (30, 225))
+        
+        # 인벤토리 정렬 버튼 그리기
+        draw_rounded_rect(surface, (40, 50, 70, 180), (160, 222, 55, 18), radius=3)
+        pygame.draw.rect(surface, Colors.UI_BORDER, (160, 222, 55, 18), 1, border_radius=3)
+        btn_text = FontManager.get(9).render("정렬", True, Colors.UI_TEXT)
+        surface.blit(btn_text, (160 + (55 - btn_text.get_width()) // 2, 222 + (18 - btn_text.get_height()) // 2))
 
         inv_start_x = 30
         inv_start_y = 250
@@ -679,6 +777,12 @@ class HideoutUI:
         stash_label = FontManager.get(13).render(f"보관 창고 (Global Stash) (휠 스크롤 지원)", True, Colors.UI_ACCENT_WARM)
         surface.blit(stash_label, (stash_start_x, stash_start_y - 30))
 
+        # Stash 정렬 버튼 그리기
+        draw_rounded_rect(surface, (40, 50, 70, 180), (stash_start_x + 280, stash_start_y - 35, 55, 18), radius=3)
+        pygame.draw.rect(surface, Colors.UI_BORDER, (stash_start_x + 280, stash_start_y - 35, 55, 18), 1, border_radius=3)
+        btn_text2 = FontManager.get(9).render("정렬", True, Colors.UI_TEXT)
+        surface.blit(btn_text2, (stash_start_x + 280 + (55 - btn_text2.get_width()) // 2, stash_start_y - 35 + (18 - btn_text2.get_height()) // 2))
+
         for idx in range(stash_cols * stash_rows):
             actual_idx = idx + self.stash_scroll * stash_cols
             row = idx // stash_cols
@@ -709,6 +813,7 @@ class HideoutUI:
         if self.selected_item:
             item_name = self.selected_item["item_name"]
             data = ITEM_DATABASE.get(item_name, {})
+            src = self.selected_item["source"]
             
             # 아이템 아이콘 및 라벨
             large_icon = ItemIconRenderer.get_icon(item_name)
@@ -724,6 +829,19 @@ class HideoutUI:
             val_surf = font_small.render(f"시세: {data.get('value', 1000):,} ₽", True, (255, 215, 0))
             surface.blit(val_surf, (info_x + 15, info_y + 98))
 
+            desc_start_y = 120
+            # 내구도 및 보험 정보 표시 (장착품인 경우)
+            if src == "equipped":
+                slot = self.selected_item["slot_name"]
+                dur = player.equipped_durability.get(slot, 100.0)
+                dur_surf = font_small.render(f"내구도: {int(dur)}/100", True, (100, 255, 100) if dur > 20 else (255, 100, 100))
+                surface.blit(dur_surf, (info_x + 15, info_y + 115))
+                
+                insured = player.equipped_insured.get(slot, False)
+                ins_surf = font_small.render("보험: 가입완료" if insured else "보험: 미가입", True, (100, 255, 150) if insured else (180, 180, 180))
+                surface.blit(ins_surf, (info_x + 15, info_y + 130))
+                desc_start_y = 150
+
             # 설명 개행 처리
             desc = data.get("description", "")
             desc_lines = []
@@ -731,10 +849,9 @@ class HideoutUI:
                 desc_lines.append(desc[i:i+12])
             for idx, d_line in enumerate(desc_lines[:6]):
                 l_surf = font_small.render(d_line, True, (130, 135, 145))
-                surface.blit(l_surf, (info_x + 15, info_y + 120 + idx * 15))
+                surface.blit(l_surf, (info_x + 15, info_y + desc_start_y + idx * 15))
 
             # 버튼: 이동 (Stash <-> Inventory)
-            src = self.selected_item["source"]
             btn_color = Colors.UI_ACCENT + (40,)
             btn_lbl = "창고로 이동" if src == "inventory" else "가방으로 이동"
             if src == "equipped":
@@ -761,6 +878,21 @@ class HideoutUI:
                 pygame.draw.rect(surface, (50, 180, 120), (info_x + 10, info_y + 360, 140, 35), 1, border_radius=6)
                 m_surf = font_small.render("플리마켓 등록", True, Colors.UI_TEXT)
                 surface.blit(m_surf, (info_x + 10 + (140 - m_surf.get_width()) // 2, info_y + 370))
+
+            # 보험 가입 버튼 (equipped)
+            if src == "equipped":
+                slot = self.selected_item["slot_name"]
+                insured = player.equipped_insured.get(slot, False)
+                if insured:
+                    draw_rounded_rect(surface, (40, 55, 45), (info_x + 10, info_y + 410, 140, 35), radius=6)
+                    ins_btn_lbl = font_small.render("보험 가입됨", True, (100, 220, 140))
+                    surface.blit(ins_btn_lbl, (info_x + 10 + (140 - ins_btn_lbl.get_width()) // 2, info_y + 420))
+                else:
+                    cost = int(ITEM_DATABASE.get(item_name, {}).get("value", 1000) * 0.1)
+                    draw_rounded_rect(surface, (100, 80, 40), (info_x + 10, info_y + 410, 140, 35), radius=6)
+                    pygame.draw.rect(surface, (150, 120, 50), (info_x + 10, info_y + 410, 140, 35), 1, border_radius=6)
+                    ins_btn_lbl = font_small.render(f"보험 {cost} ₽", True, Colors.WHITE)
+                    surface.blit(ins_btn_lbl, (info_x + 10 + (140 - ins_btn_lbl.get_width()) // 2, info_y + 420))
         else:
             empty_surf = font_small.render("아이템을 선택하면", True, Colors.UI_TEXT_DIM)
             empty_surf2 = font_small.render("상세 정보와 기능이", True, Colors.UI_TEXT_DIM)
