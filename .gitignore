@@ -179,3 +179,10 @@ cython_debug/
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
 .cursorindexingignore
+
+# RuinHarvest Game Saves & Sensitive Settings
+saves/
+src/core/saves/
+*.json.tmp
+*.json.bak
+game_settings.json
