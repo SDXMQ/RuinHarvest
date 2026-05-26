@@ -149,7 +149,7 @@ class Chunk:
 class WorldGenerator:
     """절차적 월드 생성"""
 
-    def __init__(self, seed=None, world_settings=None):
+    def __init__(self, seed=None, world_settings=None, is_raid=False):
         self.seed = seed or random.randint(0, 2**31)
         self.settings = world_settings or {}
         self.noise = SimplexNoise(self.seed)
@@ -162,6 +162,7 @@ class WorldGenerator:
 
         # 바이옴 목록 (키 리스트)
         self.biome_keys = list(BIOMES.keys())
+        self.is_raid = is_raid
 
     def get_biome(self, wx, wy):
         """월드 좌표에서 바이옴 결정"""
@@ -289,7 +290,7 @@ class WorldGenerator:
         self._generate_buildings(chunk, cx, cy)
 
         # 은신처 (시작 지점)
-        if cx == 0 and cy == 0:
+        if cx == 0 and cy == 0 and not self.is_raid:
             self._place_shelter(chunk)
 
         # 특수 건물
@@ -477,9 +478,10 @@ class WorldGenerator:
 class World:
     """게임 월드 (청크 기반)"""
 
-    def __init__(self, seed=None, world_settings=None):
+    def __init__(self, seed=None, world_settings=None, is_raid=False):
         self.world_settings = world_settings or {}
-        self.generator = WorldGenerator(seed, world_settings)
+        self.is_raid = is_raid
+        self.generator = WorldGenerator(seed, world_settings, is_raid)
         self.chunks = {}  # (cx, cy) -> Chunk
         self.unloaded_deltas = {}  # (cx, cy) -> delta dict (변경 데이터만 보존)
         self.seed = self.generator.seed

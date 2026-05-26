@@ -3,6 +3,7 @@ hideout_ui.py - 은신처 로비, Stash, 상인 거래소, 가상 플리마켓 �
 """
 import pygame
 import math
+import copy
 from settings import Colors, TILE_SIZE
 from renderer import draw_rounded_rect, draw_gradient_rect, draw_glow, ItemIconRenderer
 from items import ITEM_DATABASE, ItemCategory, Inventory
@@ -88,13 +89,6 @@ class HideoutUI:
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = event.pos
             
-            # 나가기 버튼 클릭 검사 (오른쪽 끝에 배치)
-            ex = 20 + len(self.tabs) * 130
-            ey = 15
-            ew, eh = 100, 35
-            if ex <= mx <= ex + ew and ey <= my <= ey + eh:
-                return "main_menu"
-
             # 탭 클릭 검사
             for i, tab in enumerate(self.tabs):
                 tx = 20 + i * 130
@@ -220,7 +214,7 @@ class HideoutUI:
             self._cancel_drag(player)
             return
 
-        item_name, count = self.drag_item
+        item_name, count = copy.deepcopy(self.drag_item)
         dropped = False
 
         # 장비 슬롯에 드롭
@@ -234,13 +228,13 @@ class HideoutUI:
                 if eq_slot == slot:
                     # 기존 장비가 있으면 교환
                     old_item = player.equipped.get(slot)
-                    player.equipped[slot] = item_name
+                    player.equipped[slot] = copy.deepcopy(item_name)
                     if old_item:
                         # 드래그 출처에 따라 원래 자리로 반환
                         if self.drag_source == "stash":
-                            player.stash.add_item(old_item, 1)
+                            player.stash.add_item(copy.deepcopy(old_item), 1)
                         else:
-                            player.inventory.add_item(old_item, 1)
+                            player.inventory.add_item(copy.deepcopy(old_item), 1)
                     dropped = True
                 break
 
@@ -251,7 +245,7 @@ class HideoutUI:
             stash_w = 8 * 42
             stash_h = 11 * 42
             if stash_start_x <= mx <= stash_start_x + stash_w and stash_start_y <= my <= stash_start_y + stash_h:
-                player.stash.add_item(item_name, count)
+                player.stash.add_item(copy.deepcopy(item_name), copy.deepcopy(count))
                 dropped = True
 
         # 인벤토리 영역에 드롭
@@ -260,7 +254,7 @@ class HideoutUI:
             inv_w = 4 * 42
             inv_h = (player.inventory.slots // 4 + 1) * 42
             if inv_start_x <= mx <= inv_start_x + inv_w and inv_start_y <= my <= inv_start_y + inv_h:
-                if player.inventory.add_item(item_name, count):
+                if player.inventory.add_item(copy.deepcopy(item_name), copy.deepcopy(count)):
                     dropped = True
 
         # 드롭 실패 시 원래 자리로 반환
@@ -277,14 +271,14 @@ class HideoutUI:
     def _cancel_drag(self, player):
         """드래그 취소 - 아이템을 원래 위치로 반환"""
         if self.drag_item:
-            item_name, count = self.drag_item
+            item_name, count = copy.deepcopy(self.drag_item)
             if self.drag_source and self.drag_source.startswith("equipped_"):
                 slot = self.drag_source.replace("equipped_", "")
-                player.equipped[slot] = item_name
+                player.equipped[slot] = copy.deepcopy(item_name)
             elif self.drag_source == "stash":
-                player.stash.items.insert(min(self.drag_source_idx, len(player.stash.items)), (item_name, count))
+                player.stash.items.insert(min(self.drag_source_idx, len(player.stash.items)), (copy.deepcopy(item_name), copy.deepcopy(count)))
             elif self.drag_source == "inventory":
-                player.inventory.items.insert(min(self.drag_source_idx, len(player.inventory.items)), (item_name, count))
+                player.inventory.items.insert(min(self.drag_source_idx, len(player.inventory.items)), (copy.deepcopy(item_name), copy.deepcopy(count)))
 
         self.dragging = False
         self.drag_item = None
@@ -308,9 +302,9 @@ class HideoutUI:
                     # 아이템 개수 가져오기
                     inv = player.stash if source == "stash" else player.inventory
                     if idx < len(inv.items):
-                        item_name, count = inv.items[idx]
-                        if self.flea_market.register_item(item_name, count, price):
-                            inv.remove_item(item_name, count)
+                        item_name, count = copy.deepcopy(inv.items[idx])
+                        if self.flea_market.register_item(copy.deepcopy(item_name), copy.deepcopy(count), price):
+                            inv.remove_item(copy.deepcopy(item_name), copy.deepcopy(count))
                             self._add_log(player, f"플리마켓에 {item_name} {count}개 등록 완료!")
                     
                     self.show_register_dialog = False
@@ -404,35 +398,35 @@ class HideoutUI:
                 # Stash -> Inventory
                 if src == "stash" and 210 <= mx <= 350 and 80 <= my <= 115:
                     idx = self.selected_item["index"]
-                    name, count = player.stash.items[idx]
-                    if player.inventory.add_item(name, count):
+                    name, count = copy.deepcopy(player.stash.items[idx])
+                    if player.inventory.add_item(copy.deepcopy(name), copy.deepcopy(count)):
                         player.stash.remove_item(name, count)
                         self.selected_item = None
                 # Inventory -> Stash
                 elif src == "inventory" and 210 <= mx <= 350 and 80 <= my <= 115:
                     idx = self.selected_item["index"]
-                    name, count = player.inventory.items[idx]
-                    if player.stash.add_item(name, count):
+                    name, count = copy.deepcopy(player.inventory.items[idx])
+                    if player.stash.add_item(copy.deepcopy(name), copy.deepcopy(count)):
                         player.inventory.remove_item(name, count)
                         self.selected_item = None
                 # 장비 착용 (Stash 또는 Inventory에서)
                 elif src in ("stash", "inventory") and 210 <= mx <= 350 and 130 <= my <= 165:
                     idx = self.selected_item["index"]
                     inv = player.stash if src == "stash" else player.inventory
-                    name, count = inv.items[idx]
+                    name, count = copy.deepcopy(inv.items[idx])
                     data = ITEM_DATABASE.get(name, {})
                     slot = data.get("equip_slot")
                     if not slot and data.get("category") == ItemCategory.WEAPON:
                         slot = "weapon"
                     if slot:
                         # 기존 장착 템을 Stash로 분리하도록 안전장치
-                        if player.equip_item(name, player.stash):
+                        if player.equip_item(copy.deepcopy(name), player.stash):
                             self.selected_item = None
                 # 장비 해제
                 elif src == "equipped" and 210 <= mx <= 350 and 130 <= my <= 165:
                     slot = self.selected_item["slot_name"]
-                    name = player.equipped[slot]
-                    if player.stash.add_item(name):
+                    name = copy.deepcopy(player.equipped[slot])
+                    if player.stash.add_item(copy.deepcopy(name)):
                         player.equipped[slot] = None
                         self.selected_item = None
                 # 플리마켓 등록 다이얼로그 호출
@@ -527,7 +521,7 @@ class HideoutUI:
                 # 상인 아이템 구매
                 if action == "buy" and 470 <= mx <= 730 and 490 <= my <= 525:
                     if player.rubles >= price:
-                        if player.stash.add_item(item_name):
+                        if player.stash.add_item(copy.deepcopy(item_name)):
                             player.rubles -= price
                             # 누적 거래액 증가
                             player.spent_money[self.active_trader] = player.spent_money.get(self.active_trader, 0) + price
@@ -544,10 +538,10 @@ class HideoutUI:
                 elif action == "sell" and 470 <= mx <= 730 and 490 <= my <= 525:
                     idx = self.selected_shop_item["index"]
                     if idx < len(player.stash.items):
-                        name, count = player.stash.items[idx]
+                        name, count = copy.deepcopy(player.stash.items[idx])
                         if name == item_name:
                             # 1개씩 판매
-                            player.stash.remove_item(name, 1)
+                            player.stash.remove_item(copy.deepcopy(name), 1)
                             player.rubles += price
                             player.spent_money[self.active_trader] = player.spent_money.get(self.active_trader, 0) + price
                             self._add_log(player, f"{name} 1개를 {price}루블에 판매했습니다.")
@@ -589,7 +583,7 @@ class HideoutUI:
                         total_cost = price * count
                         if player.rubles >= total_cost:
                             # Stash에 추가
-                            if player.stash.add_item(name, count):
+                            if player.stash.add_item(copy.deepcopy(name), copy.deepcopy(count)):
                                 player.rubles -= total_cost
                                 self.flea_market.listings.remove(match_listing)
                                 self._add_log(player, f"플리마켓에서 {name} {count}개를 {total_cost}루블에 낙찰했습니다.")
@@ -674,15 +668,6 @@ class HideoutUI:
             label_map = {"stash": "창고 정리", "traders": "상인 거래", "market": "가상 플리마켓", "raid": "레이드 진입"}
             tab_label = font_btn.render(label_map.get(tab, tab), True, text_color)
             surface.blit(tab_label, (tx + (tw - tab_label.get_width()) // 2, ty + (th - tab_label.get_height()) // 2))
-
-        # 나가기 버튼 그리기 (오른쪽 끝에 배치)
-        ex = 20 + len(self.tabs) * 130
-        ey = 15
-        ew, eh = 100, 35
-        draw_rounded_rect(surface, (180, 50, 50, 160), (ex, ey, ew, eh), radius=6)
-        pygame.draw.rect(surface, (230, 80, 80), (ex, ey, ew, eh), 1, border_radius=6)
-        exit_label = font_btn.render("로비 나가기", True, Colors.WHITE)
-        surface.blit(exit_label, (ex + (ew - exit_label.get_width()) // 2, ey + (eh - exit_label.get_height()) // 2))
 
         # 2. 활성화된 탭 내용 렌더링
         if self.active_tab == "stash":

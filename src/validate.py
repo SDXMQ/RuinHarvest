@@ -396,6 +396,244 @@ def test_convenience_and_map():
 
 check("4차 편의성 및 안개 지도 시스템", test_convenience_and_map)
 
+# 14. A* 길찾기 알고리즘 검증
+print("\n[14] A* 길찾기 알고리즘 검증")
+def test_astar_pathfinding():
+    from pathfinding import find_path
+    
+    class DummyWorldForAStar:
+        def __init__(self):
+            # (1, 1)에 벽이 가로막고 있는 상태
+            self.walls = {(1, 1), (1, 0), (1, 2)}
+        def is_walkable(self, x, y):
+            return (int(x), int(y)) not in self.walls
+            
+    world = DummyWorldForAStar()
+    # (0, 1)에서 (2, 1)로 가려면 벽 (1, 1)을 넘지 못하고 위나 아래로 우회해야 함
+    path = find_path((0.5, 1.5), (2.5, 1.5), world)
+    assert len(path) > 0
+    # 경로 내에 벽 (1, 1)이 없어야 함
+    for x, y in path:
+        assert (int(x), int(y)) not in world.walls
+
+check("A* 길찾기 알고리즘 및 우회 경로 탐색", test_astar_pathfinding)
+
+# 15. 미니맵 캐싱 동작성 검증
+print("\n[15] 미니맵 캐싱 동작성 검증")
+def test_minimap_caching():
+    import os
+    os.environ["SDL_VIDEODRIVER"] = "dummy"
+    import pygame
+    pygame.init()
+    
+    from ui.hud import HUD
+    from player import Player
+    
+    class DummyWorld:
+        def __init__(self):
+            self.chunks = {}
+        def get_biome(self, x, y):
+            return "도시"
+            
+    hud = HUD(800, 600)
+    p = Player(10, 10)
+    w = DummyWorld()
+    
+    # 첫 렌더링 호출 (캐시 채우기)
+    surf = pygame.Surface((800, 600))
+    hud._draw_minimap(surf, p, w, dt=0.05)
+    
+    # 초기 타이머는 캐시 생성 시 0.0으로 리셋됨
+    assert hud.minimap_timer == 0.0
+    assert hud.last_player_tile_pos == (10, 10)
+    
+    # dt를 0.1 주면 타이머가 누적되지만 1.0 미만이고 플레이어 위치도 그대로이므로 캐시 재사용
+    hud._draw_minimap(surf, p, w, dt=0.1)
+    assert hud.minimap_timer == 0.1
+    
+    # 플레이어가 이동하면 타이머 상관없이 캐시 강제 갱신
+    p.x, p.y = 11.5, 11.5
+    hud._draw_minimap(surf, p, w, dt=0.1)
+    assert hud.minimap_timer == 0.0
+    assert hud.last_player_tile_pos == (11, 11)
+
+check("미니맵 캐싱 및 타이머/이동 감지", test_minimap_caching)
+
+# 16. Stash 복사 무결성 검증
+print("\n[16] Stash 복사 무결성 검증")
+def test_stash_integrity():
+    from player import Player
+    from main import Game
+    import pygame
+    
+    g = Game()
+    p = Player(0, 0)
+    
+    # 인벤토리에 아이템 추가
+    p.inventory.add_item("생수", 1)
+    assert p.inventory.count_item("생수") == 1
+    
+    # 인벤토리 -> Stash 이동 처리 (Stash에 deepcopy하여 추가)
+    g.hideout_ui.active_tab = "stash"
+    g.hideout_ui.selected_item = {"source": "inventory", "index": 0, "item_name": "생수"}
+    
+    # 드래그 앤 드롭이 아닌 탭 클릭을 통한 이동 처리 시뮬레이션
+    # 210 <= mx <= 350, 80 <= my <= 115 좌표 클릭 시 Stash -> Inventory 또는 그 반대 동작
+    click_event = pygame.event.Event(pygame.MOUSEBUTTONDOWN, button=1, pos=(250, 90))
+    g.hideout_ui.handle_event(click_event, p)
+    
+    # Stash에 "생수"가 정상 복사 및 추가되어야 하고, 인벤토리에서는 제거되어야 함
+    assert p.stash.count_item("생수") == 1
+    assert p.inventory.count_item("생수") == 0
+    
+    # deepcopy가 성공적으로 되었는지 입증하기 위해, Stash 내부 아이템의 정보를 별도 조작해도 영향이 없는지 혹은
+    # 세이브/로드 사망 패널티 상황 시뮬레이션(인벤토리 클리어)을 수행해도 Stash가 절대 훼손되지 않는지 검사
+    p.inventory.items = []
+    assert p.stash.count_item("생수") == 1
+
+check("Stash 아이템 복사 무결성(Deepcopy) 검증", test_stash_integrity)
+
+# 17. 레이드 시작 팝업 일시정지 검증
+print("\n[17] 레이드 시작 팝업 일시정지 검증")
+def test_raid_popup_pause():
+    from main import Game, GameState
+    from player import Player
+    g = Game()
+    g.player = Player(0, 0)
+    g.state = GameState.PLAYING
+    g.show_raid_start_popup = True
+    
+    # 팝업이 활성화된 경우 즉시 리턴하므로 어떠한 예외(NoneType AttributeError 등)도 발생하지 않음
+    try:
+        g._process_global_update(0.1)
+        popup_blocked = True
+    except:
+        popup_blocked = False
+    assert popup_blocked == True
+    
+    # 팝업을 끄면 업데이트 로직이 흐르며 미설정된 서브시스템(time_system 등) 참조로 예외가 발생함
+    g.show_raid_start_popup = False
+    try:
+        g._process_global_update(0.1)
+        popup_passed = True
+    except AttributeError:
+        # 정상적으로 방어막이 풀려 AttributeError가 발생한 상황
+        popup_passed = False
+    except:
+        popup_passed = True
+    assert popup_passed == False
+
+
+check("레이드 시작 팝업 일시정지 상태 제어", test_raid_popup_pause)
+
+# 18. 비정상 종료(Alt+F4) 패널티 삭제 검증
+print("\n[18] 비정상 종료 패널티 삭제 검증")
+def test_save_no_penalty():
+    from main import Game
+    from save_system import GameSaveManager
+    g = Game()
+    
+    # 가상의 세이브 데이터 (IN_RAID 상태)
+    dummy_data = {
+        "world_settings": {"seed": 1234, "difficulty": "보통"},
+        "player": {
+            "x": 10.0, "y": 10.0,
+            "inventory": {"slots": 24, "items": [["생수", 2]]},
+            "equipped": {"head": None, "body": None, "feet": None, "weapon": None},
+            "raid_status": "IN_RAID" # 레이드 진행 도중 강제 종료 가정
+        },
+        "current_day": 1,
+        "playtime": 100
+    }
+    
+    # 복원 수행
+    res = GameSaveManager.deserialize_game(g, dummy_data)
+    assert res == True
+    # 이전 비정상종료 메커니즘이 삭제되었으므로, 복원 후 인벤토리에 아이템이 지워지지 않고 보존되어야 함
+    assert g.player.inventory.count_item("생수") == 2
+
+check("비정상 종료(Alt+F4) 패널티 삭제 검증", test_save_no_penalty)
+
+# 19. 맵 델타 및 엔티티 복원 검증
+print("\n[19] 맵 델타 및 엔티티 복원 검증")
+def test_save_delta_and_entities_restoration():
+    from main import Game
+    from entities import Zombie, NPC
+    from world import World
+    from save_system import GameSaveManager
+    import pygame
+    
+    g = Game()
+    g.world_settings = {"seed": 42, "difficulty": "보통"}
+    g.world = World(seed=42, world_settings=g.world_settings)
+    from settings import DIFFICULTY_PRESETS
+    from entities import EntityManager
+    from weather import TimeSystem
+    g.difficulty = DIFFICULTY_PRESETS["보통"]
+    g.entity_manager = EntityManager(g.difficulty)
+    g.time_system = TimeSystem(12)
+    from player import Player
+    g.player = Player(0, 0)
+    
+    # 1. 월드 오브젝트 변경 (파밍 상태 변경 시뮬레이션)
+    chunk = g.world.get_chunk(0, 0)
+    if chunk.objects:
+        obj = chunk.objects[0]
+        obj.looted = True
+        obj.hp = 10
+        
+    # 2. 좀비 및 NPC 추가
+    z = Zombie(5.5, 5.5, "normal")
+    z.hp = 25
+    g.entity_manager.zombies.append(z)
+    
+    n = NPC(10.5, 10.5, "merchant")
+    g.entity_manager.npcs.append(n)
+    
+    # 직렬화
+    data = GameSaveManager.serialize_game(g)
+    assert data is not None
+    assert len(data["world_deltas"]) > 0
+    assert len(data["entities"]["zombies"]) > 0
+    
+    # 복원
+    g2 = Game()
+    res = GameSaveManager.deserialize_game(g2, data)
+    assert res == True
+    
+    # 복원된 엔티티 검증
+    assert len(g2.entity_manager.zombies) == 1
+    z_restored = g2.entity_manager.zombies[0]
+    assert z_restored.x == 5.5
+    assert z_restored.y == 5.5
+    assert z_restored.hp == 25
+    
+    assert len(g2.entity_manager.npcs) == 1
+    n_restored = g2.entity_manager.npcs[0]
+    assert n_restored.x == 10.5
+    assert n_restored.y == 10.5
+
+check("맵 델타 및 좀비/PMC 엔티티 위치 보존 검증", test_save_delta_and_entities_restoration)
+
+# 20. 레이드 맵 내 은신처 제외 검증
+print("\n[20] 레이드 맵 내 은신처 제외 검증")
+def test_raid_shelter_exclusion():
+    from world import World
+    
+    # 1. is_raid=False 인 경우 0,0 청크에 shelter 건물이 존재해야 함
+    world_non_raid = World(seed=999, world_settings={}, is_raid=False)
+    chunk_non_raid = world_non_raid.get_chunk(0, 0)
+    has_shelter = any(b.building_type == "shelter" for b in chunk_non_raid.buildings)
+    assert has_shelter == True, "일반 월드의 (0,0) 청크에는 은신처가 생성되어야 합니다."
+    
+    # 2. is_raid=True 인 경우 0,0 청크에 shelter 건물이 없어야 함
+    world_raid = World(seed=999, world_settings={}, is_raid=True)
+    chunk_raid = world_raid.get_chunk(0, 0)
+    has_shelter_raid = any(b.building_type == "shelter" for b in chunk_raid.buildings)
+    assert has_shelter_raid == False, "레이드 월드의 (0,0) 청크에는 은신처가 생성되지 않아야 합니다."
+
+check("레이드 맵 내 은신처 제외 검증", test_raid_shelter_exclusion)
+
 # 결과 요약
 print("\n" + "=" * 60)
 if errors:

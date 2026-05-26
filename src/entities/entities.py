@@ -5,6 +5,7 @@ import math
 import random
 from settings import TILE_SIZE, CHUNK_SIZE, DIFFICULTY_PRESETS
 from utils import distance, direction_to, clamp, distance_sq, check_line_of_sight
+from pathfinding import find_path
 
 
 # ============================================================
@@ -134,6 +135,10 @@ class Zombie:
         self.can_see_target = False
         self.vision_timer = random.uniform(0.0, 0.2)  # 시야 검사 분산 타이머
         self.vision_interval = random.uniform(0.5, 0.7)  # 개별 시야 갱신 주기
+
+        # A* 길찾기 속성 추가
+        self.path = []
+        self.path_update_timer = random.uniform(0.0, 0.4)
 
     def update(self, dt, player_x, player_y, world, player_crouching=False, entity_manager=None):
         if not self.active:
@@ -300,52 +305,91 @@ class Zombie:
                         self.state = ZombieState.ENGAGE
 
 
-        # 이동에 사용할 타겟 좌표 결정
-        if self.target is not None:
-            if hasattr(self.target, 'x'):
-                move_target_x, move_target_y = self.target.x, self.target.y
-            elif isinstance(self.target, tuple):
-                move_target_x, move_target_y = self.target
-            else:
-                move_target_x, move_target_y = player_x, player_y
-        else:
-            move_target_x, move_target_y = player_x, player_y
-
-        # 상태별 물리 이동 및 행동
+        # 상태에 따른 최종 목적지 결정
+        move_target_x, move_target_y = self.x, self.y
         if self.state in (ZombieState.IDLE, ZombieState.PATROL, ZombieState.WANDER):
             self.idle_timer -= dt
             if self.idle_timer <= 0:
                 self.idle_timer = random.uniform(3, 7)
                 self.wander_target_x = self.x + random.uniform(-4, 4)
                 self.wander_target_y = self.y + random.uniform(-4, 4)
-            
-            dx, dy = direction_to(self.x, self.y, self.wander_target_x, self.wander_target_y)
-            move_speed = self.speed * 0.5 * dt
-            self._move_with_collision(dx * move_speed, dy * move_speed, world)
+            move_target_x, move_target_y = self.wander_target_x, self.wander_target_y
             
         elif self.state == ZombieState.ALERT:
-            dx, dy = direction_to(self.x, self.y, self.alert_target_x, self.alert_target_y)
-            move_speed = self.speed * 0.7 * dt
-            self._move_with_collision(dx * move_speed, dy * move_speed, world)
+            move_target_x, move_target_y = self.alert_target_x, self.alert_target_y
             
         elif self.state == ZombieState.ENGAGE:
-            dist = distance(self.x, self.y, move_target_x, move_target_y)
-            # 사거리의 80%보다 멀리 있으면 사격을 위해 접근
-            if dist > self.attack_range * 0.8:
-                dx, dy = direction_to(self.x, self.y, move_target_x, move_target_y)
-                move_speed = self.speed * dt
-                self._move_with_collision(dx * move_speed, dy * move_speed, world)
+            if self.target is not None:
+                if hasattr(self.target, 'x'):
+                    move_target_x, move_target_y = self.target.x, self.target.y
+                elif isinstance(self.target, tuple):
+                    move_target_x, move_target_y = self.target
+                else:
+                    move_target_x, move_target_y = player_x, player_y
+            else:
+                move_target_x, move_target_y = player_x, player_y
                 
         elif self.state == ZombieState.FIND_COVER:
             if self.cover_target_x is not None:
-                dx, dy = direction_to(self.x, self.y, self.cover_target_x, self.cover_target_y)
-                move_speed = self.speed * 1.3 * dt
-                self._move_with_collision(dx * move_speed, dy * move_speed, world)
+                move_target_x, move_target_y = self.cover_target_x, self.cover_target_y
+            else:
+                move_target_x, move_target_y = player_x, player_y
                 
         elif self.state == ZombieState.FLANK:
             if self.flank_target_x is not None:
-                dx, dy = direction_to(self.x, self.y, self.flank_target_x, self.flank_target_y)
-                move_speed = self.speed * 1.1 * dt
+                move_target_x, move_target_y = self.flank_target_x, self.flank_target_y
+            else:
+                move_target_x, move_target_y = player_x, player_y
+
+        # A* 경로 탐색 및 업데이트
+        self.path_update_timer += dt
+        has_los = check_line_of_sight(self.x, self.y, move_target_x, move_target_y, world)
+        
+        if has_los:
+            # 타겟과 직선 시야가 확보된 경우 A* 연산 생략하고 직선 이동
+            self.path = []
+        else:
+            if self.path_update_timer >= 0.4:
+                self.path_update_timer = 0.0
+                self.path = find_path((self.x, self.y), (move_target_x, move_target_y), world)
+
+        # 이동 처리
+        # 상태별 기본 속도 가중치 결정
+        speed_mult = 1.0
+        if self.state in (ZombieState.IDLE, ZombieState.PATROL, ZombieState.WANDER):
+            speed_mult = 0.5
+        elif self.state == ZombieState.ALERT:
+            speed_mult = 0.7
+        elif self.state == ZombieState.FIND_COVER:
+            speed_mult = 1.3
+        elif self.state == ZombieState.FLANK:
+            speed_mult = 1.1
+
+        move_speed = self.speed * speed_mult * dt
+
+        # ENGAGE 상태일 때 사격 사거리 안이면 굳이 접근하지 않고 멈춤
+        dist_to_dest = distance(self.x, self.y, move_target_x, move_target_y)
+        should_move = True
+        if self.state == ZombieState.ENGAGE and dist_to_dest <= self.attack_range * 0.8:
+            should_move = False
+
+        if should_move:
+            if self.path:
+                # A* 경로 추적 이동
+                next_node = self.path[0]
+                node_dist = distance(self.x, self.y, next_node[0], next_node[1])
+                if node_dist <= 0.35:
+                    self.path.pop(0)
+                    if self.path:
+                        next_node = self.path[0]
+                    else:
+                        next_node = (move_target_x, move_target_y)
+
+                dx, dy = direction_to(self.x, self.y, next_node[0], next_node[1])
+                self._move_with_collision(dx * move_speed, dy * move_speed, world)
+            else:
+                # 직선 이동
+                dx, dy = direction_to(self.x, self.y, move_target_x, move_target_y)
                 self._move_with_collision(dx * move_speed, dy * move_speed, world)
 
         # 방향 업데이트

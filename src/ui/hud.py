@@ -21,6 +21,11 @@ class HUD:
         self.shown_thirst = 100
         self.shown_stress = 0
         self.shown_stamina = 100
+        # 미니맵 캐시 서피스 및 타이머 초기화 (120x120 크기)
+        self.minimap_surface = pygame.Surface((120, 120), pygame.SRCALPHA)
+        self.minimap_surface.fill((10, 12, 18, 250))
+        self.minimap_timer = 1.0  # 처음에 즉시 생성되도록 1.0으로 초기화
+        self.last_player_tile_pos = None
 
     def resize(self, w, h):
         self.sw = w
@@ -40,17 +45,17 @@ class HUD:
     def add_notification(self, message, duration=3.0):
         self.notification_queue.append((message, duration, 0))
 
-    def draw(self, surface, player, time_system, weather_system, current_day, total_days, game=None):
+    def draw(self, surface, player, time_system, weather_system, current_day, total_days, raid_time_left=None, world=None, extract_target=None, extract_timer=None, dt=0.0):
         self._draw_stat_bars(surface, player)
-        self._draw_time_info(surface, time_system, current_day, total_days, game)
+        self._draw_time_info(surface, time_system, current_day, total_days, raid_time_left)
         self._draw_weather_info(surface, weather_system)
-        self._draw_minimap(surface, player, game.world if game else None)
+        self._draw_minimap(surface, player, world, dt)
         self._draw_notifications(surface)
         self._draw_equipped_weapon(surface, player)
         self._draw_quick_info(surface, player)
         self._draw_crouch_indicator(surface, player)
-        if game:
-            self._draw_extraction_hud(surface, game)
+        if extract_target and extract_timer is not None:
+            self._draw_extraction_hud(surface, extract_target, extract_timer)
 
     def _draw_stat_bars(self, surface, player):
         """스탯 바 (좌측 상단)"""
@@ -93,7 +98,7 @@ class HUD:
             val_text = font.render(f"{int(value)}", True, Colors.UI_TEXT)
             surface.blit(val_text, (bx + bar_w + 4, by))
 
-    def _draw_time_info(self, surface, time_system, current_day, total_days, game=None):
+    def _draw_time_info(self, surface, time_system, current_day, total_days, raid_time_left=None):
         """시간 정보 및 레이드 타이머 (우측 상단)"""
         font_big = FontManager.get(18)
         font_small = FontManager.get(13)
@@ -104,11 +109,11 @@ class HUD:
         py = 15
         draw_rounded_rect(surface, (15, 15, 25, 180), (px, py, panel_w, panel_h), radius=8)
 
-        if game and hasattr(game, 'raid_time_left'):
-            minutes = int(game.raid_time_left) // 60
-            seconds = int(game.raid_time_left) % 60
+        if raid_time_left is not None:
+            minutes = int(raid_time_left) // 60
+            seconds = int(raid_time_left) % 60
             time_left_str = f"남은 시간 {minutes:02d}:{seconds:02d}"
-            color = (220, 50, 50) if game.raid_time_left < 60 else Colors.UI_ACCENT_WARM
+            color = (220, 50, 50) if raid_time_left < 60 else Colors.UI_ACCENT_WARM
             timer_text = font_big.render(time_left_str, True, color)
             surface.blit(timer_text, (px + 10, py + 6))
         else:
@@ -120,15 +125,15 @@ class HUD:
         time_text = font_small.render(f"{time_system.time_string}  {t(period_key)}", True, Colors.UI_TEXT)
         surface.blit(time_text, (px + 10, py + 32))
 
-    def _draw_extraction_hud(self, surface, game):
+    def _draw_extraction_hud(self, surface, extract_target, extract_timer):
         """탈출 카운트다운 타이머 HUD 표시 (화면 중앙 상단)"""
-        if not game.extract_target or game.extract_timer <= 0:
+        if not extract_target or extract_timer <= 0:
             return
             
         font = FontManager.get(16)
         
         # 남은 탈출 시간 계산
-        remaining = max(0.0, 7.0 - game.extract_timer)
+        remaining = max(0.0, 7.0 - extract_timer)
         text_str = f"구역 이탈 중... {remaining:.1f}초"
         text_surf = font.render(text_str, True, (100, 255, 150))
         
@@ -153,7 +158,7 @@ class HUD:
         by = py + panel_h - 14
         
         pygame.draw.rect(surface, (30, 30, 40), (bx, by, bar_w, bar_h), border_radius=3)
-        ratio = min(1.0, game.extract_timer / 7.0)
+        ratio = min(1.0, extract_timer / 7.0)
         if ratio > 0:
             pygame.draw.rect(surface, (50, 220, 100), (bx, by, int(bar_w * ratio), bar_h), border_radius=3)
 
@@ -167,17 +172,10 @@ class HUD:
         weather_text = font.render(t("weather_label", t(weather_key)), True, Colors.UI_TEXT_DIM)
         surface.blit(weather_text, (px + 10, py))
 
-    def _draw_minimap(self, surface, player, world=None):
-        """미니맵 (우측 하단)"""
-        size = 120
-        mx = self.sw - size - 15
-        my = self.sh - size - 15
+    def _update_minimap_cache(self, player, world):
+        """미니맵 캐시 서피스 갱신"""
+        self.minimap_surface.fill((10, 12, 18, 250))  # 기본 안개색 (투명도 조절)
 
-        # 미니맵 서피스 생성
-        minimap_surf = pygame.Surface((size, size))
-        minimap_surf.fill((10, 12, 18))  # 기본 검은 안개색
-
-        # 플레이어 주변 타일 그리기 (1타일 = 4픽셀, 30x30 타일)
         if player and world:
             grid_size = 4
             px, py = int(player.x), int(player.y)
@@ -197,13 +195,13 @@ class HUD:
                     if (wx, wy) in player.explored_tiles:
                         chunk_key = (cx, cy)
                         tile_type = None
-                        if chunk_key in world.chunks:
+                        if world and hasattr(world, 'chunks') and chunk_key in world.chunks:
                             tile_type = world.chunks[chunk_key].get_tile(lx, ly)
 
                         # 지형 타입별 색상 결정
                         color = (35, 75, 40)  # 디폴트 풀밭
                         if tile_type:
-                            from world.world import TileType
+                            from world import TileType
                             if tile_type == TileType.ROAD:
                                 color = (70, 70, 75)
                             elif tile_type == TileType.CONCRETE:
@@ -228,26 +226,44 @@ class HUD:
                             elif biome == "황무지":
                                 color = (130, 115, 85)
 
-                        pygame.draw.rect(minimap_surf, color, (c * grid_size, r * grid_size, grid_size, grid_size))
+                        pygame.draw.rect(self.minimap_surface, color, (c * grid_size, r * grid_size, grid_size, grid_size))
+
+    def _draw_minimap(self, surface, player, world=None, dt=0.0):
+        """미니맵 (우측 하단) - 캐싱 버전"""
+        size = 120
+        mx = self.sw - size - 15
+        my = self.sh - size - 15
+
+        if player and world:
+            self.minimap_timer += dt
+            p_tile = (int(player.x), int(player.y))
+            if self.minimap_timer >= 1.0 or self.last_player_tile_pos != p_tile:
+                self._update_minimap_cache(player, world)
+                self.minimap_timer = 0.0
+                self.last_player_tile_pos = p_tile
+
+        # 렌더용 임시 복사본 생성하여 마커/오버레이 그리기 (기존 캐시 유지)
+        render_surf = self.minimap_surface.copy()
 
         # 테두리 및 마스크 오버레이
-        pygame.draw.rect(minimap_surf, Colors.UI_BORDER, (0, 0, size, size), 1, border_radius=6)
+        pygame.draw.rect(render_surf, Colors.UI_BORDER, (0, 0, size, size), 1, border_radius=6)
 
         # 플레이어 위치 (중앙)
         center = size // 2
-        pygame.draw.circle(minimap_surf, (80, 200, 255), (center, center), 3)
-        pygame.draw.circle(minimap_surf, (80, 200, 255), (center, center), 5, 1)
+        pygame.draw.circle(render_surf, (80, 200, 255), (center, center), 3)
+        pygame.draw.circle(render_surf, (80, 200, 255), (center, center), 5, 1)
 
         # 좌표 표시
         font = FontManager.get(9)
-        coord = font.render(f"({int(player.x)}, {int(player.y)})", True, Colors.WHITE)
+        px_val, py_val = (int(player.x), int(player.y)) if player else (0, 0)
+        coord = font.render(f"({px_val}, {py_val})", True, Colors.WHITE)
         # 텍스트 가독성을 위해 작은 검은색 배경 패널
         coord_bg = pygame.Surface((coord.get_width() + 6, coord.get_height() + 2), pygame.SRCALPHA)
         coord_bg.fill((10, 12, 18, 180))
-        minimap_surf.blit(coord_bg, (4 - 3, size - 14 - 1))
-        minimap_surf.blit(coord, (4, size - 14))
+        render_surf.blit(coord_bg, (4 - 3, size - 14 - 1))
+        render_surf.blit(coord, (4, size - 14))
 
-        surface.blit(minimap_surf, (mx, my))
+        surface.blit(render_surf, (mx, my))
 
     def _draw_notifications(self, surface):
         """알림 메시지 (화면 상단 중앙)"""

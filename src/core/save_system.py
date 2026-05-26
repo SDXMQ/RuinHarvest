@@ -116,7 +116,45 @@ class GameSaveManager:
         if not game.player or not game.world:
             return None
 
-        # 세션 기반이므로 레이드 중의 복잡한 맵 델타 및 임시 엔티티는 저장하지 않음
+        # 1. 맵 델타 추출
+        world_deltas = []
+        if game.world:
+            # 활성화된 청크들의 델타 추출
+            for (cx, cy), chunk in game.world.chunks.items():
+                delta = game.world._extract_delta(chunk)
+                if delta:
+                    delta["cx"] = cx
+                    delta["cy"] = cy
+                    world_deltas.append(delta)
+            # 언로드 대기 중인 델타 병합
+            for (cx, cy), delta in game.world.unloaded_deltas.items():
+                delta_copy = dict(delta)
+                delta_copy["cx"] = cx
+                delta_copy["cy"] = cy
+                world_deltas.append(delta_copy)
+
+        # 2. 엔티티 데이터 추출 (야외 및 건물 내부 좀비/NPC)
+        zombies_data = []
+        npcs_data = []
+        if game.entity_manager:
+            for z in game.entity_manager.zombies:
+                zombies_data.append(z.to_dict())
+            for n in game.entity_manager.npcs:
+                npcs_data.append(n.to_dict())
+
+        # 건물 내부 좀비 저장
+        if hasattr(game, 'interior_zombies') and game.interior_zombies:
+            for z in game.interior_zombies:
+                z_dict = z.to_dict()
+                z_dict["is_interior"] = True
+                zombies_data.append(z_dict)
+
+        # 3. 건물 내부 델타 추출
+        interior_deltas = {}
+        if hasattr(game, 'explored_interiors') and game.explored_interiors:
+            for bid, interior in game.explored_interiors.items():
+                interior_deltas[bid] = interior.to_dict()
+
         return {
             "world_settings": game.world_settings,
             "player": game.player.to_dict(),
@@ -125,9 +163,9 @@ class GameSaveManager:
             "playtime": game.playtime,
             "world_name": game.world_settings.get("world_name", "월드 1"),
             "difficulty": game.world_settings.get("difficulty", "보통"),
-            "world_deltas": [],
-            "entities": {"zombies": [], "npcs": []},
-            "interior_deltas": {},
+            "world_deltas": world_deltas,
+            "entities": {"zombies": zombies_data, "npcs": npcs_data},
+            "interior_deltas": interior_deltas,
         }
 
     @staticmethod
@@ -142,7 +180,8 @@ class GameSaveManager:
         game.total_days = game.world_settings.get("total_days", 30)
 
         # 월드 및 카메라 로드
-        game.world = World(seed=game.world_settings.get("seed"), world_settings=game.world_settings)
+        is_raid_state = data.get("player", {}).get("raid_status", "NONE") == "IN_RAID"
+        game.world = World(seed=game.world_settings.get("seed"), world_settings=game.world_settings, is_raid=is_raid_state)
         game.player = Player.from_dict(data.get("player", {}), game.difficulty)
 
         game.camera = Camera()
@@ -194,8 +233,13 @@ class GameSaveManager:
         # 엔티티 복구
         entities_data = data.get("entities", {})
         game.entity_manager.zombies = []
+        game.interior_zombies = []
         for zdict in entities_data.get("zombies", []):
-            game.entity_manager.zombies.append(Zombie.from_dict(zdict))
+            z = Zombie.from_dict(zdict)
+            if zdict.get("is_interior", False):
+                game.interior_zombies.append(z)
+            else:
+                game.entity_manager.zombies.append(z)
             
         game.entity_manager.npcs = []
         for ndict in entities_data.get("npcs", []):
@@ -208,23 +252,5 @@ class GameSaveManager:
             ext_w = idata.get("width", 8) // 2
             ext_h = idata.get("height", 8) // 2
             game.explored_interiors[bid] = BuildingInterior.from_dict(idata, ext_w, ext_h)
-
-        # Alt+F4 / 강제종료 방지: raid_status 검사
-        if hasattr(game.player, 'raid_status') and game.player.raid_status == "IN_RAID":
-            # 비정상 종료 감지 - 패널티 적용 (장착 무장 및 인벤토리 증발)
-            game.player.inventory.items = []
-            game.player.equipped = {"head": None, "body": None, "feet": None, "weapon": None}
-            game.player.hp = game.player.max_hp
-            game.player.stress = 0
-            game.player.hunger = 100
-            game.player.thirst = 100
-            game.player.alive = True
-            game.player.raid_status = "NONE"
-            # 패널티 적용된 상태로 즉시 덮어쓰기
-            penalty_data = GameSaveManager.serialize_game(game)
-            if penalty_data:
-                world_name = game.world_settings.get("world_name", "autosave").replace(" ", "_")
-                save_game(penalty_data, world_name)
-            game.event_system.add_log("⚠ 비정상 종료 감지: 레이드 중 장착했던 무장과 가방이 소실되었습니다.")
 
         return True

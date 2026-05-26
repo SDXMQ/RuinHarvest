@@ -140,8 +140,9 @@ class Game:
         self.extract_timer = 0.0      # 탈출 대기 타이머
         self.extract_target = None    # 현재 서있는 탈출구 정보
         self.map_visible = False
-        self.map_ui = None
         self.prev_state = None
+        self.dt = 0.0
+        self.show_raid_start_popup = False
 
     def _create_window(self):
         """창 생성"""
@@ -262,7 +263,11 @@ class Game:
             return False
 
         if GameSaveManager.deserialize_game(self, data):
-            self.state = GameState.HIDEOUT
+            if self.player.raid_status == "IN_RAID":
+                self.state = GameState.PLAYING
+                self.show_raid_start_popup = True
+            else:
+                self.state = GameState.HIDEOUT
             self.player.event_system = self.event_system
             self.event_system.add_log(t("log_game_loaded", self.current_day))
             return True
@@ -287,6 +292,7 @@ class Game:
         while self.running:
             dt = self.clock.tick(FPS) / 1000.0
             dt = min(dt, 0.05)  # 프레임 레이트 안전장치
+            self.dt = dt
 
             self._handle_events()
             self._update(dt)
@@ -370,8 +376,7 @@ class Game:
                     self.extract_target = None
                     
                     if self.world_settings:
-                        self.world_settings["seed"] = random.randint(0, 2**31)
-                        self.world = World(seed=self.world_settings["seed"], world_settings=self.world_settings)
+                        self.world = World(seed=self.world_settings["seed"], world_settings=self.world_settings, is_raid=True)
                         spawn_x = CHUNK_SIZE // 2 + 0.5
                         spawn_y = CHUNK_SIZE // 2 + 3.5
                         self.player.x = spawn_x
@@ -383,7 +388,7 @@ class Game:
                         self.save_current_game()  # IN_RAID 상태 원자적 저장
                         
                     self.transition.start("fade", 0.8,
-                        on_mid=lambda: setattr(self, 'state', GameState.PLAYING))
+                        on_mid=lambda: (setattr(self, 'state', GameState.PLAYING), setattr(self, 'show_raid_start_popup', True)))
                 elif result == "main_menu":
                     self.transition.start("fade", 0.6,
                         on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
@@ -392,7 +397,27 @@ class Game:
                     self.state = GameState.PAUSED
 
             elif self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
-                self._process_global_inputs(event)
+                if self.show_raid_start_popup:
+                    if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        mx, my = event.pos
+                        pw, ph = 340, 220
+                        px = (self.screen_w - pw) // 2
+                        py = (self.screen_h - ph) // 2
+                        
+                        # 버튼 1: 은신처로 돌아가기 (퇴각)
+                        if px + 30 <= mx <= px + 310 and py + 130 <= my <= py + 162:
+                            SoundGenerator.play("menu_select")
+                            self.show_raid_start_popup = False
+                            self.player.raid_status = "NONE"
+                            self.cleanup_raid()
+                            self.state = GameState.HIDEOUT
+                            self.save_current_game()
+                        # 버튼 2: 레이드 계속하기 (진입)
+                        elif px + 30 <= mx <= px + 310 and py + 172 <= my <= py + 204:
+                            SoundGenerator.play("menu_select")
+                            self.show_raid_start_popup = False
+                else:
+                    self._process_global_inputs(event)
 
             elif self.state == GameState.PAUSED:
                 result = self.pause_ui.handle_event(event)
@@ -610,6 +635,8 @@ class Game:
 
     def _process_global_update(self, dt):
         """게임플레이 및 건물 내부 공통 업데이트"""
+        if self.show_raid_start_popup:
+            return
         if not self.player or not self.player.alive:
             return
 
@@ -819,7 +846,7 @@ class Game:
             self.hideout_ui.draw(self.screen, self.player)
 
         # 지도 오버레이 렌더링
-        if self.map_visible and self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
+        if self.map_ui and self.map_visible and self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
             self.map_ui.draw(self.screen, self.player, self.world)
 
         # 전환 효과
@@ -880,7 +907,12 @@ class Game:
 
         # UI (가장 위에)
         self.hud.draw(game_surface, self.player, self.time_system,
-                     self.weather_system, self.current_day, self.total_days, game=self)
+                     self.weather_system, self.current_day, self.total_days,
+                     raid_time_left=self.raid_time_left,
+                     world=self.world,
+                     extract_target=self.extract_target,
+                     extract_timer=self.extract_timer,
+                     dt=self.dt)
 
         # 이벤트 로그
         self.event_log_ui.draw(game_surface, self.event_system.event_log)
@@ -898,6 +930,10 @@ class Game:
         # 상호작용 힌트
         self.world_renderer.draw_interaction_hint(game_surface)
 
+        # 레이드 진입 안내 팝업창
+        if self.show_raid_start_popup:
+            self._draw_raid_start_popup(game_surface)
+
     def _draw_interior_gameplay(self):
         """건물 내부 게임플레이 및 UI 렌더링"""
         if not self.player:
@@ -908,7 +944,12 @@ class Game:
 
         # UI (가장 위에)
         self.hud.draw(self.screen, self.player, self.time_system,
-                     self.weather_system, self.current_day, self.total_days, game=self)
+                     self.weather_system, self.current_day, self.total_days,
+                     raid_time_left=self.raid_time_left,
+                     world=self.world,
+                     extract_target=self.extract_target,
+                     extract_timer=self.extract_timer,
+                     dt=self.dt)
 
         # 이벤트 로그
         self.event_log_ui.draw(self.screen, self.event_system.event_log)
@@ -922,6 +963,10 @@ class Game:
 
         # 퀘스트 HUD
         self._draw_quest_hud(self.screen)
+
+        # 레이드 진입 안내 팝업창
+        if self.show_raid_start_popup:
+            self._draw_raid_start_popup(self.screen)
 
     def _draw_quest_hud(self, surface):
         """퀘스트 진행 상황 HUD 렌더링"""
@@ -1044,6 +1089,53 @@ class Game:
     @active_window_pos.setter
     def active_window_pos(self, value):
         self.interior_system.active_window_pos = value
+
+    def _draw_raid_start_popup(self, surface):
+        """레이드 진입 안내 팝업창 렌더링"""
+        # 화면 어둡게 오버레이
+        overlay = pygame.Surface((self.screen_w, self.screen_h), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 180))
+        surface.blit(overlay, (0, 0))
+        
+        # 팝업 패널 설정 (가로 340, 세로 220)
+        pw, ph = 340, 220
+        px = (self.screen_w - pw) // 2
+        py = (self.screen_h - ph) // 2
+        
+        # 배경 그리기 (유리모피즘 연출)
+        draw_rounded_rect(surface, (18, 22, 36, 240), (px, py, pw, ph), radius=10)
+        pygame.draw.rect(surface, (100, 110, 130), (px, py, pw, ph), 1, border_radius=10)
+        
+        font_title = FontManager.get(15)
+        font_body = FontManager.get(12)
+        font_btn = FontManager.get(13)
+        
+        # 제목 및 경고 문구
+        title_surf = font_title.render("레이드 진입 안내", True, (255, 100, 100))
+        surface.blit(title_surf, (px + (pw - title_surf.get_width()) // 2, py + 20))
+        
+        lines = [
+            "현재 위험한 레이드 지역에 진입했습니다.",
+            "레이드 도중 사망 시 무장과 가방이 소실됩니다.",
+            "지금 바로 레이드를 시작하시겠습니까?"
+        ]
+        for idx, line in enumerate(lines):
+            body_surf = font_body.render(line, True, Colors.UI_TEXT)
+            surface.blit(body_surf, (px + (pw - body_surf.get_width()) // 2, py + 60 + idx * 20))
+            
+        # 버튼 1: 은신처로 돌아가기 (퇴각)
+        btn1_color = (180, 60, 60, 220)
+        draw_rounded_rect(surface, btn1_color, (px + 30, py + 130, 280, 32), radius=5)
+        pygame.draw.rect(surface, (220, 80, 80), (px + 30, py + 130, 280, 32), 1, border_radius=5)
+        btn1_lbl = font_btn.render("은신처로 돌아가기 (퇴각)", True, Colors.WHITE)
+        surface.blit(btn1_lbl, (px + 30 + (280 - btn1_lbl.get_width()) // 2, py + 130 + (32 - btn1_lbl.get_height()) // 2))
+        
+        # 버튼 2: 레이드 계속하기 (진입)
+        btn2_color = (45, 135, 90, 220)
+        draw_rounded_rect(surface, btn2_color, (px + 30, py + 172, 280, 32), radius=5)
+        pygame.draw.rect(surface, (70, 180, 120), (px + 30, py + 172, 280, 32), 1, border_radius=5)
+        btn2_lbl = font_btn.render("레이드 계속하기 (진입)", True, Colors.WHITE)
+        surface.blit(btn2_lbl, (px + 30 + (280 - btn2_lbl.get_width()) // 2, py + 172 + (32 - btn2_lbl.get_height()) // 2))
 
 
 # ============================================================
