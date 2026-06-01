@@ -12,6 +12,10 @@ from items import ITEM_DATABASE
 from particles import ParticleEmitters
 from sounds import SoundGenerator
 from i18n import t
+import zlib
+
+def get_building_hash(building_id):
+    return zlib.crc32(building_id.encode('utf-8'))
 
 
 class InteriorSystem:
@@ -40,10 +44,16 @@ class InteriorSystem:
             self.current_interior = self.explored_interiors[building_id]
         else:
             from building_interior import BuildingInterior
+            # 50% chance to have 2 floors
+            from utils import seeded_random
+            max_floors = 2 if getattr(building, "building_type", "house") != "barn" and seeded_random(get_building_hash(building_id), 0.5) else 1
+            
             self.current_interior = BuildingInterior(
                 building.building_type,
                 building.width, building.height,
-                seed=hash(building_id) + (self.game.world.seed if self.game.world else 0)
+                seed=get_building_hash(building_id) + (self.game.world.seed if self.game.world else 0),
+                floor_idx=0,
+                max_floors=max_floors
             )
             self.explored_interiors[building_id] = self.current_interior
 
@@ -140,6 +150,89 @@ class InteriorSystem:
         from main import GameState
         self.game.transition.start("fade", 0.5,
             on_mid=lambda: setattr(self.game, 'state', GameState.PLAYING))
+
+    def go_upstairs(self):
+        """위층으로 이동"""
+        if not self.current_interior or not self.interior_building_ref:
+            return
+            
+        b = self.interior_building_ref
+        building_id = f"{b.x}_{b.y}_floor_{self.current_interior.floor_idx + 1}"
+        
+        # 좀비 상태 저장
+        self._save_current_floor_zombies()
+        
+        if building_id in self.explored_interiors:
+            self.current_interior = self.explored_interiors[building_id]
+        else:
+            from building_interior import BuildingInterior
+            self.current_interior = BuildingInterior(
+                b.building_type,
+                b.width, b.height,
+                seed=get_building_hash(building_id) + (self.game.world.seed if self.game.world else 0),
+                floor_idx=self.current_interior.floor_idx + 1,
+                max_floors=self.current_interior.max_floors
+            )
+            self.explored_interiors[building_id] = self.current_interior
+            
+        self._load_current_floor_zombies()
+        
+        # 윗층으로 올라가면 플레이어 위치는 내려가는 계단(door_pos) 앞
+        self.game.player.enter_interior(float(self.current_interior.door_pos[0]), float(self.current_interior.door_pos[1] - 1))
+        
+        SoundGenerator.play("door_open") # 계단 소리로 대체 가능
+        self.game.transition.start("fade", 0.5)
+        
+    def go_downstairs(self):
+        """아래층으로 이동"""
+        if not self.current_interior or not self.interior_building_ref:
+            return
+            
+        b = self.interior_building_ref
+        
+        # 1층으로 가는 경우 0층
+        next_idx = self.current_interior.floor_idx - 1
+        building_id = f"{b.x}_{b.y}" if next_idx == 0 else f"{b.x}_{b.y}_floor_{next_idx}"
+        
+        # 좀비 상태 저장
+        self._save_current_floor_zombies()
+        
+        if building_id in self.explored_interiors:
+            self.current_interior = self.explored_interiors[building_id]
+            
+        self._load_current_floor_zombies()
+        
+        # 아래층으로 내려가면 플레이어 위치는 올라가는 계단 앞
+        # 올라가는 계단(stairs_up) 타일 찾기
+        spawn_x, spawn_y = self.current_interior.width // 2, self.current_interior.height // 2
+        for y in range(self.current_interior.height):
+            for x in range(self.current_interior.width):
+                if self.current_interior.tiles[y][x] == "stairs_up":
+                    spawn_x, spawn_y = x, y + 1
+                    break
+                    
+        self.game.player.enter_interior(float(spawn_x), float(spawn_y))
+        
+        SoundGenerator.play("door_open")
+        self.game.transition.start("fade", 0.5)
+
+    def _save_current_floor_zombies(self):
+        if self.current_interior:
+            self.current_interior.zombies = [
+                {"x": z.x, "y": z.y, "hp": z.hp, "type": z.zombie_type}
+                for z in self.interior_zombies if not z.is_dead
+            ]
+            
+    def _load_current_floor_zombies(self):
+        self.interior_zombies = []
+        for zdata in self.current_interior.zombies:
+            z_type = zdata.get("type", "normal")
+            z = Zombie(zdata["x"], zdata["y"], z_type, self.game.difficulty)
+            z.speed *= 0.5
+            z.detection_range = 3
+            if "hp" in zdata:
+                z.hp = zdata["hp"]
+            self.interior_zombies.append(z)
 
     def handle_interior_attack(self):
         """실내 공격 및 탄약 소모 판정"""

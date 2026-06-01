@@ -10,6 +10,7 @@ class InteractionHandler:
     """게임 내 모든 상호작용(E키, NPC 거래, 퀘스트 등)을 담당하는 비즈니스 로직 핸들러"""
     def __init__(self, game):
         self.game = game
+        self.extract_warning_cooldown = 0.0
 
     def handle_interaction(self):
         """오버월드에서의 E키 상호작용"""
@@ -172,9 +173,16 @@ class InteractionHandler:
                 SoundGenerator.play("error")
                 return
 
-        # 출구 확인
+        # 출구 및 계단 확인
         if self.game.current_interior.is_at_exit(ix, iy):
-            self.game._exit_building()
+            if self.game.current_interior.floor_idx > 0:
+                self.game.interior_system.go_downstairs()
+            else:
+                self.game._exit_building()
+            return
+            
+        if hasattr(self.game.current_interior, 'is_at_stairs_up') and self.game.current_interior.is_at_stairs_up(ix, iy):
+            self.game.interior_system.go_upstairs()
             return
 
         # 가구 탐색 및 상호작용
@@ -195,10 +203,6 @@ class InteractionHandler:
                     self.game.time_system.current_hour = 6.0
                     if current_hour >= 18:
                         self.game.time_system.current_day += 1
-
-                    # 습격 밤이면 자동 방어 처리
-                    if self.game.raid_active:
-                        self.game._resolve_raid()
 
                     self.game.player.hp = min(self.game.player.max_hp, self.game.player.hp + 50)
                     self.game.player.stamina = self.game.player.max_stamina
@@ -234,6 +238,9 @@ class InteractionHandler:
                 self.game.event_system.add_log(t("searched_already"))
 
     def update_extraction(self, dt):
+        if hasattr(self, 'extract_warning_cooldown') and self.extract_warning_cooldown > 0:
+            self.extract_warning_cooldown -= dt
+
         if not self.game.player or self.game.player.is_interior or not self.game.world:
             self.game.extract_timer = 0.0
             self.game.extract_target = None
@@ -252,21 +259,22 @@ class InteractionHandler:
 
         if in_range_ep:
             if in_range_ep["type"] == "key_required":
-                has_key = self.game.player.inventory.has_item(in_range_ep["key_item"])
+                is_sandbox = getattr(self.game, 'sandbox_mode', False)
+                has_key = is_sandbox or self.game.player.inventory.has_item(in_range_ep["key_item"])
                 if not has_key:
                     self.game.extract_timer = 0.0
                     self.game.extract_target = None
-                    import random
-                    if random.random() < dt * 1.5:
+                    if getattr(self, 'extract_warning_cooldown', 0.0) <= 0.0:
                         self.game.event_system.add_log(f"탈출하려면 '{in_range_ep['key_item']}'이 필요합니다.")
+                        self.extract_warning_cooldown = 3.0
                     return
             elif in_range_ep["type"] == "time_locked":
                 if self.game.raid_time_left > 300:
                     self.game.extract_timer = 0.0
                     self.game.extract_target = None
-                    import random
-                    if random.random() < dt * 1.5:
+                    if getattr(self, 'extract_warning_cooldown', 0.0) <= 0.0:
                         self.game.event_system.add_log("이 탈출구는 아직 활성화되지 않았습니다 (남은 시간 5분 이하 시 가능).")
+                        self.extract_warning_cooldown = 3.0
                     return
 
             # 이동 중이면 탈출 카운트다운 취소 (하드코어 제한)

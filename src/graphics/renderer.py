@@ -129,6 +129,7 @@ class TileRenderer:
 # ============================================================
 # 캐릭터 렌더러
 # ============================================================
+
 class CharacterRenderer:
     """코드 기반 캐릭터 스프라이트 생성"""
 
@@ -632,6 +633,11 @@ class ItemIconRenderer:
             "농작물": cls._draw_crop,
             "횃불": cls._draw_torch,
             "함정": cls._draw_trap,
+            "금시계": cls._draw_gold_watch,
+            "은반지": cls._draw_silver_ring,
+            "골동품": cls._draw_antique,
+            "그래픽카드": cls._draw_gpu,
+            "CPU": cls._draw_cpu,
         }
 
         renderer = renderers.get(item_id)
@@ -643,6 +649,54 @@ class ItemIconRenderer:
             pygame.draw.rect(s, (140, 140, 150), (4, 4, sz - 8, sz - 8), 1, border_radius=4)
 
         return s
+
+    @staticmethod
+    def _draw_gold_watch(s, cx, cy, sz):
+        import pygame
+        import math
+        pygame.draw.circle(s, (255, 215, 0), (cx, cy), 6) # 골드 테두리
+        pygame.draw.circle(s, (255, 255, 255), (cx, cy), 4) # 흰색 배경
+        pygame.draw.line(s, (0, 0, 0), (cx, cy), (cx, cy - 3), 1) # 시침
+        pygame.draw.line(s, (0, 0, 0), (cx, cy), (cx + 2, cy), 1) # 분침
+        # 시계줄
+        pygame.draw.rect(s, (139, 69, 19), (cx - 3, cy - 10, 6, 4))
+        pygame.draw.rect(s, (139, 69, 19), (cx - 3, cy + 6, 6, 4))
+
+    @staticmethod
+    def _draw_silver_ring(s, cx, cy, sz):
+        import pygame
+        pygame.draw.circle(s, (192, 192, 192), (cx, cy), 6, 2) # 은색 테두리
+        pygame.draw.circle(s, (224, 255, 255), (cx, cy - 6), 3) # 보석
+
+    @staticmethod
+    def _draw_antique(s, cx, cy, sz):
+        import pygame
+        import math
+        # 도자기 모양
+        pygame.draw.ellipse(s, (139, 115, 85), (cx - 6, cy - 4, 12, 10)) # 몸통
+        pygame.draw.rect(s, (139, 115, 85), (cx - 3, cy - 8, 6, 5)) # 목
+        pygame.draw.ellipse(s, (100, 80, 60), (cx - 4, cy - 9, 8, 3)) # 입구
+        # 무늬
+        pygame.draw.arc(s, (80, 60, 40), (cx - 5, cy - 2, 10, 6), 0, math.pi, 1)
+
+    @staticmethod
+    def _draw_gpu(s, cx, cy, sz):
+        import pygame
+        pygame.draw.rect(s, (40, 40, 40), (cx - 8, cy - 5, 16, 10)) # 기판
+        pygame.draw.rect(s, (20, 20, 20), (cx - 6, cy - 3, 12, 6)) # 쿨러 하우징
+        pygame.draw.circle(s, (80, 80, 80), (cx - 3, cy), 2) # 팬 1
+        pygame.draw.circle(s, (80, 80, 80), (cx + 3, cy), 2) # 팬 2
+        pygame.draw.rect(s, (218, 165, 32), (cx - 7, cy + 5, 14, 2)) # 골드 핑거
+
+    @staticmethod
+    def _draw_cpu(s, cx, cy, sz):
+        import pygame
+        pygame.draw.rect(s, (34, 139, 34), (cx - 6, cy - 6, 12, 12)) # 녹색 기판
+        pygame.draw.rect(s, (192, 192, 192), (cx - 4, cy - 4, 8, 8)) # 은색 뚜껑
+        # 핀 (점)
+        for i in range(3):
+            for j in range(3):
+                pygame.draw.rect(s, (218, 165, 32), (cx - 5 + i * 5, cy - 5 + j * 5, 1, 1))
 
     @staticmethod
     def _draw_can(s, cx, cy, sz):

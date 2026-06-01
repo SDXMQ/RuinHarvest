@@ -552,7 +552,7 @@ class EndingUI:
         self.ending_data = ending_data
         
         # 인벤토리에 들어있는 아이템 총 개수 계산
-        loot_sum = sum(cnt for _, cnt in player.inventory.items)
+        loot_sum = sum(item[1] for item in player.inventory.items)
         
         self.player_stats = {
             "kills": player.killed_zombies,

@@ -465,7 +465,7 @@ ITEM_DATABASE = {
         "rarity": 0.1,
         "value": 12000,
     },
-    "銀반지": {
+    "은반지": {
         "category": ItemCategory.MISC,
         "description": "주거지 침실 화장대나 금고 등에서 발견되는 은빛 귀금속 전리품.",
         "stackable": True,
@@ -485,7 +485,7 @@ ITEM_DATABASE = {
     },
     "Scav 식별줄(Dogtag)": {
         "category": ItemCategory.QUEST,
-        "description": "쓰러진 스캐브의 신원을 확인할 수 있는 식별용 금속 표식. 플리마켓 거래 불가.",
+        "description": "쓰러진 Scav의 신원을 확인할 수 있는 식별용 금속 표식. 플리마켓 거래 불가.",
         "stackable": True,
         "max_stack": 20,
         "weight": 0.01,
@@ -623,13 +623,16 @@ class Inventory:
     @property
     def current_weight(self):
         total = 0.0
-        for name, count in self.items:
+        for item in self.items:
+            name, count = item[0], item[1]
             data = ITEM_DATABASE.get(name, {})
             total += data.get("weight", 0.1) * count
         return total
 
-    def add_item(self, item_name, count=1):
+    def add_item(self, item_name, count=1, metadata=None):
         """아이템 추가. 성공 시 True"""
+        if metadata is None:
+            metadata = {}
         data = ITEM_DATABASE.get(item_name)
         if not data:
             return False
@@ -647,14 +650,17 @@ class Inventory:
         # 스택 가능한 아이템 처리 시뮬레이션
         if data.get("stackable"):
             max_stack = data.get("max_stack", 99)
-            for i, (name, cnt) in enumerate(temp_items):
-                if name == item_name and cnt < max_stack:
+            for i, item in enumerate(temp_items):
+                name, cnt = item[0], item[1]
+                meta = item[2] if len(item) > 2 else {}
+                if name == item_name and meta == metadata and cnt < max_stack:
                     add = min(temp_count, max_stack - cnt)
                     
                     if not self.is_sandbox:
                         # 임시 무게 계산
                         temp_current_weight = 0.0
-                        for t_name, t_cnt in temp_items:
+                        for t_item in temp_items:
+                            t_name, t_cnt = t_item[0], t_item[1]
                             t_data = ITEM_DATABASE.get(t_name, {})
                             temp_current_weight += t_data.get("weight", 0.1) * t_cnt
                         
@@ -664,7 +670,7 @@ class Inventory:
                         if add <= 0:
                             break
                             
-                    temp_items[i] = (name, cnt + add)
+                    temp_items[i] = (name, cnt + add, meta)
                     temp_count -= add
                     if temp_count <= 0:
                         break
@@ -677,7 +683,8 @@ class Inventory:
                 
                 if not self.is_sandbox:
                     temp_current_weight = 0.0
-                    for t_name, t_cnt in temp_items:
+                    for t_item in temp_items:
+                        t_name, t_cnt = t_item[0], t_item[1]
                         t_data = ITEM_DATABASE.get(t_name, {})
                         temp_current_weight += t_data.get("weight", 0.1) * t_cnt
                     
@@ -687,18 +694,19 @@ class Inventory:
                     if add <= 0:
                         break
 
-                temp_items.append((item_name, add))
+                temp_items.append((item_name, add, metadata.copy()))
                 temp_count -= add
             else:
                 if not self.is_sandbox:
                     temp_current_weight = 0.0
-                    for t_name, t_cnt in temp_items:
+                    for t_item in temp_items:
+                        t_name, t_cnt = t_item[0], t_item[1]
                         t_data = ITEM_DATABASE.get(t_name, {})
                         temp_current_weight += t_data.get("weight", 0.1) * t_cnt
                     
                     if temp_current_weight + item_weight - 1e-7 > self.max_weight:
                         break
-                temp_items.append((item_name, 1))
+                temp_items.append((item_name, 1, metadata.copy()))
                 temp_count -= 1
 
         # 요청한 개수를 모두 담을 수 있는 경우에만 실제 인벤토리 업데이트
@@ -712,13 +720,15 @@ class Inventory:
         remaining = count
         to_remove = []
 
-        for i, (name, cnt) in enumerate(self.items):
+        for i, item in enumerate(self.items):
+            name, cnt = item[0], item[1]
+            meta = item[2] if len(item) > 2 else {}
             if name == item_name:
                 if cnt <= remaining:
                     remaining -= cnt
                     to_remove.append(i)
                 else:
-                    self.items[i] = (name, cnt - remaining)
+                    self.items[i] = (name, cnt - remaining, meta)
                     remaining = 0
                 if remaining <= 0:
                     break
@@ -730,26 +740,29 @@ class Inventory:
 
     def has_item(self, item_name, count=1):
         """아이템 보유 확인"""
-        total = sum(cnt for name, cnt in self.items if name == item_name)
+        total = sum(item[1] for item in self.items if item[0] == item_name)
         return total >= count
 
     def count_item(self, item_name):
         """아이템 개수"""
-        return sum(cnt for name, cnt in self.items if name == item_name)
+        return sum(item[1] for item in self.items if item[0] == item_name)
 
     def get_items_by_category(self, category):
         """카테고리별 아이템 목록"""
         result = []
-        for name, cnt in self.items:
+        for item in self.items:
+            name, cnt = item[0], item[1]
+            meta = item[2] if len(item) > 2 else {}
             data = ITEM_DATABASE.get(name, {})
             if data.get("category") == category:
-                result.append((name, cnt))
+                result.append((name, cnt, meta))
         return result
 
     @property
     def total_weight(self):
         total = 0
-        for name, cnt in self.items:
+        for item in self.items:
+            name, cnt = item[0], item[1]
             data = ITEM_DATABASE.get(name, {})
             total += data.get("weight", 0) * cnt
         return total
@@ -761,44 +774,55 @@ class Inventory:
     def get_all_items(self):
         """모든 아이템 (이름, 개수, 데이터) 리스트"""
         result = []
-        for name, cnt in self.items:
+        for item in self.items:
+            name, cnt = item[0], item[1]
+            meta = item[2] if len(item) > 2 else {}
             data = ITEM_DATABASE.get(name, {})
-            result.append((name, cnt, data))
+            result.append((name, cnt, meta, data))
         return result
 
     def to_dict(self):
         """저장용 딕셔너리"""
-        return {"slots": self.slots, "items": list(self.items)}
+        return {
+            "slots": self.slots,
+            "items": list(self.items),
+            "is_sandbox": self.is_sandbox
+        }
 
     @classmethod
     def from_dict(cls, data):
         """딕셔너리에서 복원"""
         inv = cls(data.get("slots", 24))
-        inv.items = [tuple(item) for item in data.get("items", [])]
+        inv.items = [tuple(item) if len(item) == 3 else (item[0], item[1], {}) for item in data.get("items", [])]
+        inv.is_sandbox = data.get("is_sandbox", False)
         return inv
 
     def merge_items(self):
         """인벤토리 내부의 중복된 스택 아이템 병합"""
         merged_items = []
-        for name, count in self.items:
+        for item in self.items:
+            name, count = item[0], item[1]
+            meta = item[2] if len(item) > 2 else {}
             data = ITEM_DATABASE.get(name, {})
             if data.get("stackable"):
                 max_stack = data.get("max_stack", 99)
                 placed = False
-                for i, (m_name, m_cnt) in enumerate(merged_items):
-                    if m_name == name and m_cnt < max_stack:
+                for i, m_item in enumerate(merged_items):
+                    m_name, m_cnt = m_item[0], m_item[1]
+                    m_meta = m_item[2] if len(m_item) > 2 else {}
+                    if m_name == name and m_meta == meta and m_cnt < max_stack:
                         add = min(count, max_stack - m_cnt)
-                        merged_items[i] = (m_name, m_cnt + add)
+                        merged_items[i] = (m_name, m_cnt + add, m_meta)
                         count -= add
                         if count <= 0:
                             placed = True
                             break
                 while count > 0:
                     add = min(count, max_stack)
-                    merged_items.append((name, add))
+                    merged_items.append((name, add, meta))
                     count -= add
             else:
-                merged_items.append((name, count))
+                merged_items.append((name, count, meta))
         self.items = merged_items
 
     def auto_sort(self):
@@ -818,7 +842,7 @@ class Inventory:
         }
         
         def sort_key(item_tuple):
-            name, count = item_tuple
+            name = item_tuple[0]
             data = ITEM_DATABASE.get(name, {})
             cat = data.get("category", ItemCategory.MISC)
             cat_val = category_order.get(cat, 9)

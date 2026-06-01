@@ -19,6 +19,8 @@ class TileType:
     SAND = "sand"
     FLOOR_WOOD = "floor_wood"
     FLOOR_TILE = "floor_tile"
+    STAIRS_UP = "stairs_up"
+    STAIRS_DOWN = "stairs_down"
 
 
 # ============================================================
@@ -610,14 +612,17 @@ class World:
         iwx = int(wx)
         iwy = int(wy)
 
-        # 건물 벽 체크 - 문 앞은 통과 허용
+        # 건물 하단 벽 체크 - 문 앞은 통과 허용
         buildings = self.get_nearby_buildings(iwx, iwy, 8)
         for b in buildings:
             if b.contains(iwx, iwy):
-                # 문 타일과 문 바로 앞 1타일은 통과 허용
-                if abs(iwx - b.door_x) <= 1 and (iwy == b.door_y or iwy == b.door_y + 1):
-                    continue
-                return False
+                # 건물 하단 벽만 통행 불가 처리
+                if iwy == b.y + b.height - 1:
+                    # 문 타일과 문 바로 앞은 통과 허용
+                    if abs(iwx - b.door_x) <= 1 and (iwy == b.door_y or iwy == b.door_y + 1):
+                        continue
+                    return False
+                # 상단 및 뒤쪽은 통과 가능
 
         # 오브젝트 체크 (나무, 바위 등 solid) - 판정 완화
         near_objects = self.get_nearby_objects(iwx, iwy, 1)

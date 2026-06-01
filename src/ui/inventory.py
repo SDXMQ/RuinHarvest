@@ -248,7 +248,8 @@ class InventoryUI:
             draw_rounded_rect(surface, bg_color, (sx, sy, slot_size, slot_size), radius=4)
 
             if i < len(player.inventory.items):
-                item_name, count = player.inventory.items[i]
+                item_tup = player.inventory.items[i]
+                item_name, count = item_tup[0], item_tup[1]
                 
                 # 현재 드래그 중인 슬롯은 비워진 것처럼 보이게 처리
                 is_dragged = self.dragging and self.drag_source_type == 'inventory' and self.drag_source_index == i

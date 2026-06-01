@@ -171,7 +171,8 @@ class HideoutUI:
             sy = inv_start_y + row * 42
             if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
                 if idx < len(player.inventory.items):
-                    name, count = player.inventory.items[idx]
+                    item_tup = player.inventory.items[idx]
+                    name, count = item_tup[0], item_tup[1]
                     self.dragging = True
                     self.drag_item = (name, count)
                     self.drag_source = "inventory"
@@ -195,7 +196,8 @@ class HideoutUI:
             sy = stash_start_y + row * 42
             if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
                 if actual_idx < len(player.stash.items):
-                    name, count = player.stash.items[actual_idx]
+                    item_tup = player.stash.items[actual_idx]
+                    name, count = item_tup[0], item_tup[1]
                     self.dragging = True
                     self.drag_item = (name, count)
                     self.drag_source = "stash"
@@ -276,9 +278,9 @@ class HideoutUI:
                 slot = self.drag_source.replace("equipped_", "")
                 player.equipped[slot] = copy.deepcopy(item_name)
             elif self.drag_source == "stash":
-                player.stash.items.insert(min(self.drag_source_idx, len(player.stash.items)), (copy.deepcopy(item_name), copy.deepcopy(count)))
+                player.stash.items.insert(min(self.drag_source_idx, len(player.stash.items)), (copy.deepcopy(item_name), copy.deepcopy(count), {}))
             elif self.drag_source == "inventory":
-                player.inventory.items.insert(min(self.drag_source_idx, len(player.inventory.items)), (copy.deepcopy(item_name), copy.deepcopy(count)))
+                player.inventory.items.insert(min(self.drag_source_idx, len(player.inventory.items)), (copy.deepcopy(item_name), copy.deepcopy(count), {}))
 
         self.dragging = False
         self.drag_item = None
@@ -356,7 +358,7 @@ class HideoutUI:
                 sy = inv_start_y + row * 42
                 if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
                     if idx < len(player.inventory.items):
-                        name, _ = player.inventory.items[idx]
+                        name = player.inventory.items[idx][0]
                         self.selected_item = {"source": "inventory", "index": idx, "item_name": name}
                     else:
                         self.selected_item = None
@@ -375,7 +377,7 @@ class HideoutUI:
                 sy = stash_start_y + row * 42
                 if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
                     if actual_idx < len(player.stash.items):
-                        name, _ = player.stash.items[actual_idx]
+                        name = player.stash.items[actual_idx][0]
                         self.selected_item = {"source": "stash", "index": actual_idx, "item_name": name}
                     else:
                         self.selected_item = None
@@ -398,14 +400,16 @@ class HideoutUI:
                 # Stash -> Inventory
                 if src == "stash" and 210 <= mx <= 350 and 80 <= my <= 115:
                     idx = self.selected_item["index"]
-                    name, count = copy.deepcopy(player.stash.items[idx])
+                    item_tup = copy.deepcopy(player.stash.items[idx])
+                    name, count = item_tup[0], item_tup[1]
                     if player.inventory.add_item(copy.deepcopy(name), copy.deepcopy(count)):
                         player.stash.remove_item(name, count)
                         self.selected_item = None
                 # Inventory -> Stash
                 elif src == "inventory" and 210 <= mx <= 350 and 80 <= my <= 115:
                     idx = self.selected_item["index"]
-                    name, count = copy.deepcopy(player.inventory.items[idx])
+                    item_tup = copy.deepcopy(player.inventory.items[idx])
+                    name, count = item_tup[0], item_tup[1]
                     if player.stash.add_item(copy.deepcopy(name), copy.deepcopy(count)):
                         player.inventory.remove_item(name, count)
                         self.selected_item = None
@@ -503,7 +507,8 @@ class HideoutUI:
             else:
                 # 플레이어 창고(Stash) 아이템을 상인에게 즉시 판매
                 list_y = 180
-                for idx, (item_name, count) in enumerate(player.stash.items):
+                for idx, item_tup in enumerate(player.stash.items):
+                    item_name, count = item_tup[0], item_tup[1]
                     ay = list_y + idx * 45 - self.trader_scroll * 45
                     if 180 <= ay <= self.sh - 80:
                         if 30 <= mx <= 420 and ay <= my <= ay + 40:
@@ -538,7 +543,8 @@ class HideoutUI:
                 elif action == "sell" and 470 <= mx <= 730 and 490 <= my <= 525:
                     idx = self.selected_shop_item["index"]
                     if idx < len(player.stash.items):
-                        name, count = copy.deepcopy(player.stash.items[idx])
+                        item_tup = copy.deepcopy(player.stash.items[idx])
+                        name, count = item_tup[0], item_tup[1]
                         if name == item_name:
                             # 1개씩 판매
                             player.stash.remove_item(copy.deepcopy(name), 1)
@@ -741,7 +747,8 @@ class HideoutUI:
 
             # 아이템 렌더링
             if idx < len(player.inventory.items):
-                name, count = player.inventory.items[idx]
+                item_tup = player.inventory.items[idx]
+                name, count = item_tup[0], item_tup[1]
                 icon = ItemIconRenderer.get_icon(name)
                 surface.blit(icon, (sx + 3, sy + 3))
                 
@@ -782,7 +789,8 @@ class HideoutUI:
                 pygame.draw.rect(surface, Colors.UI_ACCENT, (sx - 1, sy - 1, 40, 40), 2, border_radius=4)
 
             if actual_idx < len(player.stash.items):
-                name, count = player.stash.items[actual_idx]
+                item_tup = player.stash.items[actual_idx]
+                name, count = item_tup[0], item_tup[1]
                 icon = ItemIconRenderer.get_icon(name)
                 surface.blit(icon, (sx + 3, sy + 3))
                 if count > 1:
@@ -1031,7 +1039,8 @@ class HideoutUI:
                     surface.blit(p_surf, (list_x + list_w - p_surf.get_width() - 15, ay + 12))
         else:
             # Stash 인벤토리 판매 대상 목록
-            for idx, (item_name, count) in enumerate(player.stash.items):
+            for idx, item_tup in enumerate(player.stash.items):
+                item_name, count = item_tup[0], item_tup[1]
                 ay = list_y + idx * 45 - self.trader_scroll * 45
                 if list_y <= ay <= list_y + list_h - 40:
                     is_hover = self.selected_shop_item and self.selected_shop_item["name"] == item_name and self.selected_shop_item["action"] == "sell" and self.selected_shop_item["index"] == idx

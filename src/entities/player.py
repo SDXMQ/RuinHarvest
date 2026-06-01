@@ -117,12 +117,17 @@ class Player:
         self.raid_status = "NONE"  # NONE, IN_RAID, HIDEOUT
         self.explored_tiles = set()  # set of (x, y)
         self.event_system = None
+        
+        # 라디오 스캔 시스템
+        self.radio_scan_timer = 0.0
+        self.radio_scan_target = ""
 
     def enter_interior(self, ix, iy):
         """건물 내부 진입 시 좌표 전환"""
+        if not self.is_interior:
+            self.exterior_x = self.x
+            self.exterior_y = self.y
         self.is_interior = True
-        self.exterior_x = self.x
-        self.exterior_y = self.y
         self.x = float(ix)
         self.y = float(iy)
         self.moving = False
@@ -161,6 +166,37 @@ class Player:
         # 무적 타이머
         if self.invincible_timer > 0:
             self.invincible_timer -= dt
+            
+        # 라디오 스캔 타이머
+        if self.radio_scan_timer > 0:
+            self.radio_scan_timer = max(0.0, self.radio_scan_timer - dt)
+
+        # 스태미나 자연 회복 (매 프레임 처리로 부드럽게 개선)
+        if not self.is_sprinting:
+            recovery_rate = 10.0  # 기본 10/초
+            
+            # 스태미나 버프 활성화 시 회복 속도 2배
+            if self.stamina_buff_timer > 0:
+                recovery_rate *= 2.0
+            else:
+                # 허기 20% 이하 시 50% 감속 디버프
+                if self.hunger < PLAYER_MAX_HUNGER * 0.2:
+                    recovery_rate *= 0.5
+                # 갈증 20% 이하 시 50% 감속 디버프 (중첩 가능)
+                if self.thirst < PLAYER_MAX_THIRST * 0.2:
+                    recovery_rate *= 0.5
+                    
+            bad_weather = weather_type in ("비", "폭우", "폭풍") if weather_type else False
+            is_outside = not self.is_interior
+            if bad_weather and is_outside:
+                recovery_rate *= 0.5  # 악천후 야외 시 회복 50% 추가 감소
+                
+            old_stamina = self.stamina
+            self.stamina = min(PLAYER_MAX_STAMINA, self.stamina + recovery_rate * dt)
+            recovered = self.stamina - old_stamina
+            if recovered > 0:
+                # 스태미나 회복 10당 배고픔 0.3 소모
+                self.hunger = max(0.0, self.hunger - recovered * 0.03)
 
         # 스탯 감소 (시간 경과 - 0.5초 주기로 갱신하여 연산 부하 축소)
         self.stat_timer += dt
@@ -254,9 +290,9 @@ class Player:
             base_max_weight += data.get("weight_bonus", 0)
         self.inventory.max_weight = base_max_weight
         
-        # 무게 초과 확인 (80% 이상 시 속도 점진적 감소)
+        # 무게 초과 확인 (80% 이상 시 속도 점진적 감소, 샌드박스 제외)
         current_weight = self.inventory.current_weight
-        if current_weight > self.inventory.max_weight * 0.8:
+        if not self.inventory.is_sandbox and current_weight > self.inventory.max_weight * 0.8:
             penalty_ratio = (current_weight - self.inventory.max_weight * 0.8) / (self.inventory.max_weight * 0.2)
             penalty_ratio = min(1.0, penalty_ratio)
             current_speed *= (1.0 - 0.3 * penalty_ratio) # 최대 30% 감속
@@ -265,10 +301,10 @@ class Player:
         new_x = self.x + dx * current_speed * dt
         new_y = self.y + dy * current_speed * dt
 
-        # 충돌 체크
-        if world.is_walkable(new_x, self.y):
+        # 충돌 체크 (비주얼 발밑 중심 +0.5, +0.9 정렬 보정)
+        if world.is_walkable(new_x + 0.5, self.y + 0.9):
             self.x = new_x
-        if world.is_walkable(self.x, new_y):
+        if world.is_walkable(self.x + 0.5, new_y + 0.9):
             self.y = new_y
 
         # 스프린트 시 스태미나 소모 (20/초)
@@ -304,10 +340,10 @@ class Player:
         self.hunger -= hunger_rate * dt
         self.thirst -= thirst_rate * dt
 
-        # 출혈 상태이상 피해 (초당 4.0 피해)
+        # 출혈 상태이상 피해 (초당 0.5 피해 - 방치 시 서서히 사망하도록 완화)
         if self.bleeding:
-            self.hp -= 4.0 * dt
-            self.stress += 2 * dt
+            self.hp -= 0.5 * dt
+            self.stress += 0.3 * dt
 
         # 배고픔/갈증 0 하한선 제한만 적용 (아사/탈수 사망은 제거됨)
         if self.hunger <= 0:
@@ -318,31 +354,6 @@ class Player:
         # 날씨 페널티 (야외에서 비/폭우/폭풍 노출 시)
         bad_weather = weather_type in ("비", "폭우", "폭풍") if weather_type else False
         is_outside = not self.is_interior
-
-        # 스태미나 자연 회복 (배고픔/갈증 및 버프 연동)
-        if not self.is_sprinting:
-            recovery_rate = 10  # 기본 10/초
-            
-            # 스태미나 버프 활성화 시 회복 속도 2배
-            if self.stamina_buff_timer > 0:
-                recovery_rate *= 2.0
-            else:
-                # 허기 20% 이하 시 50% 감속 디버프
-                if self.hunger < PLAYER_MAX_HUNGER * 0.2:
-                    recovery_rate *= 0.5
-                # 갈증 20% 이하 시 50% 감속 디버프 (중첩 가능)
-                if self.thirst < PLAYER_MAX_THIRST * 0.2:
-                    recovery_rate *= 0.5
-                    
-            if bad_weather and is_outside:
-                recovery_rate *= 0.5  # 악천후 야외 시 회복 50% 추가 감소
-                
-            old_stamina = self.stamina
-            self.stamina = min(PLAYER_MAX_STAMINA, self.stamina + recovery_rate * dt)
-            recovered = self.stamina - old_stamina
-            if recovered > 0:
-                # 스태미나 회복 10당 배고픔 0.3 소모
-                self.hunger -= recovered * 0.03
 
         # 악천후 야외 노출 시 스트레스 지속 증가
         if bad_weather and is_outside:
@@ -416,8 +427,33 @@ class Player:
         effects = data.get("effects", {})
         category = data.get("category")
 
-        if not effects and item_name not in ("수류탄", "조명탄"):
+        if not effects and item_name not in ("수류탄", "조명탄", "장거리 무전기"):
             return False
+
+        # 장거리 무전기 특수 처리
+        if item_name == "장거리 무전기":
+            # 인벤토리에서 아이템 찾기 (내구도 확인용)
+            item_idx = -1
+            meta = {}
+            for i, it in enumerate(self.inventory.items):
+                if it[0] == item_name:
+                    item_idx = i
+                    meta = it[2] if len(it) > 2 else {}
+                    break
+            
+            if item_idx != -1:
+                durability = meta.get("durability", 100.0)
+                durability -= 10.0 # 10% 소모 (10회 사용)
+                
+                if durability <= 0:
+                    self.inventory.remove_item(item_name, 1)
+                else:
+                    meta["durability"] = durability
+                    it = self.inventory.items[item_idx]
+                    self.inventory.items[item_idx] = (it[0], it[1], meta)
+                
+                # UI 오픈을 위한 특수 반환값
+                return "radio_scan"
 
         # 효과 적용
         if "hp" in effects:
@@ -537,6 +573,9 @@ class Player:
         """저장용"""
         return {
             "x": self.x, "y": self.y,
+            "exterior_x": self.exterior_x,
+            "exterior_y": self.exterior_y,
+            "is_interior": self.is_interior,
             "hp": self.hp, "hunger": self.hunger, "thirst": self.thirst,
             "stress": self.stress, "stamina": self.stamina,
             "shelter_defense": self.shelter_defense,
@@ -567,6 +606,9 @@ class Player:
     @classmethod
     def from_dict(cls, data, difficulty_settings=None):
         p = cls(data["x"], data["y"], difficulty_settings)
+        p.exterior_x = data.get("exterior_x", 0.0)
+        p.exterior_y = data.get("exterior_y", 0.0)
+        p.is_interior = data.get("is_interior", False)
         p.hp = data.get("hp", PLAYER_MAX_HP)
         p.hunger = data.get("hunger", PLAYER_MAX_HUNGER)
         p.thirst = data.get("thirst", PLAYER_MAX_THIRST)

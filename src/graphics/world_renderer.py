@@ -106,12 +106,42 @@ class WorldSceneRenderer:
                         building.building_type, building.width, building.height, building.variant
                     )
                     sx, sy = self.game.camera.world_to_screen(bx, by)
+                    
+                    # 건물 뒤/위에 플레이어가 있으면 원본은 그리지 않음(나중에 반투명으로 덧그림)
+                    px, py = self.game.player.x, self.game.player.y
+                    if bx <= px < bx + building.width and by <= py < by + building.height - 1:
+                        continue
+                        
                     surface.blit(sprite, (sx, sy))
 
                     if building.explored:
                         font = FontManager.get(10)
                         mark = font.render("✓", True, Colors.UI_SUCCESS)
                         surface.blit(mark, (sx + 2, sy + 2))
+
+    def draw_occluding_buildings(self, surface):
+        x1, y1, x2, y2 = self.game.camera.get_visible_area()
+        px, py = self.game.player.x, self.game.player.y
+
+        for cy in range(y1 // CHUNK_SIZE - 1, y2 // CHUNK_SIZE + 2):
+            for cx in range(x1 // CHUNK_SIZE - 1, x2 // CHUNK_SIZE + 2):
+                chunk = self.game.world.chunks.get((cx, cy))
+                if not chunk:
+                    continue
+                for building in chunk.buildings:
+                    bx = building.x
+                    by = building.y
+                    if not (x1 - 5 <= bx <= x2 + 5 and y1 - 5 <= by <= y2 + 5):
+                        continue
+
+                    # 플레이어가 건물 윗부분에 위치할 경우 반투명 덧그리기
+                    if bx <= px < bx + building.width and by <= py < by + building.height - 1:
+                        sprite = BuildingRenderer.get_building(
+                            building.building_type, building.width, building.height, building.variant
+                        ).copy()
+                        sprite.set_alpha(128)
+                        sx, sy = self.game.camera.world_to_screen(bx, by)
+                        surface.blit(sprite, (sx, sy))
 
     def draw_extraction_points(self, surface):
         if not self.game.world or not hasattr(self.game.world, 'extraction_points'):
@@ -215,6 +245,12 @@ class WorldSceneRenderer:
             name_surf = font.render(npc.name, True, Colors.UI_ACCENT_WARM)
             surface.blit(name_surf, (sx + TILE_SIZE // 2 - name_surf.get_width() // 2, sy - 12))
 
+            if getattr(npc, 'show_exclamation', False):
+                excl_surf = font.render("!", True, (255, 255, 50))
+                import time
+                offset = math.sin(time.time() * 10) * 3
+                surface.blit(excl_surf, (sx + TILE_SIZE // 2 - excl_surf.get_width() // 2, sy - 25 + offset))
+
     def draw_player(self, surface):
         sx, sy = self.game.camera.world_to_screen(self.game.player.x, self.game.player.y)
         has_weapon = self.game.player.equipped.get("weapon") is not None
@@ -227,6 +263,67 @@ class WorldSceneRenderer:
             sprite.set_alpha(128)
 
         surface.blit(sprite, (sx, sy))
+        
+        self.draw_radio_scan(surface, sx, sy)
+
+    def draw_radio_scan(self, surface, sx, sy):
+        # 라디오 스캔 방향 안내 (빨간 화살표가 플레이어 주변 원을 따라 회전)
+        if not hasattr(self.game.player, 'radio_scan_timer') or self.game.player.radio_scan_timer <= 0:
+            return
+            
+        target_type = getattr(self.game.player, 'radio_scan_target', '')
+        if not target_type:
+            return
+            
+        targets = []
+        # 청크에서 빌딩 수집
+        for (cx, cy), chunk in self.game.world.chunks.items():
+            for b in chunk.buildings:
+                btype = getattr(b, "building_type", "")
+                variant = getattr(b, "variant", 0)
+                # 통신 중계소 판정
+                if target_type == "radio_tower":
+                    if btype == "military" and variant == 999:
+                        targets.append((b.x + b.width/2, b.y + b.height/2))
+                # 군사기지 판정
+                elif target_type == "military":
+                    if btype == "military" and variant != 999:
+                        targets.append((b.x + b.width/2, b.y + b.height/2))
+                # 경찰서 판정
+                elif target_type == "police":
+                    if btype == "police":
+                        targets.append((b.x + b.width/2, b.y + b.height/2))
+                    
+        # 탈출구
+        if not targets and target_type == "escape" and hasattr(self.game.world, 'extraction_points'):
+            targets = [ (ep["x"]+0.5, ep["y"]+0.5) for ep in self.game.world.extraction_points ]
+            
+        cx, cy = sx + 16, sy + 16 # 플레이어 스프라이트 중심
+        r = 35 # 화살표 궤도 반경
+
+        # 가이드 원 그리기 (반투명 느낌의 얇은 빨간 선)
+        pygame.draw.circle(surface, (255, 80, 80), (int(cx), int(cy)), r, 1)
+
+        for tx, ty in targets:
+            dx = tx - self.game.player.x
+            dy = ty - self.game.player.y
+            angle = math.atan2(dy, dx)
+            
+            # 화살표 머리(삼각형)의 중심 좌표
+            tx_pos = cx + math.cos(angle) * r
+            ty_pos = cy + math.sin(angle) * r
+            
+            # 화살표 꼬리선 그리기
+            start_tail = (cx + math.cos(angle) * (r - 10), cy + math.sin(angle) * (r - 10))
+            end_tail = (cx + math.cos(angle) * r, cy + math.sin(angle) * r)
+            pygame.draw.line(surface, (255, 40, 40), start_tail, end_tail, 3)
+
+            # 화살표 삼각 머리 꼭지점 계산
+            p1 = (tx_pos + math.cos(angle) * 10, ty_pos + math.sin(angle) * 10)
+            p2 = (tx_pos + math.cos(angle + 2.4) * 6, ty_pos + math.sin(angle + 2.4) * 6)
+            p3 = (tx_pos + math.cos(angle - 2.4) * 6, ty_pos + math.sin(angle - 2.4) * 6)
+            
+            pygame.draw.polygon(surface, (255, 40, 40), [p1, p2, p3])
 
     def draw_aim_indicator(self, surface, px, py, camera):
         if self.game.inventory_ui.visible or self.game.crafting_ui.visible or self.game.dialogue_ui.visible:
@@ -454,6 +551,23 @@ class WorldSceneRenderer:
                     font = FontManager.get(10)
                     exit_text = font.render("출구", True, (255, 255, 200))
                     surface.blit(exit_text, (sx + 4, sy + 10))
+                elif tile == "stairs_up":
+                    # 올라가는 계단 표시
+                    pygame.draw.rect(surface, (100, 90, 80), (sx, sy, TILE_SIZE, TILE_SIZE))
+                    font = FontManager.get(10)
+                    exit_text = font.render("위층", True, (255, 255, 200))
+                    surface.blit(exit_text, (sx + 4, sy + 10))
+                    # 간단한 계단 무늬
+                    for i in range(4):
+                        pygame.draw.line(surface, (80, 70, 60), (sx, sy + i * 8), (sx + TILE_SIZE, sy + i * 8))
+                elif tile == "stairs_down":
+                    # 내려가는 계단 표시
+                    pygame.draw.rect(surface, (80, 70, 60), (sx, sy, TILE_SIZE, TILE_SIZE))
+                    font = FontManager.get(10)
+                    exit_text = font.render("아래층", True, (255, 255, 200))
+                    surface.blit(exit_text, (sx + 2, sy + 10))
+                    for i in range(4):
+                        pygame.draw.line(surface, (60, 50, 40), (sx, sy + i * 8), (sx + TILE_SIZE, sy + i * 8))
                 elif tile == "furniture":
                     pygame.draw.rect(surface, Colors.FLOOR_WOOD,
                                     (sx, sy, TILE_SIZE, TILE_SIZE))
@@ -565,6 +679,7 @@ class WorldSceneRenderer:
             self.draw_environment(ext_surf)
             self.draw_buildings(ext_surf)
             self.draw_entities(ext_surf)
+            self.draw_occluding_buildings(ext_surf)
 
             ext_cam.x, ext_cam.y = old_x, old_y
 

@@ -267,12 +267,14 @@ class InteriorRoom:
 class BuildingInterior:
     """건물 내부 맵"""
 
-    def __init__(self, building_type, exterior_width, exterior_height, seed=0):
+    def __init__(self, building_type, exterior_width, exterior_height, seed=0, floor_idx=0, max_floors=1):
         self.building_type = building_type
         # 내부 크기 = 외관 비례 (각 타일을 2배 확대)
         self.width = max(8, exterior_width * 2 + 2)   # 벽 포함
         self.height = max(8, exterior_height * 2 + 2)
         self.seed = seed
+        self.floor_idx = floor_idx
+        self.max_floors = max_floors
 
         self.rooms = []
         self.furniture = []
@@ -296,12 +298,17 @@ class BuildingInterior:
             for x in range(1, self.width - 1):
                 self.tiles[y][x] = "floor"
 
-        # 출입구
+        # 출입구 (또는 2층 이상이면 내려가는 계단)
         dx, dy = self.door_pos
         if 0 <= dx < self.width and 0 <= dy < self.height:
-            self.tiles[dy][dx] = "door"
-            if dx + 1 < self.width:
-                self.tiles[dy][dx + 1] = "door"
+            if self.floor_idx > 0:
+                self.tiles[dy][dx] = "stairs_down"
+                if dx + 1 < self.width:
+                    self.tiles[dy][dx + 1] = "stairs_down"
+            else:
+                self.tiles[dy][dx] = "door"
+                if dx + 1 < self.width:
+                    self.tiles[dy][dx + 1] = "door"
 
         # 레이아웃 결정
         layout = BUILDING_LAYOUTS.get(self.building_type, BUILDING_LAYOUTS["house"])
@@ -358,6 +365,16 @@ class BuildingInterior:
             self.rooms.append(room)
             room_x += rw
 
+        # 올라가는 계단 배치 (현재 층이 꼭대기가 아니면)
+        if self.floor_idx < self.max_floors - 1 and self.rooms:
+            # 적당한 방 중앙에 계단 배치
+            target_room = rng.choice(self.rooms)
+            sx = target_room.x + target_room.width // 2
+            sy = target_room.y + target_room.height // 2
+            self.tiles[sy][sx] = "stairs_up"
+            if sx + 1 < self.width:
+                self.tiles[sy][sx + 1] = "stairs_up"
+
         # 창문 배치 (상단/좌측/우측 외벽에 1~3개)
         self.windows = []
         wall_candidates = []
@@ -397,7 +414,7 @@ class BuildingInterior:
 
     def is_walkable(self, x, y):
         tile = self.get_tile(int(x), int(y))
-        return tile in ("floor", "door")  # window는 벽과 동일하게 이동 불가
+        return tile in ("floor", "door", "stairs_up", "stairs_down")  # window는 벽과 동일하게 이동 불가
 
     def get_nearby_window(self, px, py, radius=1.5):
         """플레이어 근처 창문 반환 (가장 가까운 것)"""
@@ -425,9 +442,29 @@ class BuildingInterior:
         return None
 
     def is_at_exit(self, x, y):
-        """출구(문) 위치인지 확인"""
+        """출구(문 또는 내려가는 계단) 위치인지 확인 (판정 오차 보정)"""
         dx, dy = self.door_pos
-        return abs(x - dx) <= 1.5 and abs(y - dy) <= 0.5
+        if self.floor_idx > 0:
+            for offset_x in (0, 1):
+                tx = dx + offset_x
+                dist_x = abs(x - (tx + 0.5))
+                dist_y = abs(y - (dy + 0.5))
+                if dist_x <= 0.85 and dist_y <= 0.85:
+                    return True
+            return False
+        else:
+            return abs(x - dx) <= 1.2 and abs(y - dy) <= 1.0
+        
+    def is_at_stairs_up(self, x, y):
+        """올라가는 계단인지 확인 (소수점 판정 오차 보정)"""
+        for ty in range(self.height):
+            for tx in range(self.width):
+                if self.tiles[ty][tx] == "stairs_up":
+                    dx = (tx + 0.5) - x
+                    dy = (ty + 0.5) - y
+                    if abs(dx) <= 0.85 and abs(dy) <= 0.85:
+                        return True
+        return False
 
     def drop_item(self, item_name, wx, wy):
         """건물 내부 바닥에 아이템 드롭"""
@@ -455,6 +492,8 @@ class BuildingInterior:
             "width": self.width,
             "height": self.height,
             "seed": self.seed,
+            "floor_idx": self.floor_idx,
+            "max_floors": self.max_floors,
             "furniture": [f.to_dict() for f in self.furniture],
             "items_on_ground": list(self.items_on_ground),
             "zombies": getattr(self, 'zombies', []),
@@ -463,7 +502,7 @@ class BuildingInterior:
 
     @classmethod
     def from_dict(cls, data, ext_w=4, ext_h=4):
-        interior = cls(data["type"], ext_w, ext_h, data.get("seed", 0))
+        interior = cls(data["type"], ext_w, ext_h, data.get("seed", 0), data.get("floor_idx", 0), data.get("max_floors", 1))
         # 탐색 상태 복원
         saved_furniture = data.get("furniture", [])
         for sf in saved_furniture:

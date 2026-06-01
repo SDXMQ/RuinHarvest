@@ -113,7 +113,7 @@ class GameSaveManager:
     @staticmethod
     def serialize_game(game):
         """게임의 모든 상태를 딕셔너리로 직렬화 (RuinHarvest 세션 기반 저장)"""
-        if not game.player or not game.world:
+        if not game.player:
             return None
 
         # 1. 맵 델타 추출
@@ -181,8 +181,10 @@ class GameSaveManager:
 
         # 월드 및 카메라 로드
         is_raid_state = data.get("player", {}).get("raid_status", "NONE") == "IN_RAID"
+        game.sandbox_mode = game.world_settings.get("sandbox", False)
         game.world = World(seed=game.world_settings.get("seed"), world_settings=game.world_settings, is_raid=is_raid_state)
         game.player = Player.from_dict(data.get("player", {}), game.difficulty)
+        game.player.inventory.is_sandbox = game.sandbox_mode
 
         game.camera = Camera()
         game.camera.resize(game.screen_w, game.screen_h)

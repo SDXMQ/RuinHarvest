@@ -161,27 +161,40 @@ class CombatSystem:
                 if dist <= zombie.attack_range and check_line_of_sight(zombie.x, zombie.y, player.x, player.y, world):
                     zombie.do_attack() # 쿨다운 시작
                     
-                    # Spread (분산) 및 빗나감 판정
-                    # PMC는 명중률이 높고 Scav는 명중률이 조금 낮음
-                    is_pmc = "pmc" in zombie.zombie_type or zombie.zombie_type in ("tank", "spider")
-                    miss_chance = 0.15 if is_pmc else 0.30
+                    is_ranged = zombie.attack_range > 1.5
                     
-                    # 플레이어가 뛰고(움직이고) 있으면 맞추기 더 힘듦
-                    if player.moving:
-                        miss_chance += 0.15
+                    if is_ranged:
+                        # 원거리 사격 공격
+                        is_pmc = "pmc" in zombie.zombie_type or zombie.zombie_type in ("tank", "spider")
+                        miss_chance = 0.45 if is_pmc else 0.65
                         
-                    start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
-                    tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
+                        # 플레이어가 뛰고(움직이고) 있으면 맞추기 더 힘듦
+                        if player.moving:
+                            miss_chance += 0.15
+                            
+                        start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
+                        tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
 
-                    if random.random() < miss_chance:
-                        # 빗나감 표시
-                        self.damage_numbers.append(
-                            (player.x, player.y - 0.7, "Miss", 1.0, (200, 200, 200))
-                        )
-                        results.append(("player_miss", zombie, 0))
+                        if random.random() < miss_chance:
+                            # 빗나감 표시
+                            self.damage_numbers.append(
+                                (player.x, player.y - 0.7, "Miss", 1.0, (200, 200, 200))
+                            )
+                            results.append(("player_miss", zombie, 0))
+                            
+                            end_x = player.x + 0.5 + random.uniform(-1.5, 1.5)
+                            end_y = player.y + 0.5 + random.uniform(-1.5, 1.5)
+                            self.tracers.append({
+                                "start": (start_x, start_y),
+                                "end": (end_x, end_y),
+                                "color": tracer_color,
+                                "timer": 0.2,
+                                "max_timer": 0.2
+                            })
+                            continue
                         
-                        end_x = player.x + 0.5 + random.uniform(-1.5, 1.5)
-                        end_y = player.y + 0.5 + random.uniform(-1.5, 1.5)
+                        # 명중
+                        end_x, end_y = player.x + 0.5, player.y + 0.5
                         self.tracers.append({
                             "start": (start_x, start_y),
                             "end": (end_x, end_y),
@@ -189,32 +202,35 @@ class CombatSystem:
                             "timer": 0.2,
                             "max_timer": 0.2
                         })
-                        continue
-                    
-                    # 명중
-                    end_x, end_y = player.x + 0.5, player.y + 0.5
-                    self.tracers.append({
-                        "start": (start_x, start_y),
-                        "end": (end_x, end_y),
-                        "color": tracer_color,
-                        "timer": 0.2,
-                        "max_timer": 0.2
-                    })
 
-                    # 거리 비례 대미지 감쇄 (지수 감쇄 공식)
-                    base_damage = zombie.damage
-                    actual_damage = base_damage * math.exp(-0.04 * dist)
-                    actual_damage = max(1.0, actual_damage) # 최소 1대미지
-                    
-                    # 플레이어 아머 감쇄 등은 player.take_damage 내부에서 처리됨
-                    source_name = "PMC 사격" if is_pmc else "Scav 사격"
-                    actual = player.take_damage(actual_damage, source_name)
-                    
-                    if actual > 0:
-                        self.damage_numbers.append(
-                            (player.x, player.y - 0.5, int(actual), 1.0, (255, 60, 60))
-                        )
-                        results.append(("player_hit", zombie, actual))
+                        # 거리 비례 대미지 감쇄 (지수 감쇄 공식)
+                        base_damage = zombie.damage
+                        actual_damage = base_damage * math.exp(-0.04 * dist)
+                        actual_damage = max(1.0, actual_damage) # 최소 1대미지
+                        
+                        # 플레이어 아머 감쇄 등은 player.take_damage 내부에서 처리됨
+                        source_name = "PMC 사격" if is_pmc else "Scav 사격"
+                        actual = player.take_damage(actual_damage, source_name)
+                        
+                        if actual > 0:
+                            self.damage_numbers.append(
+                                (player.x, player.y - 0.5, int(actual), 1.0, (255, 60, 60))
+                            )
+                            results.append(("player_hit", zombie, actual))
+                    else:
+                        # 근접 공격
+                        base_damage = zombie.damage
+                        actual_damage = base_damage + random.randint(-1, 2)
+                        actual_damage = max(1.0, actual_damage)
+                        
+                        source_name = "좀비 공격"
+                        actual = player.take_damage(actual_damage, source_name)
+                        
+                        if actual > 0:
+                            self.damage_numbers.append(
+                                (player.x, player.y - 0.5, int(actual), 1.0, (255, 60, 60))
+                            )
+                            results.append(("player_hit", zombie, actual))
 
         # 진영 간 AI vs AI 교전 처리
         for zombie in entity_manager.zombies:
@@ -233,18 +249,31 @@ class CombatSystem:
             d = distance(zombie.x, zombie.y, target.x, target.y)
             if d <= zombie.attack_range and getattr(zombie, 'can_see_target', False):
                 zombie.do_attack()
-                is_pmc = getattr(zombie, 'faction', 'scav') == "pmc"
-                miss_chance = 0.15 if is_pmc else 0.30
                 
-                start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
-                tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
+                is_ranged = zombie.attack_range > 1.5
+                if is_ranged:
+                    is_pmc = getattr(zombie, 'faction', 'scav') == "pmc"
+                    miss_chance = 0.45 if is_pmc else 0.65
+                    
+                    start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
+                    tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
 
-                if random.random() < miss_chance:
-                    self.damage_numbers.append(
-                        (target.x, target.y - 0.7, "Miss", 1.0, (200, 200, 200))
-                    )
-                    end_x = target.x + 0.5 + random.uniform(-1.5, 1.5)
-                    end_y = target.y + 0.5 + random.uniform(-1.5, 1.5)
+                    if random.random() < miss_chance:
+                        self.damage_numbers.append(
+                            (target.x, target.y - 0.7, "Miss", 1.0, (200, 200, 200))
+                        )
+                        end_x = target.x + 0.5 + random.uniform(-1.5, 1.5)
+                        end_y = target.y + 0.5 + random.uniform(-1.5, 1.5)
+                        self.tracers.append({
+                            "start": (start_x, start_y),
+                            "end": (end_x, end_y),
+                            "color": tracer_color,
+                            "timer": 0.2,
+                            "max_timer": 0.2
+                        })
+                        continue
+                    
+                    end_x, end_y = target.x + 0.5, target.y + 0.5
                     self.tracers.append({
                         "start": (start_x, start_y),
                         "end": (end_x, end_y),
@@ -252,24 +281,23 @@ class CombatSystem:
                         "timer": 0.2,
                         "max_timer": 0.2
                     })
-                    continue
-                
-                end_x, end_y = target.x + 0.5, target.y + 0.5
-                self.tracers.append({
-                    "start": (start_x, start_y),
-                    "end": (end_x, end_y),
-                    "color": tracer_color,
-                    "timer": 0.2,
-                    "max_timer": 0.2
-                })
 
-                base_damage = zombie.damage
-                actual_damage = base_damage * math.exp(-0.04 * d)
-                actual_damage = max(1.0, actual_damage)
-                target.take_damage(actual_damage)
-                self.damage_numbers.append(
-                    (target.x, target.y - 0.5, int(actual_damage), 1.0, (255, 180, 50))
-                )
+                    base_damage = zombie.damage
+                    actual_damage = base_damage * math.exp(-0.04 * d)
+                    actual_damage = max(1.0, actual_damage)
+                    target.take_damage(actual_damage)
+                    self.damage_numbers.append(
+                        (target.x, target.y - 0.5, int(actual_damage), 1.0, (255, 180, 50))
+                    )
+                else:
+                    # 근접 공격
+                    base_damage = zombie.damage
+                    actual_damage = base_damage + random.randint(-1, 2)
+                    actual_damage = max(1.0, actual_damage)
+                    target.take_damage(actual_damage)
+                    self.damage_numbers.append(
+                        (target.x, target.y - 0.5, int(actual_damage), 1.0, (255, 180, 50))
+                    )
 
         return results
 

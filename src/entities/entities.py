@@ -13,46 +13,57 @@ from pathfinding import find_path
 # ============================================================
 ZOMBIE_TYPES = {
     "normal": {
+        "name": "일반 좀비",
+        "hp": 40,
+        "damage": 8,
+        "speed": 1.2,
+        "detection_range": 8,
+        "attack_range": 1.0,
+        "attack_cooldown": 1.5,
+        "xp": 15,
+        "loot_chance": 0.3,
+    },
+    "runner": {
+        "name": "러너 좀비",
+        "hp": 30,
+        "damage": 6,
+        "speed": 2.0,
+        "detection_range": 10,
+        "attack_range": 1.0,
+        "attack_cooldown": 1.2,
+        "xp": 20,
+        "loot_chance": 0.2,
+    },
+    "scav": {
         "name": "스캐브 (Scav)",
-        "hp": 50,
-        "damage": 12,
+        "hp": 45,
+        "damage": 6,
         "speed": 1.3,
         "detection_range": 10,
         "attack_range": 6.0,
-        "attack_cooldown": 1.5,
-        "xp": 20,
-        "loot_chance": 0.4,
-    },
-    "runner": {
-        "name": "러너 스캐브",
-        "hp": 40,
-        "damage": 8,
-        "speed": 2.2,
-        "detection_range": 12,
-        "attack_range": 5.0,
-        "attack_cooldown": 1.0,
-        "xp": 25,
-        "loot_chance": 0.3,
+        "attack_cooldown": 1.8,
+        "xp": 35,
+        "loot_chance": 0.5,
     },
     "tank": {
         "name": "정예 PMC 용병",
-        "hp": 120,
-        "damage": 22,
-        "speed": 1.5,
-        "detection_range": 14,
-        "attack_range": 8.0,
-        "attack_cooldown": 1.2,
+        "hp": 100,
+        "damage": 12,
+        "speed": 1.4,
+        "detection_range": 12,
+        "attack_range": 7.0,
+        "attack_cooldown": 1.5,
         "xp": 70,
         "loot_chance": 0.8,
     },
     "spider": {
         "name": "스나이퍼 PMC",
         "hp": 50,
-        "damage": 28,
-        "speed": 1.6,
-        "detection_range": 18,
-        "attack_range": 12.0,
-        "attack_cooldown": 2.2,
+        "damage": 16,
+        "speed": 1.5,
+        "detection_range": 16,
+        "attack_range": 10.0,
+        "attack_cooldown": 2.5,
         "xp": 60,
         "loot_chance": 0.7,
     },
@@ -130,7 +141,12 @@ class Zombie:
         self.active = True
 
         # 진영 (Faction) 시스템
-        self.faction = "pmc" if zombie_type in ("tank", "spider") else "scav"
+        if zombie_type in ("tank", "spider"):
+            self.faction = "pmc"
+        elif zombie_type == "scav":
+            self.faction = "scav"
+        else:
+            self.faction = "zombie"
         self.target = None  # 현재 타겟 (Player 또는 다른 Zombie)
         self.can_see_target = False
         self.vision_timer = random.uniform(0.0, 0.2)  # 시야 검사 분산 타이머
@@ -415,9 +431,9 @@ class Zombie:
     def _move_with_collision(self, dx, dy, world):
         new_x = self.x + dx
         new_y = self.y + dy
-        if world.is_walkable(new_x, self.y):
+        if world.is_walkable(new_x + 0.5, self.y + 0.9):
             self.x = new_x
-        if world.is_walkable(self.x, new_y):
+        if world.is_walkable(self.x + 0.5, new_y + 0.9):
             self.y = new_y
 
     def _find_cover_tile(self, player_x, player_y, world):
@@ -546,6 +562,7 @@ class NPCState:
     TALKING = "talking"
     TRADING = "trading"
     MOVING = "moving"
+    APPROACHING = "approaching"
 
 
 class NPC:
@@ -584,7 +601,7 @@ class NPC:
         self.wander_target_x = x
         self.wander_target_y = y
 
-    def update(self, dt, world):
+    def update(self, dt, world, px=None, py=None):
         if not self.active:
             return
 
@@ -602,20 +619,64 @@ class NPC:
             new_x = self.x + dx * speed
             new_y = self.y + dy * speed
 
-            if world.is_walkable(new_x, self.y):
+            if world.is_walkable(new_x + 0.5, self.y + 0.9):
                 self.x = new_x
-            if world.is_walkable(self.x, new_y):
+            if world.is_walkable(self.x + 0.5, new_y + 0.9):
                 self.y = new_y
 
             if distance(self.x, self.y, self.wander_target_x, self.wander_target_y) < 0.3:
                 self.state = NPCState.IDLE
                 self.idle_timer = random.uniform(2, 6)
 
+            # 상인 접근 로직
+            if self.npc_type == "merchant" and px is not None and py is not None:
+                if distance(self.x, self.y, px, py) <= 8.0:
+                    self.state = NPCState.APPROACHING
+                    self.show_exclamation = True
+                    self.exclamation_timer = 2.0
+
             # 애니메이션
             self.animation_timer += dt
             if self.animation_timer >= 0.2:
                 self.animation_timer -= 0.2
                 self.animation_frame = (self.animation_frame + 1) % 8
+
+        elif self.state == NPCState.APPROACHING:
+            if px is not None and py is not None:
+                dist = distance(self.x, self.y, px, py)
+                if dist > 8.5:
+                    self.state = NPCState.IDLE
+                    self.idle_timer = 2.0
+                elif dist > 1.5:
+                    # 천천히 다가감
+                    dx, dy = direction_to(self.x, self.y, px, py)
+                    speed = 0.5 * dt
+                    new_x = self.x + dx * speed
+                    new_y = self.y + dy * speed
+
+                    if world.is_walkable(new_x + 0.5, self.y + 0.9):
+                        self.x = new_x
+                    if world.is_walkable(self.x + 0.5, new_y + 0.9):
+                        self.y = new_y
+                else:
+                    # 플레이어와 충분히 가까움
+                    pass
+            else:
+                self.state = NPCState.IDLE
+                
+            # 애니메이션
+            self.animation_timer += dt
+            if self.animation_timer >= 0.2:
+                self.animation_timer -= 0.2
+                self.animation_frame = (self.animation_frame + 1) % 8
+
+        # 느낌표 타이머
+        if hasattr(self, 'show_exclamation') and self.show_exclamation:
+            if not hasattr(self, 'exclamation_timer'):
+                self.exclamation_timer = 0
+            self.exclamation_timer -= dt
+            if self.exclamation_timer <= 0:
+                self.show_exclamation = False
 
     def is_near(self, px, py, radius=2.0):
         return distance(self.x, self.y, px, py) <= radius
@@ -672,7 +733,7 @@ class EntityManager:
         # NPC 업데이트 (활성 상태만)
         for npc in self.npcs:
             if npc.active:
-                npc.update(dt, world)
+                npc.update(dt, world, player.x, player.y)
 
         # 좀비 스폰
         self.spawn_timer += dt
@@ -725,16 +786,31 @@ class EntityManager:
 
             # 바이옴에 따른 좀비 타입
             biome = world.get_biome(int(sx), int(sy))
+            r = random.random()
             if biome in ("군사기지",):
-                ztype = random.choice(["normal", "runner", "tank"])
+                if r < 0.02:
+                    ztype = "tank"
+                elif r < 0.05:
+                    ztype = "scav"
+                else:
+                    ztype = random.choice(["normal", "runner"])
             elif biome in ("병원구역",):
-                ztype = random.choice(["normal", "spider", "runner"])
-            elif biome in ("산림",):
-                ztype = random.choice(["normal", "normal", "runner"])
-            elif biome in ("호수", "황무지"):
-                ztype = "normal"
+                if r < 0.02:
+                    ztype = "spider"
+                elif r < 0.05:
+                    ztype = "scav"
+                else:
+                    ztype = random.choice(["normal", "runner"])
+            elif biome in ("산림", "황무지", "호수"):
+                if r < 0.015:
+                    ztype = "scav"
+                else:
+                    ztype = random.choice(["normal", "runner"])
             else:
-                ztype = random.choice(["normal", "normal", "normal", "runner"])
+                if r < 0.03:
+                    ztype = "scav"
+                else:
+                    ztype = random.choice(["normal", "normal", "normal", "runner"])
 
             zombie = Zombie(sx, sy, ztype, self.diff)
             self.zombies.append(zombie)

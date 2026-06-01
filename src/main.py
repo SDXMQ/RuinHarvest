@@ -44,6 +44,7 @@ from building_interior import BuildingInterior
 from i18n import t, set_language, get_language
 from flea_market import FleaMarket
 from ui.hideout_ui import HideoutUI
+from ui.radio_ui import RadioScannerUI
 from interior_system import InteriorSystem
 from ui.map_ui import MapUI
 
@@ -164,6 +165,7 @@ class Game:
         self.settings_ui = SettingsUI(w, h)
         self.hud = HUD(w, h)
         self.inventory_ui = InventoryUI(w, h)
+        self.radio_ui = RadioScannerUI(w, h)
         self.crafting_ui = CraftingUI(w, h)
         self.dialogue_ui = DialogueUI(w, h)
         self.event_log_ui = EventLogUI(w, h)
@@ -370,6 +372,8 @@ class Game:
                     self.player.thirst = 100.0
                     self.player.stress = 0.0
                     self.player.alive = True
+                    self.player.bleeding = False
+                    self.player.broken_bone = False
                     self.player.raid_status = "IN_RAID"
                     self.raid_time_left = 600.0
                     self.extract_timer = 0.0
@@ -388,7 +392,7 @@ class Game:
                         self.save_current_game()  # IN_RAID 상태 원자적 저장
                         
                     self.transition.start("fade", 0.8,
-                        on_mid=lambda: (setattr(self, 'state', GameState.PLAYING), setattr(self, 'show_raid_start_popup', True)))
+                        on_mid=lambda: setattr(self, 'state', GameState.PLAYING))
                 elif result == "main_menu":
                     self.transition.start("fade", 0.6,
                         on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
@@ -440,6 +444,12 @@ class Game:
 
     def _process_global_inputs(self, event):
         """게임플레이 중 이벤트"""
+        if hasattr(self, "radio_ui") and self.radio_ui.visible:
+            res = self.radio_ui.handle_event(event, self.player)
+            if res and res[0] == "radio_scan_start":
+                self.event_system.add_log(f"스캔 타겟 설정됨: {res[1]}")
+            return
+            
         # 인벤토리/크래프팅이 열려있으면 우선 처리
         if self.inventory_ui.visible:
             # 단축키(B, ESC, C, M) 입력은 아래쪽 글로벌 단축키 처리로 통과시킴
@@ -448,7 +458,13 @@ class Game:
                 if result:
                     action, value = result
                     if action == "use":
-                        if self.player.use_item(value):
+                        use_res = self.player.use_item(value)
+                        if use_res == "radio_scan":
+                            self.event_system.add_log("장거리 무전기를 켰습니다. 주파수를 스캔합니다...")
+                            SoundGenerator.play("pickup")
+                            if hasattr(self, "radio_ui"):
+                                self.radio_ui.open()
+                        elif use_res:
                             self.event_system.add_log(t("log_item_used", value))
                             SoundGenerator.play("pickup")
                     elif action == "equip":
@@ -711,6 +727,8 @@ class Game:
         # UI
         self.hud.update(dt, self.player)
         self.inventory_ui.update(dt)
+        if hasattr(self, "radio_ui"):
+            self.radio_ui.update(dt)
         self.crafting_ui.update(dt)
 
         # 청크 관리 (외부일 때만)
@@ -735,7 +753,10 @@ class Game:
         events = self.event_system.check_new_day_events(self.player, self.current_day)
 
         # 바이옴 발견 추적
-        biome = self.world.get_biome(int(self.player.x), int(self.player.y))
+        is_interior = (self.state == GameState.BUILDING_INTERIOR)
+        px = self.player.exterior_x if is_interior else self.player.x
+        py = self.player.exterior_y if is_interior else self.player.y
+        biome = self.world.get_biome(int(px), int(py))
         if biome not in self.player.discovered_biomes:
             self.player.discovered_biomes.add(biome)
             self.event_system.add_log(t("log_new_biome", biome))
@@ -756,6 +777,8 @@ class Game:
                 "title": "레이드 탈출 성공 (SURVIVED)",
                 "description": f"무사히 구역을 벗어났습니다. 획득한 전리품을 은신처로 회수합니다.\n생환 사유: {reason}",
             }
+            self.player.bleeding = False
+            self.player.broken_bone = False
         else:
             self.event_system.add_log(f"레이드 실패: {reason}")
             ending_data = {
@@ -775,6 +798,8 @@ class Game:
             self.player.hunger = 100
             self.player.thirst = 100
             self.player.alive = True
+            self.player.bleeding = False
+            self.player.broken_bone = False
 
         # 플리마켓 업데이트 및 플레이어 등록 물품 정산
         self.flea_market.update_market_prices(self.current_day)
@@ -920,6 +945,9 @@ class Game:
         # 인벤토리 / 크래프팅
         self.inventory_ui.draw(game_surface, self.player)
         self.crafting_ui.draw(game_surface, self.player)
+        
+        if hasattr(self, "radio_ui") and self.radio_ui.visible:
+            self.radio_ui.draw(game_surface)
 
         # 대화
         self.dialogue_ui.draw(game_surface)
@@ -957,6 +985,9 @@ class Game:
         # 인벤토리 / 크래프팅
         self.inventory_ui.draw(self.screen, self.player)
         self.crafting_ui.draw(self.screen, self.player)
+        
+        if hasattr(self, "radio_ui") and self.radio_ui.visible:
+            self.radio_ui.draw(self.screen)
 
         # 대화
         self.dialogue_ui.draw(self.screen)
