@@ -466,18 +466,21 @@ class BuildingInterior:
                         return True
         return False
 
-    def drop_item(self, item_name, wx, wy):
+    def drop_item(self, item_name, wx, wy, metadata=None):
         """건물 내부 바닥에 아이템 드롭"""
         # 좌표를 내부 범위로 클램프
         x = max(1, min(self.width - 2, float(wx)))
         y = max(1, min(self.height - 2, float(wy)))
-        self.items_on_ground.append((item_name, x, y))
+        if metadata:
+            self.items_on_ground.append((item_name, x, y, metadata))
+        else:
+            self.items_on_ground.append((item_name, x, y))
 
     def get_ground_items_near(self, x, y, radius=2):
         """근처 바닥 아이템 반환 (World 인터페이스와 동일한 형태)"""
         result = []
         for item_tuple in self.items_on_ground:
-            item_name, ix, iy = item_tuple
+            item_name, ix, iy = item_tuple[0], item_tuple[1], item_tuple[2]
             if abs(ix - x) <= radius and abs(iy - y) <= radius:
                 result.append(item_tuple)
         return result

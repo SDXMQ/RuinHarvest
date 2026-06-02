@@ -23,9 +23,11 @@ class InteractionHandler:
         ground_items = self.game.world.get_ground_items_near(px, py, 1.5)
         if ground_items:
             any_picked = False
-            for (item_name, ix, iy), chunk in ground_items:
-                if self.game.player.inventory.add_item(item_name):
-                    chunk.items_on_ground.remove((item_name, ix, iy))
+            for item_tuple, chunk in ground_items:
+                item_name = item_tuple[0]
+                metadata = item_tuple[3] if len(item_tuple) > 3 else {}
+                if self.game.player.inventory.add_item(item_name, 1, metadata):
+                    chunk.items_on_ground.remove(item_tuple)
                     self.game.event_system.add_log(t("acquired_item", item_name))
                     SoundGenerator.play("pickup")
                     self.game.game_particles.emit(
@@ -160,7 +162,8 @@ class InteractionHandler:
             any_picked = False
             for item_tuple in ground_items:
                 item_name = item_tuple[0]
-                if self.game.player.inventory.add_item(item_name):
+                metadata = item_tuple[3] if len(item_tuple) > 3 else {}
+                if self.game.player.inventory.add_item(item_name, 1, metadata):
                     self.game.current_interior.items_on_ground.remove(item_tuple)
                     self.game.event_system.add_log(t("acquired_item", item_name))
                     SoundGenerator.play("pickup")

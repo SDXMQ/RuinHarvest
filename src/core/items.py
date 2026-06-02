@@ -646,10 +646,19 @@ class Inventory:
             total += data.get("weight", 0.1) * count
         return total
 
+    def _get_first_free_slot(self):
+        used = {item[2].get("slot_idx") for item in self.items if len(item) > 2 and item[2].get("slot_idx") is not None}
+        for i in range(self.slots):
+            if i not in used:
+                return i
+        return 0
+
     def add_item(self, item_name, count=1, metadata=None):
         """아이템 추가. 성공 시 True"""
         if metadata is None:
             metadata = {}
+        if "slot_idx" not in metadata:
+            metadata["slot_idx"] = self._get_first_free_slot()
         data = ITEM_DATABASE.get(item_name)
         if not data:
             return False
@@ -810,7 +819,14 @@ class Inventory:
     def from_dict(cls, data):
         """딕셔너리에서 복원"""
         inv = cls(data.get("slots", 24))
-        inv.items = [tuple(item) if len(item) == 3 else (item[0], item[1], {}) for item in data.get("items", [])]
+        raw_items = data.get("items", [])
+        inv.items = []
+        for i, item in enumerate(raw_items):
+            tup = tuple(item) if len(item) == 3 else (item[0], item[1], {})
+            name, count, meta = tup
+            if "slot_idx" not in meta:
+                meta["slot_idx"] = i
+            inv.items.append((name, count, meta))
         inv.is_sandbox = data.get("is_sandbox", False)
         return inv
 
@@ -867,6 +883,11 @@ class Inventory:
             return (cat_val, -val, name)
             
         self.items.sort(key=sort_key)
+        for i, item in enumerate(self.items):
+            if len(item) > 2:
+                item[2]["slot_idx"] = i
+            else:
+                self.items[i] = (item[0], item[1], {"slot_idx": i})
 
 
 # ============================================================

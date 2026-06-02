@@ -50,7 +50,8 @@ class WorldSceneRenderer:
                 chunk = self.game.world.chunks.get((cx, cy))
                 if not chunk:
                     continue
-                for item_name, ix, iy in chunk.items_on_ground:
+                for item_tuple in chunk.items_on_ground:
+                    item_name, ix, iy = item_tuple[0], item_tuple[1], item_tuple[2]
                     sx, sy = self.game.camera.world_to_screen(ix, iy)
                     if -32 <= sx <= self.game.screen_w + 32 and -32 <= sy <= self.game.screen_h + 32:
                         icon = ItemIconRenderer.get_icon(item_name)
@@ -603,7 +604,8 @@ class WorldSceneRenderer:
             surface.blit(name_surf, (sx + 2, sy + TILE_SIZE - 12))
 
         # 내부 바닥 아이템 그리기
-        for item_name, ix, iy in interior.items_on_ground:
+        for item_tuple in interior.items_on_ground:
+            item_name, ix, iy = item_tuple[0], item_tuple[1], item_tuple[2]
             isx, isy = cam.world_to_screen(ix, iy)
             icon = ItemIconRenderer.get_icon(item_name)
             bounce = math.sin(pytime.time() * 3 + ix + iy) * 3

@@ -266,7 +266,10 @@ class Game:
 
         if GameSaveManager.deserialize_game(self, data):
             if self.player.raid_status == "IN_RAID":
-                self.state = GameState.PLAYING
+                if self.player.is_interior:
+                    self.state = GameState.BUILDING_INTERIOR
+                else:
+                    self.state = GameState.PLAYING
                 self.show_raid_start_popup = True
             else:
                 self.state = GameState.HIDEOUT
@@ -475,22 +478,37 @@ class Game:
                             self.event_system.add_log(t("log_item_equipped", value))
                             SoundGenerator.play("pickup")
                     elif action == "drop_item":
-                        # 아이템 바닥에 버리기
-                        if self.player.inventory.has_item(value):
-                            self.player.inventory.remove_item(value, 1)
-                            if self.player.is_interior and self.current_interior:
-                                self.current_interior.drop_item(value, self.player.x, self.player.y)
-                            else:
-                                self.world.drop_item(value, self.player.x, self.player.y)
-                            self.event_system.add_log(t("log_item_dropped", value))
+                        # 아이템 바닥에 버리기 (메타데이터 보존)
+                        found_idx = -1
+                        for idx, it in enumerate(self.player.inventory.items):
+                            if it[0] == value:
+                                found_idx = idx
+                                break
+                        if found_idx != -1:
+                            item_tup = self.player.inventory.items[found_idx]
+                            item_name = item_tup[0]
+                            item_meta = item_tup[2] if len(item_tup) > 2 else {}
+                            
+                            self.player.inventory.items.pop(found_idx)
+                            
+                            equip_world = self.current_interior if self.player.is_interior else self.world
+                            equip_world.drop_item(item_name, self.player.x, self.player.y, item_meta)
+                            self.event_system.add_log(t("log_item_dropped", item_name))
                             SoundGenerator.play("pickup")
                     elif action == "unequip":
                         # 장착 해제
                         item = self.player.equipped.get(value)
                         if item:
-                            if self.player.inventory.add_item(item):
-                                self.player.equipped[value] = None
-                                self.event_system.add_log(t("log_item_unequipped", item))
+                            # 가방("back")일 때만 unequip 시 항상 바닥에 드롭되도록 world를 넘김
+                            equip_world = None
+                            if value == "back":
+                                equip_world = self.current_interior if self.player.is_interior else self.world
+                            
+                            if self.player.unequip_item(value, equip_world):
+                                if value == "back":
+                                    self.event_system.add_log(t("log_item_dropped", item))
+                                else:
+                                    self.event_system.add_log(t("log_item_unequipped", item))
                                 SoundGenerator.play("pickup")
                             else:
                                 self.event_system.add_log(t("log_inventory_full"))
@@ -641,6 +659,9 @@ class Game:
         elif self.state == GameState.SETTINGS:
             pass
 
+        elif self.state == GameState.HIDEOUT:
+            self.hideout_ui.update(dt)
+
         elif self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
             self._process_global_update(dt)
 
@@ -685,6 +706,8 @@ class Game:
 
         # 탈출구 탐색 및 업데이트
         self.interaction_handler.update_extraction(dt)
+        if self.combat_system is None or self.player.raid_status != "IN_RAID":
+            return
 
         # 플레이어
         weather = self.weather_system.current_weather if not is_interior and self.weather_system else None
@@ -702,16 +725,18 @@ class Game:
         if is_interior:
             self.interior_system.update(dt, current_world)
         else:
-            self.entity_manager.update(dt, self.player, self.world)
-            combat_results = self.combat_system.process_zombie_attacks(self.player, self.entity_manager, self.world)
-            for action, zombie, dmg in combat_results:
-                if action == "player_hit":
-                    from particles import ParticleEmitters
-                    SoundGenerator.play("player_hurt")
-                    self.camera.shake(5, 0.2)
-                    self.game_particles.emit(
-                        lambda: ParticleEmitters.blood(
-                            self.player.x * 32, self.player.y * 32), 3)
+            if self.entity_manager is not None:
+                self.entity_manager.update(dt, self.player, self.world)
+            if self.combat_system is not None and self.entity_manager is not None:
+                combat_results = self.combat_system.process_zombie_attacks(self.player, self.entity_manager, self.world)
+                for action, zombie, dmg in combat_results:
+                    if action == "player_hit":
+                        from particles import ParticleEmitters
+                        SoundGenerator.play("player_hurt")
+                        self.camera.shake(5, 0.2)
+                        self.game_particles.emit(
+                            lambda: ParticleEmitters.blood(
+                                self.player.x * 32, self.player.y * 32), 3)
 
         # 전투, 이벤트, 파티클
         self.combat_system.update(dt)

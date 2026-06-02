@@ -155,9 +155,18 @@ class GameSaveManager:
             for bid, interior in game.explored_interiors.items():
                 interior_deltas[bid] = interior.to_dict()
 
+        # 건물 내부 식별 정보 저장
+        current_interior_bid = None
+        interior_floor_idx = 0
+        if game.current_interior and game.interior_building_ref:
+            current_interior_bid = f"{game.interior_building_ref.x}_{game.interior_building_ref.y}"
+            interior_floor_idx = game.current_interior.floor_idx
+
         return {
             "world_settings": game.world_settings,
             "player": game.player.to_dict(),
+            "current_interior_bid": current_interior_bid,
+            "interior_floor_idx": interior_floor_idx,
             "current_day": game.current_day,
             "current_hour": game.time_system.current_hour,
             "playtime": game.playtime,
@@ -254,5 +263,51 @@ class GameSaveManager:
             ext_w = idata.get("width", 8) // 2
             ext_h = idata.get("height", 8) // 2
             game.explored_interiors[bid] = BuildingInterior.from_dict(idata, ext_w, ext_h)
+
+        # 건물 내부 복구
+        current_interior_bid = data.get("current_interior_bid")
+        interior_floor_idx = data.get("interior_floor_idx", 0)
+        if current_interior_bid:
+            bx_str, by_str = current_interior_bid.split("_")
+            bx, by = int(bx_str), int(by_str)
+            
+            target_building = None
+            cx, cy = bx // CHUNK_SIZE, by // CHUNK_SIZE
+            chunk = game.world.get_chunk(cx, cy)
+            for b in chunk.buildings:
+                if b.x == bx and b.y == by:
+                    target_building = b
+                    break
+                    
+            if target_building:
+                game.interior_building_ref = target_building
+                bid = f"{bx}_{by}" if interior_floor_idx == 0 else f"{bx}_{by}_floor_{interior_floor_idx}"
+                if bid in game.explored_interiors:
+                    game.current_interior = game.explored_interiors[bid]
+                else:
+                    from building_interior import BuildingInterior
+                    import zlib
+                    max_floors = 2 if getattr(target_building, "building_type", "house") != "barn" else 1
+                    game.current_interior = BuildingInterior(
+                        target_building.building_type,
+                        target_building.width, target_building.height,
+                        seed=zlib.crc32(bid.encode('utf-8')) + (game.world.seed if game.world else 0),
+                        floor_idx=interior_floor_idx,
+                        max_floors=max_floors
+                    )
+                    game.explored_interiors[bid] = game.current_interior
+                
+                game.interior_zombies = []
+                for zdata in game.current_interior.zombies:
+                    z_type = zdata.get("type", "normal")
+                    z = Zombie(zdata["x"], zdata["y"], z_type, game.difficulty)
+                    z.speed *= 0.5
+                    z.detection_range = 3
+                    if "hp" in zdata:
+                        z.hp = zdata["hp"]
+                    game.interior_zombies.append(z)
+                    
+                game.interior_camera = Camera()
+                game.interior_camera.resize(game.screen_w, game.screen_h)
 
         return True

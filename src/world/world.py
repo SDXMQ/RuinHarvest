@@ -596,12 +596,15 @@ class World:
                         items.append((item, chunk))
         return items
 
-    def drop_item(self, item_name, wx, wy):
+    def drop_item(self, item_name, wx, wy, metadata=None):
         """아이템을 바닥에 떨어뜨림"""
         cx = int(wx) // CHUNK_SIZE
         cy = int(wy) // CHUNK_SIZE
         chunk = self.get_chunk(cx, cy)
-        chunk.items_on_ground.append((item_name, wx, wy))
+        if metadata:
+            chunk.items_on_ground.append((item_name, wx, wy, metadata))
+        else:
+            chunk.items_on_ground.append((item_name, wx, wy))
 
     def is_walkable(self, wx, wy):
         """해당 위치가 이동 가능한지"""

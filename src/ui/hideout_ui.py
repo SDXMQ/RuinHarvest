@@ -33,8 +33,16 @@ class HideoutUI:
 
         # 스크롤 오프셋
         self.stash_scroll = 0
+        self.inv_scroll = 0
         self.market_scroll = 0
         self.trader_scroll = 0
+        
+        # 다중구매 hold 변수
+        self.btn_hold_timer = 0.0
+        self.btn_hold_action = None
+        self.btn_hold_delay = 0.4
+        self.btn_hold_interval = 0.05
+        self.btn_hold_tick = 0.0
 
         # 선택된 아이템 정보 (Stash나 인벤토리에서 클릭 시)
         # {"source": "stash"|"inventory"|"equipped", "index": int, "item_name": str, "slot_name": str}
@@ -69,7 +77,16 @@ class HideoutUI:
             player.event_system.add_log(text)
 
     def update(self, dt):
-        pass
+        if self.btn_hold_action and self.selected_shop_item and self.selected_shop_item.get("action") == "buy":
+            self.btn_hold_timer += dt
+            if self.btn_hold_timer >= self.btn_hold_delay:
+                self.btn_hold_tick += dt
+                if self.btn_hold_tick >= self.btn_hold_interval:
+                    self.btn_hold_tick = 0.0
+                    if self.btn_hold_action == "plus":
+                        self.selected_shop_item["buy_count"] = min(30, self.selected_shop_item.get("buy_count", 1) + 1)
+                    elif self.btn_hold_action == "minus":
+                        self.selected_shop_item["buy_count"] = max(1, self.selected_shop_item.get("buy_count", 1) - 1)
 
     def handle_event(self, event, player):
         if self.show_register_dialog:
@@ -81,10 +98,13 @@ class HideoutUI:
             return None
 
         # 드래그 종료 (마우스 버튼 릴리즈)
-        if event.type == pygame.MOUSEBUTTONUP and event.button == 1 and self.dragging:
-            mx, my = event.pos
-            self._handle_drag_drop(mx, my, player)
-            return None
+        if event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+            self.btn_hold_action = None
+            self.btn_hold_timer = 0.0
+            if self.dragging:
+                mx, my = event.pos
+                self._handle_drag_drop(mx, my, player)
+                return None
 
         if event.type == pygame.MOUSEBUTTONDOWN:
             mx, my = event.pos
@@ -101,21 +121,30 @@ class HideoutUI:
                     self.selected_item = None
                     self.selected_shop_item = None
                     self.stash_scroll = 0
+                    self.inv_scroll = 0
                     self.market_scroll = 0
                     self.trader_scroll = 0
                     return None
 
             # 마우스 휠 스크롤
             if event.button == 4: # 스크롤 업
-                if self.active_tab == "stash" and mx > self.sw // 2:
-                    self.stash_scroll = max(0, self.stash_scroll - 1)
+                if self.active_tab == "stash":
+                    if mx < self.sw // 2:
+                        self.inv_scroll = max(0, self.inv_scroll - 1)
+                    else:
+                        self.stash_scroll = max(0, self.stash_scroll - 1)
                 elif self.active_tab == "traders":
                     self.trader_scroll = max(0, self.trader_scroll - 1)
                 elif self.active_tab == "market":
                     self.market_scroll = max(0, self.market_scroll - 1)
             elif event.button == 5: # 스크롤 다운
-                if self.active_tab == "stash" and mx > self.sw // 2:
-                    self.stash_scroll += 1
+                if self.active_tab == "stash":
+                    if mx < self.sw // 2:
+                        max_rows = math.ceil(player.inventory.slots / 4)
+                        visible_rows = 8
+                        self.inv_scroll = min(max(0, max_rows - visible_rows), self.inv_scroll + 1)
+                    else:
+                        self.stash_scroll += 1
                 elif self.active_tab == "traders":
                     self.trader_scroll += 1
                 elif self.active_tab == "market":
@@ -132,6 +161,23 @@ class HideoutUI:
                 return self._handle_tab_clicks(mx, my, player)
 
         elif event.type == pygame.KEYDOWN:
+            # 다중구매 수량 입력 처리
+            if self.active_tab == "traders" and self.selected_shop_item and self.selected_shop_item.get("action") == "buy":
+                if event.key == pygame.K_BACKSPACE:
+                    val_str = str(self.selected_shop_item.get("buy_count", 1))
+                    if len(val_str) > 1:
+                        self.selected_shop_item["buy_count"] = int(val_str[:-1])
+                    else:
+                        self.selected_shop_item["buy_count"] = 1
+                    return None
+                elif event.unicode and event.unicode.isdigit():
+                    val_str = str(self.selected_shop_item.get("buy_count", 1))
+                    new_val = int(val_str + event.unicode)
+                    if new_val > 30:
+                        new_val = 30
+                    self.selected_shop_item["buy_count"] = new_val
+                    return None
+
             if event.key == pygame.K_ESCAPE:
                 if self.dragging:
                     self._cancel_drag(player)
@@ -148,40 +194,47 @@ class HideoutUI:
     def _try_start_drag(self, mx, my, player):
         """드래그 시작 시도 - 클릭한 위치에 아이템이 있으면 드래그 시작"""
         # 장비 슬롯 검사
-        eq_slots = {"head": (30, 100), "body": (30, 150), "feet": (30, 200), "weapon": (120, 120)}
+        eq_slots = {"head": (30, 95), "body": (30, 137), "feet": (30, 179), "weapon": (120, 110), "back": (120, 155)}
         for slot, (ex, ey) in eq_slots.items():
             if ex <= mx <= ex + 38 and ey <= my <= ey + 38:
                 item_name = player.equipped.get(slot)
                 if item_name:
                     self.dragging = True
-                    self.drag_item = (item_name, 1)
+                    meta = copy.deepcopy(player.equipped_backpack_meta) if slot == "back" else {}
+                    self.drag_item = (item_name, 1, meta)
                     self.drag_source = f"equipped_{slot}"
                     self.drag_source_idx = -1
                     self.drag_mouse_x = mx
                     self.drag_mouse_y = my
-                    player.equipped[slot] = None
                     return True
                 return False
 
-        # 인벤토리 슬롯 검사
+        # 인벤토리 슬롯 검사 (스크롤 반영)
         inv_start_x, inv_start_y = 30, 250
         cols = 4
         for idx in range(player.inventory.slots):
             row = idx // cols
             col = idx % cols
             sx = inv_start_x + col * 42
-            sy = inv_start_y + row * 42
+            sy = inv_start_y + row * 42 - self.inv_scroll * 42
+            if not (240 <= sy <= 570):
+                continue
             if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
-                if idx < len(player.inventory.items):
-                    item_tup = player.inventory.items[idx]
+                found_idx = -1
+                for i, it in enumerate(player.inventory.items):
+                    if len(it) > 2 and it[2].get("slot_idx") == idx:
+                        found_idx = i
+                        break
+                if found_idx != -1:
+                    item_tup = player.inventory.items[found_idx]
                     name, count = item_tup[0], item_tup[1]
+                    meta = item_tup[2] if len(item_tup) > 2 else {}
                     self.dragging = True
-                    self.drag_item = (name, count)
+                    self.drag_item = (name, count, copy.deepcopy(meta))
                     self.drag_source = "inventory"
                     self.drag_source_idx = idx
                     self.drag_mouse_x = mx
                     self.drag_mouse_y = my
-                    player.inventory.items.pop(idx)
                     return True
                 return False
 
@@ -197,20 +250,40 @@ class HideoutUI:
             sx = stash_start_x + col * 42
             sy = stash_start_y + row * 42
             if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
-                if actual_idx < len(player.stash.items):
-                    item_tup = player.stash.items[actual_idx]
+                found_idx = -1
+                for i, it in enumerate(player.stash.items):
+                    if len(it) > 2 and it[2].get("slot_idx") == actual_idx:
+                        found_idx = i
+                        break
+                if found_idx != -1:
+                    item_tup = player.stash.items[found_idx]
                     name, count = item_tup[0], item_tup[1]
+                    meta = item_tup[2] if len(item_tup) > 2 else {}
                     self.dragging = True
-                    self.drag_item = (name, count)
+                    self.drag_item = (name, count, copy.deepcopy(meta))
                     self.drag_source = "stash"
                     self.drag_source_idx = actual_idx
                     self.drag_mouse_x = mx
                     self.drag_mouse_y = my
-                    player.stash.items.pop(actual_idx)
                     return True
                 return False
 
         return False
+
+    def _remove_source_item(self, player):
+        if self.drag_source == "inventory":
+            for idx, it in enumerate(player.inventory.items):
+                if len(it) > 2 and it[2].get("slot_idx") == self.drag_source_idx:
+                    player.inventory.items.pop(idx)
+                    break
+        elif self.drag_source == "stash":
+            for idx, it in enumerate(player.stash.items):
+                if len(it) > 2 and it[2].get("slot_idx") == self.drag_source_idx:
+                    player.stash.items.pop(idx)
+                    break
+        elif self.drag_source.startswith("equipped_"):
+            slot = self.drag_source.replace("equipped_", "")
+            player.equipped[slot] = None
 
     def _handle_drag_drop(self, mx, my, player):
         """드래그 종료 - 드롭 대상 결정 및 아이템 이동"""
@@ -218,11 +291,35 @@ class HideoutUI:
             self._cancel_drag(player)
             return
 
-        item_name, count = copy.deepcopy(self.drag_item)
+        item_name, count, item_meta = copy.deepcopy(self.drag_item)
         dropped = False
 
+        # 가방 해제 시의 특수 메타데이터 백업 (롤백용)
+        is_backpack_unequip = (self.drag_source == "equipped_back")
+        orig_backpack_items = []
+        orig_equipped_meta = {}
+        
+        if is_backpack_unequip:
+            orig_equipped_meta = copy.deepcopy(getattr(player, "equipped_backpack_meta", {}))
+            remaining_items = []
+            for it in player.inventory.items:
+                slot_idx = it[2].get("slot_idx", 0) if len(it) > 2 else 0
+                if slot_idx >= 12:
+                    orig_backpack_items.append(it)
+                else:
+                    remaining_items.append(it)
+            # 드롭될 가방의 메타데이터 구성
+            item_meta = copy.deepcopy(orig_equipped_meta)
+            item_meta["backpack_items"] = orig_backpack_items
+            
+            # 일단 플레이어의 가방 인벤토리 일시 축소
+            player.inventory.items = remaining_items
+            player.inventory.slots = 12
+            player.inventory.max_weight = 15.0
+            player.equipped_backpack_meta = {}
+
         # 장비 슬롯에 드롭
-        eq_slots = {"head": (30, 100), "body": (30, 150), "feet": (30, 200), "weapon": (120, 120)}
+        eq_slots = {"head": (30, 95), "body": (30, 137), "feet": (30, 179), "weapon": (120, 110), "back": (120, 155)}
         for slot, (ex, ey) in eq_slots.items():
             if ex <= mx <= ex + 38 and ey <= my <= ey + 38:
                 data = ITEM_DATABASE.get(item_name, {})
@@ -230,15 +327,17 @@ class HideoutUI:
                 if not eq_slot and data.get("category") == ItemCategory.WEAPON:
                     eq_slot = "weapon"
                 if eq_slot == slot:
-                    # 기존 장비가 있으면 교환
-                    old_item = player.equipped.get(slot)
-                    player.equipped[slot] = copy.deepcopy(item_name)
-                    if old_item:
-                        # 드래그 출처에 따라 원래 자리로 반환
-                        if self.drag_source == "stash":
-                            player.stash.add_item(copy.deepcopy(old_item), 1)
-                        else:
-                            player.inventory.add_item(copy.deepcopy(old_item), 1)
+                    self._remove_source_item(player)
+                    if player.equip_item(copy.deepcopy(item_name), player.stash):
+                        dropped = True
+                    else:
+                        if self.drag_source == "inventory":
+                            player.inventory.add_item(item_name, count, item_meta)
+                        elif self.drag_source == "stash":
+                            player.stash.add_item(item_name, count, item_meta)
+                        elif self.drag_source.startswith("equipped_"):
+                            s = self.drag_source.replace("equipped_", "")
+                            player.equipped[s] = item_name
                     dropped = True
                 break
 
@@ -249,7 +348,25 @@ class HideoutUI:
             stash_w = 8 * 42
             stash_h = 11 * 42
             if stash_start_x <= mx <= stash_start_x + stash_w and stash_start_y <= my <= stash_start_y + stash_h:
-                player.stash.add_item(copy.deepcopy(item_name), copy.deepcopy(count))
+                col = (mx - stash_start_x) // 42
+                row = (my - stash_start_y) // 42
+                dest_slot_idx = row * 8 + col + self.stash_scroll * 8
+                
+                self._remove_source_item(player)
+                
+                dest_item = None
+                for it in player.stash.items:
+                    if len(it) > 2 and it[2].get("slot_idx") == dest_slot_idx:
+                        dest_item = it
+                        break
+                
+                if dest_item:
+                    dest_item[2]["slot_idx"] = self.drag_source_idx if self.drag_source == "stash" else player.stash._get_first_free_slot()
+                    item_meta["slot_idx"] = dest_slot_idx
+                    player.stash.items.append((item_name, count, item_meta))
+                else:
+                    item_meta["slot_idx"] = dest_slot_idx
+                    player.stash.items.append((item_name, count, item_meta))
                 dropped = True
 
         # 인벤토리 영역에 드롭
@@ -258,11 +375,37 @@ class HideoutUI:
             inv_w = 4 * 42
             inv_h = (player.inventory.slots // 4 + 1) * 42
             if inv_start_x <= mx <= inv_start_x + inv_w and inv_start_y <= my <= inv_start_y + inv_h:
-                if player.inventory.add_item(copy.deepcopy(item_name), copy.deepcopy(count)):
+                col = (mx - inv_start_x) // 42
+                row = (my - (inv_start_y - self.inv_scroll * 42)) // 42
+                dest_slot_idx = row * 4 + col
+                
+                if 0 <= dest_slot_idx < player.inventory.slots:
+                    self._remove_source_item(player)
+                    
+                    dest_item = None
+                    for it in player.inventory.items:
+                        if len(it) > 2 and it[2].get("slot_idx") == dest_slot_idx:
+                            dest_item = it
+                            break
+                            
+                    if dest_item:
+                        dest_item[2]["slot_idx"] = self.drag_source_idx if self.drag_source == "inventory" else player.inventory._get_first_free_slot()
+                        item_meta["slot_idx"] = dest_slot_idx
+                        player.inventory.items.append((item_name, count, item_meta))
+                    else:
+                        item_meta["slot_idx"] = dest_slot_idx
+                        player.inventory.items.append((item_name, count, item_meta))
                     dropped = True
 
-        # 드롭 실패 시 원래 자리로 반환
         if not dropped:
+            # 롤백 처리
+            if is_backpack_unequip:
+                player.inventory.slots = 24
+                data = ITEM_DATABASE.get(item_name, {})
+                player.inventory.max_weight = 15.0 + data.get("weight_bonus", 15.0)
+                for it in orig_backpack_items:
+                    player.inventory.items.append(it)
+                player.equipped_backpack_meta = orig_equipped_meta
             self._cancel_drag(player)
             return
 
@@ -273,17 +416,6 @@ class HideoutUI:
         self.selected_item = None
 
     def _cancel_drag(self, player):
-        """드래그 취소 - 아이템을 원래 위치로 반환"""
-        if self.drag_item:
-            item_name, count = copy.deepcopy(self.drag_item)
-            if self.drag_source and self.drag_source.startswith("equipped_"):
-                slot = self.drag_source.replace("equipped_", "")
-                player.equipped[slot] = copy.deepcopy(item_name)
-            elif self.drag_source == "stash":
-                player.stash.items.insert(min(self.drag_source_idx, len(player.stash.items)), (copy.deepcopy(item_name), copy.deepcopy(count), {}))
-            elif self.drag_source == "inventory":
-                player.inventory.items.insert(min(self.drag_source_idx, len(player.inventory.items)), (copy.deepcopy(item_name), copy.deepcopy(count), {}))
-
         self.dragging = False
         self.drag_item = None
         self.drag_source = None
@@ -349,19 +481,26 @@ class HideoutUI:
                 player.stash.auto_sort()
                 self.selected_item = None
                 return None
-            # 인벤토리 슬롯 클릭 (좌측)
+            # 인벤토리 슬롯 클릭 (좌측, 스크롤 반영)
             inv_start_x = 30
-            inv_start_y = 230
+            inv_start_y = 250
             cols = 4
             for idx in range(player.inventory.slots):
                 row = idx // cols
                 col = idx % cols
                 sx = inv_start_x + col * 42
-                sy = inv_start_y + row * 42
+                sy = inv_start_y + row * 42 - self.inv_scroll * 42
+                if not (240 <= sy <= 570):
+                    continue
                 if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
-                    if idx < len(player.inventory.items):
-                        name = player.inventory.items[idx][0]
-                        self.selected_item = {"source": "inventory", "index": idx, "item_name": name}
+                    found_idx = -1
+                    for i, it in enumerate(player.inventory.items):
+                        if len(it) > 2 and it[2].get("slot_idx") == idx:
+                            found_idx = i
+                            break
+                    if found_idx != -1:
+                        name = player.inventory.items[found_idx][0]
+                        self.selected_item = {"source": "inventory", "index": found_idx, "item_name": name, "slot_idx": idx}
                     else:
                         self.selected_item = None
                     return None
@@ -370,23 +509,27 @@ class HideoutUI:
             stash_start_x = self.sw // 2 + 10
             stash_start_y = 110
             stash_cols = 8
-            # 스크롤 오프셋 반영한 그리드 노출
-            for idx in range(120): # 120개 슬롯 그리드로 노출
+            for idx in range(120):
                 actual_idx = idx + self.stash_scroll * stash_cols
                 row = idx // stash_cols
                 col = idx % stash_cols
                 sx = stash_start_x + col * 42
                 sy = stash_start_y + row * 42
                 if sx <= mx <= sx + 38 and sy <= my <= sy + 38:
-                    if actual_idx < len(player.stash.items):
-                        name = player.stash.items[actual_idx][0]
-                        self.selected_item = {"source": "stash", "index": actual_idx, "item_name": name}
+                    found_idx = -1
+                    for i, it in enumerate(player.stash.items):
+                        if len(it) > 2 and it[2].get("slot_idx") == actual_idx:
+                            found_idx = i
+                            break
+                    if found_idx != -1:
+                        name = player.stash.items[found_idx][0]
+                        self.selected_item = {"source": "stash", "index": found_idx, "item_name": name, "slot_idx": actual_idx}
                     else:
                         self.selected_item = None
                     return None
 
             # 장비창 슬롯 클릭 (좌측 상단)
-            eq_slots = {"head": (30, 80), "body": (30, 130), "feet": (30, 180), "weapon": (120, 110)}
+            eq_slots = {"head": (30, 95), "body": (30, 137), "feet": (30, 179), "weapon": (120, 110), "back": (120, 155)}
             for slot, (ex, ey) in eq_slots.items():
                 if ex <= mx <= ex + 38 and ey <= my <= ey + 38:
                     item_name = player.equipped.get(slot)
@@ -396,54 +539,51 @@ class HideoutUI:
                         self.selected_item = None
                     return None
 
-            # 기능성 버튼 처리 (아이템 이동 / 무장 탈착 등)
+            # 기능성 버튼 처리
             if self.selected_item:
                 src = self.selected_item["source"]
                 # Stash -> Inventory
                 if src == "stash" and 210 <= mx <= 350 and 80 <= my <= 115:
                     idx = self.selected_item["index"]
                     item_tup = copy.deepcopy(player.stash.items[idx])
-                    name, count = item_tup[0], item_tup[1]
-                    if player.inventory.add_item(copy.deepcopy(name), copy.deepcopy(count)):
-                        player.stash.remove_item(name, count)
+                    name, count, meta = item_tup[0], item_tup[1], item_tup[2]
+                    if player.inventory.add_item(copy.deepcopy(name), copy.deepcopy(count), copy.deepcopy(meta)):
+                        player.stash.items.pop(idx)
                         self.selected_item = None
                 # Inventory -> Stash
                 elif src == "inventory" and 210 <= mx <= 350 and 80 <= my <= 115:
                     idx = self.selected_item["index"]
                     item_tup = copy.deepcopy(player.inventory.items[idx])
-                    name, count = item_tup[0], item_tup[1]
-                    if player.stash.add_item(copy.deepcopy(name), copy.deepcopy(count)):
-                        player.inventory.remove_item(name, count)
+                    name, count, meta = item_tup[0], item_tup[1], item_tup[2]
+                    if player.stash.add_item(copy.deepcopy(name), copy.deepcopy(count), copy.deepcopy(meta)):
+                        player.inventory.items.pop(idx)
                         self.selected_item = None
-                # 장비 착용 (Stash 또는 Inventory에서)
+                # 장비 착용
                 elif src in ("stash", "inventory") and 210 <= mx <= 350 and 130 <= my <= 165:
                     idx = self.selected_item["index"]
                     inv = player.stash if src == "stash" else player.inventory
-                    name, count = copy.deepcopy(inv.items[idx])
+                    name, count, meta = copy.deepcopy(inv.items[idx])
                     data = ITEM_DATABASE.get(name, {})
                     slot = data.get("equip_slot")
                     if not slot and data.get("category") == ItemCategory.WEAPON:
                         slot = "weapon"
                     if slot:
-                        # 기존 장착 템을 Stash로 분리하도록 안전장치
                         if player.equip_item(copy.deepcopy(name), player.stash):
+                            inv.items.pop(idx)
                             self.selected_item = None
                 # 장비 해제
                 elif src == "equipped" and 210 <= mx <= 350 and 130 <= my <= 165:
                     slot = self.selected_item["slot_name"]
-                    name = copy.deepcopy(player.equipped[slot])
-                    if player.stash.add_item(copy.deepcopy(name)):
-                        player.equipped[slot] = None
+                    if player.unequip_item(slot, player.stash):
                         self.selected_item = None
+                    else:
+                        self._add_log(player, "인벤토리 공간이 부족하여 해제할 수 없습니다.")
                 # 플리마켓 등록 다이얼로그 호출
                 elif src in ("stash", "inventory") and 210 <= mx <= 350 and 180 <= my <= 215:
                     self.show_register_dialog = True
                     self.register_price_input = str(ITEM_DATABASE.get(self.selected_item["item_name"], {}).get("value", 1000))
                     self.register_target_item = (src, self.selected_item["index"], self.selected_item["item_name"])
                 # 장비 개별 보험 가입
-                elif src == "equipped" and 210 <= mx <= 350 and 130 <= my <= 165:
-                    # 장비 해제 대신 보험 가입 버튼이 따로 있음 (y=410 부근)
-                    pass
                 elif src == "equipped" and 210 <= mx <= 350 and 410 <= my <= 445:
                     slot = self.selected_item["slot_name"]
                     name = player.equipped[slot]
@@ -452,7 +592,7 @@ class HideoutUI:
                         if player.rubles >= cost:
                             player.rubles -= cost
                             player.equipped_insured[slot] = True
-                            self._add_log(player, f"[{name}]에 보험(10% 비용)을 가입했습니다.")
+                            self._add_log(player, f"[{name}]에 보험을 가입했습니다.")
                             SoundGenerator.play("craft_complete")
 
         # === 2. TRADERS 탭 클릭 ===
@@ -529,13 +669,17 @@ class HideoutUI:
                 if action == "buy":
                     info_x = 450
                     info_y = 180
-                    # [-] 버튼 클릭 (info_x + 180, info_y + 258, 25, 25)
+                    # [-] 버튼 클릭 검사
                     if info_x + 180 <= mx <= info_x + 205 and info_y + 258 <= my <= info_y + 283:
                         self.selected_shop_item["buy_count"] = max(1, self.selected_shop_item.get("buy_count", 1) - 1)
+                        self.btn_hold_action = "minus"
+                        self.btn_hold_timer = 0.0
                         return None
-                    # [+] 버튼 클릭 (info_x + 245, info_y + 258, 25, 25)
+                    # [+] 버튼 클릭 검사
                     if info_x + 245 <= mx <= info_x + 270 and info_y + 258 <= my <= info_y + 283:
                         self.selected_shop_item["buy_count"] = min(30, self.selected_shop_item.get("buy_count", 1) + 1)
+                        self.btn_hold_action = "plus"
+                        self.btn_hold_timer = 0.0
                         return None
                         
                     if 470 <= mx <= 730 and 490 <= my <= 525:
@@ -711,14 +855,20 @@ class HideoutUI:
         font_small = FontManager.get(11)
 
         # 1. 플레이어 장비 슬롯 (좌측 상단)
-        draw_rounded_rect(surface, (15, 18, 28, 120), (20, 70, 200, 140), radius=6)
-        pygame.draw.rect(surface, Colors.UI_BORDER, (20, 70, 200, 140), 1, border_radius=6)
+        draw_rounded_rect(surface, (15, 18, 28, 120), (20, 70, 200, 145), radius=6)
+        pygame.draw.rect(surface, Colors.UI_BORDER, (20, 70, 200, 145), 1, border_radius=6)
         
         eq_label = FontManager.get(12).render("장착 장비", True, Colors.UI_ACCENT)
         surface.blit(eq_label, (30, 75))
 
         # 장착 슬롯들
-        eq_slots = {"head": (30, 100, "머리"), "body": (30, 150, "상체"), "feet": (30, 200, "신발"), "weapon": (120, 120, "무기")}
+        eq_slots = {
+            "head": (30, 95, "머리"),
+            "body": (30, 137, "상체"),
+            "feet": (30, 179, "신발"),
+            "weapon": (120, 110, "무기"),
+            "back": (120, 155, "가방")
+        }
         for slot, (ex, ey, s_name) in eq_slots.items():
             draw_rounded_rect(surface, (25, 28, 38, 200), (ex, ey, 38, 38), radius=4)
             pygame.draw.rect(surface, Colors.UI_BORDER, (ex, ey, 38, 38), 1, border_radius=4)
@@ -747,31 +897,53 @@ class HideoutUI:
         inv_start_x = 30
         inv_start_y = 250
         cols = 4
+        
+        # 가방 영역 클리핑 셋업 (20, 245, 200, 330)
+        clip_rect = pygame.Rect(20, 245, 200, 330)
+        old_clip = surface.get_clip()
+        surface.set_clip(clip_rect)
+        
         for idx in range(player.inventory.slots):
             row = idx // cols
             col = idx % cols
             sx = inv_start_x + col * 42
-            sy = inv_start_y + row * 42
+            sy = inv_start_y + row * 42 - self.inv_scroll * 42
             
-            # 슬롯 테두리
             draw_rounded_rect(surface, (25, 28, 38, 200), (sx, sy, 38, 38), radius=4)
             pygame.draw.rect(surface, Colors.UI_BORDER, (sx, sy, 38, 38), 1, border_radius=4)
 
-            # 선택 표시
             if self.selected_item and self.selected_item["source"] == "inventory" and self.selected_item["index"] == idx:
                 pygame.draw.rect(surface, Colors.UI_ACCENT, (sx - 1, sy - 1, 40, 40), 2, border_radius=4)
 
-            # 아이템 렌더링
-            if idx < len(player.inventory.items):
-                item_tup = player.inventory.items[idx]
-                name, count = item_tup[0], item_tup[1]
-                icon = ItemIconRenderer.get_icon(name)
-                surface.blit(icon, (sx + 3, sy + 3))
-                
-                # 수량
-                if count > 1:
-                    c_surf = font_small.render(str(count), True, Colors.WHITE)
-                    surface.blit(c_surf, (sx + 36 - c_surf.get_width(), sy + 24))
+            found_item = None
+            for i, it in enumerate(player.inventory.items):
+                if len(it) > 2 and it[2].get("slot_idx") == idx:
+                    found_item = it
+                    break
+
+            if found_item is not None:
+                name, count = found_item[0], found_item[1]
+                is_dragged = self.dragging and self.drag_source == "inventory" and self.drag_source_idx == idx
+                if not is_dragged:
+                    icon = ItemIconRenderer.get_icon(name)
+                    surface.blit(icon, (sx + 3, sy + 3))
+                    
+                    if count > 1:
+                        c_surf = font_small.render(str(count), True, Colors.WHITE)
+                        surface.blit(c_surf, (sx + 36 - c_surf.get_width(), sy + 24))
+        
+        surface.set_clip(old_clip)
+
+        # 가방 인벤토리 세로 스크롤바
+        max_inv_scroll = max(0, math.ceil(player.inventory.slots / 4) - 8)
+        if max_inv_scroll > 0:
+            track_x = 203
+            track_y = 250
+            track_h = 320
+            pygame.draw.rect(surface, (30, 32, 42, 100), (track_x, track_y, 4, track_h), border_radius=2)
+            thumb_h = max(20, int(track_h * (8 / math.ceil(player.inventory.slots / 4))))
+            thumb_y = track_y + int((track_h - thumb_h) * (self.inv_scroll / max_inv_scroll))
+            pygame.draw.rect(surface, Colors.UI_ACCENT, (track_x, thumb_y, 4, thumb_h), border_radius=2)
 
         # 3. 영구 창고 Stash 그리드 (우측)
         stash_start_x = self.sw // 2 + 10
@@ -804,14 +976,21 @@ class HideoutUI:
             if self.selected_item and self.selected_item["source"] == "stash" and self.selected_item["index"] == actual_idx:
                 pygame.draw.rect(surface, Colors.UI_ACCENT, (sx - 1, sy - 1, 40, 40), 2, border_radius=4)
 
-            if actual_idx < len(player.stash.items):
-                item_tup = player.stash.items[actual_idx]
-                name, count = item_tup[0], item_tup[1]
-                icon = ItemIconRenderer.get_icon(name)
-                surface.blit(icon, (sx + 3, sy + 3))
-                if count > 1:
-                    c_surf = font_small.render(str(count), True, Colors.WHITE)
-                    surface.blit(c_surf, (sx + 36 - c_surf.get_width(), sy + 24))
+            found_item = None
+            for it in player.stash.items:
+                if len(it) > 2 and it[2].get("slot_idx") == actual_idx:
+                    found_item = it
+                    break
+
+            if found_item is not None:
+                name, count = found_item[0], found_item[1]
+                is_dragged = self.dragging and self.drag_source == "stash" and self.drag_source_idx == actual_idx
+                if not is_dragged:
+                    icon = ItemIconRenderer.get_icon(name)
+                    surface.blit(icon, (sx + 3, sy + 3))
+                    if count > 1:
+                        c_surf = font_small.render(str(count), True, Colors.WHITE)
+                        surface.blit(c_surf, (sx + 36 - c_surf.get_width(), sy + 24))
 
         # 4. 중앙 아이템 상세 정보 및 기능 액션 패널
         info_x = 240
@@ -912,7 +1091,7 @@ class HideoutUI:
 
         # 드래그 중인 아이템 마우스 커서에 표시
         if self.dragging and self.drag_item:
-            drag_name, drag_count = self.drag_item
+            drag_name, drag_count = self.drag_item[0], self.drag_item[1]
             drag_surf = pygame.Surface((120, 28), pygame.SRCALPHA)
             drag_surf.fill((40, 45, 60, 210))
             pygame.draw.rect(drag_surf, Colors.UI_ACCENT, (0, 0, 120, 28), 1, border_radius=4)

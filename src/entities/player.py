@@ -53,12 +53,14 @@ class Player:
         self.recoil_stack = 0.0  # 반동 스택 (연사 시 누적)
 
         # 인벤토리 & 크래프팅
-        self.inventory = Inventory(slots=24)
+        self.inventory = Inventory(slots=12)
+        self.inventory.max_weight = 15.0
         self.stash = Inventory(slots=150)
         self.secure_container = Inventory(slots=9) # 하베스트 파우치 (3x3)
         self.crafting = CraftingSystem()
 
         self.rubles = 10000
+        self.equipped_backpack_meta = {}
         self.level = 1
         self.xp = 0
         self.reputation = {"prapor": 0.2, "therapist": 0.2, "fence": 0.2}
@@ -320,11 +322,14 @@ class Player:
             data = ITEM_DATABASE.get(self.equipped["feet"], {})
             current_speed += data.get("speed_bonus", 0)
             
-        base_max_weight = 30.0
-        if self.equipped.get("back"):
-            data = ITEM_DATABASE.get(self.equipped["back"], {})
-            base_max_weight += data.get("weight_bonus", 0)
-        self.inventory.max_weight = base_max_weight
+        if not self.inventory.is_sandbox:
+            if self.equipped.get("back"):
+                self.inventory.slots = 24
+                data = ITEM_DATABASE.get(self.equipped["back"], {})
+                self.inventory.max_weight = 15.0 + data.get("weight_bonus", 15.0)
+            else:
+                self.inventory.slots = 12
+                self.inventory.max_weight = 15.0
         
         # 무게 초과 확인 (80% 이상 시 속도 점진적 감소, 샌드박스 제외)
         current_weight = self.inventory.current_weight
@@ -547,6 +552,7 @@ class Player:
 
     def equip_item(self, item_name, world=None):
         """장비 착용"""
+        import copy
         data = ITEM_DATABASE.get(item_name)
         if not data:
             return False
@@ -561,14 +567,37 @@ class Player:
         if not self.inventory.has_item(item_name):
             return False
 
+        # 인벤토리에서 아이템 메타데이터 백업
+        item_meta = {}
+        for it in self.inventory.items:
+            if it[0] == item_name:
+                item_meta = copy.deepcopy(it[2]) if len(it) > 2 else {}
+                break
+
         old_item = self.equipped.get(slot)
-        
-        # 새 아이템을 먼저 인벤토리에서 제거하여 빈 공간(슬롯)을 1칸 확보
+        old_meta = {}
+        if old_item:
+            if slot == "back":
+                old_meta = getattr(self, "equipped_backpack_meta", {})
+                backpack_items = []
+                remaining_items = []
+                for it in self.inventory.items:
+                    slot_idx = it[2].get("slot_idx", 0) if len(it) > 2 else 0
+                    if slot_idx >= 12:
+                        backpack_items.append(it)
+                    else:
+                        remaining_items.append(it)
+                old_meta["backpack_items"] = backpack_items
+                self.inventory.items = remaining_items
+                self.inventory.slots = 12
+                self.inventory.max_weight = 15.0
+
+        # 새 아이템 인벤토리에서 제거
         self.inventory.remove_item(item_name, 1)
 
         # 기존에 장착 중이던 장비를 인벤토리에 추가
         if old_item:
-            if not self.inventory.add_item(old_item):
+            if not self.inventory.add_item(old_item, 1, old_meta):
                 # 인벤토리가 가득 찼으면 바닥에 드롭 (장비 증발 방지)
                 if world and hasattr(world, 'drop_item'):
                     drop_x = self.x
@@ -576,7 +605,69 @@ class Player:
                     world.drop_item(old_item, drop_x, drop_y)
 
         self.equipped[slot] = item_name
+        
+        if slot == "back":
+            self.equipped_backpack_meta = item_meta
+            if not self.inventory.is_sandbox:
+                self.inventory.slots = 24
+                self.inventory.max_weight = 15.0 + data.get("weight_bonus", 15.0)
+                
+                # 가방 내부 아이템 복원
+                backpack_items = item_meta.get("backpack_items", [])
+                for it in backpack_items:
+                    self.inventory.items.append(it)
+                
         return True
+
+    def unequip_item(self, slot, world=None):
+        """장비 해제"""
+        import copy
+        item_name = self.equipped.get(slot)
+        if not item_name:
+            return False
+
+        item_meta = {}
+        backpack_items = []
+        if slot == "back":
+            item_meta = copy.deepcopy(getattr(self, "equipped_backpack_meta", {}))
+            if not self.inventory.is_sandbox:
+                remaining_items = []
+                for it in self.inventory.items:
+                    slot_idx = it[2].get("slot_idx", 0) if len(it) > 2 else 0
+                    if slot_idx >= 12:
+                        backpack_items.append(it)
+                    else:
+                        remaining_items.append(it)
+                item_meta["backpack_items"] = backpack_items
+                self.inventory.items = remaining_items
+                self.inventory.slots = 12
+                self.inventory.max_weight = 15.0
+
+        self.equipped[slot] = None
+
+        # 레이드 월드 중 장비 해제 시 바닥에 드롭
+        if world and hasattr(world, 'drop_item') and not isinstance(world, Inventory):
+            world.drop_item(item_name, self.x, self.y, item_meta)
+            if slot == "back":
+                self.equipped_backpack_meta = {}
+            return True
+
+        # 은신처 등 월드가 없을 때는 인벤토리나 stash에 추가 시도
+        dest_inv = world if isinstance(world, Inventory) else self.inventory
+        if dest_inv.add_item(item_name, 1, item_meta):
+            if slot == "back":
+                self.equipped_backpack_meta = {}
+            return True
+            
+        # 실패 시 롤백 (인벤토리나 stash에 넣을 공간이 없을 때)
+        self.equipped[slot] = item_name
+        if slot == "back" and not self.inventory.is_sandbox:
+            self.inventory.slots = 24
+            data = ITEM_DATABASE.get(item_name, {})
+            self.inventory.max_weight = 15.0 + data.get("weight_bonus", 15.0)
+            for it in backpack_items:
+                self.inventory.items.append(it)
+        return False
 
     def get_attack_damage(self):
         """현재 무기의 공격력"""
@@ -652,6 +743,7 @@ class Player:
             "equipped": dict(self.equipped),
             "equipped_durability": dict(self.equipped_durability),
             "equipped_insured": dict(self.equipped_insured),
+            "equipped_backpack_meta": getattr(self, "equipped_backpack_meta", {}),
             "bleeding": self.bleeding,
             "broken_bone": self.broken_bone,
             "killed_zombies": self.killed_zombies,
@@ -686,6 +778,7 @@ class Player:
         p.spent_money = data.get("spent_money", {"prapor": 0, "therapist": 0, "fence": 0})
         p.crafting = CraftingSystem.from_dict(data.get("crafting", {}))
         p.equipped = data.get("equipped", {"head": None, "body": None, "feet": None, "weapon": None})
+        p.equipped_backpack_meta = data.get("equipped_backpack_meta", {})
         p.equipped_durability = data.get("equipped_durability", {"head": 100.0, "body": 100.0, "feet": 100.0, "weapon": 100.0})
         p.equipped_insured = data.get("equipped_insured", {"head": False, "body": False, "feet": False, "weapon": False})
         p.bleeding = data.get("bleeding", False)
