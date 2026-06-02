@@ -290,3 +290,19 @@ class ParticleEmitters:
             gravity=-0.01,
             friction=0.95,
         )
+
+    @staticmethod
+    def extraction_hint_particle(x, y):
+        """탈출구 방향 힌트 조명 (청록색)"""
+        angle = random.uniform(math.pi * 1.2, math.pi * 1.8) # 위쪽 방향
+        speed = random.uniform(1.0, 3.0)
+        return Particle(
+            x + random.uniform(-10, 10), y + random.uniform(-10, 10),
+            math.cos(angle) * speed, math.sin(angle) * speed - 1.5,
+            life=random.uniform(1.0, 2.0),
+            size=random.uniform(2, 4),
+            color=(50, 220, 200),
+            gravity=-0.05,  # 위로 솟구침
+            friction=0.95,
+            glow=True,
+        )

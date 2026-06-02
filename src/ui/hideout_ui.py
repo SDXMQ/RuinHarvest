@@ -95,6 +95,8 @@ class HideoutUI:
                 ty = 15
                 tw, th = 120, 35
                 if tx <= mx <= tx + tw and ty <= my <= ty + th:
+                    if self.dragging:
+                        self._cancel_drag(player)
                     self.active_tab = tab
                     self.selected_item = None
                     self.selected_shop_item = None
@@ -502,7 +504,7 @@ class HideoutUI:
                     ay = list_y + idx * 45 - self.trader_scroll * 45
                     if 180 <= ay <= self.sh - 80:
                         if 30 <= mx <= 420 and ay <= my <= ay + 40:
-                            self.selected_shop_item = {"name": item_name, "price": price, "action": "buy"}
+                            self.selected_shop_item = {"name": item_name, "price": price, "action": "buy", "buy_count": 1}
                             return None
             else:
                 # 플레이어 창고(Stash) 아이템을 상인에게 즉시 판매
@@ -524,20 +526,34 @@ class HideoutUI:
                 price = self.selected_shop_item["price"]
                 
                 # 상인 아이템 구매
-                if action == "buy" and 470 <= mx <= 730 and 490 <= my <= 525:
-                    if player.rubles >= price:
-                        if player.stash.add_item(copy.deepcopy(item_name)):
-                            player.rubles -= price
-                            # 누적 거래액 증가
-                            player.spent_money[self.active_trader] = player.spent_money.get(self.active_trader, 0) + price
-                            # 우호도 소폭 상승 (0.01)
-                            player.reputation[self.active_trader] = min(1.0, player.reputation.get(self.active_trader, 0) + 0.005)
-                            self._add_log(player, f"{item_name}을(를) {price}루블에 구매했습니다.")
-                            self.selected_shop_item = None
+                if action == "buy":
+                    info_x = 450
+                    info_y = 180
+                    # [-] 버튼 클릭 (info_x + 180, info_y + 258, 25, 25)
+                    if info_x + 180 <= mx <= info_x + 205 and info_y + 258 <= my <= info_y + 283:
+                        self.selected_shop_item["buy_count"] = max(1, self.selected_shop_item.get("buy_count", 1) - 1)
+                        return None
+                    # [+] 버튼 클릭 (info_x + 245, info_y + 258, 25, 25)
+                    if info_x + 245 <= mx <= info_x + 270 and info_y + 258 <= my <= info_y + 283:
+                        self.selected_shop_item["buy_count"] = min(30, self.selected_shop_item.get("buy_count", 1) + 1)
+                        return None
+                        
+                    if 470 <= mx <= 730 and 490 <= my <= 525:
+                        count = self.selected_shop_item.get("buy_count", 1)
+                        total_price = price * count
+                        if player.rubles >= total_price:
+                            if player.stash.add_item(copy.deepcopy(item_name), count):
+                                player.rubles -= total_price
+                                # 누적 거래액 증가
+                                player.spent_money[self.active_trader] = player.spent_money.get(self.active_trader, 0) + total_price
+                                # 우호도 소폭 상승 (0.01)
+                                player.reputation[self.active_trader] = min(1.0, player.reputation.get(self.active_trader, 0) + 0.005)
+                                self._add_log(player, f"{item_name} {count}개를 {total_price}루블에 구매했습니다.")
+                                self.selected_shop_item = None
+                            else:
+                                self._add_log(player, "Stash 창고가 가득 찼습니다.")
                         else:
-                            self._add_log(player, "Stash 창고가 가득 찼습니다.")
-                    else:
-                        self._add_log(player, "루블이 부족합니다.")
+                            self._add_log(player, "루블이 부족합니다.")
                 
                 # 내 Stash 아이템 상인 판매
                 elif action == "sell" and 470 <= mx <= 730 and 490 <= my <= 525:
@@ -995,7 +1011,32 @@ class HideoutUI:
             pygame.draw.line(surface, (50, 55, 70), (info_x + 20, info_y + 245), (info_x + 280, info_y + 245), 1)
             
             s_name_surf = font.render(f"선택: {s_item['name']}", True, Colors.UI_TEXT)
-            s_price_surf = FontManager.get(14).render(f"가격: {s_item['price']:,} ₽", True, (255, 215, 0))
+            
+            if s_item.get("action") == "buy":
+                count = s_item.get("buy_count", 1)
+                total_price = s_item['price'] * count
+                s_price_surf = FontManager.get(14).render(f"합계: {total_price:,} ₽", True, (255, 215, 0))
+                
+                # 수량 조절 UI 그리기
+                cnt_lbl = font.render("수량:", True, Colors.UI_TEXT_DIM)
+                surface.blit(cnt_lbl, (info_x + 140, info_y + 260))
+                
+                # [-] 버튼
+                draw_rounded_rect(surface, (50, 55, 70), (info_x + 180, info_y + 258, 25, 25), radius=4)
+                minus_surf = font.render("-", True, Colors.WHITE)
+                surface.blit(minus_surf, (info_x + 180 + (25 - minus_surf.get_width())//2, info_y + 258 + (25 - minus_surf.get_height())//2))
+                
+                # 수량 표시
+                c_val = font.render(str(count), True, Colors.WHITE)
+                surface.blit(c_val, (info_x + 215 + (20 - c_val.get_width())//2, info_y + 260))
+                
+                # [+] 버튼
+                draw_rounded_rect(surface, (50, 55, 70), (info_x + 245, info_y + 258, 25, 25), radius=4)
+                plus_surf = font.render("+", True, Colors.WHITE)
+                surface.blit(plus_surf, (info_x + 245 + (25 - plus_surf.get_width())//2, info_y + 258 + (25 - plus_surf.get_height())//2))
+            else:
+                s_price_surf = FontManager.get(14).render(f"가격: {s_item['price']:,} ₽", True, (255, 215, 0))
+            
             surface.blit(s_name_surf, (info_x + 20, info_y + 260))
             surface.blit(s_price_surf, (info_x + 20, info_y + 280))
 

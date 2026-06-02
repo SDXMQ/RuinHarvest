@@ -107,9 +107,9 @@ class WorldSceneRenderer:
                     )
                     sx, sy = self.game.camera.world_to_screen(bx, by)
                     
-                    # 건물 뒤/위에 플레이어가 있으면 원본은 그리지 않음(나중에 반투명으로 덧그림)
+                    # 플레이어가 건물 뒤편(북쪽)에 있어 가려지는 경우 원본은 그리지 않음(나중에 반투명으로 덧그림)
                     px, py = self.game.player.x, self.game.player.y
-                    if bx <= px < bx + building.width and by <= py < by + building.height - 1:
+                    if bx - 0.5 <= px < bx + building.width + 0.5 and by - 2.5 <= py < by:
                         continue
                         
                     surface.blit(sprite, (sx, sy))
@@ -134,8 +134,8 @@ class WorldSceneRenderer:
                     if not (x1 - 5 <= bx <= x2 + 5 and y1 - 5 <= by <= y2 + 5):
                         continue
 
-                    # 플레이어가 건물 윗부분에 위치할 경우 반투명 덧그리기
-                    if bx <= px < bx + building.width and by <= py < by + building.height - 1:
+                    # 플레이어가 건물 뒤편(북쪽)에 위치할 경우 반투명 덧그리기
+                    if bx - 0.5 <= px < bx + building.width + 0.5 and by - 2.5 <= py < by:
                         sprite = BuildingRenderer.get_building(
                             building.building_type, building.width, building.height, building.variant
                         ).copy()
@@ -720,7 +720,12 @@ class WorldSceneRenderer:
         hint_text = None
 
         if interior.is_at_exit(ix, iy):
-            hint_text = t("press_e_exit")
+            if interior.floor_idx > 0:
+                hint_text = "[E] 아래층으로 내려가기"
+            else:
+                hint_text = t("press_e_exit")
+        elif hasattr(interior, 'is_at_stairs_up') and interior.is_at_stairs_up(ix, iy):
+            hint_text = "[E] 위층으로 올라가기"
         else:
             furn = interior.get_unsearched_furniture_near(ix, iy, 1.5)
             if furn:

@@ -50,6 +50,7 @@ class Player:
         self.attack_cooldown = CooldownManager()
         self.invincible_timer = 0
         self.combo_count = 0
+        self.recoil_stack = 0.0  # 반동 스택 (연사 시 누적)
 
         # 인벤토리 & 크래프팅
         self.inventory = Inventory(slots=24)
@@ -140,10 +141,41 @@ class Player:
         self.y = self.exterior_y
         self.moving = False
 
-    def update(self, dt, current_world, weather_type=None):
+    def update(self, dt, current_world, weather_type=None, time_system=None):
         """플레이어 업데이트 (world 혹은 interior를 받아 다형성 적용)"""
         if not self.alive:
             return None
+
+        # 어두운 환경(밤/실내)에서 광원 도구 내구도 소모
+        is_dark = self.is_interior
+        if time_system:
+            hour = time_system.current_hour
+            if hour >= 18.0 or hour < 6.0:
+                is_dark = True
+        
+        if is_dark:
+            tools_to_consume = ["손전등", "횃불", "개조 손전등"]
+            for i, it in enumerate(self.inventory.items):
+                item_name = it[0]
+                if item_name in tools_to_consume:
+                    meta = it[2] if len(it) > 2 else {}
+                    durability = meta.get("durability", 100.0)
+                    
+                    consume_rate = 0.08
+                    if item_name == "횃불":
+                        consume_rate = 0.15
+                    elif item_name == "개조 손전등":
+                        consume_rate = 0.05
+                        
+                    durability -= consume_rate * dt
+                    if durability <= 0:
+                        self.inventory.remove_item(item_name, 1)
+                        if self.event_system:
+                            self.event_system.add_log(f"[{item_name}]의 내구도가 다하여 소멸했습니다.")
+                    else:
+                        meta["durability"] = durability
+                        self.inventory.items[i] = (it[0], it[1], meta)
+                    break
 
         # 피격 프레임 플래그 초기화
         self.damage_taken_this_frame = False
@@ -170,6 +202,10 @@ class Player:
         # 라디오 스캔 타이머
         if self.radio_scan_timer > 0:
             self.radio_scan_timer = max(0.0, self.radio_scan_timer - dt)
+
+        # 총기 반동 감쇠
+        if self.recoil_stack > 0:
+            self.recoil_stack = max(0.0, self.recoil_stack - dt * 4.0)
 
         # 스태미나 자연 회복 (매 프레임 처리로 부드럽게 개선)
         if not self.is_sprinting:
@@ -297,15 +333,39 @@ class Player:
             penalty_ratio = min(1.0, penalty_ratio)
             current_speed *= (1.0 - 0.3 * penalty_ratio) # 최대 30% 감속
 
-        # 이동
-        new_x = self.x + dx * current_speed * dt
-        new_y = self.y + dy * current_speed * dt
-
-        # 충돌 체크 (비주얼 발밑 중심 +0.5, +0.9 정렬 보정)
-        if world.is_walkable(new_x + 0.5, self.y + 0.9):
-            self.x = new_x
-        if world.is_walkable(self.x + 0.5, new_y + 0.9):
-            self.y = new_y
+        # 이동 및 충돌 체크 (서브스텝 단위 처리로 터널링 방지)
+        move_dist_x = dx * current_speed * dt
+        move_dist_y = dy * current_speed * dt
+        
+        total_dist = math.hypot(move_dist_x, move_dist_y)
+        MAX_STEP = 0.5  # 최대 0.5타일(16픽셀)씩 쪼개어 검사
+        steps = max(1, int(math.ceil(total_dist / MAX_STEP)))
+        
+        step_x = move_dist_x / steps
+        step_y = move_dist_y / steps
+        
+        for _ in range(steps):
+            new_x = self.x + step_x
+            new_y = self.y + step_y
+            
+            # 다중 포인트 충돌 체크 (플레이어 발밑 영역: 가로 +0.2~+0.8, 세로 +0.8~+0.95)
+            can_move_x = (
+                world.is_walkable(new_x + 0.2, self.y + 0.8) and
+                world.is_walkable(new_x + 0.8, self.y + 0.8) and
+                world.is_walkable(new_x + 0.2, self.y + 0.95) and
+                world.is_walkable(new_x + 0.8, self.y + 0.95)
+            )
+            if can_move_x:
+                self.x = new_x
+                
+            can_move_y = (
+                world.is_walkable(self.x + 0.2, new_y + 0.8) and
+                world.is_walkable(self.x + 0.8, new_y + 0.8) and
+                world.is_walkable(self.x + 0.2, new_y + 0.95) and
+                world.is_walkable(self.x + 0.8, new_y + 0.95)
+            )
+            if can_move_y:
+                self.y = new_y
 
         # 스프린트 시 스태미나 소모 (20/초)
         if self.is_sprinting and self.moving:

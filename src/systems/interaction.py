@@ -253,9 +253,17 @@ class InteractionHandler:
         for ep in getattr(self.game.world, 'extraction_points', []):
             dx = ep["x"] - px
             dy = ep["y"] - py
-            if dx * dx + dy * dy <= 2.0 * 2.0:
+            dist_sq = dx * dx + dy * dy
+            
+            # 12타일 반경 내 진입 시 청록색 파티클 발생 (탈출구 힌트)
+            if dist_sq <= 144.0:
+                if random.random() < 0.1 * dt * 60:
+                    ep_x, ep_y = ep["x"], ep["y"]
+                    self.game.game_particles.emit(
+                        lambda: ParticleEmitters.extraction_hint_particle(ep_x * TILE_SIZE, ep_y * TILE_SIZE), 1)
+
+            if dist_sq <= 4.0 and in_range_ep is None:
                 in_range_ep = ep
-                break
 
         if in_range_ep:
             if in_range_ep["type"] == "key_required":

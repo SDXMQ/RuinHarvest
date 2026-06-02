@@ -45,7 +45,7 @@ class HUD:
     def add_notification(self, message, duration=3.0):
         self.notification_queue.append((message, duration, 0))
 
-    def draw(self, surface, player, time_system, weather_system, current_day, total_days, raid_time_left=None, world=None, extract_target=None, extract_timer=None, dt=0.0):
+    def draw(self, surface, player, time_system, weather_system, current_day, total_days, raid_time_left=None, world=None, extract_target=None, extract_timer=None, dt=0.0, extract_points=None):
         self._draw_stat_bars(surface, player)
         self._draw_time_info(surface, time_system, current_day, total_days, raid_time_left)
         self._draw_weather_info(surface, weather_system)
@@ -56,6 +56,7 @@ class HUD:
         self._draw_crouch_indicator(surface, player)
         if extract_target and extract_timer is not None:
             self._draw_extraction_hud(surface, extract_target, extract_timer)
+        self._draw_compass(surface, player, extract_points, world)
 
     def _draw_stat_bars(self, surface, player):
         """스탯 바 (좌측 상단)"""
@@ -332,6 +333,206 @@ class HUD:
         pygame.draw.rect(bg, (20, 40, 60, 180), (0, 0, tw + 20, 28), border_radius=6)
         surface.blit(bg, (x - 10, y - 4))
         surface.blit(text, (x, y))
+
+    # 방향 인덱스(0~7) → 라디안 변환 (0=down → π/2, 시계방향)
+    _DIR_TO_RAD = [
+        math.pi / 2,        # 0: down
+        3 * math.pi / 4,    # 1: down-left
+        math.pi,            # 2: left
+        -3 * math.pi / 4,   # 3: up-left
+        -math.pi / 2,       # 4: up
+        -math.pi / 4,       # 5: up-right
+        0.0,                # 6: right
+        math.pi / 4,        # 7: down-right
+    ]
+
+    def _find_nearest_building(self, player, world, target_id):
+        if not world:
+            return None
+        nearest_b = None
+        min_dist = 999999.0
+        for chunk in world.chunks.values():
+            for b in chunk.buildings:
+                is_match = False
+                btype = getattr(b, "building_type", "")
+                variant = getattr(b, "variant", 0)
+                if target_id == "police" and btype == "police":
+                    is_match = True
+                elif target_id == "military" and btype == "military" and variant != 999:
+                    is_match = True
+                elif target_id == "radio_tower" and btype == "military" and variant == 999:
+                    is_match = True
+                
+                if is_match:
+                    bx, by = b.center
+                    dist = math.hypot(bx - player.x, by - player.y)
+                    if dist < min_dist:
+                        min_dist = dist
+                        nearest_b = (bx, by)
+        return nearest_b
+
+    def _draw_compass(self, surface, player, extract_points, world=None):
+        """나침반 바 (화면 상단 중앙)"""
+        if not player:
+            return
+
+        bar_w, bar_h = 300, 24
+        cx = self.sw // 2
+        bar_x = cx - bar_w // 2
+        bar_y = 12
+
+        # 배경 패널
+        draw_rounded_rect(surface, (15, 15, 25, 180), (bar_x, bar_y, bar_w, bar_h), radius=6)
+
+        # 플레이어 방향 → 라디안 (0=right 기준, 수학 각도)
+        player_angle = self._DIR_TO_RAD[player.direction % 8]
+
+        # 방위 라벨과 각도 (수학 좌표계: 0=E, π/2=S 방향이지만 게임 Y축 반전)
+        # 게임 좌표: Y+ = down, X+ = right
+        # "N" = up = angle -π/2, "E" = right = 0, "S" = down = π/2, "W" = left = π
+        cardinals = [
+            ("N",  -math.pi / 2),
+            ("NE", -math.pi / 4),
+            ("E",  0.0),
+            ("SE", math.pi / 4),
+            ("S",  math.pi / 2),
+            ("SW", 3 * math.pi / 4),
+            ("W",  math.pi),
+            ("NW", -3 * math.pi / 4),
+        ]
+
+        font = FontManager.get(11)
+        font_small = FontManager.get(9)
+        half_w = bar_w // 2
+        pixels_per_rad = bar_w / math.pi  # 바 너비 = 180° 시야
+
+        # 중앙 마커 (현재 향하는 방향)
+        pygame.draw.line(surface, (200, 200, 220), (cx, bar_y), (cx, bar_y + bar_h), 1)
+
+        # 방위 라벨 렌더링
+        for label, angle in cardinals:
+            diff = angle - player_angle
+            # -π ~ π 범위로 정규화
+            while diff > math.pi:
+                diff -= 2 * math.pi
+            while diff < -math.pi:
+                diff += 2 * math.pi
+
+            screen_x = cx + diff * pixels_per_rad
+            if bar_x <= screen_x <= bar_x + bar_w:
+                is_cardinal = len(label) == 1
+                f = font if is_cardinal else font_small
+                color = (220, 220, 230) if is_cardinal else (140, 145, 160)
+                text_surf = f.render(label, True, color)
+                tw = text_surf.get_width()
+                ty = bar_y + (bar_h - text_surf.get_height()) // 2
+                surface.blit(text_surf, (int(screen_x - tw // 2), ty))
+
+        # 탈출구 마커
+        if extract_points:
+            for ep in extract_points:
+                dx = ep["x"] - player.x
+                dy = ep["y"] - player.y
+                ep_angle = math.atan2(dy, dx)
+
+                diff = ep_angle - player_angle
+                while diff > math.pi:
+                    diff -= 2 * math.pi
+                while diff < -math.pi:
+                    diff += 2 * math.pi
+
+                # 바 범위 내에 있으면 삼각형 마커 표시
+                screen_x = cx + diff * pixels_per_rad
+                if bar_x <= screen_x <= bar_x + bar_w:
+                    ep_type = ep.get("type", "always_open")
+                    color = (80, 220, 120) if ep_type == "always_open" else (220, 200, 60)
+                    # 아래쪽 삼각형
+                    tx = int(screen_x)
+                    ty_top = bar_y + bar_h - 8
+                    pygame.draw.polygon(surface, color, [
+                        (tx, bar_y + bar_h - 2),
+                        (tx - 4, ty_top),
+                        (tx + 4, ty_top),
+                    ])
+                else:
+                    # 범위 밖이면 바 가장자리에 화살표로 방향 힌트
+                    ep_type = ep.get("type", "always_open")
+                    color = (80, 220, 120) if ep_type == "always_open" else (220, 200, 60)
+                    if diff > 0:
+                        edge_x = bar_x + bar_w - 2
+                        pygame.draw.polygon(surface, color, [
+                            (edge_x, bar_y + bar_h // 2),
+                            (edge_x - 5, bar_y + bar_h // 2 - 4),
+                            (edge_x - 5, bar_y + bar_h // 2 + 4),
+                        ])
+                    else:
+                        edge_x = bar_x + 2
+                        pygame.draw.polygon(surface, color, [
+                            (edge_x, bar_y + bar_h // 2),
+                            (edge_x + 5, bar_y + bar_h // 2 - 4),
+                            (edge_x + 5, bar_y + bar_h // 2 + 4),
+                        ])
+
+        # 무전기 스캔 타겟 마커
+        if player and getattr(player, 'radio_scan_timer', 0) > 0:
+            target_id = getattr(player, 'radio_scan_target', '')
+            if target_id:
+                target_pos = None
+                target_name = ""
+                if target_id == "escape":
+                    target_name = "탈출구"
+                    if extract_points:
+                        min_d = 999999.0
+                        for ep in extract_points:
+                            d = math.hypot(ep["x"] - player.x, ep["y"] - player.y)
+                            if d < min_d:
+                                min_d = d
+                                target_pos = (ep["x"], ep["y"])
+                else:
+                    mapping = {"police": "경찰서", "military": "군사기지", "radio_tower": "통신탑"}
+                    target_name = mapping.get(target_id, "특수건물")
+                    target_pos = self._find_nearest_building(player, world, target_id)
+
+                if target_pos:
+                    tx, ty = target_pos
+                    dx = tx - player.x
+                    dy = ty - player.y
+                    target_angle = math.atan2(dy, dx)
+                    
+                    diff = target_angle - player_angle
+                    while diff > math.pi:
+                        diff -= 2 * math.pi
+                    while diff < -math.pi:
+                        diff += 2 * math.pi
+
+                    screen_x = cx + diff * pixels_per_rad
+                    if bar_x <= screen_x <= bar_x + bar_w:
+                        color = (255, 60, 60)
+                        tx_screen = int(screen_x)
+                        ty_bottom = bar_y + 8
+                        pygame.draw.polygon(surface, color, [
+                            (tx_screen, bar_y + 2),
+                            (tx_screen - 4, ty_bottom),
+                            (tx_screen + 4, ty_bottom),
+                        ])
+                        lbl_surf = font_small.render(target_name, True, color)
+                        surface.blit(lbl_surf, (tx_screen - lbl_surf.get_width() // 2, bar_y + bar_h + 1))
+                    else:
+                        color = (255, 60, 60)
+                        if diff > 0:
+                            edge_x = bar_x + bar_w - 2
+                            pygame.draw.polygon(surface, color, [
+                                (edge_x, bar_y + bar_h // 2),
+                                (edge_x - 5, bar_y + bar_h // 2 - 4),
+                                (edge_x - 5, bar_y + bar_h // 2 + 4),
+                            ])
+                        else:
+                            edge_x = bar_x + 2
+                            pygame.draw.polygon(surface, color, [
+                                (edge_x, bar_y + bar_h // 2),
+                                (edge_x + 5, bar_y + bar_h // 2 - 4),
+                                (edge_x + 5, bar_y + bar_h // 2 + 4),
+                            ])
 
 
 class EventLogUI:

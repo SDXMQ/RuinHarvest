@@ -13,16 +13,20 @@ for subdir in subdirs:
     if path not in sys.path:
         sys.path.insert(0, path)
 
+import logging
+logging.basicConfig(level=logging.INFO, format='%(message)s')
+logger = logging.getLogger('validate')
+
 errors = []
 warnings = []
 
 def check(name, fn):
     try:
         fn()
-        print(f"  ✅ {name}")
+        logger.info(f"  ✅ {name}")
     except Exception as e:
         errors.append((name, str(e)))
-        print(f"  ❌ {name}: {e}")
+        logger.error(f"  ❌ {name}: {e}")
         traceback.print_exc()
 
 print("=" * 60)
@@ -267,7 +271,7 @@ def test_combat_tracers_and_aiming():
     # 2. AI 조준 대상 인지 검증 (entity_manager 전달 확인)
     em = EntityManager()
     p = Player(0, 0)
-    scav = Zombie(2, 2, "normal")
+    scav = Zombie(2, 2, "scav")
     pmc = Zombie(4, 4, "tank")
     
     em.zombies.extend([scav, pmc])
@@ -699,12 +703,12 @@ def test_sandbox_weight_exemption():
 check("샌드박스 무게 한도 및 속도 패널티 면제 검증", test_sandbox_weight_exemption)
 
 # 결과 요약
-print("\n" + "=" * 60)
+logger.info("\n" + "=" * 60)
 if errors:
-    print(f"⚠️  {len(errors)}개 오류 발견:")
+    logger.error(f"⚠️  {len(errors)}개 오류 발견:")
     for name, err in errors:
-        print(f"  - {name}: {err}")
+        logger.error(f"  - {name}: {err}")
 else:
-    print("✅ 모든 검증 통과!")
-print("=" * 60)
+    logger.info("✅ 모든 검증 통과!")
+logger.info("=" * 60)
 sys.exit(len(errors))

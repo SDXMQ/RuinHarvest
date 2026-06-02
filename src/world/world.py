@@ -605,36 +605,36 @@ class World:
 
     def is_walkable(self, wx, wy):
         """해당 위치가 이동 가능한지"""
-        tile = self.get_tile(int(wx), int(wy))
-        if tile == TileType.WATER:
-            return False
-
-        iwx = int(wx)
-        iwy = int(wy)
-
-        # 건물 하단 벽 체크 - 문 앞은 통과 허용
-        buildings = self.get_nearby_buildings(iwx, iwy, 8)
-        for b in buildings:
-            if b.contains(iwx, iwy):
-                # 건물 하단 벽만 통행 불가 처리
-                if iwy == b.y + b.height - 1:
-                    # 문 타일과 문 바로 앞은 통과 허용
+        try:
+            tile = self.get_tile(int(wx), int(wy))
+            if tile == TileType.WATER:
+                return False
+    
+            iwx = int(wx)
+            iwy = int(wy)
+    
+            # 건물 체크 - 건물 위로 넘어가는 통행 차단
+            buildings = self.get_nearby_buildings(iwx, iwy, 8)
+            for b in buildings:
+                if b.contains(iwx, iwy):
+                    # 문 타일과 문 바로 앞은 통과 허용 (진입용)
                     if abs(iwx - b.door_x) <= 1 and (iwy == b.door_y or iwy == b.door_y + 1):
                         continue
                     return False
-                # 상단 및 뒤쪽은 통과 가능
-
-        # 오브젝트 체크 (나무, 바위 등 solid) - 판정 완화
-        near_objects = self.get_nearby_objects(iwx, iwy, 1)
-        for obj in near_objects:
-            # 나무나 수풀은 이동 편의를 위해 통과 허용
-            if obj.obj_type.startswith("tree_") or obj.obj_type == "bush":
-                continue
-                
-            if obj.solid and abs(obj.x - wx) < 0.5 and abs(obj.y - wy) < 0.5:
-                return False
-
-        return True
+    
+            # 오브젝트 체크 (나무, 바위 등 solid) - 판정 완화
+            near_objects = self.get_nearby_objects(iwx, iwy, 1)
+            for obj in near_objects:
+                # 나무나 수풀은 이동 편의를 위해 통과 허용
+                if obj.obj_type.startswith("tree_") or obj.obj_type == "bush":
+                    continue
+                    
+                if obj.solid and abs(obj.x - wx) < 0.5 and abs(obj.y - wy) < 0.5:
+                    return False
+    
+            return True
+        except Exception:
+            return False
 
     def get_loaded_chunk_count(self):
         return len(self.chunks)

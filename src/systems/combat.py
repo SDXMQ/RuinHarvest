@@ -96,8 +96,24 @@ class CombatSystem:
                 if ammo_type:
                     player.inventory.remove_item(ammo_type, 1)
 
+                # 반동 누적 (연사 시 정확도 감소)
+                player.recoil_stack = min(15.0, player.recoil_stack + weapon_data.get("recoil", 3.0))
+
                 # 총성 발사 신호 (어그로 트리거용)
                 results.append(("gunshot_fired", None, 0))
+
+                # 탄 퍼짐 적용 (반동 + 기본 스프레드)
+                base_spread = weapon_data.get("spread", 0.05)  # 라디안
+                recoil_spread = player.recoil_stack * 0.015  # 반동 누적에 비례한 추가 퍼짐
+
+                # 조준 버프 활성 시 스프레드 50% 감소
+                if player.aim_buff_timer > 0:
+                    base_spread *= 0.5
+                    recoil_spread *= 0.5
+
+                total_spread = base_spread + recoil_spread
+                # 탄퍼짐 각도 가우시안 오프셋 적용
+                attack_angle += random.gauss(0, total_spread)
 
                 # 마우스 방향에서 가장 가까운 적 (±15° 내)
                 RANGED_ARC = math.pi / 6  # 30도
@@ -115,9 +131,14 @@ class CombatSystem:
                 start_x, start_y = center_x, center_y
                 if valid:
                     target = min(valid, key=lambda z: distance(z.x + 0.5, z.y + 0.5, center_x, center_y))
+                    dist = distance(target.x + 0.5, target.y + 0.5, center_x, center_y)
                     end_x, end_y = target.x + 0.5, target.y + 0.5
                     
-                    actual_damage = damage + random.randint(-3, 5)
+                    # 비선형 대미지 감쇠 탄도식 적용
+                    k = 0.08 if weapon == "권총" else (0.015 if weapon == "레버액션 소총" else 0.05)
+                    base_dmg = damage + random.randint(-3, 5)
+                    actual_damage = max(1, int(base_dmg * math.exp(-k * dist)))
+                    
                     kb_dir = direction_to(center_x, center_y, target.x, target.y)
                     target.take_damage(actual_damage, kb_dir)
 

@@ -605,6 +605,13 @@ class NPC:
         if not self.active:
             return
 
+        # 상인 플레이어 감지 시 접근 로직 (IDLE, MOVING 상태에서 작동)
+        if self.npc_type == "merchant" and self.state in (NPCState.IDLE, NPCState.MOVING) and px is not None and py is not None:
+            if distance(self.x, self.y, px, py) <= 8.0:
+                self.state = NPCState.APPROACHING
+                self.show_exclamation = True
+                self.exclamation_timer = 2.0
+
         if self.state == NPCState.IDLE:
             self.idle_timer -= dt
             if self.idle_timer <= 0:
@@ -627,13 +634,6 @@ class NPC:
             if distance(self.x, self.y, self.wander_target_x, self.wander_target_y) < 0.3:
                 self.state = NPCState.IDLE
                 self.idle_timer = random.uniform(2, 6)
-
-            # 상인 접근 로직
-            if self.npc_type == "merchant" and px is not None and py is not None:
-                if distance(self.x, self.y, px, py) <= 8.0:
-                    self.state = NPCState.APPROACHING
-                    self.show_exclamation = True
-                    self.exclamation_timer = 2.0
 
             # 애니메이션
             self.animation_timer += dt
@@ -788,14 +788,14 @@ class EntityManager:
             biome = world.get_biome(int(sx), int(sy))
             r = random.random()
             if biome in ("군사기지",):
-                if r < 0.02:
+                if r < 0.002:
                     ztype = "tank"
                 elif r < 0.05:
                     ztype = "scav"
                 else:
                     ztype = random.choice(["normal", "runner"])
             elif biome in ("병원구역",):
-                if r < 0.02:
+                if r < 0.002:
                     ztype = "spider"
                 elif r < 0.05:
                     ztype = "scav"

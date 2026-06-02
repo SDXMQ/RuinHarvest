@@ -638,6 +638,8 @@ class ItemIconRenderer:
             "골동품": cls._draw_antique,
             "그래픽카드": cls._draw_gpu,
             "CPU": cls._draw_cpu,
+            "암호화된 SSD": cls._draw_encrypted_ssd,
+            "군용 나침반": cls._draw_military_compass,
         }
 
         renderer = renderers.get(item_id)
@@ -649,6 +651,23 @@ class ItemIconRenderer:
             pygame.draw.rect(s, (140, 140, 150), (4, 4, sz - 8, sz - 8), 1, border_radius=4)
 
         return s
+
+    @staticmethod
+    def _draw_encrypted_ssd(s, cx, cy, sz):
+        import pygame
+        pygame.draw.rect(s, (30, 30, 30), (cx - 8, cy - 5, 16, 10), border_radius=1)
+        pygame.draw.rect(s, (50, 50, 50), (cx - 6, cy - 3, 12, 6))
+        pygame.draw.rect(s, (10, 10, 10), (cx - 3, cy - 2, 4, 4))
+        pygame.draw.rect(s, (218, 165, 32), (cx - 7, cy + 3, 14, 1))
+
+    @staticmethod
+    def _draw_military_compass(s, cx, cy, sz):
+        import pygame
+        import math
+        pygame.draw.circle(s, (60, 70, 50), (cx, cy), 8)
+        pygame.draw.circle(s, (240, 240, 245), (cx, cy), 6)
+        pygame.draw.line(s, (220, 50, 50), (cx, cy), (cx + 2, cy - 4), 2)
+        pygame.draw.line(s, (50, 100, 220), (cx, cy), (cx - 2, cy + 4), 2)
 
     @staticmethod
     def _draw_gold_watch(s, cx, cy, sz):

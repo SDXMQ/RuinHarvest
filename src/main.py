@@ -367,6 +367,8 @@ class Game:
             elif self.state == GameState.HIDEOUT:
                 result = self.hideout_ui.handle_event(event, self.player)
                 if result == "start_raid":
+                    if self.hideout_ui.dragging:
+                        self.hideout_ui._cancel_drag(self.player)
                     self.player.hp = self.player.max_hp
                     self.player.hunger = 100.0
                     self.player.thirst = 100.0
@@ -686,7 +688,7 @@ class Game:
 
         # 플레이어
         weather = self.weather_system.current_weather if not is_interior and self.weather_system else None
-        craft_result = self.player.update(dt, current_world, weather)
+        craft_result = self.player.update(dt, current_world, weather, self.time_system)
         if craft_result:
             self.event_system.add_log(t("log_craft_success", craft_result))
             SoundGenerator.play("craft_complete")
@@ -770,6 +772,10 @@ class Game:
         self.extract_timer = 0.0
         self.extract_target = None
         self.player.raid_status = "NONE"
+        
+        self.player.is_interior = False
+        self.player.moving = False
+        self.player.is_sprinting = False
 
         if success:
             self.event_system.add_log("레이드 탈출에 성공했습니다!")
@@ -787,6 +793,19 @@ class Game:
             }
             # 인벤토리 및 무장 초기화 (하베스트 파우치는 Phase 2에서 별도로 보존)
             self.player.inventory.items = []
+            
+            reclaimed_items = []
+            for slot, item_name in list(self.player.equipped.items()):
+                if item_name and self.player.equipped_insured.get(slot):
+                    if random.random() < 0.60:
+                        reclaimed_items.append(item_name)
+                        self.player.stash.add_item(item_name)
+                self.player.equipped_insured[slot] = False
+                
+            if reclaimed_items:
+                reclaimed_str = ", ".join(reclaimed_items)
+                ending_data["description"] += f"\n\n[보험 회수 품목]\n{reclaimed_str}"
+
             self.player.equipped = {
                 "head": None,
                 "body": None,
@@ -818,7 +837,14 @@ class Game:
 
     def cleanup_raid(self):
         """레이드 종료 시 리소스 해제 (메모리 누수 방지)"""
-        self.world = None
+        if self.world:
+            for chunk in self.world.chunks.values():
+                if hasattr(chunk, 'surface') and chunk.surface:
+                    chunk.surface = None
+            self.world.chunks.clear()
+            self.world.unloaded_deltas.clear()
+            self.world = None
+            
         self.entity_manager = None
         self.combat_system = None
         if self.game_particles:
@@ -916,6 +942,7 @@ class Game:
 
         # 플레이어
         self.world_renderer.draw_player(game_surface)
+        self.world_renderer.draw_occluding_buildings(game_surface)
         self.world_renderer.draw_aim_indicator(game_surface, self.player.x, self.player.y, self.camera)
 
         # 전투 이펙트
@@ -937,7 +964,8 @@ class Game:
                      world=self.world,
                      extract_target=self.extract_target,
                      extract_timer=self.extract_timer,
-                     dt=self.dt)
+                     dt=self.dt,
+                     extract_points=self.world.extraction_points if self.world else None)
 
         # 이벤트 로그
         self.event_log_ui.draw(game_surface, self.event_system.event_log)
@@ -977,7 +1005,8 @@ class Game:
                      world=self.world,
                      extract_target=self.extract_target,
                      extract_timer=self.extract_timer,
-                     dt=self.dt)
+                     dt=self.dt,
+                     extract_points=self.world.extraction_points if self.world else None)
 
         # 이벤트 로그
         self.event_log_ui.draw(self.screen, self.event_system.event_log)
