@@ -466,6 +466,26 @@ class Game:
                             SoundGenerator.play("pickup")
                             if hasattr(self, "radio_ui"):
                                 self.radio_ui.open()
+                        elif use_res == "grenade":
+                            self.event_system.add_log("수류탄을 투척했습니다! 폭발이 일어납니다!")
+                            SoundGenerator.play("gunshot")
+                            px, py = self.player.x, self.player.y
+                            targets = self.interior_zombies if self.player.is_interior else (self.entity_manager.zombies if self.entity_manager else [])
+                            for z in targets:
+                                if z.active and not z.is_dead:
+                                    dist = math.sqrt((z.x - px)**2 + (z.y - py)**2)
+                                    if dist <= 3.5:
+                                        z.take_damage(80)
+                                        self.combat_system.damage_numbers.append((z.x, z.y - 0.5, 80, 1.0, (255, 150, 50)))
+                                        from particles import ParticleEmitters
+                                        self.game_particles.emit(lambda: ParticleEmitters.blood(z.x * 32, z.y * 32), 4)
+                            if self.camera:
+                                self.camera.shake(8, 0.3)
+                            if self.player.is_interior and self.interior_camera:
+                                self.interior_camera.shake(8, 0.3)
+                        elif use_res == "flare":
+                            self.event_system.add_log("조명탄을 피웠습니다! 주변이 밝아집니다.")
+                            SoundGenerator.play("pickup")
                         elif use_res:
                             self.event_system.add_log(t("log_item_used", value))
                             SoundGenerator.play("pickup")
@@ -840,6 +860,7 @@ class Game:
                 "body": None,
                 "feet": None,
                 "weapon": None,
+                "back": None,
             }
             self.player.hp = self.player.max_hp  # 로비 복귀 후 스탯 초기화
             self.player.stress = 0
@@ -982,6 +1003,15 @@ class Game:
 
         # 낮밤 오버레이
         self.weather_system.draw_ambient(game_surface, self.time_system)
+
+        # 조명탄 효과 렌더링
+        if getattr(self.player, 'flare_timer', 0) > 0:
+            px_scr, py_scr = self.camera.world_to_screen(self.player.x, self.player.y) if self.state == GameState.PLAYING else self.interior_camera.world_to_screen(self.player.x, self.player.y)
+            flare_light = pygame.Surface((300, 300), pygame.SRCALPHA)
+            for r in range(150, 0, -10):
+                alpha = int(70 * (1.0 - r / 150.0))
+                pygame.draw.circle(flare_light, (250, 240, 200, alpha), (150, 150), r)
+            game_surface.blit(flare_light, (px_scr - 150 + 16, py_scr - 150 + 16), special_flags=pygame.BLEND_RGBA_ADD)
 
         # 날씨 효과
         self.weather_system.draw_effects(game_surface, 0)

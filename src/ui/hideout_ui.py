@@ -439,7 +439,8 @@ class HideoutUI:
                     # 아이템 개수 가져오기
                     inv = player.stash if source == "stash" else player.inventory
                     if idx < len(inv.items):
-                        item_name, count = copy.deepcopy(inv.items[idx])
+                        item_tup = copy.deepcopy(inv.items[idx])
+                        item_name, count = item_tup[0], item_tup[1]
                         if self.flea_market.register_item(copy.deepcopy(item_name), copy.deepcopy(count), price):
                             inv.remove_item(copy.deepcopy(item_name), copy.deepcopy(count))
                             self._add_log(player, f"플리마켓에 {item_name} {count}개 등록 완료!")

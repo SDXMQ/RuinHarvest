@@ -70,7 +70,7 @@ class TimeSystem:
         elif self.is_day:
             return "낮"
         elif self.is_dusk:
-            return "저녁"
+            return "황혼"
         else:
             return "밤"
 

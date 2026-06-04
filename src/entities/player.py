@@ -29,6 +29,7 @@ class Player:
         self.thirst = PLAYER_MAX_THIRST
         self.stress = 0
         self.stamina = PLAYER_MAX_STAMINA
+        self.max_stamina = PLAYER_MAX_STAMINA
         self.defense = 0
         self.shelter_defense = 10
 
@@ -72,6 +73,7 @@ class Player:
             "body": None,
             "feet": None,
             "weapon": None,
+            "back": None,
         }
 
         # 내부/외부 상태 관리 (인테리어)
@@ -94,6 +96,7 @@ class Player:
         # 버프 타이머
         self.stamina_buff_timer = 0.0
         self.aim_buff_timer = 0.0
+        self.flare_timer = 0.0
 
         # 장비 내구도 (100.0 기준)
         self.equipped_durability = {
@@ -101,6 +104,7 @@ class Player:
             "body": 100.0,
             "feet": 100.0,
             "weapon": 100.0,
+            "back": 100.0,
         }
 
         # 보험 가입 여부
@@ -109,6 +113,7 @@ class Player:
             "body": False,
             "feet": False,
             "weapon": False,
+            "back": False,
         }
 
         # 퀘스트/진행 추적
@@ -187,6 +192,8 @@ class Player:
             self.stamina_buff_timer = max(0.0, self.stamina_buff_timer - dt)
         if self.aim_buff_timer > 0:
             self.aim_buff_timer = max(0.0, self.aim_buff_timer - dt)
+        if self.flare_timer > 0:
+            self.flare_timer = max(0.0, self.flare_timer - dt)
 
         # 이동 처리
         self._handle_movement(dt, current_world)
@@ -248,6 +255,8 @@ class Player:
         result = self.crafting.update(dt, self.inventory, current_world, self.x, self.y)
         if result:
             self.items_crafted += 1
+            if result == "방탄조끼 수리":
+                self.equipped_durability["body"] = 100.0
 
         # 상태 확인
         self._check_status()
@@ -520,6 +529,17 @@ class Player:
                 # UI 오픈을 위한 특수 반환값
                 return "radio_scan"
 
+        # 수류탄 사용 시 특수 값 리턴
+        if item_name == "수류탄":
+            self.inventory.remove_item(item_name, 1)
+            return "grenade"
+
+        # 조명탄 사용 시 특수 값 리턴
+        if item_name == "조명탄":
+            self.flare_timer = 45.0
+            self.inventory.remove_item(item_name, 1)
+            return "flare"
+
         # 효과 적용
         if "hp" in effects:
             self.heal(effects["hp"])
@@ -777,10 +797,10 @@ class Player:
         p.reputation = data.get("reputation", {"prapor": 0.2, "therapist": 0.2, "fence": 0.2})
         p.spent_money = data.get("spent_money", {"prapor": 0, "therapist": 0, "fence": 0})
         p.crafting = CraftingSystem.from_dict(data.get("crafting", {}))
-        p.equipped = data.get("equipped", {"head": None, "body": None, "feet": None, "weapon": None})
+        p.equipped = data.get("equipped", {"head": None, "body": None, "feet": None, "weapon": None, "back": None})
         p.equipped_backpack_meta = data.get("equipped_backpack_meta", {})
-        p.equipped_durability = data.get("equipped_durability", {"head": 100.0, "body": 100.0, "feet": 100.0, "weapon": 100.0})
-        p.equipped_insured = data.get("equipped_insured", {"head": False, "body": False, "feet": False, "weapon": False})
+        p.equipped_durability = data.get("equipped_durability", {"head": 100.0, "body": 100.0, "feet": 100.0, "weapon": 100.0, "back": 100.0})
+        p.equipped_insured = data.get("equipped_insured", {"head": False, "body": False, "feet": False, "weapon": False, "back": False})
         p.bleeding = data.get("bleeding", False)
         p.broken_bone = data.get("broken_bone", False)
         p.killed_zombies = data.get("killed_zombies", 0)

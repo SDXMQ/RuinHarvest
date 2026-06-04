@@ -177,8 +177,10 @@ class MapUI:
         ptx = map_x + (px - start_wx) * self.grid_tile_size
         pty = map_y + (py - start_wy) * self.grid_tile_size
         
-        # 펄스 광원 효과
-        pygame.draw.circle(surface, (80, 200, 255, pulse), (ptx + self.grid_tile_size//2, pty + self.grid_tile_size//2), 8)
+        # 펄스 광원 효과 (투명도 지원 Surface 사용)
+        pulse_surf = pygame.Surface((24, 24), pygame.SRCALPHA)
+        pygame.draw.circle(pulse_surf, (80, 200, 255, max(0, min(255, pulse))), (12, 12), 8)
+        surface.blit(pulse_surf, (ptx + self.grid_tile_size//2 - 12, pty + self.grid_tile_size//2 - 12))
         pygame.draw.circle(surface, (255, 255, 255), (ptx + self.grid_tile_size//2, pty + self.grid_tile_size//2), 3)
 
         # 7. 타이틀 및 안내 텍스트 표시
