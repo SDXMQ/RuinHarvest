@@ -124,6 +124,7 @@ class Game:
         self.sandbox_mode = False
         self.current_day = 1
         self.total_days = 30
+        self.is_final_ending = False
         self.day_changed = False
         self.last_day = 1
         self.playtime = 0
@@ -441,8 +442,16 @@ class Game:
             elif self.state == GameState.ENDING:
                 result = self.ending_ui.handle_event(event)
                 if result == "main_menu":
-                    self.transition.start("fade", 1.0,
-                        on_mid=lambda: setattr(self, 'state', GameState.HIDEOUT))
+                    if self.is_final_ending:
+                        world_name = self.world_settings.get("world_name", "autosave").replace(" ", "_")
+                        from save_system import delete_save
+                        delete_save(world_name)
+                        self.is_final_ending = False
+                        self.transition.start("fade", 1.0,
+                            on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
+                    else:
+                        self.transition.start("fade", 1.0,
+                            on_mid=lambda: setattr(self, 'state', GameState.HIDEOUT))
 
     def _process_global_inputs(self, event):
         """게임플레이 중 이벤트"""
@@ -790,6 +799,13 @@ class Game:
 
     def _on_new_day(self):
         """새로운 날 시작"""
+        if self.current_day > self.total_days:
+            ending_id, ending_data = determine_ending(self.player)
+            self.is_final_ending = True
+            self.ending_ui.show(ending_data, self.player)
+            self.state = GameState.ENDING
+            return
+
         self.event_system.add_log(t("log_day_header", self.current_day))
         SoundGenerator.play("day_start")
 
@@ -854,6 +870,7 @@ class Game:
             if reclaimed_items:
                 reclaimed_str = ", ".join(reclaimed_items)
                 ending_data["description"] += f"\n\n[보험 회수 품목]\n{reclaimed_str}"
+                self.event_system.add_log(f"보험 회수 완료: {reclaimed_str}")
 
             self.player.equipped = {
                 "head": None,
@@ -870,6 +887,11 @@ class Game:
             self.player.bleeding = False
             self.player.broken_bone = False
 
+        # 30일 초과 시 최종 엔딩 판정
+        if self.current_day > self.total_days:
+            ending_id, ending_data = determine_ending(self.player)
+            self.is_final_ending = True
+
         # 플리마켓 업데이트 및 플레이어 등록 물품 정산
         self.flea_market.update_market_prices(self.current_day)
         self.flea_market.refresh_listings(self.current_day)
@@ -881,8 +903,9 @@ class Game:
         self.ending_ui.show(ending_data, self.player)
         self.state = GameState.ENDING
         
-        # 원자적 즉시 저장
-        self.save_current_game()
+        # 최종 엔딩이 아닐 때만 즉시 저장
+        if not self.is_final_ending:
+            self.save_current_game()
         SoundGenerator.play("game_over")
 
     def cleanup_raid(self):
