@@ -34,6 +34,9 @@ class InventoryUI:
         self.animation_progress = 0
         self.selected_slot = -1
         self.dragging = False
+        self.drag_source_type = None
+        self.drag_source_index = None
+        self.drag_item_name = None
         self.scroll_offset = 0
 
     def update(self, dt):

@@ -296,15 +296,16 @@ class GameSaveManager:
                     )
                     game.explored_interiors[bid] = game.current_interior
                 
-                game.interior_zombies = []
-                for zdata in game.current_interior.zombies:
-                    z_type = zdata.get("type", "normal")
-                    z = Zombie(zdata["x"], zdata["y"], z_type, game.difficulty)
-                    z.speed *= 0.5
-                    z.detection_range = 3
-                    if "hp" in zdata:
-                        z.hp = zdata["hp"]
-                    game.interior_zombies.append(z)
+                if not game.interior_zombies:
+                    game.interior_zombies = []
+                    for zdata in game.current_interior.zombies:
+                        z_type = zdata.get("type", "normal")
+                        z = Zombie(zdata["x"], zdata["y"], z_type, game.difficulty)
+                        z.speed *= 0.5
+                        z.detection_range = 3
+                        if "hp" in zdata:
+                            z.hp = zdata["hp"]
+                        game.interior_zombies.append(z)
                     
                 game.interior_camera = Camera()
                 game.interior_camera.resize(game.screen_w, game.screen_h)

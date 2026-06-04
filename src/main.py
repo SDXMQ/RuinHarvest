@@ -413,14 +413,11 @@ class Game:
                         px = (self.screen_w - pw) // 2
                         py = (self.screen_h - ph) // 2
                         
-                        # 버튼 1: 은신처로 돌아가기 (퇴각)
+                        # 버튼 1: 은신처로 돌아가기 (퇴각 - 패널티 적용)
                         if px + 30 <= mx <= px + 310 and py + 130 <= my <= py + 162:
                             SoundGenerator.play("menu_select")
                             self.show_raid_start_popup = False
-                            self.player.raid_status = "NONE"
-                            self.cleanup_raid()
-                            self.state = GameState.HIDEOUT
-                            self.save_current_game()
+                            self.resolve_raid_end(success=False, reason="MIA")
                         # 버튼 2: 레이드 계속하기 (진입)
                         elif px + 30 <= mx <= px + 310 and py + 172 <= my <= py + 204:
                             SoundGenerator.play("menu_select")
@@ -1194,7 +1191,7 @@ class Game:
         px = (self.screen_w - pw) // 2
         py = (self.screen_h - ph) // 2
         
-        # 배경 그리기 (유리모피즘 연출)
+        # 배경 그리기 (글래스모피즘 연출)
         draw_rounded_rect(surface, (18, 22, 36, 240), (px, py, pw, ph), radius=10)
         pygame.draw.rect(surface, (100, 110, 130), (px, py, pw, ph), 1, border_radius=10)
         
