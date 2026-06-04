@@ -824,7 +824,14 @@ class Game:
                 if item_name and self.player.equipped_insured.get(slot):
                     if random.random() < 0.60:
                         reclaimed_items.append(item_name)
-                        self.player.stash.add_item(item_name)
+                        meta = {}
+                        if slot == "back":
+                            import copy
+                            meta = copy.deepcopy(getattr(self.player, "equipped_backpack_meta", {}))
+                        else:
+                            dur = self.player.equipped_durability.get(slot, 100.0)
+                            meta = {"durability": dur}
+                        self.player.stash.add_item(item_name, 1, meta)
                 self.player.equipped_insured[slot] = False
                 
             if reclaimed_items:

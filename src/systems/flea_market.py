@@ -82,7 +82,7 @@ class FleaMarket:
         """가상 매물 재생성 및 갱신"""
         # 날짜 기반 시드 고정
         saved_state = random.getstate()
-        random.seed(in_game_day * 20011 + self.next_listing_id)
+        random.seed(in_game_day * 20011)
         self.listings = []
         
         # 전체 아이템 데이터베이스에서 무작위로 매물 스폰

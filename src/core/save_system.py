@@ -285,7 +285,6 @@ class GameSaveManager:
                 if bid in game.explored_interiors:
                     game.current_interior = game.explored_interiors[bid]
                 else:
-                    from building_interior import BuildingInterior
                     import zlib
                     max_floors = 2 if getattr(target_building, "building_type", "house") != "barn" else 1
                     game.current_interior = BuildingInterior(

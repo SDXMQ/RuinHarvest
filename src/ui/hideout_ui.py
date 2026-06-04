@@ -9,6 +9,7 @@ from renderer import draw_rounded_rect, draw_gradient_rect, draw_glow, ItemIconR
 from items import ITEM_DATABASE, ItemCategory, Inventory
 from .fonts import FontManager
 from i18n import t
+from sounds import SoundGenerator
 
 class HideoutUI:
     """은신처 및 경제 로비 통합 UI"""
