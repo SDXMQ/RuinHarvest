@@ -7,7 +7,7 @@ import random
 import pygame
 from settings import TILE_SIZE
 from camera import Camera
-from entities import Zombie, ZombieState
+from entities import Enemy, EnemyState
 from items import ITEM_DATABASE
 from particles import ParticleEmitters
 from sounds import SoundGenerator
@@ -28,9 +28,9 @@ class InteriorSystem:
         self.current_interior = None       # BuildingInterior 객체
         self.interior_camera = None        # 내부용 카메라
         self.interior_building_ref = None   # 외부 건물 참조
-        self.interior_zombies = []         # 내부 은신형 좀비
+        self.interior_enemies = []         # 내부 은신형 적
         self.explored_interiors = {}       # 건물_id -> BuildingInterior (델타 저장)
-        self.zombie_intrusion_timer = 0.0  # 야외 좀비 건물 침입 주기 타이머
+        self.enemy_intrusion_timer = 0.0   # 야외 적 건물 침입 주기 타이머
         self.window_vision = None          # 창문 시야 데이터
         self.last_window_angle = None      # 창문의 마지막 유효 시야 각도
         self.active_window_pos = None      # 현재 주시 중인 창문 위치
@@ -65,37 +65,37 @@ class InteriorSystem:
         self.interior_camera = Camera()
         self.interior_camera.resize(self.game.screen_w, self.game.screen_h)
 
-        # 좀비 인스턴스 복원
-        self.interior_zombies = []
-        for zdata in self.current_interior.zombies:
-            z_type = zdata.get("type", "normal")
-            z = Zombie(zdata["x"], zdata["y"], z_type, self.game.difficulty)
-            z.speed *= 0.5  # 은신형 좀비는 야외보다 느림
-            z.detection_range = 3
-            if "hp" in zdata:
-                z.hp = zdata["hp"]
-            self.interior_zombies.append(z)
+        # 적 인스턴스 복원
+        self.interior_enemies = []
+        for edata in self.current_interior.enemies:
+            e_type = edata.get("type", "normal")
+            e = Enemy(edata["x"], edata["y"], e_type, self.game.difficulty)
+            e.speed *= 0.5  # 은신형 적은 야외보다 느림
+            e.detection_range = 3
+            if "hp" in edata:
+                e.hp = edata["hp"]
+            self.interior_enemies.append(e)
 
-        # 추적 중이던 야외 좀비 유입
-        MAX_INTERIOR_ZOMBIES = 8
+        # 추적 중이던 야외 적 유입
+        MAX_INTERIOR_ENEMIES = 8
         if self.game.entity_manager:
             door_x, door_y = building.door_x, building.door_y
-            nearby_outdoor = self.game.entity_manager.get_nearby_zombies(door_x, door_y, 8)
-            for oz in nearby_outdoor:
-                if len(self.interior_zombies) >= MAX_INTERIOR_ZOMBIES:
+            nearby_outdoor = self.game.entity_manager.get_nearby_enemies(door_x, door_y, 8)
+            for oe in nearby_outdoor:
+                if len(self.interior_enemies) >= MAX_INTERIOR_ENEMIES:
                     break
-                if oz.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT):
+                if oe.state in (EnemyState.ENGAGE, EnemyState.FLANK, EnemyState.ALERT):
                     ix = float(self.current_interior.door_pos[0])
                     iy = float(self.current_interior.door_pos[1] - 2)
-                    iz = Zombie(ix, iy, oz.zombie_type, self.game.difficulty)
-                    iz.hp = oz.hp
-                    iz.state = ZombieState.ENGAGE
-                    self.interior_zombies.append(iz)
-                    oz.active = False
-            if len(self.interior_zombies) > len(self.current_interior.zombies):
-                self.game.event_system.add_log(t("zombie_followed"))
+                    ie = Enemy(ix, iy, oe.enemy_type, self.game.difficulty)
+                    ie.hp = oe.hp
+                    ie.state = EnemyState.ENGAGE
+                    self.interior_enemies.append(ie)
+                    oe.active = False
+            if len(self.interior_enemies) > len(self.current_interior.enemies):
+                self.game.event_system.add_log(t("enemy_followed"))
 
-        self.zombie_intrusion_timer = 0.0
+        self.enemy_intrusion_timer = 0.0
 
         if not building.explored:
             building.explored = True
@@ -111,38 +111,38 @@ class InteriorSystem:
     def exit_building(self):
         """건물에서 퇴장 처리"""
         b = self.interior_building_ref
-        followed_zombies = []
-        remaining_interior_zombies = []
+        followed_enemies = []
+        remaining_interior_enemies = []
 
-        for z in self.interior_zombies:
-            if not z.is_dead and z.active:
-                if z.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT) and b:
-                    followed_zombies.append(z)
+        for e in self.interior_enemies:
+            if not e.is_dead and e.active:
+                if e.state in (EnemyState.ENGAGE, EnemyState.FLANK, EnemyState.ALERT) and b:
+                    followed_enemies.append(e)
                 else:
-                    remaining_interior_zombies.append(z)
+                    remaining_interior_enemies.append(e)
 
-        # 내부의 남은 좀비 상태 동기화
+        # 내부의 남은 적 상태 동기화
         if self.current_interior is not None:
-            self.current_interior.zombies = [
-                {"x": z.x, "y": z.y, "hp": z.hp, "type": z.zombie_type}
-                for z in remaining_interior_zombies
+            self.current_interior.enemies = [
+                {"x": e.x, "y": e.y, "hp": e.hp, "type": e.enemy_type}
+                for e in remaining_interior_enemies
             ]
         
         self.game.player.exit_interior()
         self.current_interior = None
         self.interior_building_ref = None
-        self.interior_zombies = []
+        self.interior_enemies = []
 
         # 문 밖으로 따라 나온 적들을 야외 맵에 인스턴스화
-        if b and self.game.entity_manager and followed_zombies:
-            for fz in followed_zombies:
+        if b and self.game.entity_manager and followed_enemies:
+            for fe in followed_enemies:
                 spawn_x = float(b.door_x) + random.uniform(-0.5, 0.5)
                 spawn_y = float(b.door_y) + 1.2
-                oz = Zombie(spawn_x, spawn_y, fz.zombie_type, self.game.difficulty)
-                oz.hp = fz.hp
-                oz.state = ZombieState.ENGAGE
-                self.game.entity_manager.zombies.append(oz)
-            self.game.event_system.add_log(t("zombie_followed_outside"))
+                oe = Enemy(spawn_x, spawn_y, fe.enemy_type, self.game.difficulty)
+                oe.hp = fe.hp
+                oe.state = EnemyState.ENGAGE
+                self.game.entity_manager.enemies.append(oe)
+            self.game.event_system.add_log(t("enemy_followed_outside"))
 
         SoundGenerator.play("door_open")
         self.game.event_system.add_log(t("exiting_building"))
@@ -159,8 +159,8 @@ class InteriorSystem:
         b = self.interior_building_ref
         building_id = f"{b.x}_{b.y}_floor_{self.current_interior.floor_idx + 1}"
         
-        # 좀비 상태 저장
-        self._save_current_floor_zombies()
+        # 적 상태 저장
+        self._save_current_floor_enemies()
         
         if building_id in self.explored_interiors:
             self.current_interior = self.explored_interiors[building_id]
@@ -175,7 +175,7 @@ class InteriorSystem:
             )
             self.explored_interiors[building_id] = self.current_interior
             
-        self._load_current_floor_zombies()
+        self._load_current_floor_enemies()
         
         # 윗층으로 올라가면 플레이어 위치는 내려가는 계단(door_pos) 앞
         self.game.player.enter_interior(float(self.current_interior.door_pos[0]), float(self.current_interior.door_pos[1] - 1))
@@ -194,13 +194,13 @@ class InteriorSystem:
         next_idx = self.current_interior.floor_idx - 1
         building_id = f"{b.x}_{b.y}" if next_idx == 0 else f"{b.x}_{b.y}_floor_{next_idx}"
         
-        # 좀비 상태 저장
-        self._save_current_floor_zombies()
+        # 적 상태 저장
+        self._save_current_floor_enemies()
         
         if building_id in self.explored_interiors:
             self.current_interior = self.explored_interiors[building_id]
             
-        self._load_current_floor_zombies()
+        self._load_current_floor_enemies()
         
         # 아래층으로 내려가면 플레이어 위치는 올라가는 계단 앞
         # 올라가는 계단(stairs_up) 타일 찾기
@@ -216,23 +216,23 @@ class InteriorSystem:
         SoundGenerator.play("door_open")
         self.game.transition.start("fade", 0.5)
 
-    def _save_current_floor_zombies(self):
+    def _save_current_floor_enemies(self):
         if self.current_interior:
-            self.current_interior.zombies = [
-                {"x": z.x, "y": z.y, "hp": z.hp, "type": z.zombie_type}
-                for z in self.interior_zombies if not z.is_dead
+            self.current_interior.enemies = [
+                {"x": e.x, "y": e.y, "hp": e.hp, "type": e.enemy_type}
+                for e in self.interior_enemies if not e.is_dead
             ]
             
-    def _load_current_floor_zombies(self):
-        self.interior_zombies = []
-        for zdata in self.current_interior.zombies:
-            z_type = zdata.get("type", "normal")
-            z = Zombie(zdata["x"], zdata["y"], z_type, self.game.difficulty)
-            z.speed *= 0.5
-            z.detection_range = 3
-            if "hp" in zdata:
-                z.hp = zdata["hp"]
-            self.interior_zombies.append(z)
+    def _load_current_floor_enemies(self):
+        self.interior_enemies = []
+        for edata in self.current_interior.enemies:
+            e_type = edata.get("type", "normal")
+            e = Enemy(edata["x"], edata["y"], e_type, self.game.difficulty)
+            e.speed *= 0.5
+            e.detection_range = 3
+            if "hp" in edata:
+                e.hp = edata["hp"]
+            self.interior_enemies.append(e)
 
     def handle_interior_attack(self):
         """실내 공격 및 탄약 소모 판정"""
@@ -254,33 +254,33 @@ class InteriorSystem:
         px, py = self.game.player.x, self.game.player.y
         attack_angle = math.atan2(mouse_wy - py, mouse_wx - px)
         
-        hit_zombies = []
+        hit_enemies = []
         from combat import angle_diff
 
         if weapon_type == "melee":
-            for z in self.interior_zombies:
-                if z.is_dead or not z.active:
+            for e in self.interior_enemies:
+                if e.is_dead or not e.active:
                     continue
-                dist = math.sqrt((z.x - px)**2 + (z.y - py)**2)
+                dist = math.sqrt((e.x - px)**2 + (e.y - py)**2)
                 if dist <= attack_range:
-                    angle_to_target = math.atan2(z.y - py, z.x - px)
+                    angle_to_target = math.atan2(e.y - py, e.x - px)
                     if abs(angle_diff(attack_angle, angle_to_target)) <= math.pi / 6:
-                        hit_zombies.append(z)
+                        hit_enemies.append(e)
         else:
-            closest_z = None
+            closest_e = None
             min_dist = 999.0
-            for z in self.interior_zombies:
-                if z.is_dead or not z.active:
+            for e in self.interior_enemies:
+                if e.is_dead or not e.active:
                     continue
-                dist = math.sqrt((z.x - px)**2 + (z.y - py)**2)
+                dist = math.sqrt((e.x - px)**2 + (e.y - py)**2)
                 if dist <= attack_range:
-                    angle_to_target = math.atan2(z.y - py, z.x - px)
+                    angle_to_target = math.atan2(e.y - py, e.x - px)
                     if abs(angle_diff(attack_angle, angle_to_target)) <= math.pi / 12:
                         if dist < min_dist:
                             min_dist = dist
-                            closest_z = z
-            if closest_z:
-                hit_zombies.append(closest_z)
+                            closest_e = e
+            if closest_e:
+                hit_enemies.append(closest_e)
 
         if weapon_type == "melee":
             SoundGenerator.play("melee_swing")
@@ -289,67 +289,67 @@ class InteriorSystem:
             SoundGenerator.play("gunshot")
             self.game._trigger_gunshot_noise(px, py, True)
 
-        for z in hit_zombies:
-            z.take_damage(damage)
+        for e in hit_enemies:
+            e.take_damage(damage)
             actual_damage = damage
-            self.game.combat_system.damage_numbers.append((z.x, z.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
+            self.game.combat_system.damage_numbers.append((e.x, e.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
             if weapon_type == "melee":
                 SoundGenerator.play("hit_melee")
                 self.interior_camera.shake(3, 0.15)
-            self.game.game_particles.emit(lambda: ParticleEmitters.blood(z.x * TILE_SIZE, z.y * TILE_SIZE))
+            self.game.game_particles.emit(lambda: ParticleEmitters.blood(e.x * TILE_SIZE, e.y * TILE_SIZE))
             
             kb_dist = 1.0 if weapon_type == "melee" else 0.5
-            angle = math.atan2(z.y - py, z.x - px)
-            z.x += math.cos(angle) * kb_dist
-            z.y += math.sin(angle) * kb_dist
+            angle = math.atan2(e.y - py, e.x - px)
+            e.x += math.cos(angle) * kb_dist
+            e.y += math.sin(angle) * kb_dist
             
-            if z.is_dead:
-                self.game.player.killed_zombies += 1
-                self.game.event_system.add_log(t("zombie_killed"))
-                loot = z.get_loot() if hasattr(z, 'get_loot') else []
+            if e.is_dead:
+                self.game.player.killed_enemies += 1
+                self.game.event_system.add_log(t("log_enemy_killed"))
+                loot = e.get_loot() if hasattr(e, 'get_loot') else []
                 for item_name in loot:
                     if self.current_interior:
-                        self.current_interior.drop_item(item_name, z.x, z.y)
+                        self.current_interior.drop_item(item_name, e.x, e.y)
                     self.game.event_system.add_log(f"  [{item_name}] 드롭!")
 
     def update(self, dt, current_world):
         """실내 업데이트 주기 관리"""
-        # 1. 내부 좀비 물리 및 공격 갱신
-        for z in self.interior_zombies:
-            if not z.is_dead and z.active:
-                z.update(dt, self.game.player.x, self.game.player.y, current_world, self.game.player.is_crouching)
-                if z.state == ZombieState.ENGAGE and z.can_attack():
-                    damage = z.do_attack()
-                    actual = self.game.player.take_damage(damage, t("stealth_zombie"))
+        # 1. 내부 적 물리 및 공격 갱신
+        for e in self.interior_enemies:
+            if not e.is_dead and e.active:
+                e.update(dt, self.game.player.x, self.game.player.y, current_world, self.game.player.is_crouching)
+                if e.state == EnemyState.ENGAGE and e.can_attack():
+                    damage = e.do_attack()
+                    actual = self.game.player.take_damage(damage, t("stealth_enemy"))
                     if actual > 0:
                         self.game.combat_system.damage_numbers.append((self.game.player.x, self.game.player.y - 0.5, actual, 1.0, (255, 60, 60)))
-                        self.game.event_system.add_log(t("log_stealth_zombie_damage", int(actual)))
+                        self.game.event_system.add_log(t("log_stealth_enemy_damage", int(actual)))
                         if self.game.camera:
                             self.game.camera.shake(3, 0.2)
                         if self.interior_camera:
                             self.interior_camera.shake(3, 0.2)
 
-        # 2. 야외 추적 중인 좀비 침입 판단
-        MAX_INTERIOR_ZOMBIES = 8
-        self.zombie_intrusion_timer += dt
-        if self.zombie_intrusion_timer >= 3.0 and self.interior_building_ref and self.game.entity_manager:
-            self.zombie_intrusion_timer = 0.0
+        # 2. 야외 추적 중인 적 침입 판단
+        MAX_INTERIOR_ENEMIES = 8
+        self.enemy_intrusion_timer += dt
+        if self.enemy_intrusion_timer >= 3.0 and self.interior_building_ref and self.game.entity_manager:
+            self.enemy_intrusion_timer = 0.0
             bref = self.interior_building_ref
             door_x, door_y = bref.door_x, bref.door_y
-            nearby = self.game.entity_manager.get_nearby_zombies(door_x, door_y, 5)
-            for oz in nearby:
-                if len(self.interior_zombies) >= MAX_INTERIOR_ZOMBIES:
+            nearby = self.game.entity_manager.get_nearby_enemies(door_x, door_y, 5)
+            for oe in nearby:
+                if len(self.interior_enemies) >= MAX_INTERIOR_ENEMIES:
                     break
-                if oz.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT):
+                if oe.state in (EnemyState.ENGAGE, EnemyState.FLANK, EnemyState.ALERT):
                     ix = float(self.current_interior.door_pos[0])
                     iy = float(self.current_interior.door_pos[1] - 2)
-                    iz = Zombie(ix, iy, oz.zombie_type, self.game.difficulty)
-                    iz.hp = oz.hp
-                    iz.state = ZombieState.ENGAGE
-                    self.interior_zombies.append(iz)
-                    oz.active = False
-                    self.game.event_system.add_log(t("zombie_intrusion"))
-                    SoundGenerator.play("zombie_die")
+                    ie = Enemy(ix, iy, oe.enemy_type, self.game.difficulty)
+                    ie.hp = oe.hp
+                    ie.state = EnemyState.ENGAGE
+                    self.interior_enemies.append(ie)
+                    oe.active = False
+                    self.game.event_system.add_log(t("enemy_intrusion"))
+                    SoundGenerator.play("enemy_die")
                     if self.interior_camera:
                         self.interior_camera.shake(5, 0.3)
 
@@ -395,21 +395,21 @@ class InteriorSystem:
                 look_x = world_x + view_dir_x * vision_range * 0.5
                 look_y = world_y + view_dir_y * vision_range * 0.5
                 
-                # 시야각(60도 콘) 범위 내 야외 좀비 인지 필터링
-                visible_zombies = []
+                # 시야각(60도 콘) 범위 내 야외 적 인지 필터링
+                visible_enemies = []
                 if self.game.entity_manager:
-                    outdoor_z = self.game.entity_manager.get_nearby_zombies(look_x, look_y, vision_range)
-                    for oz in outdoor_z:
-                        dx = oz.x - world_x
-                        dy = oz.y - world_y
+                    outdoor_e = self.game.entity_manager.get_nearby_enemies(look_x, look_y, vision_range)
+                    for oe in outdoor_e:
+                        dx = oe.x - world_x
+                        dy = oe.y - world_y
                         angle_to = math.atan2(dy, dx)
-                        z_diff = abs((angle_to - final_angle + math.pi) % (2 * math.pi) - math.pi)
-                        if z_diff <= math.pi / 6:
-                            visible_zombies.append({
-                                "x": oz.x,
-                                "y": oz.y,
-                                "type": oz.zombie_type,
-                                "state": oz.state
+                        e_diff = abs((angle_to - final_angle + math.pi) % (2 * math.pi) - math.pi)
+                        if e_diff <= math.pi / 6:
+                            visible_enemies.append({
+                                "x": oe.x,
+                                "y": oe.y,
+                                "type": oe.enemy_type,
+                                "state": oe.state
                             })
 
                 self.window_vision = {
@@ -419,7 +419,7 @@ class InteriorSystem:
                     "dir_x": view_dir_x,
                     "dir_y": view_dir_y,
                     "range": vision_range,
-                    "zombies": visible_zombies,
+                    "enemies": visible_enemies,
                 }
             else:
                 self.active_window_pos = None

@@ -41,11 +41,11 @@ RANDOM_EVENTS = {
     "야간_습격": {
         "type": EventType.RAID,
         "title": "야간 습격!",
-        "description": "밤사이 좀비들이 은신처를 공격했습니다!",
+        "description": "밤사이 적대 세력이 은신처를 공격했습니다!",
         "effects": {"stress": 15},
         "defense_check": 20,
         "defense_fail_effects": {"hp": -20, "stress": 25},
-        "defense_success_msg": "튼튼한 바리케이드 덕분에 좀비들이 물러갔습니다!",
+        "defense_success_msg": "튼튼한 바리케이드 덕분에 적대 세력이 물러갔습니다!",
         "defense_fail_msg": "방어도가 낮아 일부 피해를 입었습니다.",
         "chance": 0.1,
         "day_min": 3,
@@ -58,11 +58,11 @@ RANDOM_EVENTS = {
         "chance": 0.04,
         "day_min": 5,
     },
-    "좀비_웨이브": {
+    "적대_세력_웨이브": {
         "type": EventType.HORDE,
-        "title": "좀비 웨이브!",
-        "description": "대규모 좀비 무리가 이 지역으로 이동 중입니다!",
-        "zombie_count": 8,
+        "title": "적대 세력 웨이브!",
+        "description": "대규모 적대 세력 무리가 이 지역으로 이동 중입니다!",
+        "enemy_count": 8,
         "chance": 0.06,
         "day_min": 7,
     },
@@ -241,7 +241,7 @@ ENDINGS = {
     },
     "노말A_철의군주": {
         "title": "노말 엔딩: 폐허 위에 군림하는 철의 군주",
-        "description": "헬기는 지나갔지만, 당신의 은신처는 좀비 군단도 뚫지 못하는 요새입니다.\n풍부한 식량과 함께, 이 지역의 왕이 되기로 결심합니다.",
+        "description": "헬기는 지나갔지만, 당신의 은신처는 적대 세력도 뚫지 못하는 요새입니다.\n풍부한 식량과 함께, 이 지역의 왕이 되기로 결심합니다.",
         "condition": lambda p: p.shelter_defense >= 50 and p.inventory.has_item("식량통조림"),
         "priority": 5,
     },
@@ -251,10 +251,10 @@ ENDINGS = {
         "condition": lambda p: p.hp >= 70 and p.equipped.get("weapon") and p.equipped.get("body"),
         "priority": 4,
     },
-    "히든_좀비헌터": {
-        "title": "히든 엔딩: 전설의 좀비 사냥꾼",
-        "description": "100마리 이상의 좀비를 처치한 당신의 이름은 전설이 됩니다.\n생존자들 사이에서 당신은 '사신'이라 불립니다.",
-        "condition": lambda p: p.killed_zombies >= 100,
+    "히든_적대원헌터": {
+        "title": "히든 엔딩: 전설의 하베스터",
+        "description": "100명 이상의 적을 처치한 당신의 이름은 전설이 됩니다.\n생존자들 사이에서 당신은 '사신'이라 불립니다.",
+        "condition": lambda p: p.killed_enemies >= 100,
         "priority": 7,
     },
     "히든_과학자": {
@@ -271,7 +271,7 @@ ENDINGS = {
     },
     "배드엔딩": {
         "title": "배드 엔딩: 잊혀진 자의 고독한 최후",
-        "description": "헬기가 지나가는 것을 허망하게 바라봅니다...\n라디오도, 빛도, 방어할 힘도 남아있지 않습니다.\n은신처 너머로 좀비 떼의 끔찍한 소리만이 귓가를 맴돕니다.",
+        "description": "헬기가 지나가는 것을 허망하게 바라봅니다...\n라디오도, 빛도, 방어할 힘도 남아있지 않습니다.\n은신처 너머로 적대 세력의 끔찍한 소리만이 귓가를 맴돕니다.",
         "condition": lambda p: True,  # 기본 엔딩
         "priority": 0,
     },

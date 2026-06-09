@@ -118,7 +118,7 @@ class Player:
 
         # 퀘스트/진행 추적
         self.discovered_biomes = set()
-        self.killed_zombies = 0
+        self.killed_enemies = 0
         self.buildings_explored = 0
         self.items_crafted = 0
         self.days_survived = 0
@@ -790,7 +790,7 @@ class Player:
             "equipped_backpack_meta": getattr(self, "equipped_backpack_meta", {}),
             "bleeding": self.bleeding,
             "broken_bone": self.broken_bone,
-            "killed_zombies": self.killed_zombies,
+            "killed_enemies": self.killed_enemies,
             "buildings_explored": self.buildings_explored,
             "items_crafted": self.items_crafted,
             "days_survived": self.days_survived,
@@ -827,7 +827,7 @@ class Player:
         p.equipped_insured = data.get("equipped_insured", {"head": False, "body": False, "feet": False, "weapon": False, "back": False})
         p.bleeding = data.get("bleeding", False)
         p.broken_bone = data.get("broken_bone", False)
-        p.killed_zombies = data.get("killed_zombies", 0)
+        p.killed_enemies = data.get("killed_enemies", 0)
         p.buildings_explored = data.get("buildings_explored", 0)
         p.items_crafted = data.get("items_crafted", 0)
         p.days_survived = data.get("days_survived", 0)

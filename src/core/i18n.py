@@ -23,7 +23,7 @@ STRINGS = {
         "day_length": "하루 길이(분)",
         "resource_density": "자원 밀도",
         "weather_variability": "날씨 변동성",
-        "zombie_activity": "적대 세력 활동량",
+        "enemy_activity": "적대 세력 활동량",
         "building_density": "건물 밀도",
         "survival_days": "생존 일수",
         "start_world": "월드 생성 시작",
@@ -78,9 +78,9 @@ STRINGS = {
         "searched_already": "이미 탐색한 가구입니다.",
         "found_nothing": "아무것도 발견하지 못했습니다.",
         "found_items": "발견: ",
-        "zombie_intrusion": "적대 세력이 건물 안으로 침입했습니다!",
-        "zombie_followed": "적대 세력이 따라 들어왔습니다!",
-        "zombie_followed_outside": "적대 세력이 문을 열고 밖으로 쫓아나왔습니다!",
+        "enemy_intrusion": "적대 세력이 건물 안으로 침입했습니다!",
+        "enemy_followed": "적대 세력이 따라 들어왔습니다!",
+        "enemy_followed_outside": "적대 세력이 문을 열고 밖으로 쫓아나왔습니다!",
 
         # 세이브 슬롯
         "save_slots_title": "세이브 파일",
@@ -106,7 +106,7 @@ STRINGS = {
         # 이벤트
         "game_saved": "게임이 저장되었습니다.",
         "new_day": "{}일차가 밝았습니다.",
-        "zombie_horde": "적대 세력 무리가 접근합니다!",
+        "enemy_horde": "적대 세력 무리가 접근합니다!",
         "found_survivor": "생존자를 발견했습니다!",
 
         # 난이도
@@ -307,10 +307,10 @@ STRINGS = {
         "log_inventory_full": "인벤토리 빈 공간이 부족합니다!",
         "log_crafting_started": "'{0}' 제작을 시작합니다...",
         "log_craft_success": "✓ '{0}' 제작을 완료했습니다!",
-        "log_zombie_killed": "적대 세력을 처치했습니다!",
-        "log_item_dropped_by_zombie": "  [{0}] 획득!",
+        "log_enemy_killed": "적대원을 처치했습니다!",
+        "log_item_dropped_by_enemy": "  [{0}] 획득!",
         "log_ammo_lacking": "탄약이 부족합니다!",
-        "log_stealth_zombie_damage": "잠복 중인 적에게 {0} 피해!",
+        "log_stealth_enemy_damage": "잠복 중인 적에게 {0} 피해!",
         "log_day_header": "═══ Day {0} ═══",
         "log_new_biome": "새로운 지역 발견: {0}",
         "log_horde_warning": "⚠ [습격 예보] 오늘 밤 대규모 약탈자 습격이 예상됩니다! ({0}명)",
@@ -329,12 +329,12 @@ STRINGS = {
         "여어, 반가워! 좋은 물건 많이 있어.": "여어, 반가워! 좋은 물건 많이 있어.",
         "살아있는 사람이라니... 도와줄 수 있나요?": "살아있는 사람이라니... 도와줄 수 있나요?",
         "생존자인가? 이 지역 정보를 공유할 수 있소.": "생존자인가? 이 지역 정보를 공유할 수 있소.",
-        "일반 좀비": "스캐브 (Scav)",
-        "러너 좀비": "러너 스캐브",
-        "탱크 좀비": "정예 PMC 용병",
-        "스파이더 좀비": "스나이퍼 PMC",
-        "은신형 좀비": "잠복 초소 적",
-        "stealth_zombie": "잠복 초소 적",
+        "일반 스캐브": "스캐브 (Scav)",
+        "러너 스캐브": "러너 스캐브",
+        "정예 PMC 용병": "정예 PMC 용병",
+        "스나이퍼 PMC": "스나이퍼 PMC",
+        "잠복 초소 적": "잠복 초소 적",
+        "stealth_enemy": "잠복 초소 적",
     },
     "en": {
         # Main Menu
@@ -353,7 +353,7 @@ STRINGS = {
         "day_length": "Day Length (min)",
         "resource_density": "Resource Density",
         "weather_variability": "Weather Variability",
-        "zombie_activity": "Zombie Activity",
+        "enemy_activity": "Enemy Activity",
         "building_density": "Building Density",
         "survival_days": "Survival Days",
         "start_world": "Create World",
@@ -408,9 +408,9 @@ STRINGS = {
         "searched_already": "Already searched.",
         "found_nothing": "Found nothing.",
         "found_items": "Found: ",
-        "zombie_intrusion": "A zombie has broken into the building!",
-        "zombie_followed": "A zombie followed you inside!",
-        "zombie_followed_outside": "A zombie followed you outside!",
+        "enemy_intrusion": "An enemy has broken into the building!",
+        "enemy_followed": "An enemy followed you inside!",
+        "enemy_followed_outside": "An enemy followed you outside!",
 
         # Save Slots
         "save_slots_title": "Save Files",
@@ -436,7 +436,7 @@ STRINGS = {
         # Events
         "game_saved": "Game saved.",
         "new_day": "Day {} has dawned.",
-        "zombie_horde": "A zombie horde approaches!",
+        "enemy_horde": "An enemy squad approaches!",
         "found_survivor": "You found a survivor!",
 
         # Difficulty
@@ -505,11 +505,11 @@ STRINGS = {
         "밀밭": "Wheat Field",
 
         # Difficulty Preset Descriptions
-        "desc_peaceful": "Zombies rarely spawn and resources are abundant. Good for exploring and building.",
-        "desc_easy": "Fewer zombies and plenty of resources. Suitable for beginners.",
+        "desc_peaceful": "Enemies rarely spawn and resources are abundant. Good for exploring and building.",
+        "desc_easy": "Fewer enemies and plenty of resources. Suitable for beginners.",
         "desc_normal": "Balanced difficulty. Requires strategic gameplay.",
-        "desc_hard": "Stronger zombies and scarce resources. For experienced survivors only.",
-        "desc_hardcore": "Extremely scarce resources. Zombies are fast and lethal. Permadeath enabled.",
+        "desc_hard": "Stronger enemies and scarce resources. For experienced survivors only.",
+        "desc_hardcore": "Extremely scarce resources. Enemies are fast and lethal. Permadeath enabled.",
         "desc_challenge": "Ultimate challenge. Everything wants to kill you. For true survivors.",
 
         # Item Names
@@ -600,7 +600,7 @@ STRINGS = {
         "desc_기계 부품": "Complex mechanical parts. Vital for modifying precision gear.",
         "desc_농작물": "Fresh crops from the field. Fills your stomach nicely.",
         "desc_횃불": "A torch made of wood and cloth. Illuminates your surroundings.",
-        "desc_함정": "A trap made of scrap metal and nails. Can catch zombies.",
+        "desc_함정": "A trap made of scrap metal and nails. Can catch enemies.",
 
         # Interaction Logs and NPC Messages
         "acquired_item": "Acquired '{0}'!",
@@ -637,18 +637,18 @@ STRINGS = {
         "log_inventory_full": "Not enough inventory space!",
         "log_crafting_started": "Started crafting '{0}'...",
         "log_craft_success": "✓ Crafted '{0}' successfully!",
-        "log_zombie_killed": "Zombie defeated!",
-        "log_item_dropped_by_zombie": "  [{0}] dropped!",
+        "log_enemy_killed": "Enemy defeated!",
+        "log_item_dropped_by_enemy": "  [{0}] dropped!",
         "log_ammo_lacking": "Not enough ammo!",
-        "log_stealth_zombie_damage": "Inflicted {0} damage to stealthy zombie!",
+        "log_stealth_enemy_damage": "Inflicted {0} damage to stealthy enemy!",
         "log_day_header": "═══ Day {0} ═══",
         "log_new_biome": "Discovered new area: {0}",
-        "log_horde_warning": "⚠ [Horde Warning] Large scale zombie raid expected tonight! ({0} zombies)",
-        "log_raid_warning": "⚠ [Raid Warning] A zombie swarm is approaching tonight... ({0} zombies)",
+        "log_horde_warning": "⚠ [Horde Warning] Large scale enemy raid expected tonight! ({0} enemies)",
+        "log_raid_warning": "⚠ [Raid Warning] An enemy swarm is approaching tonight... ({0} enemies)",
         "notify_raid_forecast": "⚠ Raid forecast! Prepare your defense!",
         "log_raid_defended": "★ Raid defense complete: Swarm defeated! ★",
         "notify_raid_defended": "★ Raid Defended Successfully! ★",
-        "log_raid_started": "⚔ Raid started! {0} zombies are attacking the shelter!",
+        "log_raid_started": "⚔ Raid started! {0} enemies are attacking the shelter!",
         "log_barricade_blocked": "★ Barricade blocked the raid! (Defense -{0})",
         "log_barricade_breached": "✕ Barricade breached! (HP -{0}, Defense → 0)",
 
@@ -659,12 +659,12 @@ STRINGS = {
         "여어, 반가워! 좋은 물건 많이 있어.": "Hello, nice to meet you! I have good items.",
         "살아있는 사람이라니... 도와줄 수 있나요?": "A living person... can you help me?",
         "생존자인가? 이 지역 정보를 공유할 수 있소.": "Survivor? I can share some regional info.",
-        "일반 좀비": "Normal Zombie",
-        "러너 좀비": "Runner Zombie",
-        "탱크 좀비": "Tank Zombie",
-        "스파이더 좀비": "Spider Zombie",
-        "은신형 좀비": "Stealthy Zombie",
-        "stealth_zombie": "Stealthy Zombie",
+        "일반 스캐브": "Normal Scav",
+        "러너 스캐브": "Runner Scav",
+        "정예 PMC 용병": "Elite PMC Soldier",
+        "스나이퍼 PMC": "Sniper PMC",
+        "잠복 초소 적": "Stealthy Enemy",
+        "stealth_enemy": "Stealthy Enemy",
     },
 }
 

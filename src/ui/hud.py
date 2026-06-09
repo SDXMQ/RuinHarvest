@@ -313,7 +313,7 @@ class HUD:
         surface.blit(def_text, (x, y))
 
         # 킬 수
-        kill_text = font.render(t("kills_label", player.killed_zombies), True, Colors.UI_TEXT_DIM)
+        kill_text = font.render(t("kills_label", player.killed_enemies), True, Colors.UI_TEXT_DIM)
         surface.blit(kill_text, (x, y + 16))
 
         # 조작 안내

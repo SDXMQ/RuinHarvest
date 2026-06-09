@@ -80,7 +80,7 @@ class SoundGenerator:
                 return cls._generate_tone(800, 0.08, 0.3, "noise")
             elif name == "player_hurt":
                 return cls._generate_tone(200, 0.3, 0.3, "sawtooth")
-            elif name == "zombie_die":
+            elif name == "enemy_die":
                 return cls._generate_tone(100, 0.4, 0.3, "sawtooth")
             elif name == "pickup":
                 return cls._generate_tone(600, 0.1, 0.2, "sine")

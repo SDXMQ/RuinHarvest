@@ -24,7 +24,7 @@ from settings import (Colors, FPS, TILE_SIZE, CHUNK_SIZE, RENDER_DISTANCE,
 from camera import Camera
 from world import World
 from player import Player
-from entities import EntityManager, Zombie, NPC, ZombieState
+from entities import EntityManager, Enemy, NPC, EnemyState
 from combat import CombatSystem
 from weather import TimeSystem, WeatherSystem
 from events import EventSystem, determine_ending
@@ -523,15 +523,15 @@ class Game:
                             self.event_system.add_log("수류탄을 투척했습니다! 폭발이 일어납니다!")
                             SoundGenerator.play("gunshot")
                             px, py = self.player.x, self.player.y
-                            targets = self.interior_zombies if self.player.is_interior else (self.entity_manager.zombies if self.entity_manager else [])
-                            for z in targets:
-                                if z.active and not z.is_dead:
-                                    dist = math.sqrt((z.x - px)**2 + (z.y - py)**2)
+                            targets = self.interior_enemies if self.player.is_interior else (self.entity_manager.enemies if self.entity_manager else [])
+                            for e in targets:
+                                if e.active and not e.is_dead:
+                                    dist = math.sqrt((e.x - px)**2 + (e.y - py)**2)
                                     if dist <= 3.5:
-                                        z.take_damage(80)
-                                        self.combat_system.damage_numbers.append((z.x, z.y - 0.5, 80, 1.0, (255, 150, 50)))
+                                        e.take_damage(80)
+                                        self.combat_system.damage_numbers.append((e.x, e.y - 0.5, 80, 1.0, (255, 150, 50)))
                                         from particles import ParticleEmitters
-                                        self.game_particles.emit(lambda: ParticleEmitters.blood(z.x * 32, z.y * 32), 4)
+                                        self.game_particles.emit(lambda: ParticleEmitters.blood(e.x * 32, e.y * 32), 4)
                             if self.camera:
                                 self.camera.shake(8, 0.3)
                             if self.player.is_interior and self.interior_camera:
@@ -665,13 +665,13 @@ class Game:
                                 target.x * TILE_SIZE, target.y * TILE_SIZE),
                             5)
                 elif action == "kill":
-                    SoundGenerator.play("zombie_die")
-                    self.event_system.add_log(t("log_zombie_killed"))
+                    SoundGenerator.play("enemy_die")
+                    self.event_system.add_log(t("log_enemy_killed"))
                     if target:
                         loot = target.get_loot()
                         for item in loot:
                             self.world.drop_item(item, target.x, target.y)
-                            self.event_system.add_log(t("log_item_dropped_by_zombie", item))
+                            self.event_system.add_log(t("log_item_dropped_by_enemy", item))
                 elif action == "no_ammo":
                     self.event_system.add_log(t("log_ammo_lacking"))
                 elif action == "gunshot_fired":
@@ -680,25 +680,25 @@ class Game:
 
 
     def _trigger_gunshot_noise(self, px, py, is_interior):
-        """총성 소음 어그로: 반경 내 좀비를 ALERT 경계 상태로 전환"""
+        """총성 소음 어그로: 반경 내 적을 ALERT 경계 상태로 전환"""
         NOISE_RADIUS = 60  # 타일 단위 (~3~4 청크)
         if is_interior:
-            for z in self.interior_zombies:
-                if not z.is_dead and z.active:
-                    z.state = ZombieState.ALERT
-                    z.alert_target_x = px
-                    z.alert_target_y = py
-                    z.alert_timer = 6.0
-                    z.aggro_alert = 2.0
+            for e in self.interior_enemies:
+                if not e.is_dead and e.active:
+                    e.state = EnemyState.ALERT
+                    e.alert_target_x = px
+                    e.alert_target_y = py
+                    e.alert_timer = 6.0
+                    e.aggro_alert = 2.0
         else:
-            nearby = self.entity_manager.get_nearby_zombies(px, py, NOISE_RADIUS)
-            for z in nearby:
-                if z.state in (ZombieState.IDLE, ZombieState.WANDER, ZombieState.PATROL):
-                    z.state = ZombieState.ALERT
-                    z.alert_target_x = px
-                    z.alert_target_y = py
-                    z.alert_timer = 6.0
-                    z.aggro_alert = 2.0
+            nearby = self.entity_manager.get_nearby_enemies(px, py, NOISE_RADIUS)
+            for e in nearby:
+                if e.state in (EnemyState.IDLE, EnemyState.WANDER, EnemyState.PATROL):
+                    e.state = EnemyState.ALERT
+                    e.alert_target_x = px
+                    e.alert_target_y = py
+                    e.alert_timer = 6.0
+                    e.aggro_alert = 2.0
 
     # ============================================================
     # 건물 내부 진입/퇴장
@@ -803,8 +803,8 @@ class Game:
             if self.entity_manager is not None:
                 self.entity_manager.update(dt, self.player, self.world)
             if self.combat_system is not None and self.entity_manager is not None:
-                combat_results = self.combat_system.process_zombie_attacks(self.player, self.entity_manager, self.world)
-                for action, zombie, dmg in combat_results:
+                combat_results = self.combat_system.process_enemy_attacks(self.player, self.entity_manager, self.world)
+                for action, enemy, dmg in combat_results:
                     if action == "player_hit":
                         from particles import ParticleEmitters
                         SoundGenerator.play("player_hurt")
@@ -981,7 +981,7 @@ class Game:
             self.game_particles = None
         self.current_interior = None
         self.interior_building_ref = None
-        self.interior_zombies = []
+        self.interior_enemies = []
         self.explored_interiors = {}
         self.window_vision = None
         self.active_window_pos = None
@@ -1069,7 +1069,7 @@ class Game:
         # 탈출구 그리기
         self.world_renderer.draw_extraction_points(game_surface)
 
-        # 엔티티 (좀비, NPC)
+        # 엔티티 (적, NPC)
         self.world_renderer.draw_entities(game_surface)
 
         # 플레이어
@@ -1244,12 +1244,12 @@ class Game:
         self.interior_system.interior_building_ref = value
 
     @property
-    def interior_zombies(self):
-        return self.interior_system.interior_zombies
+    def interior_enemies(self):
+        return self.interior_system.interior_enemies
 
-    @interior_zombies.setter
-    def interior_zombies(self, value):
-        self.interior_system.interior_zombies = value
+    @interior_enemies.setter
+    def interior_enemies(self, value):
+        self.interior_system.interior_enemies = value
 
     @property
     def explored_interiors(self):
@@ -1260,12 +1260,12 @@ class Game:
         self.interior_system.explored_interiors = value
 
     @property
-    def zombie_intrusion_timer(self):
-        return self.interior_system.zombie_intrusion_timer
+    def enemy_intrusion_timer(self):
+        return self.interior_system.enemy_intrusion_timer
 
-    @zombie_intrusion_timer.setter
-    def zombie_intrusion_timer(self, value):
-        self.interior_system.zombie_intrusion_timer = value
+    @enemy_intrusion_timer.setter
+    def enemy_intrusion_timer(self, value):
+        self.interior_system.enemy_intrusion_timer = value
 
     @property
     def window_vision(self):

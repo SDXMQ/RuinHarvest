@@ -65,11 +65,11 @@ class CombatSystem:
         if weapon_type == "melee":
             # 근접 공격 - 부채꼴 60° (±30°) 판정
             MELEE_ARC = math.pi / 3  # 60도
-            targets = entity_manager.get_nearby_zombies(center_x, center_y, attack_range + 0.5)
+            targets = entity_manager.get_nearby_enemies(center_x, center_y, attack_range + 0.5)
 
-            for zombie in targets:
-                zx = zombie.x + 0.5
-                zy = zombie.y + 0.5
+            for enemy in targets:
+                zx = enemy.x + 0.5
+                zy = enemy.y + 0.5
                 if distance(zx, zy, center_x, center_y) > attack_range:
                     continue
                 target_angle = math.atan2(zy - center_y, zx - center_x)
@@ -77,16 +77,16 @@ class CombatSystem:
                     continue  # 부채꼴 밖 → 미스
 
                 actual_damage = damage + random.randint(-2, 3)
-                kb_dir = direction_to(player.x, player.y, zombie.x, zombie.y)
-                zombie.take_damage(actual_damage, kb_dir)
+                kb_dir = direction_to(player.x, player.y, enemy.x, enemy.y)
+                enemy.take_damage(actual_damage, kb_dir)
 
-                self.hit_effects.append((zombie.x, zombie.y, 0.3))
-                self.damage_numbers.append((zombie.x, zombie.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
-                results.append(("hit", zombie, actual_damage))
+                self.hit_effects.append((enemy.x, enemy.y, 0.3))
+                self.damage_numbers.append((enemy.x, enemy.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
+                results.append(("hit", enemy, actual_damage))
 
-                if zombie.is_dead:
-                    player.killed_zombies += 1
-                    results.append(("kill", zombie, 0))
+                if enemy.is_dead:
+                    player.killed_enemies += 1
+                    results.append(("kill", enemy, 0))
 
         elif weapon_type == "ranged":
             ammo_type = weapon_data.get("ammo")
@@ -117,7 +117,7 @@ class CombatSystem:
 
                 # 마우스 방향에서 가장 가까운 적 (±15° 내)
                 RANGED_ARC = math.pi / 6  # 30도
-                targets = entity_manager.get_nearby_zombies(center_x, center_y, attack_range + 0.5)
+                targets = entity_manager.get_nearby_enemies(center_x, center_y, attack_range + 0.5)
                 valid = []
                 for z in targets:
                     zx = z.x + 0.5
@@ -147,7 +147,7 @@ class CombatSystem:
                     results.append(("hit", target, actual_damage))
 
                     if target.is_dead:
-                        player.killed_zombies += 1
+                        player.killed_enemies += 1
                         results.append(("kill", target, 0))
                 else:
                     end_x = center_x + math.cos(attack_angle) * attack_range
@@ -165,35 +165,35 @@ class CombatSystem:
         player.attack_cooldown.set_cooldown("attack", attack_speed)
         return results
 
-    def process_zombie_attacks(self, player, entity_manager, world):
+    def process_enemy_attacks(self, player, entity_manager, world):
         """AI 공격 처리 (사선 검사 및 원거리 사격 연동)"""
         results = []
         px = player.x + 0.5
         py = player.y + 0.5
         from utils import check_line_of_sight
         
-        for zombie in entity_manager.zombies:
-            if zombie.is_dead or not zombie.active:
+        for enemy in entity_manager.enemies:
+            if enemy.is_dead or not enemy.active:
                 continue
-            if zombie.can_attack():
-                dist = distance(zombie.x, zombie.y, player.x, player.y)
+            if enemy.can_attack():
+                dist = distance(enemy.x, enemy.y, player.x, player.y)
                 
                 # 사거리 내에 있고 사선이 뚫려 있을 때만 공격
-                if dist <= zombie.attack_range and check_line_of_sight(zombie.x, zombie.y, player.x, player.y, world):
-                    zombie.do_attack() # 쿨다운 시작
+                if dist <= enemy.attack_range and check_line_of_sight(enemy.x, enemy.y, player.x, player.y, world):
+                    enemy.do_attack() # 쿨다운 시작
                     
-                    is_ranged = zombie.attack_range > 1.5
+                    is_ranged = enemy.attack_range > 1.5
                     
                     if is_ranged:
                         # 원거리 사격 공격
-                        is_pmc = "pmc" in zombie.zombie_type or zombie.zombie_type in ("tank", "spider")
+                        is_pmc = "pmc" in enemy.enemy_type or enemy.enemy_type in ("tank", "spider")
                         miss_chance = 0.45 if is_pmc else 0.65
                         
                         # 플레이어가 뛰고(움직이고) 있으면 맞추기 더 힘듦
                         if player.moving:
                             miss_chance += 0.15
                             
-                        start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
+                        start_x, start_y = enemy.x + 0.5, enemy.y + 0.5
                         tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
 
                         if random.random() < miss_chance:
@@ -201,7 +201,7 @@ class CombatSystem:
                             self.damage_numbers.append(
                                 (player.x, player.y - 0.7, "Miss", 1.0, (200, 200, 200))
                             )
-                            results.append(("player_miss", zombie, 0))
+                            results.append(("player_miss", enemy, 0))
                             
                             end_x = player.x + 0.5 + random.uniform(-1.5, 1.5)
                             end_y = player.y + 0.5 + random.uniform(-1.5, 1.5)
@@ -225,7 +225,7 @@ class CombatSystem:
                         })
 
                         # 거리 비례 대미지 감쇄 (지수 감쇄 공식)
-                        base_damage = zombie.damage
+                        base_damage = enemy.damage
                         actual_damage = base_damage * math.exp(-0.04 * dist)
                         actual_damage = max(1.0, actual_damage) # 최소 1대미지
                         
@@ -237,29 +237,29 @@ class CombatSystem:
                             self.damage_numbers.append(
                                 (player.x, player.y - 0.5, int(actual), 1.0, (255, 60, 60))
                             )
-                            results.append(("player_hit", zombie, actual))
+                            results.append(("player_hit", enemy, actual))
                     else:
                         # 근접 공격
-                        base_damage = zombie.damage
+                        base_damage = enemy.damage
                         actual_damage = base_damage + random.randint(-1, 2)
                         actual_damage = max(1.0, actual_damage)
                         
-                        source_name = "좀비 공격"
+                        source_name = "적대원 공격"
                         actual = player.take_damage(actual_damage, source_name)
                         
                         if actual > 0:
                             self.damage_numbers.append(
                                 (player.x, player.y - 0.5, int(actual), 1.0, (255, 60, 60))
                             )
-                            results.append(("player_hit", zombie, actual))
+                            results.append(("player_hit", enemy, actual))
 
         # 진영 간 AI vs AI 교전 처리
-        for zombie in entity_manager.zombies:
-            if zombie.is_dead or not zombie.active:
+        for enemy in entity_manager.enemies:
+            if enemy.is_dead or not enemy.active:
                 continue
-            if not zombie.can_attack():
+            if not enemy.can_attack():
                 continue
-            target = getattr(zombie, 'target', None)
+            target = getattr(enemy, 'target', None)
             if target is None or not hasattr(target, 'x'):
                 continue
             # 타겟이 다른 AI인 경우만 (플레이어 공격은 위에서 처리)
@@ -267,16 +267,16 @@ class CombatSystem:
                 continue
             if target.is_dead or not target.active:
                 continue
-            d = distance(zombie.x, zombie.y, target.x, target.y)
-            if d <= zombie.attack_range and getattr(zombie, 'can_see_target', False):
-                zombie.do_attack()
+            d = distance(enemy.x, enemy.y, target.x, target.y)
+            if d <= enemy.attack_range and getattr(enemy, 'can_see_target', False):
+                enemy.do_attack()
                 
-                is_ranged = zombie.attack_range > 1.5
+                is_ranged = enemy.attack_range > 1.5
                 if is_ranged:
-                    is_pmc = getattr(zombie, 'faction', 'scav') == "pmc"
+                    is_pmc = getattr(enemy, 'faction', 'scav') == "pmc"
                     miss_chance = 0.45 if is_pmc else 0.65
                     
-                    start_x, start_y = zombie.x + 0.5, zombie.y + 0.5
+                    start_x, start_y = enemy.x + 0.5, enemy.y + 0.5
                     tracer_color = (255, 60, 60) if is_pmc else (255, 150, 50)
 
                     if random.random() < miss_chance:
@@ -303,7 +303,7 @@ class CombatSystem:
                         "max_timer": 0.2
                     })
 
-                    base_damage = zombie.damage
+                    base_damage = enemy.damage
                     actual_damage = base_damage * math.exp(-0.04 * d)
                     actual_damage = max(1.0, actual_damage)
                     target.take_damage(actual_damage)
@@ -312,7 +312,7 @@ class CombatSystem:
                     )
                 else:
                     # 근접 공격
-                    base_damage = zombie.damage
+                    base_damage = enemy.damage
                     actual_damage = base_damage + random.randint(-1, 2)
                     actual_damage = max(1.0, actual_damage)
                     target.take_damage(actual_damage)

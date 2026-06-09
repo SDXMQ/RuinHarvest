@@ -190,14 +190,14 @@ check("도로 생성 검증", test_roads)
 # 8. 엔티티 디스폰
 print("\n[8] 엔티티 디스폰")
 def test_despawn():
-    from entities import EntityManager, Zombie
+    from entities import EntityManager, Enemy
     from settings import CHUNK_SIZE
     em = EntityManager()
-    # 플레이어에서 매우 먼 좀비
-    z = Zombie(999, 999, "normal")
-    em.zombies.append(z)
+    # 플레이어에서 매우 먼 적
+    e = Enemy(999, 999, "normal")
+    em.enemies.append(e)
     em._cull_distant_entities(0, 0)
-    assert z.active == False, "먼 엔티티가 비활성화되지 않음"
+    assert e.active == False, "먼 엔티티가 비활성화되지 않음"
 check("원거리 엔티티 디스폰", test_despawn)
 
 # 9. Bresenham 사선 검사
@@ -220,7 +220,7 @@ check("사선 검사 (Line of Sight)", test_line_of_sight)
 # 10. 전술 AI 엄폐물 및 우회 타겟
 print("\n[10] 전술 AI 엄폐물 및 우회 타겟")
 def test_tactical_ai_helpers():
-    from entities import Zombie
+    from entities import Enemy
     
     class DummyWorld:
         def __init__(self):
@@ -229,12 +229,12 @@ def test_tactical_ai_helpers():
             return (int(x), int(y)) not in self.walls
             
     world = DummyWorld()
-    z = Zombie(3, 3, "normal")
+    e = Enemy(3, 3, "normal")
     
-    cx, cy = z._find_cover_tile(6, 6, world)
+    cx, cy = e._find_cover_tile(6, 6, world)
     assert cx is not None or cy is not None
     
-    fx, fy = z._calculate_flank_pos(6, 6, world)
+    fx, fy = e._calculate_flank_pos(6, 6, world)
     assert fx is not None and fy is not None
 check("전술 AI 엄폐/우회 알고리즘", test_tactical_ai_helpers)
 
@@ -242,7 +242,7 @@ check("전술 AI 엄폐/우회 알고리즘", test_tactical_ai_helpers)
 print("\n[11] 총기 궤적 및 AI 조준선 검증")
 def test_combat_tracers_and_aiming():
     from combat import CombatSystem
-    from entities import Zombie, EntityManager
+    from entities import Enemy, EntityManager
     from player import Player
     
     # 1. 궤적 초기화 및 등록 테스트
@@ -271,10 +271,10 @@ def test_combat_tracers_and_aiming():
     # 2. AI 조준 대상 인지 검증 (entity_manager 전달 확인)
     em = EntityManager()
     p = Player(0, 0)
-    scav = Zombie(2, 2, "scav")
-    pmc = Zombie(4, 4, "tank")
+    scav = Enemy(2, 2, "scav")
+    pmc = Enemy(4, 4, "tank")
     
-    em.zombies.extend([scav, pmc])
+    em.enemies.extend([scav, pmc])
     
     # 팩션 확인
     assert scav.faction == "scav"
@@ -288,7 +288,7 @@ def test_combat_tracers_and_aiming():
             
     world = DummyWorld()
     
-    # zombie.update 호출 시 entity_manager가 잘 넘어가서 적대 팩션 타겟을 인지하는지 확인
+    # enemy.update 호출 시 entity_manager가 잘 넘어가서 적대 팩션 타겟을 인지하는지 확인
     # pmc가 2타일 거리의 scav를 탐지해야 함
     pmc.ai_timer = 0.2  # AI 의사결정이 즉시 이루어지도록 타이머 조절
     pmc.update(0.1, p.x, p.y, world, player_crouching=False, entity_manager=em)
@@ -562,7 +562,7 @@ check("비정상 종료(Alt+F4) 패널티 삭제 검증", test_save_no_penalty)
 print("\n[19] 맵 델타 및 엔티티 복원 검증")
 def test_save_delta_and_entities_restoration():
     from main import Game
-    from entities import Zombie, NPC
+    from entities import Enemy, NPC
     from world import World
     from save_system import GameSaveManager
     import pygame
@@ -586,10 +586,10 @@ def test_save_delta_and_entities_restoration():
         obj.looted = True
         obj.hp = 10
         
-    # 2. 좀비 및 NPC 추가
-    z = Zombie(5.5, 5.5, "normal")
+    # 2. 적 및 NPC 추가
+    z = Enemy(5.5, 5.5, "normal")
     z.hp = 25
-    g.entity_manager.zombies.append(z)
+    g.entity_manager.enemies.append(z)
     
     n = NPC(10.5, 10.5, "merchant")
     g.entity_manager.npcs.append(n)
@@ -598,7 +598,7 @@ def test_save_delta_and_entities_restoration():
     data = GameSaveManager.serialize_game(g)
     assert data is not None
     assert len(data["world_deltas"]) > 0
-    assert len(data["entities"]["zombies"]) > 0
+    assert len(data["entities"]["enemies"]) > 0
     
     # 복원
     g2 = Game()
@@ -606,8 +606,8 @@ def test_save_delta_and_entities_restoration():
     assert res == True
     
     # 복원된 엔티티 검증
-    assert len(g2.entity_manager.zombies) == 1
-    z_restored = g2.entity_manager.zombies[0]
+    assert len(g2.entity_manager.enemies) == 1
+    z_restored = g2.entity_manager.enemies[0]
     assert z_restored.x == 5.5
     assert z_restored.y == 5.5
     assert z_restored.hp == 25
@@ -617,7 +617,7 @@ def test_save_delta_and_entities_restoration():
     assert n_restored.x == 10.5
     assert n_restored.y == 10.5
 
-check("맵 델타 및 좀비/PMC 엔티티 위치 보존 검증", test_save_delta_and_entities_restoration)
+check("맵 델타 및 스캐브/PMC 엔티티 위치 보존 검증", test_save_delta_and_entities_restoration)
 
 # 20. 레이드 맵 내 은신처 제외 검증
 print("\n[20] 레이드 맵 내 은신처 제외 검증")

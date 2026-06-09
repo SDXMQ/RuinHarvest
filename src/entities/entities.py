@@ -9,11 +9,11 @@ from pathfinding import find_path
 
 
 # ============================================================
-# 좀비(Scav/PMC) 타입 정의 (원거리 교전 사거리 적용)
+# 적(Scav/PMC) 타입 정의 (원거리 교전 사거리 적용)
 # ============================================================
-ZOMBIE_TYPES = {
+ENEMY_TYPES = {
     "normal": {
-        "name": "일반 좀비",
+        "name": "일반 스캐브",
         "hp": 40,
         "damage": 8,
         "speed": 1.2,
@@ -24,7 +24,7 @@ ZOMBIE_TYPES = {
         "loot_chance": 0.3,
     },
     "runner": {
-        "name": "러너 좀비",
+        "name": "러너 스캐브",
         "hp": 30,
         "damage": 6,
         "speed": 2.0,
@@ -70,14 +70,14 @@ ZOMBIE_TYPES = {
 }
 
 # AI가 드롭하는 아이템 풀
-ZOMBIE_LOOT = [
+ENEMY_LOOT = [
     ("천", 0.2), ("고철", 0.15), ("못", 0.1),
     ("식량통조림", 0.05), ("붕대", 0.1), ("탄약", 0.2),
     ("생수", 0.05), ("나이프", 0.05),
 ]
 
 
-class ZombieState:
+class EnemyState:
     IDLE = "idle"
     WANDER = "wander"
     CHASE = "chase"
@@ -92,28 +92,28 @@ class ZombieState:
     FLANK = "flank"
 
 
-class Zombie:
-    """좀비 엔티티"""
+class Enemy:
+    """적 엔티티"""
 
-    def __init__(self, x, y, zombie_type="normal", difficulty_settings=None):
+    def __init__(self, x, y, enemy_type="normal", difficulty_settings=None):
         self.x = float(x)
         self.y = float(y)
-        self.zombie_type = zombie_type
+        self.enemy_type = enemy_type
         self.diff = difficulty_settings or DIFFICULTY_PRESETS["보통"]
 
-        type_data = ZOMBIE_TYPES.get(zombie_type, ZOMBIE_TYPES["normal"])
+        type_data = ENEMY_TYPES.get(enemy_type, ENEMY_TYPES["normal"])
 
-        self.max_hp = type_data["hp"] * self.diff.get("zombie_hp_mult", 1.0)
+        self.max_hp = type_data["hp"] * self.diff.get("enemy_hp_mult", 1.0)
         self.hp = self.max_hp
-        self.damage = type_data["damage"] * self.diff.get("zombie_damage_mult", 1.0)
-        self.speed = type_data["speed"] * self.diff.get("zombie_speed_mult", 1.0)
+        self.damage = type_data["damage"] * self.diff.get("enemy_damage_mult", 1.0)
+        self.speed = type_data["speed"] * self.diff.get("enemy_speed_mult", 1.0)
         self.detection_range = type_data["detection_range"]
         self.attack_range = type_data["attack_range"]
         self.attack_cooldown_time = type_data["attack_cooldown"]
         self.loot_chance = type_data["loot_chance"]
         self.xp = type_data["xp"]
 
-        self.state = ZombieState.PATROL
+        self.state = EnemyState.PATROL
         self.direction = 0
         self.animation_frame = 0
         self.animation_timer = 0
@@ -141,13 +141,13 @@ class Zombie:
         self.active = True
 
         # 진영 (Faction) 시스템
-        if zombie_type in ("tank", "spider"):
+        if enemy_type in ("tank", "spider"):
             self.faction = "pmc"
-        elif zombie_type == "scav":
+        elif enemy_type == "scav":
             self.faction = "scav"
         else:
-            self.faction = "zombie"
-        self.target = None  # 현재 타겟 (Player 또는 다른 Zombie)
+            self.faction = "scav"
+        self.target = None  # 현재 타겟 (Player 또는 다른 Enemy)
         self.can_see_target = False
         self.vision_timer = random.uniform(0.0, 0.2)  # 시야 검사 분산 타이머
         self.vision_interval = random.uniform(0.5, 0.7)  # 개별 시야 갱신 주기
@@ -165,8 +165,8 @@ class Zombie:
 
         # 사망 처리
         if self.hp <= 0:
-            if self.state != ZombieState.DEAD:
-                self.state = ZombieState.DEAD
+            if self.state != EnemyState.DEAD:
+                self.state = EnemyState.DEAD
                 self.death_timer = 1.5
             self.death_timer -= dt
             if self.death_timer <= 0:
@@ -174,14 +174,14 @@ class Zombie:
             return
 
         # 피격 상태 (기존 유지하되, 회복 후 즉시 교전 또는 도망 유도)
-        if self.state == ZombieState.HURT:
+        if self.state == EnemyState.HURT:
             self.hurt_timer -= dt
             if self.hurt_timer <= 0:
                 if self.hp < self.max_hp * 0.4:
-                    self.state = ZombieState.FIND_COVER
+                    self.state = EnemyState.FIND_COVER
                     self.cover_target_x = None
                 else:
-                    self.state = ZombieState.ENGAGE
+                    self.state = EnemyState.ENGAGE
             return
 
         # 쿨다운 감소
@@ -214,7 +214,7 @@ class Zombie:
 
             # 적대 진영 AI 탐색
             if entity_manager:
-                for other in entity_manager.zombies:
+                for other in entity_manager.enemies:
                     if other is self or other.is_dead or not other.active:
                         continue
                     if other.faction == self.faction:
@@ -248,41 +248,41 @@ class Zombie:
             dist = best_dist
 
             # 상태 전이 로직
-            if self.state in (ZombieState.IDLE, ZombieState.WANDER, ZombieState.PATROL):
+            if self.state in (EnemyState.IDLE, EnemyState.WANDER, EnemyState.PATROL):
                 if has_los:
-                    self.state = ZombieState.ENGAGE
+                    self.state = EnemyState.ENGAGE
                 elif self.aggro_alert > 0: # 총성 등의 소음을 감지했을 때 경계
-                    self.state = ZombieState.ALERT
+                    self.state = EnemyState.ALERT
                     self.alert_target_x = target_x
                     self.alert_target_y = target_y
                     self.alert_timer = 6.0
             
-            elif self.state == ZombieState.ALERT:
+            elif self.state == EnemyState.ALERT:
                 if has_los:
-                    self.state = ZombieState.ENGAGE
+                    self.state = EnemyState.ENGAGE
                 else:
                     self.alert_timer -= 0.15
                     if self.alert_timer <= 0:
-                        self.state = ZombieState.PATROL
+                        self.state = EnemyState.PATROL
                         
-            elif self.state == ZombieState.ENGAGE:
+            elif self.state == EnemyState.ENGAGE:
                 if not has_los:
                     # 타겟 시야 상실 시 마지막 위치 경계
-                    self.state = ZombieState.ALERT
+                    self.state = EnemyState.ALERT
                     self.alert_target_x = target_x
                     self.alert_target_y = target_y
                     self.alert_timer = 8.0
                 elif self.hp < self.max_hp * 0.3:
                     # 체력이 낮으면 엄폐
-                    self.state = ZombieState.FIND_COVER
+                    self.state = EnemyState.FIND_COVER
                     self.cover_target_x = None
                 elif random.random() < 0.05:
                     # 간헐적인 우회 공격 시도
-                    self.state = ZombieState.FLANK
+                    self.state = EnemyState.FLANK
                     self.flank_target_x = None
                     self.flank_timer = 5.0
                     
-            elif self.state == ZombieState.FIND_COVER:
+            elif self.state == EnemyState.FIND_COVER:
                 if self.cover_target_x is not None:
                     # 엄폐 타겟 접근 검증
                     if distance(self.x, self.y, self.cover_target_x, self.cover_target_y) < 0.5:
@@ -291,9 +291,9 @@ class Zombie:
                         self.hp = min(self.max_hp, self.hp + 0.3)
                         if self.cover_timer > 3.0:
                             if has_los:
-                                self.state = ZombieState.ENGAGE
+                                self.state = EnemyState.ENGAGE
                             else:
-                                self.state = ZombieState.ALERT
+                                self.state = EnemyState.ALERT
                                 self.alert_target_x = target_x
                                 self.alert_target_y = target_y
                                 self.alert_timer = 5.0
@@ -304,26 +304,26 @@ class Zombie:
                         self.cover_target_y = cy
                         self.cover_timer = 0.0
                     else:
-                        self.state = ZombieState.ENGAGE
+                        self.state = EnemyState.ENGAGE
                         
-            elif self.state == ZombieState.FLANK:
+            elif self.state == EnemyState.FLANK:
                 self.flank_timer -= 0.15
                 if self.flank_timer <= 0:
-                    self.state = ZombieState.ENGAGE
+                    self.state = EnemyState.ENGAGE
                 elif has_los and dist <= self.attack_range:
-                    self.state = ZombieState.ENGAGE
+                    self.state = EnemyState.ENGAGE
                 elif self.flank_target_x is None:
                     fx, fy = self._calculate_flank_pos(target_x, target_y, world)
                     if fx is not None:
                         self.flank_target_x = fx
                         self.flank_target_y = fy
                     else:
-                        self.state = ZombieState.ENGAGE
+                        self.state = EnemyState.ENGAGE
 
 
         # 상태에 따른 최종 목적지 결정
         move_target_x, move_target_y = self.x, self.y
-        if self.state in (ZombieState.IDLE, ZombieState.PATROL, ZombieState.WANDER):
+        if self.state in (EnemyState.IDLE, EnemyState.PATROL, EnemyState.WANDER):
             self.idle_timer -= dt
             if self.idle_timer <= 0:
                 self.idle_timer = random.uniform(3, 7)
@@ -331,10 +331,10 @@ class Zombie:
                 self.wander_target_y = self.y + random.uniform(-4, 4)
             move_target_x, move_target_y = self.wander_target_x, self.wander_target_y
             
-        elif self.state == ZombieState.ALERT:
+        elif self.state == EnemyState.ALERT:
             move_target_x, move_target_y = self.alert_target_x, self.alert_target_y
             
-        elif self.state == ZombieState.ENGAGE:
+        elif self.state == EnemyState.ENGAGE:
             if self.target is not None:
                 if hasattr(self.target, 'x'):
                     move_target_x, move_target_y = self.target.x, self.target.y
@@ -345,13 +345,13 @@ class Zombie:
             else:
                 move_target_x, move_target_y = player_x, player_y
                 
-        elif self.state == ZombieState.FIND_COVER:
+        elif self.state == EnemyState.FIND_COVER:
             if self.cover_target_x is not None:
                 move_target_x, move_target_y = self.cover_target_x, self.cover_target_y
             else:
                 move_target_x, move_target_y = player_x, player_y
                 
-        elif self.state == ZombieState.FLANK:
+        elif self.state == EnemyState.FLANK:
             if self.flank_target_x is not None:
                 move_target_x, move_target_y = self.flank_target_x, self.flank_target_y
             else:
@@ -372,13 +372,13 @@ class Zombie:
         # 이동 처리
         # 상태별 기본 속도 가중치 결정
         speed_mult = 1.0
-        if self.state in (ZombieState.IDLE, ZombieState.PATROL, ZombieState.WANDER):
+        if self.state in (EnemyState.IDLE, EnemyState.PATROL, EnemyState.WANDER):
             speed_mult = 0.5
-        elif self.state == ZombieState.ALERT:
+        elif self.state == EnemyState.ALERT:
             speed_mult = 0.7
-        elif self.state == ZombieState.FIND_COVER:
+        elif self.state == EnemyState.FIND_COVER:
             speed_mult = 1.3
-        elif self.state == ZombieState.FLANK:
+        elif self.state == EnemyState.FLANK:
             speed_mult = 1.1
 
         move_speed = self.speed * speed_mult * dt
@@ -386,7 +386,7 @@ class Zombie:
         # ENGAGE 상태일 때 사격 사거리 안이면 굳이 접근하지 않고 멈춤
         dist_to_dest = distance(self.x, self.y, move_target_x, move_target_y)
         should_move = True
-        if self.state == ZombieState.ENGAGE and dist_to_dest <= self.attack_range * 0.8:
+        if self.state == EnemyState.ENGAGE and dist_to_dest <= self.attack_range * 0.8:
             should_move = False
 
         if should_move:
@@ -409,7 +409,7 @@ class Zombie:
                 self._move_with_collision(dx * move_speed, dy * move_speed, world)
 
         # 방향 업데이트
-        if self.state in (ZombieState.ENGAGE, ZombieState.FLANK, ZombieState.ALERT):
+        if self.state in (EnemyState.ENGAGE, EnemyState.FLANK, EnemyState.ALERT):
             dx = move_target_x - self.x
             dy = move_target_y - self.y
         else:
@@ -422,7 +422,7 @@ class Zombie:
             self.direction = (self.direction + 4) % 8
 
         # 애니메이션
-        if self.state not in (ZombieState.IDLE, ZombieState.DEAD):
+        if self.state not in (EnemyState.IDLE, EnemyState.DEAD):
             self.animation_timer += dt
             if self.animation_timer >= 0.15:
                 self.animation_timer -= 0.15
@@ -484,7 +484,7 @@ class Zombie:
         return None, None
 
     def can_attack(self):
-        return self.state == ZombieState.ENGAGE and self.attack_timer <= 0
+        return self.state == EnemyState.ENGAGE and self.attack_timer <= 0
 
     def do_attack(self):
         self.attack_timer = self.attack_cooldown_time
@@ -492,7 +492,7 @@ class Zombie:
 
     def take_damage(self, amount, knockback_dir=None):
         self.hp -= amount
-        self.state = ZombieState.HURT
+        self.state = EnemyState.HURT
         self.hurt_timer = 0.3
 
         if knockback_dir:
@@ -503,7 +503,7 @@ class Zombie:
         """사망 시 루트"""
         loot = []
         if random.random() < self.loot_chance:
-            for item_name, chance in ZOMBIE_LOOT:
+            for item_name, chance in ENEMY_LOOT:
                 if random.random() < chance:
                     loot.append(item_name)
                     if len(loot) >= 2:
@@ -516,7 +516,7 @@ class Zombie:
 
     def to_dict(self):
         return {
-            "x": self.x, "y": self.y, "type": self.zombie_type,
+            "x": self.x, "y": self.y, "type": self.enemy_type,
             "hp": self.hp, "state": self.state, "active": self.active,
         }
 
@@ -709,12 +709,12 @@ class EntityManager:
     """모든 엔티티 관리"""
 
     def __init__(self, difficulty_settings=None):
-        self.zombies = []
+        self.enemies = []
         self.npcs = []
         self.diff = difficulty_settings or DIFFICULTY_PRESETS["보통"]
         self.spawn_timer = 0
-        self.spawn_interval = 5.0 / max(0.1, self.diff.get("zombie_spawn_rate", 1.0))
-        self.max_zombies = self.diff.get("max_zombies", 20)
+        self.spawn_interval = 5.0 / max(0.1, self.diff.get("enemy_spawn_rate", 1.0))
+        self.max_enemies = self.diff.get("max_enemies", 20)
         self.npc_spawn_timer = 0
         self.despawn_distance = 120  # 플레이어로부터 120타일 초과 시 디스폰
 
@@ -722,24 +722,24 @@ class EntityManager:
         # 거리 기반 엔티티 동면/디스폰
         self._cull_distant_entities(player.x, player.y)
 
-        # 좀비 업데이트 (활성 상태만)
-        for zombie in self.zombies:
-            if zombie.active:
-                zombie.update(dt, player.x, player.y, world, player.is_crouching, self)
+        # 적 업데이트 (활성 상태만)
+        for enemy in self.enemies:
+            if enemy.active:
+                enemy.update(dt, player.x, player.y, world, player.is_crouching, self)
 
-        # 비활성 좀비 제거
-        self.zombies = [z for z in self.zombies if z.active]
+        # 비활성 적 제거
+        self.enemies = [e for e in self.enemies if e.active]
 
         # NPC 업데이트 (활성 상태만)
         for npc in self.npcs:
             if npc.active:
                 npc.update(dt, world, player.x, player.y)
 
-        # 좀비 스폰
+        # 적 스폰
         self.spawn_timer += dt
-        if self.spawn_timer >= self.spawn_interval and len(self.zombies) < self.max_zombies:
+        if self.spawn_timer >= self.spawn_interval and len(self.enemies) < self.max_enemies:
             self.spawn_timer = 0
-            self._spawn_zombies(player, world)
+            self._spawn_enemies(player, world)
 
         # NPC 랜덤 스폰
         self.npc_spawn_timer += dt
@@ -750,11 +750,11 @@ class EntityManager:
 
     def _cull_distant_entities(self, px, py):
         """플레이어에서 먼 엔티티 비활성화 (청크 무한 재생성 방지)"""
-        for zombie in self.zombies:
-            if zombie.active and not zombie.is_dead:
-                d = distance(zombie.x, zombie.y, px, py)
+        for enemy in self.enemies:
+            if enemy.active and not enemy.is_dead:
+                d = distance(enemy.x, enemy.y, px, py)
                 if d > self.despawn_distance:
-                    zombie.active = False
+                    enemy.active = False
 
         for npc in self.npcs:
             if npc.active:
@@ -762,8 +762,8 @@ class EntityManager:
                 if d > self.despawn_distance:
                     npc.active = False
 
-    def _spawn_zombies(self, player, world):
-        """플레이어 주변에 좀비 스폰"""
+    def _spawn_enemies(self, player, world):
+        """플레이어 주변에 적 스폰"""
         player_biome = world.get_biome(int(player.x), int(player.y))
         
         if player_biome in ("도시", "병원구역"):
@@ -784,36 +784,36 @@ class EntityManager:
             if not world.is_walkable(sx, sy):
                 continue
 
-            # 바이옴에 따른 좀비 타입
+            # 바이옴에 따른 적 타입
             biome = world.get_biome(int(sx), int(sy))
             r = random.random()
             if biome in ("군사기지",):
                 if r < 0.002:
-                    ztype = "tank"
+                    etype = "tank"
                 elif r < 0.05:
-                    ztype = "scav"
+                    etype = "scav"
                 else:
-                    ztype = random.choice(["normal", "runner"])
+                    etype = random.choice(["normal", "runner"])
             elif biome in ("병원구역",):
                 if r < 0.002:
-                    ztype = "spider"
+                    etype = "spider"
                 elif r < 0.05:
-                    ztype = "scav"
+                    etype = "scav"
                 else:
-                    ztype = random.choice(["normal", "runner"])
+                    etype = random.choice(["normal", "runner"])
             elif biome in ("산림", "황무지", "호수"):
                 if r < 0.015:
-                    ztype = "scav"
+                    etype = "scav"
                 else:
-                    ztype = random.choice(["normal", "runner"])
+                    etype = random.choice(["normal", "runner"])
             else:
                 if r < 0.03:
-                    ztype = "scav"
+                    etype = "scav"
                 else:
-                    ztype = random.choice(["normal", "normal", "normal", "runner"])
+                    etype = random.choice(["normal", "normal", "normal", "runner"])
 
-            zombie = Zombie(sx, sy, ztype, self.diff)
-            self.zombies.append(zombie)
+            enemy = Enemy(sx, sy, etype, self.diff)
+            self.enemies.append(enemy)
 
     def _spawn_npc(self, player, world):
         """NPC 스폰"""
@@ -839,19 +839,19 @@ class EntityManager:
             npc = NPC(sx, sy, npc_type)
             self.npcs.append(npc)
 
-    def get_nearby_zombies(self, x, y, radius):
-        return [z for z in self.zombies if distance(z.x, z.y, x, y) <= radius and not z.is_dead]
+    def get_nearby_enemies(self, x, y, radius):
+        return [e for e in self.enemies if distance(e.x, e.y, x, y) <= radius and not e.is_dead]
 
     def get_nearby_npcs(self, x, y, radius):
         return [n for n in self.npcs if n.is_near(x, y, radius) and n.active]
 
-    def remove_dead_zombies(self, world):
-        """사망 좀비에서 루트 드롭"""
+    def remove_dead_enemies(self, world):
+        """사망 적에서 루트 드롭"""
         drops = []
-        for z in self.zombies:
-            if z.is_dead and z.active:
-                loot = z.get_loot()
+        for e in self.enemies:
+            if e.is_dead and e.active:
+                loot = e.get_loot()
                 for item in loot:
-                    world.drop_item(item, z.x, z.y)
-                    drops.append((item, z.x, z.y))
+                    world.drop_item(item, e.x, e.y)
+                    drops.append((item, e.x, e.y))
         return drops

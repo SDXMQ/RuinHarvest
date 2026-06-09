@@ -136,7 +136,7 @@ class CharacterRenderer:
     @classmethod
     def clear_cache(cls):
         cls.get_player_sprite.cache_clear()
-        cls.get_zombie_sprite.cache_clear()
+        cls.get_enemy_sprite.cache_clear()
         cls.get_npc_sprite.cache_clear()
 
     @classmethod
@@ -211,37 +211,37 @@ class CharacterRenderer:
 
     @classmethod
     @functools.lru_cache(maxsize=512)
-    def get_zombie_sprite(cls, zombie_type="normal", direction=0, frame=0):
-        return cls._render_zombie(zombie_type, direction, frame % 16)
+    def get_enemy_sprite(cls, enemy_type="normal", direction=0, frame=0):
+        return cls._render_enemy(enemy_type, direction, frame % 16)
 
     @classmethod
-    def _render_zombie(cls, zombie_type, direction, frame):
+    def _render_enemy(cls, enemy_type, direction, frame):
         size = TILE_SIZE
-        if zombie_type == "tank":
+        if enemy_type == "tank":
             size = int(TILE_SIZE * 1.5)
         s = create_surface(size, size)
 
         cx, cy = size // 2, size // 2
         walk_offset = math.sin(frame * 0.25) * 2
-        stumble = math.sin(frame * 0.15) * 1.5  # 좀비 비틀거림
+        stumble = math.sin(frame * 0.15) * 1.5  # 적 비틀거림
 
-        skin = Colors.ZOMBIE_SKIN if zombie_type != "runner" else Colors.ZOMBIE_SKIN_DARK
-        clothes = Colors.ZOMBIE_CLOTHES
+        skin = Colors.ENEMY_SKIN if enemy_type != "runner" else Colors.ENEMY_SKIN_DARK
+        clothes = Colors.ENEMY_CLOTHES
 
-        if zombie_type == "tank":
-            # 탱크 좀비 (큰 체구)
+        if enemy_type == "tank":
+            # 정예 PMC (큰 체구)
             pygame.draw.rect(s, clothes, (cx - 8, cy - 5 + stumble, 16, 14), border_radius=3)
             pygame.draw.circle(s, skin, (cx + int(stumble), int(cy - 10)), 7)
             # 피
-            pygame.draw.circle(s, Colors.ZOMBIE_BLOOD, (cx + 3, int(cy - 8)), 2)
+            pygame.draw.circle(s, Colors.ENEMY_BLOOD, (cx + 3, int(cy - 8)), 2)
             # 팔 (굵은)
             pygame.draw.line(s, skin, (cx - 9, int(cy + stumble)), (cx - 14, int(cy + 5)), 3)
             pygame.draw.line(s, skin, (cx + 9, int(cy + stumble)), (cx + 14, int(cy + 5)), 3)
             # 다리
             pygame.draw.line(s, clothes, (cx - 4, cy + 9), (cx - 5, cy + 15 + int(walk_offset)), 3)
             pygame.draw.line(s, clothes, (cx + 4, cy + 9), (cx + 5, cy + 15 - int(walk_offset)), 3)
-        elif zombie_type == "runner":
-            # 러너 좀비 (날씬, 빠름)
+        elif enemy_type == "runner":
+            # 러너 스캐브 (날씬, 빠름)
             pygame.draw.rect(s, clothes, (cx - 4, cy - 3 + stumble, 8, 9), border_radius=1)
             pygame.draw.circle(s, skin, (cx, int(cy - 7 + stumble * 0.5)), 4)
             # 앞으로 기울어진 포즈
@@ -253,8 +253,8 @@ class CharacterRenderer:
             # 빨간 눈
             pygame.draw.circle(s, (255, 30, 30), (cx - 2, int(cy - 7)), 1)
             pygame.draw.circle(s, (255, 30, 30), (cx + 2, int(cy - 7)), 1)
-        elif zombie_type == "spider":
-            # 스파이더 좀비 (네 발로 기어다님)
+        elif enemy_type == "spider":
+            # 스나이퍼 PMC (네 발로 기어다님)
             pygame.draw.ellipse(s, skin, (cx - 6, cy - 3, 12, 8))
             pygame.draw.circle(s, skin, (cx, cy - 5), 4)
             pygame.draw.circle(s, (255, 50, 50), (cx - 2, cy - 5), 1)
@@ -271,7 +271,7 @@ class CharacterRenderer:
                 ly2 = cy + int(math.sin(rad2) * 6 - anim)
                 pygame.draw.line(s, skin, (cx + int(math.cos(rad2) * 5), cy), (lx2, ly2), 1)
         else:
-            # 일반 좀비
+            # 일반 스캐브
             pygame.draw.rect(s, clothes, (cx - 5, cy - 2 + stumble, 10, 10), border_radius=1)
             pygame.draw.circle(s, skin, (cx + int(stumble * 0.5), int(cy - 6 + stumble * 0.3)), 5)
             # 찢어진 옷 디테일
@@ -283,7 +283,7 @@ class CharacterRenderer:
             pygame.draw.line(s, clothes, (cx - 3, cy + 8), (cx - 4, cy + 13 + int(walk_offset)), 2)
             pygame.draw.line(s, clothes, (cx + 3, cy + 8), (cx + 3, cy + 13 - int(walk_offset)), 2)
             # 약간의 피
-            pygame.draw.circle(s, Colors.ZOMBIE_BLOOD, (cx + 2, int(cy - 4)), 1)
+            pygame.draw.circle(s, Colors.ENEMY_BLOOD, (cx + 2, int(cy - 4)), 1)
             # 눈
             pygame.draw.circle(s, (200, 200, 50), (cx - 2, int(cy - 6)), 1)
             pygame.draw.circle(s, (200, 200, 50), (cx + 2, int(cy - 6)), 1)

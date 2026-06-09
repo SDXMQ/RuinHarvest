@@ -87,10 +87,10 @@ class Colors:
     PLAYER_PANTS = (50, 55, 65)
     PLAYER_HAIR = (60, 40, 25)
 
-    ZOMBIE_SKIN = (120, 155, 100)
-    ZOMBIE_SKIN_DARK = (90, 120, 75)
-    ZOMBIE_CLOTHES = (80, 70, 65)
-    ZOMBIE_BLOOD = (150, 30, 30)
+    ENEMY_SKIN = (120, 155, 100)
+    ENEMY_SKIN_DARK = (90, 120, 75)
+    ENEMY_CLOTHES = (80, 70, 65)
+    ENEMY_BLOOD = (150, 30, 30)
 
     NPC_MERCHANT_CLOAK = (100, 75, 55)
     NPC_SURVIVOR_SHIRT = (70, 80, 120)
@@ -128,8 +128,8 @@ class Colors:
 DIFFICULTY_PRESETS = {
     "평화로움": {
         "id": "peaceful",
-        "description": "좀비가 거의 출현하지 않고 자원이 풍부합니다. 탐험과 건설에 집중할 수 있습니다.",
-        "zombie_spawn_rate": 0.1,
+        "description": "적대 세력이 거의 출현하지 않고 자원이 풍부합니다. 탐험과 건설에 집중할 수 있습니다.",
+        "enemy_spawn_rate": 0.1,
         "resource_multiplier": 3.0,
         "damage_multiplier": 0.3,
         "hunger_rate": 0.5,
@@ -137,16 +137,16 @@ DIFFICULTY_PRESETS = {
         "stress_rate": 0.3,
         "night_danger": 0.2,
         "loot_quality": 1.5,
-        "zombie_hp_mult": 0.5,
-        "zombie_damage_mult": 0.3,
-        "zombie_speed_mult": 0.7,
-        "max_zombies": 5,
+        "enemy_hp_mult": 0.5,
+        "enemy_damage_mult": 0.3,
+        "enemy_speed_mult": 0.7,
+        "max_enemies": 5,
         "raid_chance": 0.02,
     },
     "쉬움": {
         "id": "easy",
-        "description": "좀비 수가 적고 자원이 넉넉합니다. 서바이벌 입문자에게 적합합니다.",
-        "zombie_spawn_rate": 0.3,
+        "description": "적대 세력의 수가 적고 자원이 넉넉합니다. 서바이벌 입문자에게 적합합니다.",
+        "enemy_spawn_rate": 0.3,
         "resource_multiplier": 2.0,
         "damage_multiplier": 0.6,
         "hunger_rate": 0.7,
@@ -154,16 +154,16 @@ DIFFICULTY_PRESETS = {
         "stress_rate": 0.5,
         "night_danger": 0.5,
         "loot_quality": 1.3,
-        "zombie_hp_mult": 0.7,
-        "zombie_damage_mult": 0.6,
-        "zombie_speed_mult": 0.85,
-        "max_zombies": 10,
+        "enemy_hp_mult": 0.7,
+        "enemy_damage_mult": 0.6,
+        "enemy_speed_mult": 0.85,
+        "max_enemies": 10,
         "raid_chance": 0.05,
     },
     "보통": {
         "id": "normal",
         "description": "균형 잡힌 난이도. 전략적 플레이가 필요합니다.",
-        "zombie_spawn_rate": 0.6,
+        "enemy_spawn_rate": 0.6,
         "resource_multiplier": 1.0,
         "damage_multiplier": 1.0,
         "hunger_rate": 1.0,
@@ -171,16 +171,16 @@ DIFFICULTY_PRESETS = {
         "stress_rate": 1.0,
         "night_danger": 1.0,
         "loot_quality": 1.0,
-        "zombie_hp_mult": 1.0,
-        "zombie_damage_mult": 1.0,
-        "zombie_speed_mult": 1.0,
-        "max_zombies": 20,
+        "enemy_hp_mult": 1.0,
+        "enemy_damage_mult": 1.0,
+        "enemy_speed_mult": 1.0,
+        "max_enemies": 20,
         "raid_chance": 0.1,
     },
     "어려움": {
         "id": "hard",
-        "description": "좀비가 강하고 자원이 부족합니다. 숙련된 생존자만 도전하세요.",
-        "zombie_spawn_rate": 0.85,
+        "description": "적대 세력이 강하고 자원이 부족합니다. 숙련된 생존자만 도전하세요.",
+        "enemy_spawn_rate": 0.85,
         "resource_multiplier": 0.6,
         "damage_multiplier": 1.5,
         "hunger_rate": 1.3,
@@ -188,16 +188,16 @@ DIFFICULTY_PRESETS = {
         "stress_rate": 1.3,
         "night_danger": 1.5,
         "loot_quality": 0.7,
-        "zombie_hp_mult": 1.5,
-        "zombie_damage_mult": 1.5,
-        "zombie_speed_mult": 1.15,
-        "max_zombies": 30,
+        "enemy_hp_mult": 1.5,
+        "enemy_damage_mult": 1.5,
+        "enemy_speed_mult": 1.15,
+        "max_enemies": 30,
         "raid_chance": 0.18,
     },
     "하드코어": {
         "id": "hardcore",
-        "description": "자원 극도로 부족. 좀비가 매우 빠르고 강합니다. 사망 시 세이브 삭제.",
-        "zombie_spawn_rate": 1.0,
+        "description": "자원 극도로 부족. 적대 세력이 매우 빠르고 강합니다. 사망 시 세이브 삭제.",
+        "enemy_spawn_rate": 1.0,
         "resource_multiplier": 0.35,
         "damage_multiplier": 2.0,
         "hunger_rate": 1.6,
@@ -205,17 +205,17 @@ DIFFICULTY_PRESETS = {
         "stress_rate": 1.6,
         "night_danger": 2.0,
         "loot_quality": 0.5,
-        "zombie_hp_mult": 2.0,
-        "zombie_damage_mult": 2.0,
-        "zombie_speed_mult": 1.3,
-        "max_zombies": 40,
+        "enemy_hp_mult": 2.0,
+        "enemy_damage_mult": 2.0,
+        "enemy_speed_mult": 1.3,
+        "max_enemies": 40,
         "raid_chance": 0.25,
         "permadeath": True,
     },
     "챌린지": {
         "id": "challenge",
         "description": "극한의 도전. 모든 것이 당신을 죽이려 합니다. 진정한 서바이버만.",
-        "zombie_spawn_rate": 1.2,
+        "enemy_spawn_rate": 1.2,
         "resource_multiplier": 0.2,
         "damage_multiplier": 3.0,
         "hunger_rate": 2.0,
@@ -223,10 +223,10 @@ DIFFICULTY_PRESETS = {
         "stress_rate": 2.0,
         "night_danger": 3.0,
         "loot_quality": 0.3,
-        "zombie_hp_mult": 3.0,
-        "zombie_damage_mult": 2.5,
-        "zombie_speed_mult": 1.5,
-        "max_zombies": 60,
+        "enemy_hp_mult": 3.0,
+        "enemy_damage_mult": 2.5,
+        "enemy_speed_mult": 1.5,
+        "max_enemies": 60,
         "raid_chance": 0.35,
         "permadeath": True,
     },
@@ -242,7 +242,7 @@ DEFAULT_WORLD_SETTINGS = {
     "resource_density": 1.0,  # 0.2 ~ 3.0
     "weather_variability": 1.0,  # 0.0 ~ 2.0
     "world_name": "월드 1",
-    "zombie_activity": 1.0,  # 0.0 ~ 2.0
+    "enemy_activity": 1.0,  # 0.0 ~ 2.0
     "building_density": 1.0,  # 0.5 ~ 2.0
     "starting_items": True,
     "enable_events": True,
@@ -289,7 +289,7 @@ BIOMES = {
         "base_tile": "concrete",
         "building_chance": 0.7,
         "tree_chance": 0.01,
-        "zombie_density": 1.5,
+        "enemy_density": 1.5,
         "loot_modifier": 1.2,
         "road_interval": 8,
         "colors": {
@@ -302,7 +302,7 @@ BIOMES = {
         "base_tile": "grass",
         "building_chance": 0.5,
         "tree_chance": 0.08,
-        "zombie_density": 1.0,
+        "enemy_density": 1.0,
         "loot_modifier": 1.0,
         "road_interval": 12,
         "colors": {
@@ -315,7 +315,7 @@ BIOMES = {
         "base_tile": "grass",
         "building_chance": 0.01,
         "tree_chance": 0.35,
-        "zombie_density": 0.5,
+        "enemy_density": 0.5,
         "loot_modifier": 0.5,
         "road_interval": 0,
         "colors": {
@@ -328,7 +328,7 @@ BIOMES = {
         "base_tile": "concrete",
         "building_chance": 0.4,
         "tree_chance": 0.02,
-        "zombie_density": 1.8,
+        "enemy_density": 1.8,
         "loot_modifier": 1.5,
         "road_interval": 10,
         "colors": {
@@ -341,7 +341,7 @@ BIOMES = {
         "base_tile": "concrete",
         "building_chance": 0.5,
         "tree_chance": 0.01,
-        "zombie_density": 2.0,
+        "enemy_density": 2.0,
         "loot_modifier": 2.0,
         "road_interval": 10,
         "colors": {
@@ -354,7 +354,7 @@ BIOMES = {
         "base_tile": "water",
         "building_chance": 0.0,
         "tree_chance": 0.0,
-        "zombie_density": 0.0,
+        "enemy_density": 0.0,
         "loot_modifier": 0.0,
         "colors": {
             "ground": Colors.WATER_1,
@@ -366,7 +366,7 @@ BIOMES = {
         "base_tile": "dirt",
         "building_chance": 0.02,
         "tree_chance": 0.01,
-        "zombie_density": 0.8,
+        "enemy_density": 0.8,
         "loot_modifier": 0.4,
         "road_interval": 0,
         "colors": {
@@ -379,7 +379,7 @@ BIOMES = {
         "base_tile": "concrete",
         "building_chance": 0.8,
         "tree_chance": 0.0,
-        "zombie_density": 2.0,
+        "enemy_density": 2.0,
         "loot_modifier": 1.5,
         "road_interval": 8,
         "colors": {
@@ -392,7 +392,7 @@ BIOMES = {
         "base_tile": "dirt",
         "building_chance": 0.1,
         "tree_chance": 0.02,
-        "zombie_density": 0.5,
+        "enemy_density": 0.5,
         "loot_modifier": 0.8,
         "road_interval": 0,
         "colors": {

@@ -151,47 +151,47 @@ BUILDING_LAYOUTS = {
     "house": {
         "rooms": ["주방", "거실", "침실"],
         "optional_rooms": ["욕실", "침실"],
-        "default_zombie_chance": 0.2,
+        "default_enemy_chance": 0.2,
     },
     "store": {
         "rooms": ["상점홀"],
         "optional_rooms": ["창고", "사무실"],
-        "default_zombie_chance": 0.3,
+        "default_enemy_chance": 0.3,
     },
     "hospital": {
         "rooms": ["진료실", "병실"],
         "optional_rooms": ["진료실", "창고"],
-        "default_zombie_chance": 0.5,
+        "default_enemy_chance": 0.5,
     },
     "police": {
         "rooms": ["사무실", "무기고"],
         "optional_rooms": ["사무실", "창고"],
-        "default_zombie_chance": 0.4,
+        "default_enemy_chance": 0.4,
     },
     "military": {
         "rooms": ["무기고", "통신실"],
         "optional_rooms": ["창고", "사무실"],
-        "default_zombie_chance": 0.6,
+        "default_enemy_chance": 0.6,
     },
     "school": {
         "rooms": ["교실", "교실"],
         "optional_rooms": ["사무실", "창고", "교실"],
-        "default_zombie_chance": 0.4,
+        "default_enemy_chance": 0.4,
     },
     "factory": {
         "rooms": ["기계실", "창고"],
         "optional_rooms": ["기계실", "사무실"],
-        "default_zombie_chance": 0.5,
+        "default_enemy_chance": 0.5,
     },
     "warehouse": {
         "rooms": ["창고", "창고"],
         "optional_rooms": ["사무실", "창고"],
-        "default_zombie_chance": 0.4,
+        "default_enemy_chance": 0.4,
     },
     "barn": {
         "rooms": ["창고"],
         "optional_rooms": ["창고"],
-        "default_zombie_chance": 0.2,
+        "default_enemy_chance": 0.2,
     },
 }
 
@@ -279,7 +279,7 @@ class BuildingInterior:
         self.rooms = []
         self.furniture = []
         self.tiles = []    # 2D 타일맵 (벽/바닥/문/window)
-        self.zombies = []  # 내부 좀비 위치
+        self.enemies = []  # 내부 적 위치
         self.items_on_ground = []  # 내부 바닥 아이템 [(item_name, x, y)]
         self.door_pos = (self.width // 2, self.height - 1)  # 출입구
         self.windows = []  # 창문 리스트: [{"x", "y", "dir_x", "dir_y"}]
@@ -398,14 +398,14 @@ class BuildingInterior:
                 self.tiles[wy][wx] = "window"
                 self.windows.append({"x": wx, "y": wy, "dir_x": dx, "dir_y": dy})
 
-        # 은신형 좀비 스폰
-        zombie_chance = layout.get("default_zombie_chance", 0.2)
+        # 은신형 적 스폰
+        enemy_chance = layout.get("default_enemy_chance", 0.2)
         for _ in range(rng.randint(0, 3)):
-            if rng.random() < zombie_chance:
+            if rng.random() < enemy_chance:
                 zx = rng.randint(2, self.width - 3)
                 zy = rng.randint(2, self.height - 3)
                 if self.tiles[zy][zx] == "floor":
-                    self.zombies.append({"x": zx, "y": zy, "type": "stealth"})
+                    self.enemies.append({"x": zx, "y": zy, "type": "stealth"})
 
     def get_tile(self, x, y):
         if 0 <= x < self.width and 0 <= y < self.height:
@@ -499,7 +499,7 @@ class BuildingInterior:
             "max_floors": self.max_floors,
             "furniture": [f.to_dict() for f in self.furniture],
             "items_on_ground": list(self.items_on_ground),
-            "zombies": getattr(self, 'zombies', []),
+            "enemies": getattr(self, 'enemies', []),
             "windows": getattr(self, 'windows', []),
         }
 
@@ -515,8 +515,8 @@ class BuildingInterior:
                     break
         # 바닥 아이템 복원
         interior.items_on_ground = [tuple(item) for item in data.get("items_on_ground", [])]
-        # 좀비 상태 복원
-        interior.zombies = data.get("zombies", [])
+        # 적 상태 복원
+        interior.enemies = data.get("enemies", [])
         # 창문 복원
         interior.windows = data.get("windows", getattr(interior, 'windows', []))
         return interior

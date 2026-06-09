@@ -9,7 +9,7 @@ from settings import (Colors, CHUNK_SIZE, DIFFICULTY_PRESETS, DEFAULT_WORLD_SETT
 from camera import Camera
 from world import World, WorldObject, Building
 from player import Player
-from entities import EntityManager, Zombie, NPC
+from entities import EntityManager, Enemy, NPC
 from combat import CombatSystem
 from weather import TimeSystem, WeatherSystem
 from particles import ParticleSystem
@@ -190,21 +190,21 @@ class GameSaveManager:
                 delta_copy["cy"] = cy
                 world_deltas.append(delta_copy)
 
-        # 2. 엔티티 데이터 추출 (야외 및 건물 내부 좀비/NPC)
-        zombies_data = []
+        # 2. 엔티티 데이터 추출 (야외 및 건물 내부 적/NPC)
+        enemies_data = []
         npcs_data = []
         if game.entity_manager:
-            for z in game.entity_manager.zombies:
-                zombies_data.append(z.to_dict())
+            for e in game.entity_manager.enemies:
+                enemies_data.append(e.to_dict())
             for n in game.entity_manager.npcs:
                 npcs_data.append(n.to_dict())
 
-        # 건물 내부 좀비 저장
-        if hasattr(game, 'interior_zombies') and game.interior_zombies:
-            for z in game.interior_zombies:
-                z_dict = z.to_dict()
-                z_dict["is_interior"] = True
-                zombies_data.append(z_dict)
+        # 건물 내부 적 저장
+        if hasattr(game, 'interior_enemies') and game.interior_enemies:
+            for e in game.interior_enemies:
+                e_dict = e.to_dict()
+                e_dict["is_interior"] = True
+                enemies_data.append(e_dict)
 
         # 3. 건물 내부 델타 추출
         interior_deltas = {}
@@ -230,7 +230,7 @@ class GameSaveManager:
             "world_name": game.world_settings.get("world_name", "월드 1"),
             "difficulty": game.world_settings.get("difficulty", "보통"),
             "world_deltas": world_deltas,
-            "entities": {"zombies": zombies_data, "npcs": npcs_data},
+            "entities": {"enemies": enemies_data, "npcs": npcs_data},
             "interior_deltas": interior_deltas,
         }
 
@@ -300,16 +300,16 @@ class GameSaveManager:
 
         # 엔티티 복구
         entities_data = data.get("entities", {})
-        game.entity_manager.zombies = []
-        game.interior_zombies = []
-        loaded_interior_zombie_count = 0
-        for zdict in entities_data.get("zombies", []):
-            z = Zombie.from_dict(zdict)
-            if zdict.get("is_interior", False):
-                game.interior_zombies.append(z)
-                loaded_interior_zombie_count += 1
+        game.entity_manager.enemies = []
+        game.interior_enemies = []
+        loaded_interior_enemy_count = 0
+        for edict in entities_data.get("enemies", []):
+            e = Enemy.from_dict(edict)
+            if edict.get("is_interior", False):
+                game.interior_enemies.append(e)
+                loaded_interior_enemy_count += 1
             else:
-                game.entity_manager.zombies.append(z)
+                game.entity_manager.enemies.append(e)
             
         game.entity_manager.npcs = []
         for ndict in entities_data.get("npcs", []):
@@ -355,16 +355,16 @@ class GameSaveManager:
                     )
                     game.explored_interiors[bid] = game.current_interior
                 
-                if loaded_interior_zombie_count == 0 and not game.interior_zombies:
-                    game.interior_zombies = []
-                    for zdata in game.current_interior.zombies:
-                        z_type = zdata.get("type", "normal")
-                        z = Zombie(zdata["x"], zdata["y"], z_type, game.difficulty)
-                        z.speed *= 0.5
-                        z.detection_range = 3
-                        if "hp" in zdata:
-                            z.hp = zdata["hp"]
-                        game.interior_zombies.append(z)
+                if loaded_interior_enemy_count == 0 and not game.interior_enemies:
+                    game.interior_enemies = []
+                    for edata in game.current_interior.enemies:
+                        e_type = edata.get("type", "normal")
+                        e = Enemy(edata["x"], edata["y"], e_type, game.difficulty)
+                        e.speed *= 0.5
+                        e.detection_range = 3
+                        if "hp" in edata:
+                            e.hp = edata["hp"]
+                        game.interior_enemies.append(e)
                     
                 game.interior_camera = Camera()
                 game.interior_camera.resize(game.screen_w, game.screen_h)

@@ -122,7 +122,7 @@ class WorldCreationUI:
             "day_length_minutes": {"label_key": "day_length", "min": 5, "max": 30, "step": 1},
             "resource_density": {"label_key": "resource_density", "min": 0.2, "max": 3.0, "step": 0.1},
             "weather_variability": {"label_key": "weather_variability", "min": 0.0, "max": 2.0, "step": 0.1},
-            "zombie_activity": {"label_key": "zombie_activity", "min": 0.0, "max": 2.0, "step": 0.1},
+            "enemy_activity": {"label_key": "enemy_activity", "min": 0.0, "max": 2.0, "step": 0.1},
             "building_density": {"label_key": "building_density", "min": 0.5, "max": 2.0, "step": 0.1},
             "total_days": {"label_key": "survival_days", "min": 10, "max": 100, "step": 5},
         }
@@ -555,7 +555,7 @@ class EndingUI:
         loot_sum = sum(item[1] for item in player.inventory.items)
         
         self.player_stats = {
-            "kills": player.killed_zombies,
+            "kills": player.killed_enemies,
             "crafted": player.items_crafted,
             "explored": player.buildings_explored,
             "hp": int(player.hp),
