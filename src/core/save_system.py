@@ -33,6 +33,11 @@ def get_save_files():
             try:
                 with open(path, 'r', encoding='utf-8') as fp:
                     data = json.load(fp)
+                # player.rubles에서 자금 추출
+                rubles = 0
+                player_data = data.get("player", {})
+                if isinstance(player_data, dict):
+                    rubles = player_data.get("rubles", 0)
                 saves.append({
                     "filename": f,
                     "path": path,
@@ -40,7 +45,9 @@ def get_save_files():
                     "day": data.get("current_day", 0),
                     "difficulty": data.get("difficulty", "보통"),
                     "save_time": data.get("save_time", ""),
+                    "created_at": data.get("created_at", ""),
                     "playtime": data.get("playtime", 0),
+                    "funds": rubles,
                 })
             except Exception:
                 continue
@@ -56,6 +63,19 @@ def save_game(game_state, slot_name="autosave"):
     tmp_path = path + ".tmp"
 
     game_state["save_time"] = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    # created_at은 최초 저장 시에만 기록
+    if not game_state.get("created_at"):
+        # 기존 파일에서 created_at 유지 시도
+        if os.path.exists(path):
+            try:
+                with open(path, 'r', encoding='utf-8') as f:
+                    old = json.load(f)
+                game_state["created_at"] = old.get("created_at", game_state["save_time"])
+            except Exception:
+                game_state["created_at"] = game_state["save_time"]
+        else:
+            game_state["created_at"] = game_state["save_time"]
 
     try:
         # 1. 임시 파일에 쓰기
@@ -105,6 +125,43 @@ def delete_save(slot_name):
     except Exception:
         pass
     return False
+
+
+def rename_save(old_slot_name, new_name):
+    """세이브 파일 이름 변경 (파일명 + 내부 world_name)"""
+    ensure_save_dir()
+    old_filename = f"{old_slot_name}.json"
+    old_path = os.path.join(SAVE_DIR, old_filename)
+    if not os.path.exists(old_path):
+        return False
+
+    new_slot_name = new_name.replace(" ", "_")
+    new_filename = f"{new_slot_name}.json"
+    new_path = os.path.join(SAVE_DIR, new_filename)
+
+    # 같은 이름이면 내부 world_name만 갱신
+    try:
+        with open(old_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        data["world_name"] = new_name
+        if "world_settings" in data and isinstance(data["world_settings"], dict):
+            data["world_settings"]["world_name"] = new_name
+
+        if old_path == new_path:
+            with open(old_path, 'w', encoding='utf-8') as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            return True
+
+        # 대상 파일이 이미 존재하면 실패
+        if os.path.exists(new_path):
+            return False
+
+        with open(new_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.remove(old_path)
+        return True
+    except Exception:
+        return False
 
 
 class GameSaveManager:
@@ -245,10 +302,12 @@ class GameSaveManager:
         entities_data = data.get("entities", {})
         game.entity_manager.zombies = []
         game.interior_zombies = []
+        loaded_interior_zombie_count = 0
         for zdict in entities_data.get("zombies", []):
             z = Zombie.from_dict(zdict)
             if zdict.get("is_interior", False):
                 game.interior_zombies.append(z)
+                loaded_interior_zombie_count += 1
             else:
                 game.entity_manager.zombies.append(z)
             
@@ -296,7 +355,7 @@ class GameSaveManager:
                     )
                     game.explored_interiors[bid] = game.current_interior
                 
-                if not game.interior_zombies:
+                if loaded_interior_zombie_count == 0 and not game.interior_zombies:
                     game.interior_zombies = []
                     for zdata in game.current_interior.zombies:
                         z_type = zdata.get("type", "normal")

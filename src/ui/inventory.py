@@ -96,7 +96,7 @@ class InventoryUI:
                             break
                     if found_idx != -1:
                         item_name = player.inventory.items[found_idx][0]
-                        return ("drop_item", item_name)
+                        return ("drop_item", (item_name, inv_slot))
 
         elif event.type == pygame.MOUSEMOTION:
             mx, my = event.pos
@@ -116,7 +116,7 @@ class InventoryUI:
                 if self.drag_source_type == 'inventory':
                     # 인벤토리 -> 장비창으로 드롭 (장착)
                     if eq_slot is not None:
-                        result = ("equip", self.drag_item_name)
+                        result = ("equip", (self.drag_item_name, self.drag_source_index))
                     # 인벤토리 내 슬롯 교환 (Swap)
                     elif inv_slot is not None and inv_slot != self.drag_source_index:
                         src_item = None
@@ -136,7 +136,7 @@ class InventoryUI:
                                 src_item[2]["slot_idx"] = inv_slot
                     # 드래그를 거의 안했으면 (클릭으로 간주) -> 아이템 사용
                     elif math.hypot(mx - self.drag_mouse_pos[0], my - self.drag_mouse_pos[1]) < 10 and inv_slot == self.drag_source_index:
-                        result = ("use", self.drag_item_name)
+                        result = ("use", (self.drag_item_name, self.drag_source_index))
                         
                 elif self.drag_source_type == 'equip':
                     # 장비창 -> 인벤토리(또는 빈 공간)로 드롭 (해제)

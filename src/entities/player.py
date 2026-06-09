@@ -492,10 +492,25 @@ class Player:
         """체력 회복"""
         self.hp = min(self.max_hp, self.hp + amount)
 
-    def use_item(self, item_name):
+    def use_item(self, item_name, slot_idx=None):
         """아이템 사용"""
-        if not self.inventory.has_item(item_name):
+        found_idx = -1
+        if slot_idx is not None:
+            for idx, it in enumerate(self.inventory.items):
+                if len(it) > 2 and it[2].get("slot_idx") == slot_idx:
+                    found_idx = idx
+                    break
+        else:
+            for idx, it in enumerate(self.inventory.items):
+                if it[0] == item_name:
+                    found_idx = idx
+                    break
+
+        if found_idx == -1:
             return False
+
+        item_tup = self.inventory.items[found_idx]
+        meta = item_tup[2] if len(item_tup) > 2 else {}
 
         data = ITEM_DATABASE.get(item_name, {})
         effects = data.get("effects", {})
@@ -506,38 +521,27 @@ class Player:
 
         # 장거리 무전기 특수 처리
         if item_name == "장거리 무전기":
-            # 인벤토리에서 아이템 찾기 (내구도 확인용)
-            item_idx = -1
-            meta = {}
-            for i, it in enumerate(self.inventory.items):
-                if it[0] == item_name:
-                    item_idx = i
-                    meta = it[2] if len(it) > 2 else {}
-                    break
+            durability = meta.get("durability", 100.0)
+            durability -= 10.0 # 10% 소모 (10회 사용)
             
-            if item_idx != -1:
-                durability = meta.get("durability", 100.0)
-                durability -= 10.0 # 10% 소모 (10회 사용)
-                
-                if durability <= 0:
-                    self.inventory.remove_item(item_name, 1)
-                else:
-                    meta["durability"] = durability
-                    it = self.inventory.items[item_idx]
-                    self.inventory.items[item_idx] = (it[0], it[1], meta)
-                
-                # UI 오픈을 위한 특수 반환값
-                return "radio_scan"
+            if durability <= 0:
+                self.inventory.items.pop(found_idx)
+            else:
+                meta["durability"] = durability
+                self.inventory.items[found_idx] = (item_tup[0], item_tup[1], meta)
+            
+            # UI 오픈을 위한 특수 반환값
+            return "radio_scan"
 
         # 수류탄 사용 시 특수 값 리턴
         if item_name == "수류탄":
-            self.inventory.remove_item(item_name, 1)
+            self.inventory.items.pop(found_idx)
             return "grenade"
 
         # 조명탄 사용 시 특수 값 리턴
         if item_name == "조명탄":
             self.flare_timer = 45.0
-            self.inventory.remove_item(item_name, 1)
+            self.inventory.items.pop(found_idx)
             return "flare"
 
         # 효과 적용
@@ -567,10 +571,15 @@ class Player:
         elif item_name == "진통제":
             self.broken_bone = False
 
-        self.inventory.remove_item(item_name, 1)
+        # 아이템 수량 차감
+        cnt = item_tup[1]
+        if cnt <= 1:
+            self.inventory.items.pop(found_idx)
+        else:
+            self.inventory.items[found_idx] = (item_tup[0], cnt - 1, meta)
         return True
 
-    def equip_item(self, item_name, world=None):
+    def equip_item(self, item_name, world=None, slot_idx=None, source_inventory=None):
         """장비 착용"""
         import copy
         data = ITEM_DATABASE.get(item_name)
@@ -583,16 +592,29 @@ class Player:
 
         if not slot:
             return False
-            
-        if not self.inventory.has_item(item_name):
+
+        # 소스 인벤토리 결정 (기본값은 플레이어의 inventory)
+        src_inv = source_inventory if source_inventory is not None else self.inventory
+
+        # 해당 아이템이 소스 인벤토리에 존재하는지 확인
+        found_idx = -1
+        if slot_idx is not None:
+            for idx, it in enumerate(src_inv.items):
+                if len(it) > 2 and it[2].get("slot_idx") == slot_idx:
+                    found_idx = idx
+                    break
+        else:
+            for idx, it in enumerate(src_inv.items):
+                if it[0] == item_name:
+                    found_idx = idx
+                    break
+
+        if found_idx == -1:
             return False
 
-        # 인벤토리에서 아이템 메타데이터 백업
-        item_meta = {}
-        for it in self.inventory.items:
-            if it[0] == item_name:
-                item_meta = copy.deepcopy(it[2]) if len(it) > 2 else {}
-                break
+        # 아이템 정보 획득 및 메타데이터 백업
+        item_tup = src_inv.items[found_idx]
+        item_meta = copy.deepcopy(item_tup[2]) if len(item_tup) > 2 else {}
 
         old_item = self.equipped.get(slot)
         old_meta = {}
@@ -602,8 +624,8 @@ class Player:
                 backpack_items = []
                 remaining_items = []
                 for it in self.inventory.items:
-                    slot_idx = it[2].get("slot_idx", 0) if len(it) > 2 else 0
-                    if slot_idx >= 12:
+                    s_idx = it[2].get("slot_idx", 0) if len(it) > 2 else 0
+                    if s_idx >= 12:
                         backpack_items.append(it)
                     else:
                         remaining_items.append(it)
@@ -612,14 +634,16 @@ class Player:
                 self.inventory.slots = 12
                 self.inventory.max_weight = 15.0
 
-        # 새 아이템 인벤토리에서 제거
-        self.inventory.remove_item(item_name, 1)
+        # 소스 인벤토리에서 아이템 제거
+        src_inv.items.pop(found_idx)
 
-        # 기존에 장착 중이던 장비를 인벤토리에 추가
+        # 기존에 장착 중이던 장비를 소스 인벤토리에 복구
         if old_item:
-            if not self.inventory.add_item(old_item, 1, old_meta):
-                # 인벤토리가 가득 찼으면 바닥에 드롭 (장비 증발 방지)
-                if world and hasattr(world, 'drop_item'):
+            if not src_inv.add_item(old_item, 1, old_meta):
+                # 인벤토리가 가득 찼으면 백업 대안 처리
+                if world and hasattr(world, 'add_item') and not hasattr(world, 'drop_item'):
+                    world.add_item(old_item, 1, old_meta)
+                elif world and hasattr(world, 'drop_item'):
                     drop_x = self.x
                     drop_y = self.y
                     world.drop_item(old_item, drop_x, drop_y)

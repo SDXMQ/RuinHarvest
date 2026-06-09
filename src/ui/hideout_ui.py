@@ -328,17 +328,9 @@ class HideoutUI:
                 if not eq_slot and data.get("category") == ItemCategory.WEAPON:
                     eq_slot = "weapon"
                 if eq_slot == slot:
-                    self._remove_source_item(player)
-                    if player.equip_item(copy.deepcopy(item_name), player.stash):
+                    src_inv = player.inventory if self.drag_source == "inventory" else (player.stash if self.drag_source == "stash" else None)
+                    if player.equip_item(copy.deepcopy(item_name), player.stash, slot_idx=self.drag_source_idx, source_inventory=src_inv):
                         dropped = True
-                    else:
-                        if self.drag_source == "inventory":
-                            player.inventory.add_item(item_name, count, item_meta)
-                        elif self.drag_source == "stash":
-                            player.stash.add_item(item_name, count, item_meta)
-                        elif self.drag_source.startswith("equipped_"):
-                            s = self.drag_source.replace("equipped_", "")
-                            player.equipped[s] = item_name
                     dropped = True
                 break
 
@@ -570,8 +562,8 @@ class HideoutUI:
                     if not slot and data.get("category") == ItemCategory.WEAPON:
                         slot = "weapon"
                     if slot:
-                        if player.equip_item(copy.deepcopy(name), player.stash):
-                            inv.items.pop(idx)
+                        slot_idx = meta.get("slot_idx")
+                        if player.equip_item(copy.deepcopy(name), player.stash, slot_idx=slot_idx, source_inventory=inv):
                             self.selected_item = None
                 # 장비 해제
                 elif src == "equipped" and 210 <= mx <= 350 and 130 <= my <= 165:
@@ -814,7 +806,7 @@ class HideoutUI:
 
         # 상단 우측 플레이어 루블 및 레벨 정보 표시
         info_font = FontManager.get(14)
-        ruble_text = info_font.render(f"자금: {player.rubles:,} ₽", True, (255, 215, 0))
+        ruble_text = info_font.render(f"자금: {player.rubles:,} {t('ruble')}", True, (255, 215, 0))
         level_text = info_font.render(f"레벨: {player.level} (XP: {player.xp})", True, (150, 200, 255))
         surface.blit(ruble_text, (self.sw - ruble_text.get_width() - 20, 15))
         surface.blit(level_text, (self.sw - level_text.get_width() - 20, 35))
@@ -1016,7 +1008,7 @@ class HideoutUI:
             cat_surf = font_small.render(f"분류: {data.get('category', '기타')}", True, Colors.UI_TEXT_DIM)
             surface.blit(cat_surf, (info_x + 15, info_y + 80))
             
-            val_surf = font_small.render(f"시세: {data.get('value', 1000):,} ₽", True, (255, 215, 0))
+            val_surf = font_small.render(f"시세: {data.get('value', 1000):,} {t('ruble')}", True, (255, 215, 0))
             surface.blit(val_surf, (info_x + 15, info_y + 98))
 
             desc_start_y = 120
@@ -1081,7 +1073,7 @@ class HideoutUI:
                     cost = int(ITEM_DATABASE.get(item_name, {}).get("value", 1000) * 0.1)
                     draw_rounded_rect(surface, (100, 80, 40), (info_x + 10, info_y + 410, 140, 35), radius=6)
                     pygame.draw.rect(surface, (150, 120, 50), (info_x + 10, info_y + 410, 140, 35), 1, border_radius=6)
-                    ins_btn_lbl = font_small.render(f"보험 {cost} ₽", True, Colors.WHITE)
+                    ins_btn_lbl = font_small.render(f"보험 {cost} {t('ruble')}", True, Colors.WHITE)
                     surface.blit(ins_btn_lbl, (info_x + 10 + (140 - ins_btn_lbl.get_width()) // 2, info_y + 420))
         else:
             empty_surf = font_small.render("아이템을 선택하면", True, Colors.UI_TEXT_DIM)
@@ -1165,7 +1157,7 @@ class HideoutUI:
         pygame.draw.line(surface, (50, 55, 70), (info_x + 20, info_y + 65), (info_x + 280, info_y + 65), 1)
         
         rep_surf = font.render(f"우호도(Reputation): {rep:.2f}", True, Colors.UI_SUCCESS)
-        spent_surf = font.render(f"누적 거래액(Spent): {spent:,} ₽", True, (255, 215, 0))
+        spent_surf = font.render(f"누적 거래액(Spent): {spent:,} {t('ruble')}", True, (255, 215, 0))
         lvl_surf = FontManager.get(14).render(f"상인 신용 등급: Loyalty Level {lvl}", True, Colors.UI_ACCENT_WARM)
         
         surface.blit(rep_surf, (info_x + 20, info_y + 80))
@@ -1179,7 +1171,7 @@ class HideoutUI:
             r_text = f"Level {req_lvl} 해금 조건:"
             r_lvl = f"  - 플레이어 레벨: {player.level} / {reqs['level']}"
             r_rep = f"  - 상인 우호도: {rep:.2f} / {reqs['rep']:.2f}"
-            r_spent = f"  - 누적 거래액: {spent:,} / {reqs['spent']:,} ₽"
+            r_spent = f"  - 누적 거래액: {spent:,} / {reqs['spent']:,} {t('ruble')}"
             
             surface.blit(font_small.render(r_text, True, Colors.UI_TEXT_DIM), (info_x + 20, info_y + 165))
             surface.blit(font_small.render(r_lvl, True, Colors.UI_SUCCESS if player.level >= reqs["level"] else Colors.UI_TEXT_DIM), (info_x + 20, info_y + 185))
@@ -1196,7 +1188,7 @@ class HideoutUI:
             if s_item.get("action") == "buy":
                 count = s_item.get("buy_count", 1)
                 total_price = s_item['price'] * count
-                s_price_surf = FontManager.get(14).render(f"합계: {total_price:,} ₽", True, (255, 215, 0))
+                s_price_surf = FontManager.get(14).render(f"합계: {total_price:,} {t('ruble')}", True, (255, 215, 0))
                 
                 # 수량 조절 UI 그리기
                 cnt_lbl = font.render("수량:", True, Colors.UI_TEXT_DIM)
@@ -1216,7 +1208,7 @@ class HideoutUI:
                 plus_surf = font.render("+", True, Colors.WHITE)
                 surface.blit(plus_surf, (info_x + 245 + (25 - plus_surf.get_width())//2, info_y + 258 + (25 - plus_surf.get_height())//2))
             else:
-                s_price_surf = FontManager.get(14).render(f"가격: {s_item['price']:,} ₽", True, (255, 215, 0))
+                s_price_surf = FontManager.get(14).render(f"가격: {s_item['price']:,} {t('ruble')}", True, (255, 215, 0))
             
             surface.blit(s_name_surf, (info_x + 20, info_y + 260))
             surface.blit(s_price_surf, (info_x + 20, info_y + 280))
@@ -1257,7 +1249,7 @@ class HideoutUI:
                     t_surf = font.render(item_name, True, Colors.UI_TEXT)
                     surface.blit(t_surf, (list_x + 45, ay + 12))
                     
-                    p_surf = font.render(f"{price:,} ₽", True, (255, 215, 0))
+                    p_surf = font.render(f"{price:,} {t('ruble')}", True, (255, 215, 0))
                     surface.blit(p_surf, (list_x + list_w - p_surf.get_width() - 15, ay + 12))
         else:
             # Stash 인벤토리 판매 대상 목록
@@ -1279,7 +1271,7 @@ class HideoutUI:
                     surface.blit(t_surf, (list_x + 45, ay + 12))
                     
                     price = int(ITEM_DATABASE.get(item_name, {}).get("value", 1000) * 0.5)
-                    p_surf = font.render(f"{price:,} ₽", True, (255, 215, 0))
+                    p_surf = font.render(f"{price:,} {t('ruble')}", True, (255, 215, 0))
                     surface.blit(p_surf, (list_x + list_w - p_surf.get_width() - 15, ay + 12))
 
     def _get_trader_items(self, trader_id, player):
@@ -1379,7 +1371,7 @@ class HideoutUI:
 
                 # 가격
                 total_p = listing["price"] * listing["count"]
-                p_surf = font.render(f"{total_p:,} ₽ ({listing['price']}₽/개)", True, (255, 215, 0))
+                p_surf = font.render(f"{total_p:,} {t('ruble')} ({listing['price']}{t('ruble')}/개)", True, (255, 215, 0))
                 surface.blit(p_surf, (list_x + list_w - p_surf.get_width() - 15, ay + 12))
 
         # 2. 우측 결제/정산 패널
@@ -1393,7 +1385,7 @@ class HideoutUI:
             name_surf = font.render(f"매물: {s_item['name']}", True, Colors.UI_TEXT)
             cnt_surf = font_small.render(f"수량: {s_item['count']}개", True, Colors.UI_TEXT_DIM)
             cost = s_item["price"] * s_item["count"]
-            cost_surf = FontManager.get(15).render(f"총 합계: {cost:,} ₽", True, (255, 215, 0))
+            cost_surf = FontManager.get(15).render(f"총 합계: {cost:,} {t('ruble')}", True, (255, 215, 0))
             
             surface.blit(name_surf, (info_x + 15, info_y + 20))
             surface.blit(cnt_surf, (info_x + 15, info_y + 45))
@@ -1422,7 +1414,7 @@ class HideoutUI:
 
         for idx, listing in enumerate(self.flea_market.player_listings[:3]):
             ly = my_panel_y + 40 + idx * 42
-            item_text = font_small.render(f"{listing['item_name']} x{listing['count']} ({listing['price']:,} ₽)", True, Colors.UI_TEXT)
+            item_text = font_small.render(f"{listing['item_name']} x{listing['count']} ({listing['price']:,} {t('ruble')})", True, Colors.UI_TEXT)
             time_text = font_small.render(f"남은 기한: {listing['timer']:.1f}", True, Colors.UI_TEXT_DIM)
             surface.blit(item_text, (info_x + 15, ly))
             surface.blit(time_text, (info_x + 15, ly + 15))
@@ -1507,7 +1499,7 @@ class HideoutUI:
         # 입력 필드 박스
         pygame.draw.rect(surface, Colors.UI_BORDER, (dx + 40, dy + 85, 240, 32), 1, border_radius=5)
         
-        input_text = self.register_price_input + " ₽" if self.register_price_input else " ₽"
+        input_text = self.register_price_input + f" {t('ruble')}" if self.register_price_input else f" {t('ruble')}"
         input_surf = font_input.render(input_text, True, (255, 215, 0))
         surface.blit(input_surf, (dx + 50, dy + 92))
 

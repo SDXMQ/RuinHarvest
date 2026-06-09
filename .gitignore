@@ -187,3 +187,4 @@ src/core/saves/
 *.json.bak
 game_settings.json
 next.txt
+releaser.py

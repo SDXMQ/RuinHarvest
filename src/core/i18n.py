@@ -82,6 +82,20 @@ STRINGS = {
         "zombie_followed": "적대 세력이 따라 들어왔습니다!",
         "zombie_followed_outside": "적대 세력이 문을 열고 밖으로 쫓아나왔습니다!",
 
+        # 세이브 슬롯
+        "save_slots_title": "세이브 파일",
+        "save_slot_empty": "빈 슬롯",
+        "save_slot_day": "Day {0}",
+        "save_slot_created": "생성: {0}",
+        "save_slot_last_played": "최근: {0}",
+        "save_slot_funds": "{0} 루블",
+        "ruble": "루블",
+        "save_slot_delete_confirm": "정말 삭제하시겠습니까?",
+        "save_slot_yes": "예",
+        "save_slot_no": "아니오",
+        "save_slot_no_saves": "저장된 게임이 없습니다",
+        "save_slot_page": "{0} / {1}",
+
         # 일시정지
         "paused": "일시정지",
         "resume": "계속하기",
@@ -397,6 +411,20 @@ STRINGS = {
         "zombie_intrusion": "A zombie has broken into the building!",
         "zombie_followed": "A zombie followed you inside!",
         "zombie_followed_outside": "A zombie followed you outside!",
+
+        # Save Slots
+        "save_slots_title": "Save Files",
+        "save_slot_empty": "Empty Slot",
+        "save_slot_day": "Day {0}",
+        "save_slot_created": "Created: {0}",
+        "save_slot_last_played": "Last: {0}",
+        "save_slot_funds": "{0} RUB",
+        "ruble": "RUB",
+        "save_slot_delete_confirm": "Delete this save?",
+        "save_slot_yes": "Yes",
+        "save_slot_no": "No",
+        "save_slot_no_saves": "No saved games",
+        "save_slot_page": "{0} / {1}",
 
         # Pause
         "paused": "Paused",

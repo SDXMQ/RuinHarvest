@@ -36,9 +36,9 @@ from transitions import TransitionManager
 from world_renderer import WorldSceneRenderer
 from ui import (FontManager, HUD, InventoryUI, CraftingUI, DialogueUI,
                 EventLogUI, MainMenuUI, WorldCreationUI, SettingsUI,
-                PauseUI, EndingUI)
+                PauseUI, EndingUI, SaveSlotsUI)
 from sounds import SoundGenerator
-from save_system import save_game, load_game, get_save_files, GameSaveManager
+from save_system import save_game, load_game, get_save_files, delete_save, rename_save, GameSaveManager
 from interaction import InteractionHandler
 from building_interior import BuildingInterior
 from i18n import t, set_language, get_language
@@ -67,6 +67,7 @@ class GameState:
     DIALOGUE = "dialogue"
     ENDING = "ending"                   # 레이드 정산 결과 창 (생환 / KIA 여부 요약)
     GAME_OVER = "game_over"
+    SAVE_SLOTS = "save_slots"
 
 
 # ============================================================
@@ -174,6 +175,7 @@ class Game:
         self.ending_ui = EndingUI(w, h)
         self.hideout_ui = HideoutUI(w, h, self.flea_market)
         self.map_ui = MapUI(w, h)
+        self.save_slots_ui = SaveSlotsUI(w, h)
 
     def _apply_resolution(self):
         """해상도 변경 적용"""
@@ -255,13 +257,15 @@ class Game:
         self.event_system.add_log(t("log_survival_started"))
         SoundGenerator.play("day_start")
 
-    def load_saved_game(self):
+    def load_saved_game(self, slot_name=None):
         """저장된 게임 로드"""
-        saves = get_save_files()
-        if not saves:
-            return False
+        if slot_name is None:
+            saves = get_save_files()
+            if not saves:
+                return False
+            slot_name = saves[0]["filename"].replace(".json", "")
 
-        data = load_game(saves[0]["filename"].replace(".json", ""))
+        data = load_game(slot_name)
         if not data:
             return False
 
@@ -338,9 +342,10 @@ class Game:
                         on_mid=lambda: setattr(self, 'state', GameState.WORLD_CREATION))
                 elif result == "load_game":
                     SoundGenerator.play("menu_select")
-                    self.transition.start("fade", 0.6,
-                        on_mid=lambda: self.load_saved_game() or setattr(self, 'state',
-                            GameState.HIDEOUT if self.player else GameState.MAIN_MENU))
+                    saves = get_save_files()
+                    self.save_slots_ui.refresh(saves)
+                    self.transition.start("fade", 0.4,
+                        on_mid=lambda: setattr(self, 'state', GameState.SAVE_SLOTS))
                 elif result == "settings":
                     SoundGenerator.play("menu_select")
                     self.transition.start("fade", 0.4,
@@ -358,6 +363,40 @@ class Game:
                 elif result == "back":
                     self.transition.start("fade", 0.4,
                         on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
+
+            elif self.state == GameState.SAVE_SLOTS:
+                result = self.save_slots_ui.handle_event(event)
+                if result == "back":
+                    self.transition.start("fade", 0.4,
+                        on_mid=lambda: setattr(self, 'state', GameState.MAIN_MENU))
+                elif isinstance(result, tuple):
+                    action = result[0]
+                    if action == "load":
+                        idx = result[1]
+                        saves = self.save_slots_ui.saves
+                        if 0 <= idx < len(saves):
+                            slot = saves[idx]["filename"].replace(".json", "")
+                            SoundGenerator.play("menu_select")
+                            self.transition.start("fade", 0.6,
+                                on_mid=lambda s=slot: self.load_saved_game(s) or setattr(self, 'state',
+                                    GameState.HIDEOUT if self.player else GameState.SAVE_SLOTS))
+                    elif action == "delete":
+                        idx = result[1]
+                        saves = self.save_slots_ui.saves
+                        if 0 <= idx < len(saves):
+                            slot = saves[idx]["filename"].replace(".json", "")
+                            delete_save(slot)
+                            self.save_slots_ui.refresh(get_save_files())
+                            SoundGenerator.play("menu_select")
+                    elif action == "rename":
+                        idx = result[1]
+                        new_name = result[2].strip()
+                        saves = self.save_slots_ui.saves
+                        if 0 <= idx < len(saves) and new_name:
+                            old_slot = saves[idx]["filename"].replace(".json", "")
+                            rename_save(old_slot, new_name)
+                            self.save_slots_ui.refresh(get_save_files())
+                            SoundGenerator.play("menu_select")
 
             elif self.state == GameState.SETTINGS:
                 result = self.settings_ui.handle_event(event)
@@ -444,7 +483,6 @@ class Game:
                 if result == "main_menu":
                     if self.is_final_ending:
                         world_name = self.world_settings.get("world_name", "autosave").replace(" ", "_")
-                        from save_system import delete_save
                         delete_save(world_name)
                         self.is_final_ending = False
                         self.transition.start("fade", 1.0,
@@ -468,8 +506,14 @@ class Game:
                 result = self.inventory_ui.handle_event(event, self.player)
                 if result:
                     action, value = result
+                    slot_idx = None
+                    if isinstance(value, tuple):
+                        item_name, slot_idx = value
+                    else:
+                        item_name = value
+
                     if action == "use":
-                        use_res = self.player.use_item(value)
+                        use_res = self.player.use_item(item_name, slot_idx=slot_idx)
                         if use_res == "radio_scan":
                             self.event_system.add_log("장거리 무전기를 켰습니다. 주파수를 스캔합니다...")
                             SoundGenerator.play("pickup")
@@ -496,20 +540,25 @@ class Game:
                             self.event_system.add_log("조명탄을 피웠습니다! 주변이 밝아집니다.")
                             SoundGenerator.play("pickup")
                         elif use_res:
-                            self.event_system.add_log(t("log_item_used", value))
+                            self.event_system.add_log(t("log_item_used", item_name))
                             SoundGenerator.play("pickup")
                     elif action == "equip":
                         equip_world = self.current_interior if self.player.is_interior else self.world
-                        if self.player.equip_item(value, equip_world):
-                            self.event_system.add_log(t("log_item_equipped", value))
+                        if self.player.equip_item(item_name, equip_world, slot_idx=slot_idx):
+                            self.event_system.add_log(t("log_item_equipped", item_name))
                             SoundGenerator.play("pickup")
                     elif action == "drop_item":
                         # 아이템 바닥에 버리기 (메타데이터 보존)
                         found_idx = -1
                         for idx, it in enumerate(self.player.inventory.items):
-                            if it[0] == value:
-                                found_idx = idx
-                                break
+                            if slot_idx is not None:
+                                if len(it) > 2 and it[2].get("slot_idx") == slot_idx:
+                                    found_idx = idx
+                                    break
+                            else:
+                                if it[0] == item_name:
+                                    found_idx = idx
+                                    break
                         if found_idx != -1:
                             item_tup = self.player.inventory.items[found_idx]
                             item_name = item_tup[0]
@@ -895,7 +944,14 @@ class Game:
         # 플리마켓 업데이트 및 플레이어 등록 물품 정산
         self.flea_market.update_market_prices(self.current_day)
         self.flea_market.refresh_listings(self.current_day)
-        self.flea_market.process_player_sales(self.player)
+        completed_sales, failed_sales = self.flea_market.process_player_sales(self.player)
+        
+        for sale in completed_sales:
+            self.event_system.add_log(f"[마켓] 등록한 {t(sale['item_name'])} {sale['count']}개가 판매되어 {sale['earned']} 루블이 정산되었습니다.")
+            
+        for failed in failed_sales:
+            self.player.stash.add_item(failed["item_name"], failed["count"], {})
+            self.event_system.add_log(f"[마켓] 기한 만료된 {t(failed['item_name'])} {failed['count']}개가 창고로 반환되었습니다.")
 
         # 레이드 리소스 정리 (메모리 누수 방지)
         self.cleanup_raid()
@@ -965,6 +1021,9 @@ class Game:
 
         elif self.state == GameState.ENDING:
             self.ending_ui.draw(self.screen)
+
+        elif self.state == GameState.SAVE_SLOTS:
+            self.save_slots_ui.draw(self.screen)
 
         elif self.state == GameState.HIDEOUT:
             self.hideout_ui.draw(self.screen, self.player)
