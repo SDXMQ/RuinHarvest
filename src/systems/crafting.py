@@ -194,10 +194,16 @@ class CraftingSystem:
     def to_dict(self):
         return {
             "discovered": list(self.discovered_recipes),
+            "craft_queue": self.craft_queue,
+            "craft_timer": self.craft_timer,
+            "craft_progress": self.craft_progress,
         }
 
     @classmethod
     def from_dict(cls, data):
         system = cls()
         system.discovered_recipes = set(data.get("discovered", []))
+        system.craft_queue = data.get("craft_queue", None)
+        system.craft_timer = data.get("craft_timer", 0)
+        system.craft_progress = data.get("craft_progress", 0)
         return system

@@ -26,7 +26,8 @@ class InteractionHandler:
             for item_tuple, chunk in ground_items:
                 item_name = item_tuple[0]
                 metadata = item_tuple[3] if len(item_tuple) > 3 else {}
-                if self.game.player.inventory.add_item(item_name, 1, metadata):
+                count = metadata.get("count", 1)
+                if self.game.player.inventory.add_item(item_name, count, metadata):
                     chunk.items_on_ground.remove(item_tuple)
                     self.game.event_system.add_log(t("acquired_item", item_name))
                     SoundGenerator.play("pickup")
@@ -163,7 +164,8 @@ class InteractionHandler:
             for item_tuple in ground_items:
                 item_name = item_tuple[0]
                 metadata = item_tuple[3] if len(item_tuple) > 3 else {}
-                if self.game.player.inventory.add_item(item_name, 1, metadata):
+                count = metadata.get("count", 1)
+                if self.game.player.inventory.add_item(item_name, count, metadata):
                     self.game.current_interior.items_on_ground.remove(item_tuple)
                     self.game.event_system.add_log(t("acquired_item", item_name))
                     SoundGenerator.play("pickup")

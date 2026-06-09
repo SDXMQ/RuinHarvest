@@ -256,6 +256,7 @@ class Game:
             self.event_system.add_log(t("log_sandbox_started"))
         self.event_system.add_log(t("log_survival_started"))
         SoundGenerator.play("day_start")
+        self.menu_particles.clear()
 
     def load_saved_game(self, slot_name=None):
         """저장된 게임 로드"""
@@ -280,6 +281,7 @@ class Game:
                 self.state = GameState.HIDEOUT
             self.player.event_system = self.event_system
             self.event_system.add_log(t("log_game_loaded", self.current_day))
+            self.menu_particles.clear()
             return True
         return False
 
@@ -562,7 +564,10 @@ class Game:
                         if found_idx != -1:
                             item_tup = self.player.inventory.items[found_idx]
                             item_name = item_tup[0]
-                            item_meta = item_tup[2] if len(item_tup) > 2 else {}
+                            item_count = item_tup[1]
+                            import copy
+                            item_meta = copy.deepcopy(item_tup[2]) if len(item_tup) > 2 else {}
+                            item_meta["count"] = item_count
                             
                             self.player.inventory.items.pop(found_idx)
                             
@@ -627,7 +632,7 @@ class Game:
                     self.inventory_ui.toggle()
                 self.map_visible = False
             elif event.key == pygame.K_m:
-                if self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
+                if self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR) and not self.show_raid_start_popup:
                     self.map_visible = not self.map_visible
                     if self.inventory_ui.visible:
                         self.inventory_ui.toggle()
@@ -786,7 +791,10 @@ class Game:
 
         # 플레이어
         weather = self.weather_system.current_weather if not is_interior and self.weather_system else None
-        craft_result = self.player.update(dt, current_world, weather, self.time_system)
+        craft_result = self.player.update(
+            dt, current_world, weather, self.time_system,
+            dialogue_active=self.dialogue_ui.visible
+        )
         if craft_result:
             self.event_system.add_log(t("log_craft_success", craft_result))
             SoundGenerator.play("craft_complete")
@@ -1029,7 +1037,7 @@ class Game:
             self.hideout_ui.draw(self.screen, self.player)
 
         # 지도 오버레이 렌더링
-        if self.map_ui and self.map_visible and self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR):
+        if self.map_ui and self.map_visible and self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR) and not self.show_raid_start_popup:
             self.map_ui.draw(self.screen, self.player, self.world)
 
         # 전환 효과
@@ -1069,11 +1077,8 @@ class Game:
         # 탈출구 그리기
         self.world_renderer.draw_extraction_points(game_surface)
 
-        # 엔티티 (적, NPC)
+        # 엔티티 (적, NPC, 플레이어 통합 정렬)
         self.world_renderer.draw_entities(game_surface)
-
-        # 플레이어
-        self.world_renderer.draw_player(game_surface)
         self.world_renderer.draw_occluding_buildings(game_surface)
         self.world_renderer.draw_aim_indicator(game_surface, self.player.x, self.player.y, self.camera)
 

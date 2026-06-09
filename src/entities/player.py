@@ -148,7 +148,7 @@ class Player:
         self.y = self.exterior_y
         self.moving = False
 
-    def update(self, dt, current_world, weather_type=None, time_system=None):
+    def update(self, dt, current_world, weather_type=None, time_system=None, dialogue_active=False):
         """플레이어 업데이트 (world 혹은 interior를 받아 다형성 적용)"""
         if not self.alive:
             return None
@@ -196,7 +196,7 @@ class Player:
             self.flare_timer = max(0.0, self.flare_timer - dt)
 
         # 이동 처리
-        self._handle_movement(dt, current_world)
+        self._handle_movement(dt, current_world, dialogue_active)
 
         # 애니메이션
         self._update_animation(dt)
@@ -275,8 +275,12 @@ class Player:
 
         return result
 
-    def _handle_movement(self, dt, world):
+    def _handle_movement(self, dt, world, dialogue_active=False):
         """키 입력 기반 이동"""
+        if dialogue_active:
+            self.moving = False
+            self.is_sprinting = False
+            return
         keys = pygame.key.get_pressed()
         dx, dy = 0, 0
 

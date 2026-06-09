@@ -402,11 +402,11 @@ class Enemy:
                         next_node = (move_target_x, move_target_y)
 
                 dx, dy = direction_to(self.x, self.y, next_node[0], next_node[1])
-                self._move_with_collision(dx * move_speed, dy * move_speed, world)
+                self._move_with_collision(dx * move_speed, dy * move_speed, world, entity_manager)
             else:
                 # 직선 이동
                 dx, dy = direction_to(self.x, self.y, move_target_x, move_target_y)
-                self._move_with_collision(dx * move_speed, dy * move_speed, world)
+                self._move_with_collision(dx * move_speed, dy * move_speed, world, entity_manager)
 
         # 방향 업데이트
         if self.state in (EnemyState.ENGAGE, EnemyState.FLANK, EnemyState.ALERT):
@@ -428,13 +428,50 @@ class Enemy:
                 self.animation_timer -= 0.15
                 self.animation_frame = (self.animation_frame + 1) % 8
 
-    def _move_with_collision(self, dx, dy, world):
-        new_x = self.x + dx
-        new_y = self.y + dy
-        if world.is_walkable(new_x + 0.5, self.y + 0.9):
-            self.x = new_x
-        if world.is_walkable(self.x + 0.5, new_y + 0.9):
-            self.y = new_y
+    def _move_with_collision(self, dx, dy, world, entity_manager=None):
+        total_dist = math.hypot(dx, dy)
+        MAX_STEP = 0.4  # 최대 0.4타일씩 쪼개어 검사
+        steps = max(1, int(math.ceil(total_dist / MAX_STEP)))
+        
+        step_x = dx / steps
+        step_y = dy / steps
+        
+        for _ in range(steps):
+            new_x = self.x + step_x
+            new_y = self.y + step_y
+            
+            # 1. 월드 타일 충돌 체크
+            can_move_x = world.is_walkable(new_x + 0.5, self.y + 0.9)
+            can_move_y = world.is_walkable(self.x + 0.5, new_y + 0.9)
+            
+            # 2. 좀비 간의 충돌 검사 (밀치기 효과 적용하여 한 점 겹침 방지)
+            if entity_manager:
+                push_force_x = 0.0
+                push_force_y = 0.0
+                for other in entity_manager.enemies:
+                    if other is self or not other.active or other.is_dead:
+                        continue
+                    # 대상과의 거리 계산
+                    dist = distance(new_x, self.y, other.x, other.y)
+                    MIN_DIST = 0.45  # 좀비 충돌 반경
+                    if dist < MIN_DIST:
+                        if dist > 0.01:
+                            push_force_x += ((new_x - other.x) / dist) * 0.05
+                            push_force_y += ((self.y - other.y) / dist) * 0.05
+                        else:
+                            push_force_x += random.uniform(-0.05, 0.05)
+                            push_force_y += random.uniform(-0.05, 0.05)
+                            
+                # 반발력 가산
+                if abs(push_force_x) > 0.01 and world.is_walkable(new_x + push_force_x + 0.5, self.y + 0.9):
+                    new_x += push_force_x
+                if abs(push_force_y) > 0.01 and world.is_walkable(self.x + 0.5, new_y + push_force_y + 0.9):
+                    new_y += push_force_y
+            
+            if can_move_x:
+                self.x = new_x
+            if can_move_y:
+                self.y = new_y
 
     def _find_cover_tile(self, player_x, player_y, world):
         best_cover = None

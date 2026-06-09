@@ -56,9 +56,9 @@ class Camera:
 
     def shake(self, intensity=5, duration=0.3):
         """카메라 흔들림 트리거"""
-        self.shake_intensity = intensity
-        self.shake_duration = duration
-        self.shake_timer = duration
+        self.shake_intensity = max(self.shake_intensity, intensity)
+        self.shake_duration = max(self.shake_duration, duration)
+        self.shake_timer = max(self.shake_timer, duration)
 
     def world_to_screen(self, world_x, world_y):
         """월드 좌표 → 화면 좌표"""

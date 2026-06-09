@@ -198,59 +198,81 @@ class WorldSceneRenderer:
             surface.blit(text_surf, (tx, ty))
 
     def draw_entities(self, surface):
+        # 렌더링 대상이 되는 엔티티들 수집
+        render_list = []
+        
+        # 좀비 추가
         for enemy in self.game.entity_manager.enemies:
-            if not enemy.active:
-                continue
-            if not self.game.camera.is_visible(enemy.x, enemy.y):
-                continue
-
-            sx, sy = self.game.camera.world_to_screen(enemy.x, enemy.y)
-            sprite = CharacterRenderer.get_enemy_sprite(
-                enemy.enemy_type, enemy.direction, enemy.animation_frame
-            )
-
-            if enemy.state == "hurt" and int(enemy.hurt_timer * 10) % 2:
-                sprite = sprite.copy()
-                sprite.fill((255, 100, 100, 128), special_flags=pygame.BLEND_RGBA_MULT)
-
-            surface.blit(sprite, (sx, sy))
-
-            if enemy.hp < enemy.max_hp:
-                bar_w = TILE_SIZE
-                bar_h = 3
-                ratio = enemy.hp / enemy.max_hp
-                pygame.draw.rect(surface, (40, 40, 45), (sx, sy - 5, bar_w, bar_h))
-                pygame.draw.rect(surface, (220, 50, 50), (sx, sy - 5, int(bar_w * ratio), bar_h))
-
-            # 총성 어그로 느낌표
-            if enemy.aggro_alert > 0:
-                alert_font = FontManager.get(14)
-                alert_surf = alert_font.render("!", True, (255, 50, 50))
-                bounce = math.sin(pytime.time() * 8) * 2
-                surface.blit(alert_surf, (sx + TILE_SIZE // 2 - alert_surf.get_width() // 2,
-                                          sy - 15 + int(bounce)))
-
+            if enemy.active and self.game.camera.is_visible(enemy.x, enemy.y):
+                render_list.append(("enemy", enemy.y, enemy))
+                
+        # NPC 추가
         for npc in self.game.entity_manager.npcs:
-            if not npc.active:
-                continue
-            if not self.game.camera.is_visible(npc.x, npc.y):
-                continue
+            if npc.active and self.game.camera.is_visible(npc.x, npc.y):
+                render_list.append(("npc", npc.y, npc))
+                
+        # 플레이어 추가 (실외 렌더링 시 Z-depth 처리를 위해 함께 추가)
+        if self.game.player and self.game.player.alive:
+            render_list.append(("player", self.game.player.y, self.game.player))
+            
+        # Y좌표 오름차순 정렬 (Y가 작을수록 위에 그려지므로 '뒤'에 있는 것이 됨)
+        render_list.sort(key=lambda x: x[1])
+        
+        for type_tag, _, obj in render_list:
+            if type_tag == "enemy":
+                enemy = obj
+                sx, sy = self.game.camera.world_to_screen(enemy.x, enemy.y)
+                sprite = CharacterRenderer.get_enemy_sprite(
+                    enemy.enemy_type, enemy.direction, enemy.animation_frame
+                )
 
-            sx, sy = self.game.camera.world_to_screen(npc.x, npc.y)
-            sprite = CharacterRenderer.get_npc_sprite(
-                npc.npc_type, npc.direction, npc.animation_frame
-            )
-            surface.blit(sprite, (sx, sy))
+                if enemy.state == "hurt" and int(enemy.hurt_timer * 10) % 2:
+                    sprite = sprite.copy()
+                    sprite.fill((255, 100, 100, 128), special_flags=pygame.BLEND_RGBA_MULT)
 
-            font = FontManager.get(10)
-            name_surf = font.render(npc.name, True, Colors.UI_ACCENT_WARM)
-            surface.blit(name_surf, (sx + TILE_SIZE // 2 - name_surf.get_width() // 2, sy - 12))
+                surface.blit(sprite, (sx, sy))
 
-            if getattr(npc, 'show_exclamation', False):
-                excl_surf = font.render("!", True, (255, 255, 50))
-                import time
-                offset = math.sin(time.time() * 10) * 3
-                surface.blit(excl_surf, (sx + TILE_SIZE // 2 - excl_surf.get_width() // 2, sy - 25 + offset))
+                if enemy.hp < enemy.max_hp:
+                    bar_w = TILE_SIZE
+                    bar_h = 3
+                    ratio = enemy.hp / enemy.max_hp
+                    pygame.draw.rect(surface, (40, 40, 45), (sx, sy - 5, bar_w, bar_h))
+                    pygame.draw.rect(surface, (220, 50, 50), (sx, sy - 5, int(bar_w * ratio), bar_h))
+
+                # 총성 어그로 느낌표
+                if enemy.aggro_alert > 0:
+                    alert_font = FontManager.get(14)
+                    alert_surf = alert_font.render("!", True, (255, 50, 50))
+                    bounce = math.sin(pytime.time() * 8) * 2
+                    surface.blit(alert_surf, (sx + TILE_SIZE // 2 - alert_surf.get_width() // 2,
+                                              sy - 15 + int(bounce)))
+                                              
+            elif type_tag == "npc":
+                npc = obj
+                sx, sy = self.game.camera.world_to_screen(npc.x, npc.y)
+                sprite = CharacterRenderer.get_npc_sprite(
+                    npc.npc_type, npc.direction, npc.animation_frame
+                )
+                surface.blit(sprite, (sx, sy))
+
+                font = FontManager.get(10)
+                name_surf = font.render(npc.name, True, Colors.UI_ACCENT_WARM)
+                surface.blit(name_surf, (sx + TILE_SIZE // 2 - name_surf.get_width() // 2, sy - 12))
+
+                if getattr(npc, 'show_exclamation', False):
+                    excl_surf = font.render("!", True, (255, 255, 50))
+                    import time
+                    offset = math.sin(time.time() * 10) * 3
+                    surface.blit(excl_surf, (sx + TILE_SIZE // 2 - excl_surf.get_width() // 2, sy - 25 + offset))
+                    
+            elif type_tag == "player":
+                # 플레이어 렌더링
+                player = obj
+                psx, psy = self.game.camera.world_to_screen(player.x, player.y)
+                player_sprite = CharacterRenderer.get_player_sprite(
+                    player.direction, player.animation_frame, player.is_sprinting, player.is_crouching
+                )
+                surface.blit(player_sprite, (psx, psy))
 
     def draw_player(self, surface):
         sx, sy = self.game.camera.world_to_screen(self.game.player.x, self.game.player.y)
@@ -611,9 +633,19 @@ class WorldSceneRenderer:
             bounce = math.sin(pytime.time() * 3 + ix + iy) * 3
             surface.blit(icon, (isx + 4, isy + 4 + int(bounce)))
 
-        # 내부 적 그리기
+        # 내부 적과 플레이어를 취합하여 Y 정렬 렌더링
+        interior_render_list = []
         for enemy in self.game.interior_enemies:
             if enemy.active and not enemy.is_dead:
+                interior_render_list.append(("enemy", enemy.y, enemy))
+        if self.game.player and self.game.player.alive:
+            interior_render_list.append(("player", self.game.player.y, self.game.player))
+            
+        interior_render_list.sort(key=lambda x: x[1])
+        
+        for type_tag, _, obj in interior_render_list:
+            if type_tag == "enemy":
+                enemy = obj
                 zsx, zsy = cam.world_to_screen(enemy.x, enemy.y)
                 sprite = CharacterRenderer.get_enemy_sprite(enemy.enemy_type, enemy.direction, enemy.animation_frame)
                 
@@ -639,17 +671,17 @@ class WorldSceneRenderer:
                     bounce = math.sin(pytime.time() * 8) * 2
                     surface.blit(alert_surf, (zsx + TILE_SIZE // 2 - alert_surf.get_width() // 2,
                                               zsy - 15 + int(bounce)))
+            elif type_tag == "player":
+                player = obj
+                psx, psy = cam.world_to_screen(player.x, player.y)
+                player_sprite = CharacterRenderer.get_player_sprite(
+                    player.direction, player.animation_frame, player.is_sprinting, player.is_crouching
+                )
+                surface.blit(player_sprite, (psx, psy))
 
         # 전투 이펙트 및 파티클
         self.draw_combat_effects(surface, cam)
         self.game.game_particles.draw(surface, cam)
-
-        # 플레이어 그리기
-        psx, psy = cam.world_to_screen(self.game.player.x, self.game.player.y)
-        player_sprite = CharacterRenderer.get_player_sprite(
-            self.game.player.direction, self.game.player.animation_frame, self.game.player.is_sprinting, self.game.player.is_crouching
-        )
-        surface.blit(player_sprite, (psx, psy))
         self.draw_aim_indicator(surface, self.game.player.x, self.game.player.y, cam)
 
         # 창문 시야 오버레이 및 실외 렌더링

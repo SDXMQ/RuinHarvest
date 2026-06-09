@@ -145,7 +145,9 @@ class HideoutUI:
                         visible_rows = 8
                         self.inv_scroll = min(max(0, max_rows - visible_rows), self.inv_scroll + 1)
                     else:
-                        self.stash_scroll += 1
+                        max_rows = math.ceil(player.stash.slots / 8)
+                        visible_rows = 11
+                        self.stash_scroll = min(max(0, max_rows - visible_rows), self.stash_scroll + 1)
                 elif self.active_tab == "traders":
                     self.trader_scroll += 1
                 elif self.active_tab == "market":
