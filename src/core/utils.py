@@ -248,8 +248,8 @@ def format_time(hours, minutes):
 
 def check_line_of_sight(x1, y1, x2, y2, world):
     """Bresenham 알고리즘 기반 벽 충돌 사선 검사"""
-    ix1, iy1 = int(x1), int(y1)
-    ix2, iy2 = int(x2), int(y2)
+    ix1, iy1 = int(math.floor(x1)), int(math.floor(y1))
+    ix2, iy2 = int(math.floor(x2)), int(math.floor(y2))
     
     dx = abs(ix2 - ix1)
     dy = abs(iy2 - iy1)

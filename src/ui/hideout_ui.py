@@ -203,7 +203,12 @@ class HideoutUI:
                 item_name = player.equipped.get(slot)
                 if item_name:
                     self.dragging = True
-                    meta = copy.deepcopy(player.equipped_backpack_meta) if slot == "back" else {}
+                    if slot == "back":
+                        meta = copy.deepcopy(player.equipped_backpack_meta)
+                    else:
+                        meta = {"durability": player.equipped_durability.get(slot, 100.0)}
+                        if player.equipped_insured.get(slot):
+                            meta["insured"] = True
                     self.drag_item = (item_name, 1, meta)
                     self.drag_source = f"equipped_{slot}"
                     self.drag_source_idx = -1

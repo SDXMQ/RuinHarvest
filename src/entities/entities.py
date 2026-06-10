@@ -155,6 +155,7 @@ class Enemy:
         # A* 길찾기 속성 추가
         self.path = []
         self.path_update_timer = random.uniform(0.0, 0.4)
+        self.path_has_los = False
 
     def update(self, dt, player_x, player_y, world, player_crouching=False, entity_manager=None):
         if not self.active:
@@ -244,6 +245,9 @@ class Enemy:
             else:
                 target_x, target_y = player_x, player_y
             
+            if self.target != best_target:
+                self.vision_timer = self.vision_interval
+                self.can_see_target = False
             self.target = best_target
             dist = best_dist
 
@@ -359,15 +363,18 @@ class Enemy:
 
         # A* 경로 탐색 및 업데이트
         self.path_update_timer += dt
-        has_los = check_line_of_sight(self.x, self.y, move_target_x, move_target_y, world)
+        if not hasattr(self, 'path_has_los'):
+            self.path_has_los = check_line_of_sight(self.x, self.y, move_target_x, move_target_y, world)
         
-        if has_los:
+        if self.path_update_timer >= 0.4:
+            self.path_update_timer = 0.0
+            self.path_has_los = check_line_of_sight(self.x, self.y, move_target_x, move_target_y, world)
+            if not self.path_has_los:
+                self.path = find_path((self.x, self.y), (move_target_x, move_target_y), world)
+        
+        if self.path_has_los:
             # 타겟과 직선 시야가 확보된 경우 A* 연산 생략하고 직선 이동
             self.path = []
-        else:
-            if self.path_update_timer >= 0.4:
-                self.path_update_timer = 0.0
-                self.path = find_path((self.x, self.y), (move_target_x, move_target_y), world)
 
         # 이동 처리
         # 상태별 기본 속도 가중치 결정

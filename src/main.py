@@ -568,6 +568,7 @@ class Game:
                             import copy
                             item_meta = copy.deepcopy(item_tup[2]) if len(item_tup) > 2 else {}
                             item_meta["count"] = item_count
+                            item_meta.pop("slot_idx", None)
                             
                             self.player.inventory.items.pop(found_idx)
                             
@@ -958,7 +959,10 @@ class Game:
             self.event_system.add_log(f"[마켓] 등록한 {t(sale['item_name'])} {sale['count']}개가 판매되어 {sale['earned']} 루블이 정산되었습니다.")
             
         for failed in failed_sales:
+            orig_sandbox = self.player.stash.is_sandbox
+            self.player.stash.is_sandbox = True
             self.player.stash.add_item(failed["item_name"], failed["count"], {})
+            self.player.stash.is_sandbox = orig_sandbox
             self.event_system.add_log(f"[마켓] 기한 만료된 {t(failed['item_name'])} {failed['count']}개가 창고로 반환되었습니다.")
 
         # 레이드 리소스 정리 (메모리 누수 방지)

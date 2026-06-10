@@ -417,6 +417,7 @@ class Player:
 
         self.hunger -= hunger_rate * dt
         self.thirst -= thirst_rate * dt
+        self.stress = min(100.0, self.stress + stress_rate * dt)
 
         # 출혈 상태이상 피해 (초당 0.5 피해 - 방치 시 서서히 사망하도록 완화)
         if self.bleeding:
@@ -624,7 +625,7 @@ class Player:
         old_meta = {}
         if old_item:
             if slot == "back":
-                old_meta = getattr(self, "equipped_backpack_meta", {})
+                old_meta = copy.deepcopy(getattr(self, "equipped_backpack_meta", {}))
                 backpack_items = []
                 remaining_items = []
                 for it in self.inventory.items:
@@ -637,6 +638,11 @@ class Player:
                 self.inventory.items = remaining_items
                 self.inventory.slots = 12
                 self.inventory.max_weight = 15.0
+            else:
+                old_meta = {"durability": self.equipped_durability.get(slot, 100.0)}
+            
+            # 인벤토리 복귀 시 슬롯 겹침 방지
+            old_meta.pop("slot_idx", None)
 
         # 소스 인벤토리에서 아이템 제거
         src_inv.items.pop(found_idx)
@@ -653,6 +659,7 @@ class Player:
                     world.drop_item(old_item, drop_x, drop_y)
 
         self.equipped[slot] = item_name
+        self.equipped_durability[slot] = item_meta.get("durability", 100.0)
         
         if slot == "back":
             self.equipped_backpack_meta = item_meta
@@ -690,6 +697,11 @@ class Player:
                 self.inventory.items = remaining_items
                 self.inventory.slots = 12
                 self.inventory.max_weight = 15.0
+        else:
+            item_meta = {"durability": self.equipped_durability.get(slot, 100.0)}
+
+        # 인벤토리에 들어갈 때 슬롯 겹침 방지
+        item_meta.pop("slot_idx", None)
 
         self.equipped[slot] = None
 

@@ -251,6 +251,8 @@ class GameSaveManager:
         game.world = World(seed=game.world_settings.get("seed"), world_settings=game.world_settings, is_raid=is_raid_state)
         game.player = Player.from_dict(data.get("player", {}), game.difficulty)
         game.player.inventory.is_sandbox = game.sandbox_mode
+        game.player.stash.is_sandbox = game.sandbox_mode
+        game.player.secure_container.is_sandbox = game.sandbox_mode
 
         game.camera = Camera()
         game.camera.resize(game.screen_w, game.screen_h)

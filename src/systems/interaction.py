@@ -27,6 +27,7 @@ class InteractionHandler:
                 item_name = item_tuple[0]
                 metadata = item_tuple[3] if len(item_tuple) > 3 else {}
                 count = metadata.get("count", 1)
+                metadata.pop("slot_idx", None)
                 if self.game.player.inventory.add_item(item_name, count, metadata):
                     chunk.items_on_ground.remove(item_tuple)
                     self.game.event_system.add_log(t("acquired_item", item_name))
@@ -165,6 +166,7 @@ class InteractionHandler:
                 item_name = item_tuple[0]
                 metadata = item_tuple[3] if len(item_tuple) > 3 else {}
                 count = metadata.get("count", 1)
+                metadata.pop("slot_idx", None)
                 if self.game.player.inventory.add_item(item_name, count, metadata):
                     self.game.current_interior.items_on_ground.remove(item_tuple)
                     self.game.event_system.add_log(t("acquired_item", item_name))
