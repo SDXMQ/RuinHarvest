@@ -7,6 +7,51 @@ from crafting import CRAFTING_RECIPES, RECIPE_CATEGORIES
 from utils import wrap_text, ease_out_cubic, lerp
 
 
+class CachedFont:
+    """pygame.font.Font 객체를 래핑하여 텍스트 렌더링 및 크기 연산 결과를 캐싱하는 클래스"""
+    def __init__(self, font_obj):
+        self.font = font_obj
+        self._render_cache = {}
+        self._size_cache = {}
+
+    def render(self, text, antialias, color, background=None):
+        # pygame.Color 객체는 해시 불가능하므로 튜플로 변환
+        if isinstance(color, pygame.Color):
+            color_key = (color.r, color.g, color.b, color.a)
+        elif isinstance(color, (list, tuple)):
+            color_key = tuple(color)
+        else:
+            color_key = color
+
+        if background is not None:
+            if isinstance(background, pygame.Color):
+                bg_key = (background.r, background.g, background.b, background.a)
+            elif isinstance(background, (list, tuple)):
+                bg_key = tuple(background)
+            else:
+                bg_key = background
+        else:
+            bg_key = None
+
+        key = (text, antialias, color_key, bg_key)
+        if key not in self._render_cache:
+            # 캐시 크기 관리 (메모리 누수 방지)
+            if len(self._render_cache) > 1000:
+                self._render_cache.clear()
+            self._render_cache[key] = self.font.render(text, antialias, color, background)
+        return self._render_cache[key]
+
+    def size(self, text):
+        if text not in self._size_cache:
+            if len(self._size_cache) > 1000:
+                self._size_cache.clear()
+            self._size_cache[text] = self.font.size(text)
+        return self._size_cache[text]
+
+    def __getattr__(self, name):
+        return getattr(self.font, name)
+
+
 class FontManager:
     """폰트 관리"""
     _fonts = {}
@@ -41,8 +86,9 @@ class FontManager:
             cls.init()
         if size not in cls._fonts:
             try:
-                cls._fonts[size] = pygame.font.SysFont(cls._base_font, size)
+                raw_font = pygame.font.SysFont(cls._base_font, size)
             except Exception:
-                cls._fonts[size] = pygame.font.Font(None, size)
+                raw_font = pygame.font.Font(None, size)
+            cls._fonts[size] = CachedFont(raw_font)
         return cls._fonts[size]
 

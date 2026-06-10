@@ -58,8 +58,11 @@ class InteriorSystem:
             self.explored_interiors[building_id] = self.current_interior
 
         self.interior_building_ref = building
-        # 플레이어 스폰 위치 조정 (내부 문 바로 앞)
-        self.game.player.enter_interior(float(self.current_interior.door_pos[0]), float(self.current_interior.door_pos[1] - 1))
+        # 플레이어 스폰 위치 조정 (내부 문 바로 앞, 정중앙 소환 보정)
+        self.game.player.enter_interior(
+            float(self.current_interior.door_pos[0]) + 0.5,
+            float(self.current_interior.door_pos[1] - 1) + 0.5
+        )
 
         # 내부 카메라 인스턴스화
         self.interior_camera = Camera()
@@ -177,8 +180,11 @@ class InteriorSystem:
             
         self._load_current_floor_enemies()
         
-        # 윗층으로 올라가면 플레이어 위치는 내려가는 계단(door_pos) 앞
-        self.game.player.enter_interior(float(self.current_interior.door_pos[0]), float(self.current_interior.door_pos[1] - 1))
+        # 윗층으로 올라가면 플레이어 위치는 내려가는 계단(door_pos) 앞, 정중앙 소환 보정
+        self.game.player.enter_interior(
+            float(self.current_interior.door_pos[0]) + 0.5,
+            float(self.current_interior.door_pos[1] - 1) + 0.5
+        )
         
         SoundGenerator.play("door_open") # 계단 소리로 대체 가능
         self.game.transition.start("fade", 0.5)
@@ -202,16 +208,50 @@ class InteriorSystem:
             
         self._load_current_floor_enemies()
         
-        # 아래층으로 내려가면 플레이어 위치는 올라가는 계단 앞
-        # 올라가는 계단(stairs_up) 타일 찾기
-        spawn_x, spawn_y = self.current_interior.width // 2, self.current_interior.height // 2
+        # 아래층으로 내려가면 플레이어 위치는 올라가는 계단 근처의 보행 가능한 타일
+        # stairs_up 타일의 위치들을 전부 수집
+        stairs_tiles = []
         for y in range(self.current_interior.height):
             for x in range(self.current_interior.width):
                 if self.current_interior.tiles[y][x] == "stairs_up":
-                    spawn_x, spawn_y = x, y + 1
+                    stairs_tiles.append((x, y))
+
+        spawn_x, spawn_y = None, None
+        
+        # stairs_up 타일 주변 1타일 반경(상, 하, 좌, 우, 대각선)을 돌며 walkable한 타일을 검색
+        # y+1(남쪽)을 가장 먼저 검사하여 우선순위를 줍니다.
+        if stairs_tiles:
+            directions = [
+                (0, 1),   # 남
+                (0, -1),  # 북
+                (1, 0),   # 동
+                (-1, 0),  # 서
+                (1, 1), (1, -1), (-1, 1), (-1, -1) # 대각선
+            ]
+            
+            found = False
+            for dx, dy in directions:
+                for sx, sy in stairs_tiles:
+                    tx, ty = sx + dx, sy + dy
+                    # 계단 타일 자체가 아닌 곳 중에서 walkable한 타일 탐색
+                    if (tx, ty) not in stairs_tiles and self.current_interior.is_walkable(tx, ty):
+                        spawn_x, spawn_y = tx, ty
+                        found = True
+                        break
+                if found:
                     break
                     
-        self.game.player.enter_interior(float(spawn_x), float(spawn_y))
+        # 만약 찾지 못했다면 기본 맵 내부에서 walkable한 첫 번째 타일을 찾아 폴백
+        if spawn_x is None:
+            spawn_x, spawn_y = self.current_interior.width // 2, self.current_interior.height // 2
+            for y in range(1, self.current_interior.height - 1):
+                for x in range(1, self.current_interior.width - 1):
+                    if self.current_interior.is_walkable(x, y):
+                        spawn_x, spawn_y = x, y
+                        break
+
+        # 플레이어를 타일의 정중앙에 소환
+        self.game.player.enter_interior(float(spawn_x) + 0.5, float(spawn_y) + 0.5)
         
         SoundGenerator.play("door_open")
         self.game.transition.start("fade", 0.5)

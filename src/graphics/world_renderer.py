@@ -403,8 +403,14 @@ class WorldSceneRenderer:
         cam = camera or self.game.camera
         font = FontManager.get(14)
 
-        # 투명도 드로잉을 위한 임시 알파 서피스 생성
-        temp_alpha_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+        # 투명도 드로잉을 위한 임시 알파 서피스 재사용 및 초기화 (성능 최적화)
+        if (not hasattr(self, 'temp_alpha_surf') or 
+                self.temp_alpha_surf is None or 
+                self.temp_alpha_surf.get_size() != (self.game.screen_w, self.game.screen_h)):
+            self.temp_alpha_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+        else:
+            self.temp_alpha_surf.fill((0, 0, 0, 0))
+        temp_alpha_surf = self.temp_alpha_surf
 
         # 1. 탄막 궤적 (Bullet Tracers)
         for tr in self.game.combat_system.tracers:
@@ -547,64 +553,63 @@ class WorldSceneRenderer:
         interior = self.game.current_interior
         cam = self.game.interior_camera
 
-        # 타일 그리기
-        for ty in range(interior.height):
-            for tx in range(interior.width):
-                tile = interior.get_tile(tx, ty)
-                sx, sy = cam.world_to_screen(tx, ty)
+        # 1. 내부 타일맵 서피스 캐싱 (성능 최적화)
+        if not hasattr(interior, 'surface') or interior.surface is None:
+            w_px = interior.width * TILE_SIZE
+            h_px = interior.height * TILE_SIZE
+            interior.surface = pygame.Surface((w_px, h_px)).convert()
+            interior.surface.fill((20, 18, 25))
 
-                if sx < -TILE_SIZE or sx > self.game.screen_w + TILE_SIZE:
-                    continue
-                if sy < -TILE_SIZE or sy > self.game.screen_h + TILE_SIZE:
-                    continue
+            for ty in range(interior.height):
+                for tx in range(interior.width):
+                    tile = interior.get_tile(tx, ty)
+                    px, py = tx * TILE_SIZE, ty * TILE_SIZE
 
-                if tile == "wall":
-                    pygame.draw.rect(surface, (55, 50, 60),
-                                    (sx, sy, TILE_SIZE, TILE_SIZE))
-                    pygame.draw.rect(surface, (70, 65, 75),
-                                    (sx, sy, TILE_SIZE, TILE_SIZE), 1)
-                elif tile == "floor":
-                    color = Colors.FLOOR_WOOD if (tx + ty) % 2 == 0 else (145, 108, 65)
-                    pygame.draw.rect(surface, color,
-                                    (sx, sy, TILE_SIZE, TILE_SIZE))
-                elif tile == "door":
-                    pygame.draw.rect(surface, Colors.DOOR,
-                                    (sx, sy, TILE_SIZE, TILE_SIZE))
-                    # 출구 표시
-                    font = FontManager.get(10)
-                    exit_text = font.render("출구", True, (255, 255, 200))
-                    surface.blit(exit_text, (sx + 4, sy + 10))
-                elif tile == "stairs_up":
-                    # 올라가는 계단 표시
-                    pygame.draw.rect(surface, (100, 90, 80), (sx, sy, TILE_SIZE, TILE_SIZE))
-                    font = FontManager.get(10)
-                    exit_text = font.render("위층", True, (255, 255, 200))
-                    surface.blit(exit_text, (sx + 4, sy + 10))
-                    # 간단한 계단 무늬
-                    for i in range(4):
-                        pygame.draw.line(surface, (80, 70, 60), (sx, sy + i * 8), (sx + TILE_SIZE, sy + i * 8))
-                elif tile == "stairs_down":
-                    # 내려가는 계단 표시
-                    pygame.draw.rect(surface, (80, 70, 60), (sx, sy, TILE_SIZE, TILE_SIZE))
-                    font = FontManager.get(10)
-                    exit_text = font.render("아래층", True, (255, 255, 200))
-                    surface.blit(exit_text, (sx + 2, sy + 10))
-                    for i in range(4):
-                        pygame.draw.line(surface, (60, 50, 40), (sx, sy + i * 8), (sx + TILE_SIZE, sy + i * 8))
-                elif tile == "furniture":
-                    pygame.draw.rect(surface, Colors.FLOOR_WOOD,
-                                    (sx, sy, TILE_SIZE, TILE_SIZE))
-                elif tile == "window":
-                    # 창문 타일: 벽 배경 + 반투명 파란 유리 + 십자 격자
-                    pygame.draw.rect(surface, (55, 50, 60),
-                                    (sx, sy, TILE_SIZE, TILE_SIZE))
-                    win_surf = pygame.Surface((TILE_SIZE - 4, TILE_SIZE - 4), pygame.SRCALPHA)
-                    win_surf.fill((120, 180, 220, 100))
-                    surface.blit(win_surf, (sx + 2, sy + 2))
-                    # 십자 격자
-                    pygame.draw.line(surface, (80, 75, 85), (sx + TILE_SIZE // 2, sy + 2), (sx + TILE_SIZE // 2, sy + TILE_SIZE - 2), 1)
-                    pygame.draw.line(surface, (80, 75, 85), (sx + 2, sy + TILE_SIZE // 2), (sx + TILE_SIZE - 2, sy + TILE_SIZE // 2), 1)
-                    pygame.draw.rect(surface, (90, 85, 95), (sx, sy, TILE_SIZE, TILE_SIZE), 1)
+                    if tile == "wall":
+                        pygame.draw.rect(interior.surface, (55, 50, 60),
+                                        (px, py, TILE_SIZE, TILE_SIZE))
+                        pygame.draw.rect(interior.surface, (70, 65, 75),
+                                        (px, py, TILE_SIZE, TILE_SIZE), 1)
+                    elif tile == "floor":
+                        color = Colors.FLOOR_WOOD if (tx + ty) % 2 == 0 else (145, 108, 65)
+                        pygame.draw.rect(interior.surface, color,
+                                        (px, py, TILE_SIZE, TILE_SIZE))
+                    elif tile == "door":
+                        pygame.draw.rect(interior.surface, Colors.DOOR,
+                                        (px, py, TILE_SIZE, TILE_SIZE))
+                        font = FontManager.get(10)
+                        exit_text = font.render("출구", True, (255, 255, 200))
+                        interior.surface.blit(exit_text, (px + 4, py + 10))
+                    elif tile == "stairs_up":
+                        pygame.draw.rect(interior.surface, (100, 90, 80), (px, py, TILE_SIZE, TILE_SIZE))
+                        font = FontManager.get(10)
+                        exit_text = font.render("위층", True, (255, 255, 200))
+                        interior.surface.blit(exit_text, (px + 4, py + 10))
+                        for i in range(4):
+                            pygame.draw.line(interior.surface, (80, 70, 60), (px, py + i * 8), (px + TILE_SIZE, py + i * 8))
+                    elif tile == "stairs_down":
+                        pygame.draw.rect(interior.surface, (80, 70, 60), (px, py, TILE_SIZE, TILE_SIZE))
+                        font = FontManager.get(10)
+                        exit_text = font.render("아래층", True, (255, 255, 200))
+                        interior.surface.blit(exit_text, (px + 2, py + 10))
+                        for i in range(4):
+                            pygame.draw.line(interior.surface, (60, 50, 40), (px, py + i * 8), (px + TILE_SIZE, py + i * 8))
+                    elif tile == "furniture":
+                        pygame.draw.rect(interior.surface, Colors.FLOOR_WOOD,
+                                        (px, py, TILE_SIZE, TILE_SIZE))
+                    elif tile == "window":
+                        pygame.draw.rect(interior.surface, (55, 50, 60),
+                                        (px, py, TILE_SIZE, TILE_SIZE))
+                        win_surf = pygame.Surface((TILE_SIZE - 4, TILE_SIZE - 4), pygame.SRCALPHA)
+                        win_surf.fill((120, 180, 220, 100))
+                        interior.surface.blit(win_surf, (px + 2, py + 2))
+                        pygame.draw.line(interior.surface, (80, 75, 85), (px + TILE_SIZE // 2, py + 2), (px + TILE_SIZE // 2, py + TILE_SIZE - 2), 1)
+                        pygame.draw.line(interior.surface, (80, 75, 85), (px + 2, py + TILE_SIZE // 2), (px + TILE_SIZE - 2, py + TILE_SIZE // 2), 1)
+                        pygame.draw.rect(interior.surface, (90, 85, 95), (px, py, TILE_SIZE, TILE_SIZE), 1)
+
+        # 캐싱된 타일맵 화면에 렌더링
+        world_zero_sx, world_zero_sy = cam.world_to_screen(0, 0)
+        surface.blit(interior.surface, (world_zero_sx, world_zero_sy))
 
         # 가구 그리기
         for furn in interior.furniture:
@@ -670,7 +675,7 @@ class WorldSceneRenderer:
                     alert_surf = alert_font.render("!", True, (255, 50, 50))
                     bounce = math.sin(pytime.time() * 8) * 2
                     surface.blit(alert_surf, (zsx + TILE_SIZE // 2 - alert_surf.get_width() // 2,
-                                              zsy - 15 + int(bounce)))
+                                               zsy - 15 + int(bounce)))
             elif type_tag == "player":
                 player = obj
                 psx, psy = cam.world_to_screen(player.x, player.y)
@@ -706,7 +711,14 @@ class WorldSceneRenderer:
             ext_cam.x = wx * TILE_SIZE - cx / ext_cam.zoom
             ext_cam.y = wy * TILE_SIZE - cy / ext_cam.zoom
 
-            ext_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+            # ext_surf 재사용 및 초기화 (성능 최적화)
+            if (not hasattr(self, 'ext_surf') or 
+                    self.ext_surf is None or 
+                    self.ext_surf.get_size() != (self.game.screen_w, self.game.screen_h)):
+                self.ext_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+            else:
+                self.ext_surf.fill((0, 0, 0, 0))
+            ext_surf = self.ext_surf
 
             self.draw_tiles(ext_surf)
             self.draw_ground_items(ext_surf)
@@ -717,8 +729,15 @@ class WorldSceneRenderer:
 
             ext_cam.x, ext_cam.y = old_x, old_y
 
-            # 부채꼴 마스크 생성
-            mask_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+            # 부채꼴 마스크 생성 (재사용 및 초기화)
+            if (not hasattr(self, 'mask_surf') or 
+                    self.mask_surf is None or 
+                    self.mask_surf.get_size() != (self.game.screen_w, self.game.screen_h)):
+                self.mask_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+            else:
+                self.mask_surf.fill((0, 0, 0, 0))
+            mask_surf = self.mask_surf
+
             num_points = 12
             points = [(cx, cy)]
             for i in range(num_points + 1):
@@ -735,8 +754,15 @@ class WorldSceneRenderer:
                 # 최종 화면에 블릿
                 surface.blit(ext_surf, (0, 0))
                 
-                # 푸른빛 오버레이 테두리 (알파 블렌딩을 위해 임시 서피스 사용)
-                overlay_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+                # 푸른빛 오버레이 테두리 (알파 블렌딩을 위해 임시 서피스 사용 - 재사용 및 초기화)
+                if (not hasattr(self, 'overlay_surf') or 
+                        self.overlay_surf is None or 
+                        self.overlay_surf.get_size() != (self.game.screen_w, self.game.screen_h)):
+                    self.overlay_surf = pygame.Surface((self.game.screen_w, self.game.screen_h), pygame.SRCALPHA)
+                else:
+                    self.overlay_surf.fill((0, 0, 0, 0))
+                overlay_surf = self.overlay_surf
+
                 pygame.draw.polygon(overlay_surf, (120, 200, 255, 35), points)
                 pygame.draw.polygon(overlay_surf, (120, 200, 255, 60), points, 2)
                 surface.blit(overlay_surf, (0, 0))
