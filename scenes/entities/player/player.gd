@@ -170,6 +170,8 @@ func _try_attack() -> void:
 func _physics_process(delta: float) -> void:
 	_handle_movement(delta)
 
+var is_exhausted: bool = false
+
 func _handle_movement(delta: float) -> void:
 	# 마우스 방향으로 회전
 	var mouse_pos = get_global_mouse_position()
@@ -189,15 +191,21 @@ func _handle_movement(delta: float) -> void:
 	
 	input_dir = input_dir.normalized()
 	
-	var is_sprinting = Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
+	var wants_sprint = Input.is_physical_key_pressed(KEY_SHIFT) or Input.is_action_pressed("sprint")
 	var is_crouching = Input.is_physical_key_pressed(KEY_CTRL) or Input.is_action_pressed("crouch")
 	
+	# 탈진 상태 관리 (0 이하로 떨어지면 탈진, 25 이상 회복되어야 달리기 가능)
+	if stamina <= 0.0:
+		is_exhausted = true
+	elif is_exhausted and stamina >= 25.0:
+		is_exhausted = false
+		
 	var current_speed = walk_speed
 	
 	# 달리기 스태미너 소모 및 제어
-	if is_sprinting and input_dir != Vector2.ZERO and stamina > 0 and not is_fractured:
+	if wants_sprint and input_dir != Vector2.ZERO and not is_exhausted and stamina > 5.0 and not is_fractured:
 		current_speed = sprint_speed
-		stamina -= 15.0 * delta # 초당 15 소모
+		stamina -= 25.0 * delta # 달리기 시 초당 25 소모
 	elif is_crouching:
 		current_speed = crouch_speed
 		_regen_stamina(delta, 1.5)
@@ -250,30 +258,41 @@ func _update_interaction() -> void:
 	# 마우스 방향이나 캐릭터가 바라보는 방향 기준
 	var interact_dist = 32.0 # 1타일 거리
 	var check_pos = global_position + Vector2.RIGHT.rotated(rotation) * interact_dist
+	
+	var object_layer: TileMapLayer = null
 	var chunk_manager = get_node_or_null("/root/MainWorld/ChunkManager")
+	if chunk_manager and chunk_manager.object_layer:
+		object_layer = chunk_manager.object_layer
+	else:
+		# 실내 씬 등 부모 노드 계층에서 ObjectsLayer 탐색
+		var cur_scene = get_tree().current_scene
+		if cur_scene and cur_scene.has_node("ObjectsLayer"):
+			object_layer = cur_scene.get_node("ObjectsLayer")
+		elif get_parent() and get_parent().get_parent() and get_parent().get_parent().has_node("ObjectsLayer"):
+			object_layer = get_parent().get_parent().get_node("ObjectsLayer")
 	
 	interactable_type = Vector2i(-1, -1)
 	interactable_tile_pos = Vector2i(-1, -1)
 	var can_interact = false
 	var prompt_text = ""
 	
-	if chunk_manager and chunk_manager.object_layer:
-		var t_pos = chunk_manager.object_layer.local_to_map(check_pos)
-		var tile_coords = chunk_manager.object_layer.get_cell_atlas_coords(t_pos)
+	if object_layer:
+		var t_pos = object_layer.local_to_map(check_pos)
+		var tile_coords = object_layer.get_cell_atlas_coords(t_pos)
 		
 		# 상호작용 가능한 타일인지 확인 (TileManager 상수 사용)
 		if tile_coords == Vector2i(3, 1): # OBJ_CRATE
 			can_interact = true
-			prompt_text = "[E] 파밍 상자 열기"
+			prompt_text = "[E] 수색하기"
 		elif tile_coords == Vector2i(4, 1): # OBJ_BARREL
 			can_interact = true
-			prompt_text = "[E] 드럼통 뒤지기"
+			prompt_text = "[E] 가구 수색하기"
 		elif tile_coords == Vector2i(5, 1): # OBJ_CAR
 			can_interact = true
 			prompt_text = "[E] 폐차 수색하기"
 		elif tile_coords == Vector2i(6, 1): # OBJ_DOOR
 			can_interact = true
-			prompt_text = "[E] 문 열기/닫기"
+			prompt_text = "[E] 문 열기/나가기"
 			
 		if can_interact:
 			interactable_tile_pos = t_pos

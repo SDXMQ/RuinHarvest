@@ -89,10 +89,7 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 			if road:
 				tile_coords = TileManager.TILE_ROAD
 			elif building:
-				if biome == "commercial" or biome == "industrial" or biome == "military":
-					tile_coords = TileManager.TILE_FLOOR_TILE
-				else:
-					tile_coords = TileManager.TILE_FLOOR_WOOD
+				tile_coords = TileManager.TILE_CONCRETE
 			else:
 				var n_val = noise.get_noise_2d(wx, wy)
 				if n_val > 0.2:
@@ -106,25 +103,13 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 				
 			# 오브젝트 결정
 			if building:
-				# 건물 외곽 벽
 				var dx = abs(wx) % 20
 				var dy = abs(wy) % 20
-				if dx == 5 or dx == 15 or dy == 5 or dy == 15:
-					# 출입문 구멍 (도로 방향)
-					var is_door = false
-					if (dx == 10 and (dy == 5 or dy == 15)) or (dy == 10 and (dx == 5 or dx == 15)):
-						is_door = true
-						
-					if is_door:
-						obj_coords = TileManager.OBJ_DOOR
-					else:
-						obj_coords = TileManager.OBJ_WALL
+				# 출입문은 남쪽(dy == 15, dx == 10) 외벽에 1개 배치
+				if dy == 15 and dx == 10:
+					obj_coords = TileManager.OBJ_DOOR
 				else:
-					# 건물 내부 프랍
-					if rng.randf() < 0.05:
-						obj_coords = TileManager.OBJ_CRATE
-					elif rng.randf() < 0.03:
-						obj_coords = TileManager.OBJ_BARREL
+					obj_coords = TileManager.OBJ_WALL
 			elif road:
 				# 도로 위 버려진 차
 				if rng.randf() < 0.02 and tile_coords != TileManager.TILE_ROAD_LINE:

@@ -56,7 +56,30 @@ func _ready() -> void:
 	
 	# 플레이어 인스턴스화
 	player = PlayerScene.instantiate()
-	player.position = Vector2.ZERO
+	var spawn_pos = Vector2.ZERO
+	if GameManager and GameManager.current_world_data.has("current_interior"):
+		var info = GameManager.current_world_data["current_interior"]
+		if info.has("return_pos"):
+			spawn_pos = info["return_pos"]
+		GameManager.current_world_data.erase("current_interior")
+		
+	# 복귀 시 스탯 및 타이머 복원
+	if GameManager and GameManager.current_world_data.has("player_stats"):
+		var s = GameManager.current_world_data["player_stats"]
+		player.hp = s.get("hp", 100.0)
+		player.stamina = s.get("stamina", 100.0)
+		player.hunger = s.get("hunger", 100.0)
+		player.thirst = s.get("thirst", 100.0)
+		player.is_bleeding = s.get("is_bleeding", false)
+		player.is_fractured = s.get("is_fractured", false)
+		player.is_infected = s.get("is_infected", false)
+		GameManager.current_world_data.erase("player_stats")
+		
+	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
+		raid_time_remaining = GameManager.current_world_data["raid_time_remaining"]
+		GameManager.current_world_data.erase("raid_time_remaining")
+		
+	player.position = spawn_pos
 	entities_layer.add_child(player)
 	
 	player.stats_changed.connect(_on_player_stats_changed)
@@ -343,7 +366,7 @@ func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector
 		loot_title = "폐차 트렁크"
 		slots = 8
 	elif type == Vector2i(6, 1): # Door
-		print("문을 엽니다/닫습니다!")
+		_enter_building_interior(tile_pos)
 		return
 		
 	if table_name != "":
@@ -360,6 +383,43 @@ func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector
 			container_inventories[tile_pos] = inv
 			
 		_open_loot_window(inv, loot_title)
+
+func _enter_building_interior(tile_pos: Vector2i) -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	
+	# 현재 플레이어 데이터 및 배낭 저장
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var saved_items = []
+		for item in player_inventory.items:
+			if item:
+				saved_items.append(item.duplicate())
+		GameManager.current_world_data["player"]["inventory"] = saved_items
+		GameManager.current_world_data["raid_time_remaining"] = raid_time_remaining
+		GameManager.current_world_data["player_stats"] = {
+			"hp": player.hp,
+			"stamina": player.stamina,
+			"hunger": player.hunger,
+			"thirst": player.thirst,
+			"is_bleeding": player.is_bleeding,
+			"is_fractured": player.is_fractured,
+			"is_infected": player.is_infected
+		}
+		
+		# 바이옴에 따른 건물 타입 결정
+		var b_type = "house"
+		if chunk_manager and chunk_manager.generator:
+			var biome = chunk_manager.generator.get_biome(tile_pos.x, tile_pos.y)
+			if biome == "military": b_type = "military"
+			elif biome == "commercial": b_type = "store"
+			elif biome == "industrial": b_type = "hospital"
+			
+		GameManager.current_world_data["current_interior"] = {
+			"type": b_type,
+			"seed": tile_pos.x * 73856093 ^ tile_pos.y * 19349663,
+			"return_pos": player.global_position
+		}
+		
+	get_tree().change_scene_to_file("res://scenes/interior/building_interior_scene.tscn")
 
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	get_tree().paused = true

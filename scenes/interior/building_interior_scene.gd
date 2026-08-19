@@ -1,0 +1,262 @@
+# res://scenes/interior/building_interior_scene.gd
+extends Node2D
+
+@onready var tile_map: TileMapLayer = $TileMapLayer
+@onready var objects_layer: TileMapLayer = $ObjectsLayer
+@onready var entities_layer: Node2D = $Entities
+@onready var hud_title: Label = $UI/HUD/BuildingTitle
+@onready var interact_prompt: Label = $UI/HUD/InteractPrompt
+
+# HUD 게이지 노드
+@onready var hp_bar: ProgressBar = $UI/HUD/Panel/VBox/HPBar
+@onready var stamina_bar: ProgressBar = $UI/HUD/Panel/VBox/StaminaBar
+@onready var hunger_bar: ProgressBar = $UI/HUD/Panel/VBox/HungerBar
+@onready var thirst_bar: ProgressBar = $UI/HUD/Panel/VBox/ThirstBar
+@onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
+@onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
+
+# 일시정지 메뉴
+@onready var pause_menu: Control = $UI/PauseMenu
+@onready var resume_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ResumeBtn
+@onready var exit_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ExitBtn
+
+const PlayerScene = preload("res://scenes/entities/player/player.tscn")
+const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
+const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
+
+var player: CharacterBody2D
+var player_inventory: Inventory
+var interior_data: Dictionary = {}
+var furniture_inventories: Dictionary = {} # Vector2i -> Inventory
+var current_loot_window: Control = null
+var current_crafting_window: Control = null
+
+var raid_time_remaining: float = 300.0
+
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	
+	resume_btn.pressed.connect(_toggle_pause)
+	exit_btn.pressed.connect(_on_exit_pressed)
+	
+	# 남은 레이드 시간 복원
+	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
+		raid_time_remaining = GameManager.current_world_data["raid_time_remaining"]
+		
+	# 건물 내부 데이터 가져오기
+	var b_type = "house"
+	var seed_val = randi()
+	if GameManager and GameManager.current_world_data.has("current_interior"):
+		var info = GameManager.current_world_data["current_interior"]
+		b_type = info.get("type", "house")
+		seed_val = info.get("seed", randi())
+		
+	interior_data = BuildingInterior.generate_interior(b_type, seed_val)
+	hud_title.text = "🏢 " + interior_data["title"]
+	
+	_setup_tilemap()
+	_setup_furnitures()
+	_setup_player()
+
+func _setup_tilemap() -> void:
+	if TileManager.tileset:
+		tile_map.tile_set = TileManager.tileset
+		objects_layer.tile_set = TileManager.tileset
+		
+	var w = interior_data["width"]
+	var h = interior_data["height"]
+	var tiles = interior_data["tiles"]
+	
+	for y in range(h):
+		for x in range(w):
+			var t_type = tiles[y * w + x]
+			if t_type == 0: # 벽
+				tile_map.set_cell(Vector2i(x, y), 0, TileManager.TILE_CONCRETE)
+				objects_layer.set_cell(Vector2i(x, y), 0, TileManager.OBJ_WALL)
+			elif t_type == 1: # 바닥
+				tile_map.set_cell(Vector2i(x, y), 0, TileManager.TILE_FLOOR_WOOD)
+			elif t_type == 2: # 출구 문
+				tile_map.set_cell(Vector2i(x, y), 0, TileManager.TILE_ROAD)
+				objects_layer.set_cell(Vector2i(x, y), 0, TileManager.OBJ_DOOR)
+
+func _setup_furnitures() -> void:
+	for f in interior_data["furnitures"]:
+		var pos = f["pos"]
+		var f_type = f["type"]
+		
+		var obj_coord = TileManager.OBJ_CRATE
+		if f_type == "무기함" or f_type == "금고":
+			obj_coord = TileManager.OBJ_CRATE
+		elif f_type == "냉장고" or f_type == "약품장":
+			obj_coord = TileManager.OBJ_BARREL
+			
+		objects_layer.set_cell(pos, 0, obj_coord)
+		
+		var inv = Inventory.new()
+		inv.max_slots = 8
+		add_child(inv)
+		for item in f["loot"]:
+			inv.add_item(item["id"], item["amount"])
+		furniture_inventories[pos] = {"type": f_type, "inv": inv}
+
+func _setup_player() -> void:
+	player = PlayerScene.instantiate()
+	var exit_pos = interior_data["exit_pos"]
+	player.position = Vector2((exit_pos.x + 0.5) * 32.0, (exit_pos.y - 1.5) * 32.0)
+	entities_layer.add_child(player)
+	
+	# 플레이어 생존 스탯 복원
+	if GameManager and GameManager.current_world_data.has("player_stats"):
+		var s = GameManager.current_world_data["player_stats"]
+		player.hp = s.get("hp", 100.0)
+		player.stamina = s.get("stamina", 100.0)
+		player.hunger = s.get("hunger", 100.0)
+		player.thirst = s.get("thirst", 100.0)
+		player.is_bleeding = s.get("is_bleeding", false)
+		player.is_fractured = s.get("is_fractured", false)
+		player.is_infected = s.get("is_infected", false)
+		
+	player_inventory = Inventory.new()
+	player_inventory.max_slots = 12
+	add_child(player_inventory)
+	
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
+		for item in p_items:
+			if item:
+				player_inventory.add_item(item["id"], item["amount"])
+				
+	player.stats_changed.connect(_on_player_stats_changed)
+	player.interact_prompt.connect(_on_interact_prompt)
+	player.object_interacted.connect(_on_object_interacted)
+	_on_player_stats_changed()
+
+func _process(delta: float) -> void:
+	if raid_time_remaining > 0:
+		raid_time_remaining -= delta
+		var minutes = int(raid_time_remaining) / 60
+		var seconds = int(raid_time_remaining) % 60
+		if raid_timer_label:
+			raid_timer_label.text = "탈출 시간: %02d:%02d" % [minutes, seconds]
+			if raid_time_remaining < 60:
+				raid_timer_label.add_theme_color_override("font_color", Color.RED)
+		if raid_time_remaining <= 0:
+			GameManager.end_raid("mia")
+
+func _on_player_stats_changed() -> void:
+	if not player: return
+	if hp_bar:
+		hp_bar.value = player.hp
+		hp_bar.get_node("Label").text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
+	if stamina_bar:
+		stamina_bar.value = player.stamina
+		stamina_bar.get_node("Label").text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
+	if hunger_bar:
+		hunger_bar.value = player.hunger
+	if thirst_bar:
+		thirst_bar.value = player.thirst
+		
+	if status_label:
+		var statuses = []
+		if player.is_bleeding: statuses.append("출혈")
+		if player.is_fractured: statuses.append("골절")
+		if player.is_infected: statuses.append("감염")
+		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+
+func _unhandled_input(event: InputEvent) -> void:
+	if current_loot_window != null or current_crafting_window != null:
+		return
+		
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
+			_toggle_pause()
+			get_viewport().set_input_as_handled()
+			return
+			
+	if event.is_action_pressed("pause"):
+		_toggle_pause()
+		get_viewport().set_input_as_handled()
+		
+	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
+		_open_loot_window(null, "내 배낭")
+		get_viewport().set_input_as_handled()
+		
+	if event.is_action_pressed("crafting") or (event is InputEventKey and event.physical_keycode == KEY_C and event.pressed):
+		_open_crafting_window()
+		get_viewport().set_input_as_handled()
+
+func _open_crafting_window() -> void:
+	get_tree().paused = true
+	current_crafting_window = CraftingWindowScene.instantiate()
+	$UI.add_child(current_crafting_window)
+	current_crafting_window.setup(player_inventory)
+	current_crafting_window.window_closed.connect(func(): current_crafting_window = null)
+
+func _toggle_pause() -> void:
+	var is_paused = not get_tree().paused
+	get_tree().paused = is_paused
+	if pause_menu:
+		pause_menu.visible = is_paused
+
+func _on_exit_pressed() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	get_tree().paused = false
+	if GameManager:
+		GameManager.is_paused = false
+		GameManager.end_raid("survived")
+
+func _on_interact_prompt(show: bool, text: String) -> void:
+	if interact_prompt and current_loot_window == null:
+		interact_prompt.visible = show
+		interact_prompt.text = text
+	elif interact_prompt:
+		interact_prompt.visible = false
+
+func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
+	if current_loot_window != null: return
+	
+	if tile_pos == interior_data["exit_pos"] or type == TileManager.OBJ_DOOR:
+		_exit_interior()
+		return
+		
+	if furniture_inventories.has(tile_pos):
+		var f_data = furniture_inventories[tile_pos]
+		_open_loot_window(f_data["inv"], f_data["type"])
+	elif type == TileManager.OBJ_CRATE or type == TileManager.OBJ_BARREL:
+		var inv = Inventory.new()
+		inv.max_slots = 6
+		add_child(inv)
+		var loot_items = ItemDatabase.generate_loot("residential", 2)
+		for item in loot_items:
+			inv.add_item(item["id"], item["amount"])
+		furniture_inventories[tile_pos] = {"type": "보관함", "inv": inv}
+		_open_loot_window(inv, "보관함")
+
+func _open_loot_window(target_inv: Inventory, title: String) -> void:
+	get_tree().paused = true
+	current_loot_window = LootWindowScene.instantiate()
+	$UI.add_child(current_loot_window)
+	current_loot_window.setup(player_inventory, target_inv, title)
+	current_loot_window.window_closed.connect(func(): current_loot_window = null)
+
+func _exit_interior() -> void:
+	# 플레이어 데이터, 배낭, 남은 시간 저장 후 야외로 복귀
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var saved_items = []
+		for item in player_inventory.items:
+			if item:
+				saved_items.append(item.duplicate())
+		GameManager.current_world_data["player"]["inventory"] = saved_items
+		GameManager.current_world_data["raid_time_remaining"] = raid_time_remaining
+		GameManager.current_world_data["player_stats"] = {
+			"hp": player.hp,
+			"stamina": player.stamina,
+			"hunger": player.hunger,
+			"thirst": player.thirst,
+			"is_bleeding": player.is_bleeding,
+			"is_fractured": player.is_fractured,
+			"is_infected": player.is_infected
+		}
+		
+	if SoundManager: SoundManager.play("menu_select")
+	get_tree().change_scene_to_file("res://scenes/world/main_world.tscn")
