@@ -1,0 +1,17 @@
+[gd_scene load_steps=3 format=3 uid="uid://player00000"]
+
+[ext_resource type="Script" path="res://scenes/entities/player/player.gd" id="1_plr"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_p1"]
+radius = 14.0
+
+[node name="Player" type="CharacterBody2D"]
+script = ExtResource("1_plr")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_p1")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(1.5, 1.5)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
