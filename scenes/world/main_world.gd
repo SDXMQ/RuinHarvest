@@ -2,7 +2,6 @@
 extends Node2D
 
 @onready var chunk_manager: Node = $ChunkManager
-@onready var world_renderer: Node2D = $WorldRenderer
 @onready var entities_layer: Node2D = $Entities
 @onready var pause_menu: Control = $UI/PauseMenu
 @onready var resume_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ResumeBtn
@@ -56,11 +55,11 @@ func _process(_delta: float) -> void:
 			var hint_text = "조작: WASD 이동 | Shift 달리기 | ESC 일시정지"
 			debug_label.text = "%s\n%s\n%s" % [pos_text, speed_text, hint_text]
 
-func _on_chunk_loaded(chunk_pos: Vector2i, data: Dictionary) -> void:
-	world_renderer.add_chunk(chunk_pos, data)
+func _on_chunk_loaded(_chunk_pos: Vector2i, _data: Dictionary) -> void:
+	pass
 
-func _on_chunk_unloaded(chunk_pos: Vector2i) -> void:
-	world_renderer.remove_chunk(chunk_pos)
+func _on_chunk_unloaded(_chunk_pos: Vector2i) -> void:
+	pass
 
 func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused

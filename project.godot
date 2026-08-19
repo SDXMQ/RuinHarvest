@@ -24,6 +24,7 @@ ItemDatabase="*res://autoload/item_database.gd"
 SoundManager="*res://autoload/sound_manager.gd"
 SaveManager="*res://autoload/save_manager.gd"
 GameManager="*res://autoload/game_manager.gd"
+TileManager="*res://autoload/tile_manager.gd"
 
 [display]
 

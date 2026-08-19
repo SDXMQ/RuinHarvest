@@ -1,4 +1,4 @@
-[gd_scene load_steps=2 format=3 uid="uid://mainmenu00000"]
+[gd_scene format=3 uid="uid://oa1t7v4cfeqp"]
 
 [ext_resource type="Script" path="res://scenes/main_menu/main_menu.gd" id="1_mmenu"]
 
@@ -64,7 +64,7 @@ anchor_bottom = 0.5
 offset_left = -100.0
 offset_top = 20.0
 offset_right = 100.0
-offset_bottom = 160.0
+offset_bottom = 180.0
 grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 15
