@@ -15,6 +15,7 @@ extends Node2D
 @onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
 @onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
 @onready var extract_bar: ProgressBar = $UI/HUD/ExtractProgressBar
+@onready var day_night_modulate: CanvasModulate = $DayNightModulate
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 var player: CharacterBody2D
@@ -114,8 +115,11 @@ func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	
 	entities_layer.add_child(enemy)
 
+const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
+var current_crafting_window: Control = null
+
 func _unhandled_input(event: InputEvent) -> void:
-	if current_loot_window != null:
+	if current_loot_window != null or current_crafting_window != null:
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -132,12 +136,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
 		_open_loot_window(null)
 		get_viewport().set_input_as_handled()
+		
+	# 제작창 열기 (C 키)
+	if event.is_action_pressed("crafting") or (event is InputEventKey and event.physical_keycode == KEY_C and event.pressed):
+		_open_crafting_window()
+		get_viewport().set_input_as_handled()
+
+func _open_crafting_window() -> void:
+	get_tree().paused = true
+	current_crafting_window = CraftingWindowScene.instantiate()
+	$UI.add_child(current_crafting_window)
+	current_crafting_window.setup(player_inventory)
+	current_crafting_window.window_closed.connect(func(): current_crafting_window = null)
 
 func _process(delta: float) -> void:
 	if player:
 		chunk_manager.update_chunks(player.global_position)
 		
-		# 레이드 제한 시간 감소
+		# 레이드 제한 시간 감소 및 낮/밤 조명 제어
 		if raid_time_remaining > 0:
 			raid_time_remaining -= delta
 			var minutes = int(raid_time_remaining) / 60
@@ -148,6 +164,8 @@ func _process(delta: float) -> void:
 					raid_timer_label.add_theme_color_override("font_color", Color.RED)
 			if raid_time_remaining <= 0:
 				GameManager.end_raid("mia")
+				
+			_update_day_night_cycle()
 		
 		# 적 주기적 스폰
 		enemy_spawn_timer -= delta
@@ -161,6 +179,26 @@ func _process(delta: float) -> void:
 			var cx = floor(player.global_position.x / (16 * 32))
 			var cy = floor(player.global_position.y / (16 * 32))
 			debug_label.text = "위치: (%.1f, %.1f) | 청크: (%d, %d)" % [player.global_position.x, player.global_position.y, cx, cy]
+
+func _update_day_night_cycle() -> void:
+	if not day_night_modulate: return
+	var progress = 1.0 - (raid_time_remaining / 300.0) # 0.0 (시작) ~ 1.0 (끝)
+	
+	# 낮 -> 황혼 -> 밤 -> 새벽 사이클
+	var target_color: Color
+	if progress < 0.3: # 낮 (0.0 ~ 0.3)
+		target_color = Color(1.0, 1.0, 1.0)
+	elif progress < 0.5: # 황혼 (0.3 ~ 0.5)
+		var t = (progress - 0.3) / 0.2
+		target_color = Color(1.0, 1.0, 1.0).lerp(Color(0.7, 0.45, 0.4), t)
+	elif progress < 0.8: # 심야 (0.5 ~ 0.8)
+		var t = (progress - 0.5) / 0.3
+		target_color = Color(0.7, 0.45, 0.4).lerp(Color(0.12, 0.12, 0.22), t)
+	else: # 새벽/여명 (0.8 ~ 1.0)
+		var t = (progress - 0.8) / 0.2
+		target_color = Color(0.12, 0.12, 0.22).lerp(Color(0.5, 0.5, 0.65), t)
+		
+	day_night_modulate.color = target_color
 
 func _on_player_stats_changed() -> void:
 	if hp_bar:

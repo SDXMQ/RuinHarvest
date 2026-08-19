@@ -8,6 +8,9 @@
 process_mode = 3
 script = ExtResource("1_wrld")
 
+[node name="DayNightModulate" type="CanvasModulate" parent="."]
+color = Color(1, 1, 1, 1)
+
 [node name="ChunkManager" type="Node2D" parent="."]
 script = ExtResource("2_cmgr")
 

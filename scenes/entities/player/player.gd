@@ -35,9 +35,79 @@ signal stats_changed
 signal interact_prompt(show: bool, text: String)
 signal object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i)
 
+# 손전등 및 조명
+var flashlight: PointLight2D
+var ambient_light: PointLight2D
+var flashlight_enabled: bool = true
+
 func _ready() -> void:
 	add_to_group("player")
 	EventBus.player_damaged.connect(_on_player_damaged)
+	_setup_lighting()
+
+func _setup_lighting() -> void:
+	# 1. 발밑 주변 360도 은은한 조명 (반경 70px)
+	ambient_light = PointLight2D.new()
+	ambient_light.name = "AmbientLight"
+	ambient_light.texture = _create_radial_gradient(140, 0.45)
+	ambient_light.color = Color(1.0, 0.95, 0.8)
+	ambient_light.energy = 0.9
+	add_child(ambient_light)
+	
+	# 2. 전방 집중 부채꼴 손전등 빔 (Real Flashlight Cone)
+	flashlight = PointLight2D.new()
+	flashlight.name = "Flashlight"
+	flashlight.texture = _create_flashlight_cone_texture(320, 240, 65.0)
+	flashlight.offset = Vector2(160, 0) # 광원 중심을 전방으로 이동
+	flashlight.color = Color(1.0, 0.98, 0.9)
+	flashlight.energy = 1.4
+	add_child(flashlight)
+
+func _create_radial_gradient(size: int, intensity: float) -> GradientTexture2D:
+	var grad = Gradient.new()
+	grad.colors = PackedColorArray([Color(1, 1, 1, intensity), Color(1, 1, 1, 0)])
+	grad.offsets = PackedFloat32Array([0.0, 1.0])
+	
+	var tex = GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = size
+	tex.height = size
+	return tex
+
+func _create_flashlight_cone_texture(width: int, height: int, cone_angle_deg: float) -> ImageTexture:
+	var img = Image.create_empty(width, height, false, Image.FORMAT_RGBA8)
+	var start_x = 0.0
+	var start_y = height / 2.0
+	var half_angle_rad = deg_to_rad(cone_angle_deg / 2.0)
+	var max_dist = float(width)
+	
+	for y in range(height):
+		for x in range(width):
+			var dx = x - start_x
+			var dy = y - start_y
+			var dist = sqrt(dx * dx + dy * dy)
+			
+			if dist <= 0.0 or dist > max_dist:
+				img.set_pixel(x, y, Color(0, 0, 0, 0))
+				continue
+				
+			var angle = abs(atan2(dy, dx))
+			if angle > half_angle_rad:
+				img.set_pixel(x, y, Color(0, 0, 0, 0))
+				continue
+				
+			# 1. 거리에 따른 부드러운 감쇠 (Falloff)
+			var dist_factor = pow(1.0 - (dist / max_dist), 1.6)
+			# 2. 부채꼴 가장자리 부드러운 페이드 (Edge feathering)
+			var angle_factor = cos((angle / half_angle_rad) * (PI / 2.0))
+			
+			var alpha = clamp(dist_factor * angle_factor, 0.0, 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, alpha))
+			
+	return ImageTexture.create_from_image(img)
 
 func _process(delta: float) -> void:
 	if attack_cooldown_timer > 0:
@@ -46,6 +116,16 @@ func _process(delta: float) -> void:
 	_handle_survival_stats(delta)
 	_update_interaction()
 	_handle_combat(delta)
+	
+	# F 키 손전등 토글
+	if Input.is_physical_key_pressed(KEY_F) or Input.is_action_just_pressed("flashlight"):
+		if interact_cooldown <= 0.0:
+			interact_cooldown = 0.3
+			flashlight_enabled = not flashlight_enabled
+			if flashlight:
+				flashlight.enabled = flashlight_enabled
+			if SoundManager:
+				SoundManager.play("menu_select")
 
 func _handle_combat(_delta: float) -> void:
 	if Input.is_action_just_pressed("attack") or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
