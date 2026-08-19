@@ -16,12 +16,15 @@ extends Node2D
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 var player: CharacterBody2D
-
 var player_inventory: Inventory
 var container_inventories: Dictionary = {} # tile_pos -> Inventory
 
 const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
 var current_loot_window: Control = null
+
+const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
+var enemy_spawn_timer: float = 2.0
+var max_enemies_count: int = 15
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
@@ -52,6 +55,25 @@ func _ready() -> void:
 	# 초기 청크 로드
 	chunk_manager.update_chunks(player.global_position)
 	_on_player_stats_changed()
+	
+	# 시작 시 주변에 초기 좀비 3마리 스폰
+	for i in range(3):
+		_spawn_enemy_near_player(200.0 + i * 50.0)
+
+func _spawn_enemy_near_player(dist: float = 350.0) -> void:
+	if not player: return
+	var angle = randf() * TAU
+	var spawn_pos = player.global_position + Vector2.RIGHT.rotated(angle) * dist
+	
+	var enemy = EnemyScene.instantiate()
+	enemy.position = spawn_pos
+	# 무작위 적 타입 결정 (일반, 러너, 탱커)
+	var r = randf()
+	if r < 0.2: enemy.enemy_type = 1 # RUNNER
+	elif r < 0.35: enemy.enemy_type = 2 # TANK
+	else: enemy.enemy_type = 0 # ZOMBIE
+	
+	entities_layer.add_child(enemy)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if current_loot_window != null:
@@ -72,9 +94,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		_open_loot_window(player_inventory, "내 배낭")
 		get_viewport().set_input_as_handled()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if player:
 		chunk_manager.update_chunks(player.global_position)
+		
+		# 적 주기적 스폰
+		enemy_spawn_timer -= delta
+		if enemy_spawn_timer <= 0:
+			enemy_spawn_timer = randf_range(4.0, 8.0)
+			var current_enemies = get_tree().get_nodes_in_group("enemies").size()
+			if current_enemies < max_enemies_count:
+				_spawn_enemy_near_player(randf_range(350.0, 550.0))
 		
 		if debug_label:
 			var cx = floor(player.global_position.x / (16 * 32))

@@ -25,17 +25,67 @@ var is_fractured: bool = false
 var interactable_tile_pos: Vector2i = Vector2i(-1, -1)
 var interactable_type: Vector2i = Vector2i(-1, -1)
 
+# 무기 및 전투
+const BulletScene = preload("res://scenes/entities/projectiles/bullet.gd")
+var equipped_weapon: String = "권총"
+var attack_cooldown_timer: float = 0.0
+var weapon_fire_rate: float = 0.35 # 발사 간격 (초)
+
 signal stats_changed
 signal interact_prompt(show: bool, text: String)
 signal object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i)
 
 func _ready() -> void:
-	# 초기화
+	add_to_group("player")
 	EventBus.player_damaged.connect(_on_player_damaged)
 
 func _process(delta: float) -> void:
+	if attack_cooldown_timer > 0:
+		attack_cooldown_timer -= delta
+		
 	_handle_survival_stats(delta)
 	_update_interaction()
+	_handle_combat(delta)
+
+func _handle_combat(_delta: float) -> void:
+	if Input.is_action_just_pressed("attack") or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		# UI가 떠있거나 일시정지면 무시
+		if get_tree().paused: return
+		_try_attack()
+
+func _try_attack() -> void:
+	if attack_cooldown_timer > 0: return
+	attack_cooldown_timer = weapon_fire_rate
+	
+	var aim_dir = Vector2.RIGHT.rotated(rotation)
+	var spawn_pos = global_position + aim_dir * 18.0
+	
+	if equipped_weapon == "권총" or equipped_weapon == "레버액션 소총":
+		# 총알 발사
+		var bullet_scene = load("res://scenes/entities/projectiles/bullet.tscn")
+		if bullet_scene:
+			var bullet = bullet_scene.instantiate()
+			get_parent().add_child(bullet)
+			bullet.setup(spawn_pos, aim_dir, 25.0)
+			
+		if SoundManager:
+			SoundManager.play("hit_ranged")
+	else:
+		# 근접 공격 (전방 40px 부채꼴 범위 공격)
+		if SoundManager:
+			SoundManager.play("hit_melee")
+			
+		var space_state = get_world_2d().direct_space_state
+		var query = PhysicsShapeQueryParameters2D.new()
+		var circle = CircleShape2D.new()
+		circle.radius = 35.0
+		query.shape = circle
+		query.transform = Transform2D(0, spawn_pos)
+		var results = space_state.intersect_shape(query)
+		for res in results:
+			var collider = res.get("collider")
+			if collider and collider.has_method("take_damage") and collider != self:
+				collider.take_damage(15.0, aim_dir)
 
 func _physics_process(delta: float) -> void:
 	_handle_movement(delta)
