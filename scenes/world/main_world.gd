@@ -6,18 +6,39 @@ extends Node2D
 @onready var pause_menu: Control = $UI/PauseMenu
 @onready var resume_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ResumeBtn
 @onready var exit_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ExitBtn
-@onready var debug_label: Label = $UI/HUD/Panel/DebugLabel
+@onready var debug_label: Label = $UI/HUD/DebugLabel
+@onready var interact_prompt: Label = $UI/HUD/InteractPrompt
+@onready var hp_bar: ProgressBar = $UI/HUD/Panel/VBox/HPBar
+@onready var stamina_bar: ProgressBar = $UI/HUD/Panel/VBox/StaminaBar
+@onready var hunger_bar: ProgressBar = $UI/HUD/Panel/VBox/HBox/HungerBar
+@onready var thirst_bar: ProgressBar = $UI/HUD/Panel/VBox/HBox/ThirstBar
+@onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 var player: CharacterBody2D
 
+var player_inventory: Inventory
+var container_inventories: Dictionary = {} # tile_pos -> Inventory
+
+const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
+var current_loot_window: Control = null
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
+	
+	# 플레이어 인벤토리 생성
+	player_inventory = Inventory.new()
+	player_inventory.max_slots = 12
+	add_child(player_inventory)
 	
 	# 플레이어 인스턴스화
 	player = PlayerScene.instantiate()
 	player.position = Vector2.ZERO
 	entities_layer.add_child(player)
+	
+	player.stats_changed.connect(_on_player_stats_changed)
+	player.interact_prompt.connect(_on_interact_prompt)
+	player.object_interacted.connect(_on_object_interacted)
 	
 	# 일시정지 메뉴 버튼 시그널 연결
 	resume_btn.pressed.connect(_on_resume_pressed)
@@ -30,8 +51,12 @@ func _ready() -> void:
 	
 	# 초기 청크 로드
 	chunk_manager.update_chunks(player.global_position)
+	_on_player_stats_changed()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if current_loot_window != null:
+		return
+		
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
 			_toggle_pause()
@@ -41,19 +66,91 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
+		
+	# 인벤토리 열기 (E나 Tab 키로 단순 확인용 창 띄우기)
+	if event.is_action_pressed("inventory"):
+		_open_loot_window(player_inventory, "내 배낭")
+		get_viewport().set_input_as_handled()
 
 func _process(_delta: float) -> void:
 	if player:
-		# 플레이어 이동 시 청크 업데이트 (render_distance 기준)
 		chunk_manager.update_chunks(player.global_position)
 		
 		if debug_label:
 			var cx = floor(player.global_position.x / (16 * 32))
 			var cy = floor(player.global_position.y / (16 * 32))
-			var pos_text = "위치: (%.1f, %.1f) | 청크: (%d, %d)" % [player.global_position.x, player.global_position.y, cx, cy]
-			var speed_text = "이동 속도: %.1f px/s" % [player.velocity.length()]
-			var hint_text = "조작: WASD 이동 | Shift 달리기 | ESC 일시정지"
-			debug_label.text = "%s\n%s\n%s" % [pos_text, speed_text, hint_text]
+			debug_label.text = "위치: (%.1f, %.1f) | 청크: (%d, %d)" % [player.global_position.x, player.global_position.y, cx, cy]
+
+func _on_player_stats_changed() -> void:
+	if hp_bar:
+		hp_bar.value = player.hp
+		hp_bar.get_node("Label").text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
+	if stamina_bar:
+		stamina_bar.value = player.stamina
+		stamina_bar.get_node("Label").text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
+	if hunger_bar:
+		hunger_bar.value = player.hunger
+	if thirst_bar:
+		thirst_bar.value = player.thirst
+		
+	if status_label:
+		var statuses = []
+		if player.is_bleeding: statuses.append("출혈")
+		if player.is_fractured: statuses.append("골절")
+		if player.is_infected: statuses.append("감염")
+		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+		
+func _on_interact_prompt(show: bool, text: String) -> void:
+	if interact_prompt and current_loot_window == null:
+		interact_prompt.visible = show
+		interact_prompt.text = text
+	elif interact_prompt:
+		interact_prompt.visible = false
+		
+func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
+	if current_loot_window != null: return
+	
+	var table_name = ""
+	var loot_title = ""
+	var slots = 8
+	
+	if type == Vector2i(3, 1): # Crate
+		table_name = "crate"
+		loot_title = "파밍 상자"
+		slots = 12
+	elif type == Vector2i(4, 1): # Barrel
+		table_name = "barrel"
+		loot_title = "드럼통"
+		slots = 4
+	elif type == Vector2i(5, 1): # Car
+		table_name = "car"
+		loot_title = "폐차 트렁크"
+		slots = 8
+	elif type == Vector2i(6, 1): # Door
+		print("문을 엽니다/닫습니다!")
+		return
+		
+	if table_name != "":
+		var inv: Inventory
+		if container_inventories.has(tile_pos):
+			inv = container_inventories[tile_pos]
+		else:
+			inv = Inventory.new()
+			inv.max_slots = slots
+			add_child(inv)
+			var loot_items = ItemDatabase.generate_loot(table_name)
+			for item in loot_items:
+				inv.add_item(item["id"], item["amount"])
+			container_inventories[tile_pos] = inv
+			
+		_open_loot_window(inv, loot_title)
+
+func _open_loot_window(target_inv: Inventory, title: String) -> void:
+	get_tree().paused = true
+	current_loot_window = LootWindowScene.instantiate()
+	$UI.add_child(current_loot_window)
+	current_loot_window.setup(player_inventory, target_inv, title)
+	current_loot_window.window_closed.connect(func(): current_loot_window = null)
 
 func _on_chunk_loaded(_chunk_pos: Vector2i, _data: Dictionary) -> void:
 	pass

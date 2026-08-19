@@ -1,0 +1,115 @@
+[gd_scene load_steps=2 format=3 uid="uid://loot00000"]
+
+[ext_resource type="Script" path="res://scenes/ui/loot_window.gd" id="1_loot"]
+
+[node name="LootWindow" type="Control"]
+process_mode = 2
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_loot")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.5)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBox" type="HBoxContainer" parent="Center"]
+layout_mode = 2
+theme_override_constants/separation = 40
+
+[node name="PlayerPanel" type="Panel" parent="Center/HBox"]
+custom_minimum_size = Vector2(300, 400)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/HBox/PlayerPanel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 10.0
+offset_bottom = 40.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 18
+text = "내 배낭"
+horizontal_alignment = 1
+
+[node name="Grid" type="GridContainer" parent="Center/HBox/PlayerPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -116.0
+offset_top = -140.0
+offset_right = 116.0
+offset_bottom = 140.0
+grow_horizontal = 2
+grow_vertical = 2
+columns = 4
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="LootPanel" type="Panel" parent="Center/HBox"]
+custom_minimum_size = Vector2(300, 400)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/HBox/LootPanel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 10.0
+offset_bottom = 40.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 18
+text = "루팅 상자"
+horizontal_alignment = 1
+
+[node name="Grid" type="GridContainer" parent="Center/HBox/LootPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -116.0
+offset_top = -140.0
+offset_right = 116.0
+offset_bottom = 140.0
+grow_horizontal = 2
+grow_vertical = 2
+columns = 4
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="CloseBtn" type="Button" parent="."]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -50.0
+offset_top = -80.0
+offset_right = 50.0
+offset_bottom = -40.0
+grow_horizontal = 2
+grow_vertical = 0
+text = "닫기 (E)"
+
+[connection signal="pressed" from="CloseBtn" to="." method="_on_close_button_pressed"]
