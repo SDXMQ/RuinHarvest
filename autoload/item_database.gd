@@ -323,12 +323,52 @@ var loot_tables: Dictionary = {
 	]
 }
 
+# 3인 상인 데이터 정의
+var traders: Dictionary = {
+	"prapor": {
+		"name": "프라포 (무기/군수품)",
+		"desc": "전직 군수 보급관. 총기와 탄약, 방어구를 취급합니다.",
+		"stock": [
+			{"id": "권총", "price": 18000},
+			{"id": "레버액션 소총", "price": 35000},
+			{"id": "탄약", "price": 200, "amount": 30},
+			{"id": "수류탄", "price": 4000},
+			{"id": "파이프", "price": 1500},
+			{"id": "방탄조끼", "price": 15000}
+		]
+	},
+	"therapist": {
+		"name": "테라피스트 (의료/식량)",
+		"desc": "응급 의사 출신. 의약품과 식수를 공정하게 거래합니다.",
+		"stock": [
+			{"id": "붕대", "price": 800},
+			{"id": "진통제", "price": 2500},
+			{"id": "구급상자", "price": 4000},
+			{"id": "식량통조림", "price": 1200},
+			{"id": "생수", "price": 600},
+			{"id": "에너지바", "price": 800}
+		]
+	},
+	"fence": {
+		"name": "펜스 (잡화/암시장)",
+		"desc": "무엇이든 사고파는 암시장 중개인. 희귀 부품과 도구를 취급합니다.",
+		"stock": [
+			{"id": "고철", "price": 400, "amount": 5},
+			{"id": "못", "price": 100, "amount": 10},
+			{"id": "천", "price": 200, "amount": 5},
+			{"id": "폐전선", "price": 1200},
+			{"id": "손전등", "price": 2000},
+			{"id": "가방", "price": 8000}
+		]
+	}
+}
+
 func get_item_data(id: String) -> Dictionary:
 	if items.has(id):
 		var d = items[id].duplicate()
 		d["name"] = id
 		return d
-	return {"name": id, "weight": 0.1, "max_stack": 1}
+	return {"name": id, "weight": 0.1, "max_stack": 1, "value": 500}
 
 func generate_loot(table_name: String, rolls: int = 3) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []

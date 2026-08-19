@@ -16,6 +16,11 @@ extends Node2D
 @onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
 @onready var extract_bar: ProgressBar = $UI/HUD/ExtractProgressBar
 @onready var day_night_modulate: CanvasModulate = $DayNightModulate
+@onready var compass_bar: Control = $UI/HUD/CompassBar
+
+const MapWindowScene = preload("res://scenes/ui/map_window.tscn")
+var current_map_window: Control = null
+var extraction_points_data: Array = []
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 var player: CharacterBody2D
@@ -34,6 +39,9 @@ var raid_time_remaining: float = 300.0 # 5분
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
+	
+	if compass_bar:
+		compass_bar.draw.connect(_on_compass_draw)
 	
 	# 플레이어 인벤토리 생성 및 데이터 복원
 	player_inventory = Inventory.new()
@@ -76,6 +84,7 @@ func _ready() -> void:
 	_spawn_extraction_zones()
 
 func _spawn_extraction_zones() -> void:
+	extraction_points_data.clear()
 	var angles = [0.0, 2.0944, 4.18879] # 0도, 120도, 240도
 	for i in range(angles.size()):
 		var angle = angles[i]
@@ -87,6 +96,11 @@ func _spawn_extraction_zones() -> void:
 		zone.extract_progress.connect(_on_extract_progress)
 		zone.extract_cancelled.connect(_on_extract_cancelled)
 		add_child(zone)
+		
+		extraction_points_data.append({
+			"name": zone.zone_name,
+			"pos": pos
+		})
 
 func _on_extract_progress(cur: float, max_t: float) -> void:
 	if extract_bar:
@@ -119,7 +133,7 @@ const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 var current_crafting_window: Control = null
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current_loot_window != null or current_crafting_window != null:
+	if current_loot_window != null or current_crafting_window != null or current_map_window != null:
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -141,6 +155,11 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("crafting") or (event is InputEventKey and event.physical_keycode == KEY_C and event.pressed):
 		_open_crafting_window()
 		get_viewport().set_input_as_handled()
+		
+	# 전술 지도 열기 (M 키)
+	if event.is_action_pressed("map") or (event is InputEventKey and event.physical_keycode == KEY_M and event.pressed):
+		_open_map_window()
+		get_viewport().set_input_as_handled()
 
 func _open_crafting_window() -> void:
 	get_tree().paused = true
@@ -149,9 +168,87 @@ func _open_crafting_window() -> void:
 	current_crafting_window.setup(player_inventory)
 	current_crafting_window.window_closed.connect(func(): current_crafting_window = null)
 
+func _open_map_window() -> void:
+	get_tree().paused = true
+	current_map_window = MapWindowScene.instantiate()
+	$UI.add_child(current_map_window)
+	
+	var biome = "주거지"
+	if chunk_manager and chunk_manager.generator:
+		var cx = int(floor(player.global_position.x / 32.0))
+		var cy = int(floor(player.global_position.y / 32.0))
+		biome = chunk_manager.generator.get_biome(cx, cy)
+		
+	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome)
+	current_map_window.window_closed.connect(func(): current_map_window = null)
+
+func _on_compass_draw() -> void:
+	if not player: return
+	var w = compass_bar.size.x
+	var h = compass_bar.size.y
+	var center_x = w / 2.0
+	
+	# 반투명 배경
+	compass_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.1, 0.1, 0.15, 0.6))
+	compass_bar.draw_line(Vector2(0, h), Vector2(w, h), Color(0.5, 0.5, 0.5, 0.5), 1.0)
+	
+	# 플레이어 시선 각도 (도)
+	var player_deg = rad_to_deg(player.rotation)
+	if player_deg < 0: player_deg += 360.0
+	
+	# 시야각 FOV (180도)
+	var fov = 160.0
+	var pixels_per_deg = w / fov
+	
+	# N, E, S, W 방위각 눈금
+	var cardinal_dirs = {
+		0.0: "E",
+		90.0: "S",
+		180.0: "W",
+		270.0: "N"
+	}
+	
+	for deg in cardinal_dirs.keys():
+		var diff = deg - player_deg
+		while diff < -180.0: diff += 360.0
+		while diff > 180.0: diff -= 360.0
+		
+		if abs(diff) <= fov / 2.0:
+			var x = center_x + diff * pixels_per_deg
+			compass_bar.draw_line(Vector2(x, h - 8), Vector2(x, h), Color.WHITE, 1.5)
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 4, h - 10), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
+			
+	# 탈출구 마커 (초록색 다이아몬드)
+	for pt in extraction_points_data:
+		var dir_to_pt = player.global_position.direction_to(pt["pos"])
+		var pt_deg = rad_to_deg(dir_to_pt.angle())
+		if pt_deg < 0: pt_deg += 360.0
+		
+		var diff = pt_deg - player_deg
+		while diff < -180.0: diff += 360.0
+		while diff > 180.0: diff -= 360.0
+		
+		if abs(diff) <= fov / 2.0:
+			var x = center_x + diff * pixels_per_deg
+			var dist = player.global_position.distance_to(pt["pos"])
+			# 다이아몬드 마커
+			var diamond = PackedVector2Array([
+				Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)
+			])
+			compass_bar.draw_colored_polygon(diamond, Color(0.2, 1.0, 0.3))
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.3, 1.0, 0.4))
+			
+	# 정중앙 조준 눈금 (노란 역삼각형)
+	var pointer = PackedVector2Array([
+		Vector2(center_x - 4, 0), Vector2(center_x + 4, 0), Vector2(center_x, 6)
+	])
+	compass_bar.draw_colored_polygon(pointer, Color(1.0, 0.85, 0.2))
+
 func _process(delta: float) -> void:
 	if player:
 		chunk_manager.update_chunks(player.global_position)
+		if compass_bar:
+			compass_bar.queue_redraw()
 		
 		# 레이드 제한 시간 감소 및 낮/밤 조명 제어
 		if raid_time_remaining > 0:
@@ -293,4 +390,4 @@ func _on_exit_pressed() -> void:
 	get_tree().paused = false
 	if GameManager:
 		GameManager.is_paused = false
-		GameManager.end_raid("survived")
+		GameManager.end_raid("survived") # 테스트 편의용 안전 탈출 복귀

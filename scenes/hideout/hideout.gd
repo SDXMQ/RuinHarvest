@@ -1,12 +1,24 @@
 # res://scenes/hideout/hideout.gd
 extends Control
 
-@onready var raid_button: Button = $BottomBar/RaidButton
-@onready var menu_button: Button = $BottomBar/MenuButton
 @onready var day_label: Label = $TopBar/DayLabel
 @onready var money_label: Label = $TopBar/MoneyLabel
-@onready var player_grid: GridContainer = $CenterArea/HBox/PlayerPanel/Grid
-@onready var stash_grid: GridContainer = $CenterArea/HBox/StashPanel/Scroll/Grid
+@onready var tab_container: TabContainer = $CenterArea/TabContainer
+
+# 창고 탭
+@onready var player_grid: GridContainer = $CenterArea/TabContainer/StashTab/HBox/PlayerPanel/Grid
+@onready var stash_grid: GridContainer = $CenterArea/TabContainer/StashTab/HBox/StashPanel/Scroll/Grid
+
+# 상인 탭
+@onready var trader_desc_label: Label = $CenterArea/TabContainer/TradersTab/VBox/Header/DescLabel
+@onready var trader_items_vbox: VBoxContainer = $CenterArea/TabContainer/TradersTab/VBox/Scroll/ItemsVBox
+@onready var trader_sell_grid: HBoxContainer = $CenterArea/TabContainer/TradersTab/VBox/SellArea/Scroll/SellGrid
+
+# 하단 바
+@onready var raid_button: Button = $BottomBar/RaidButton
+@onready var menu_button: Button = $BottomBar/MenuButton
+
+# 결과 팝업
 @onready var result_dialog: Panel = $ResultDialog
 @onready var result_title: Label = $ResultDialog/VBox/Title
 @onready var result_desc: Label = $ResultDialog/VBox/Desc
@@ -14,11 +26,21 @@ extends Control
 
 var player_inv: Inventory
 var stash_inv: Inventory
+var current_trader_id: String = "prapor"
 
 func _ready() -> void:
 	raid_button.pressed.connect(_on_raid_pressed)
 	menu_button.pressed.connect(_on_menu_pressed)
 	result_close_btn.pressed.connect(_on_result_close_pressed)
+	
+	# 상인 버튼 연결
+	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
+	var therapist_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/TherapistBtn
+	var fence_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/FenceBtn
+	
+	prapor_btn.pressed.connect(func(): _select_trader("prapor"))
+	therapist_btn.pressed.connect(func(): _select_trader("therapist"))
+	fence_btn.pressed.connect(func(): _select_trader("fence"))
 	
 	# 인벤토리 초기화
 	player_inv = Inventory.new()
@@ -26,24 +48,23 @@ func _ready() -> void:
 	add_child(player_inv)
 	
 	stash_inv = Inventory.new()
-	stash_inv.max_slots = 48 # 48칸 보관함
+	stash_inv.max_slots = 48
 	add_child(stash_inv)
 	
-	player_inv.inventory_changed.connect(_on_player_inv_changed)
-	stash_inv.inventory_changed.connect(_on_stash_changed)
+	player_inv.inventory_changed.connect(_on_inventory_changed)
+	stash_inv.inventory_changed.connect(_on_inventory_changed)
 	
 	_load_data()
 	_check_last_raid_result()
-	_refresh_ui()
+	_refresh_stash_ui()
+	_refresh_trader_ui()
 
 func _load_data() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var w_data = GameManager.current_world_data
 		var day = w_data.get("current_day", 1)
 		day_label.text = "생존 %d일차 (DAY %d)" % [day, day]
-		
-		var rubles = w_data.get("player", {}).get("rubles", 5000)
-		money_label.text = "자금: %d RUB" % rubles
+		_update_money_label()
 		
 		# 배낭 데이터 로드
 		var p_inv_data = w_data.get("player", {}).get("inventory", [])
@@ -57,12 +78,14 @@ func _load_data() -> void:
 			if item:
 				stash_inv.add_item(item["id"], item["amount"])
 
-func _on_player_inv_changed() -> void:
-	_refresh_ui()
-	_sync_save_data()
+func _update_money_label() -> void:
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var rubles = GameManager.current_world_data.get("player", {}).get("rubles", 5000)
+		money_label.text = "자금: %d RUB" % rubles
 
-func _on_stash_changed() -> void:
-	_refresh_ui()
+func _on_inventory_changed() -> void:
+	_refresh_stash_ui()
+	_refresh_trader_sell_ui()
 	_sync_save_data()
 
 func _sync_save_data() -> void:
@@ -86,7 +109,10 @@ func _sync_save_data() -> void:
 		if GameManager.current_save_slot != "":
 			SaveManager.save_game(GameManager.current_world_data, GameManager.current_save_slot)
 
-func _refresh_ui() -> void:
+# ============================================================
+# 창고 UI 로직
+# ============================================================
+func _refresh_stash_ui() -> void:
 	_populate_grid(player_grid, player_inv, true)
 	_populate_grid(stash_grid, stash_inv, false)
 
@@ -134,6 +160,108 @@ func _on_slot_clicked(index: int, is_player: bool) -> void:
 	if target_index != -1:
 		src.move_item(index, target_index, dest)
 
+# ============================================================
+# 상인 거래소 UI 로직
+# ============================================================
+func _select_trader(trader_id: String) -> void:
+	current_trader_id = trader_id
+	_refresh_trader_ui()
+
+func _refresh_trader_ui() -> void:
+	var t_data = ItemDatabase.traders.get(current_trader_id, {})
+	if t_data.is_empty(): return
+	
+	trader_desc_label.text = "[%s] %s" % [t_data["name"], t_data["desc"]]
+	
+	# 상품 목록 생성
+	for child in trader_items_vbox.get_children():
+		child.queue_free()
+		
+	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	
+	for stock_item in t_data.get("stock", []):
+		var item_id = stock_item["id"]
+		var price = stock_item["price"]
+		var amount = stock_item.get("amount", 1)
+		var item_meta = ItemDatabase.get_item_data(item_id)
+		
+		var panel = PanelContainer.new()
+		var hbox = HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 16)
+		panel.add_child(hbox)
+		
+		var name_lbl = Label.new()
+		name_lbl.text = "%s (x%d)" % [item_meta.get("name", item_id), amount]
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(name_lbl)
+		
+		var price_lbl = Label.new()
+		price_lbl.text = "%d RUB" % price
+		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+		hbox.add_child(price_lbl)
+		
+		var buy_btn = Button.new()
+		buy_btn.text = "구매"
+		buy_btn.custom_minimum_size = Vector2(60, 32)
+		buy_btn.disabled = (user_rubles < price)
+		buy_btn.pressed.connect(func(): _buy_item(item_id, amount, price))
+		hbox.add_child(buy_btn)
+		
+		trader_items_vbox.add_child(panel)
+		
+	_refresh_trader_sell_ui()
+
+func _refresh_trader_sell_ui() -> void:
+	for child in trader_sell_grid.get_children():
+		child.queue_free()
+		
+	# 배낭의 아이템들을 판매 가능 목록으로 표시
+	for i in range(player_inv.max_slots):
+		var item = player_inv.items[i]
+		if item:
+			var data = ItemDatabase.get_item_data(item["id"])
+			var sell_price = int(data.get("value", 500) * 0.6) # 기본가의 60%에 매입
+			
+			var btn = Button.new()
+			btn.custom_minimum_size = Vector2(100, 50)
+			btn.text = "%s\n+%d RUB" % [data["name"], sell_price * item["amount"]]
+			btn.add_theme_font_size_override("font_size", 10)
+			btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
+			btn.pressed.connect(func(): _sell_item(i, item["id"], item["amount"], sell_price))
+			trader_sell_grid.add_child(btn)
+
+func _buy_item(item_id: String, amount: int, price: int) -> void:
+	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	if user_rubles < price: return
+	
+	# 자금 차감
+	GameManager.current_world_data["player"]["rubles"] -= price
+	_update_money_label()
+	
+	# 배낭 또는 창고에 아이템 지급
+	var remaining = player_inv.add_item(item_id, amount)
+	if remaining > 0:
+		stash_inv.add_item(item_id, remaining)
+		
+	if SoundManager: SoundManager.play("menu_select")
+	_refresh_trader_ui()
+	_sync_save_data()
+
+func _sell_item(slot_idx: int, item_id: String, amount: int, unit_price: int) -> void:
+	var total_gain = unit_price * amount
+	GameManager.current_world_data["player"]["rubles"] += total_gain
+	_update_money_label()
+	
+	player_inv.items[slot_idx] = null
+	player_inv.inventory_changed.emit()
+	
+	if SoundManager: SoundManager.play("menu_select")
+	_refresh_trader_ui()
+	_sync_save_data()
+
+# ============================================================
+# 결과 팝업 및 네비게이션
+# ============================================================
 func _check_last_raid_result() -> void:
 	if GameManager and not GameManager.last_raid_result.is_empty():
 		var res = GameManager.last_raid_result
