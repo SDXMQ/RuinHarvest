@@ -160,6 +160,60 @@ theme_override_font_sizes/font_size = 18
 text = "[E] 상호작용"
 horizontal_alignment = 1
 
+[node name="RaidTimerPanel" type="Panel" parent="UI/HUD"]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -80.0
+offset_top = 15.0
+offset_right = 80.0
+offset_bottom = 55.0
+grow_horizontal = 2
+
+[node name="RaidTimerLabel" type="Label" parent="UI/HUD/RaidTimerPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.9, 0.9, 0.2, 1)
+theme_override_font_sizes/font_size = 18
+text = "탈출 시간: 05:00"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ExtractProgressBar" type="ProgressBar" parent="UI/HUD"]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -60.0
+offset_right = 150.0
+offset_bottom = -30.0
+grow_horizontal = 2
+grow_vertical = 2
+max_value = 5.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HUD/ExtractProgressBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.2, 1, 0.3, 1)
+theme_override_font_sizes/font_size = 16
+text = "탈출 중... 5.0초"
+horizontal_alignment = 1
+vertical_alignment = 1
+
 [node name="PauseMenu" type="Control" parent="UI"]
 process_mode = 2
 visible = false

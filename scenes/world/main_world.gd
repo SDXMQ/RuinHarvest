@@ -13,6 +13,8 @@ extends Node2D
 @onready var hunger_bar: ProgressBar = $UI/HUD/Panel/VBox/HBox/HungerBar
 @onready var thirst_bar: ProgressBar = $UI/HUD/Panel/VBox/HBox/ThirstBar
 @onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
+@onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
+@onready var extract_bar: ProgressBar = $UI/HUD/ExtractProgressBar
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 var player: CharacterBody2D
@@ -26,13 +28,22 @@ const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
 var enemy_spawn_timer: float = 2.0
 var max_enemies_count: int = 15
 
+const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
+var raid_time_remaining: float = 300.0 # 5분
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
 	
-	# 플레이어 인벤토리 생성
+	# 플레이어 인벤토리 생성 및 데이터 복원
 	player_inventory = Inventory.new()
 	player_inventory.max_slots = 12
 	add_child(player_inventory)
+	
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
+		for item in p_items:
+			if item:
+				player_inventory.add_item(item["id"], item["amount"])
 	
 	# 플레이어 인스턴스화
 	player = PlayerScene.instantiate()
@@ -59,6 +70,34 @@ func _ready() -> void:
 	# 시작 시 주변에 초기 좀비 3마리 스폰
 	for i in range(3):
 		_spawn_enemy_near_player(200.0 + i * 50.0)
+		
+	# 탈출 지점 3개 스폰 (동, 서, 남 방향 약 600~900px 거리)
+	_spawn_extraction_zones()
+
+func _spawn_extraction_zones() -> void:
+	var angles = [0.0, 2.0944, 4.18879] # 0도, 120도, 240도
+	for i in range(angles.size()):
+		var angle = angles[i]
+		var dist = 800.0
+		var pos = Vector2.RIGHT.rotated(angle) * dist
+		var zone = ExtractionZoneScene.instantiate()
+		zone.position = pos
+		zone.zone_name = "탈출구 " + str(i + 1)
+		zone.extract_progress.connect(_on_extract_progress)
+		zone.extract_cancelled.connect(_on_extract_cancelled)
+		add_child(zone)
+
+func _on_extract_progress(cur: float, max_t: float) -> void:
+	if extract_bar:
+		extract_bar.visible = true
+		extract_bar.max_value = max_t
+		extract_bar.value = cur
+		var remain = max(0.0, max_t - cur)
+		extract_bar.get_node("Label").text = "탈출 중... %.1f초" % remain
+
+func _on_extract_cancelled() -> void:
+	if extract_bar:
+		extract_bar.visible = false
 
 func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	if not player: return
@@ -89,14 +128,26 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
 		
-	# 인벤토리 열기 (E나 Tab 키로 단순 확인용 창 띄우기)
-	if event.is_action_pressed("inventory"):
-		_open_loot_window(player_inventory, "내 배낭")
+	# 인벤토리 열기 (Tab 또는 I 키로 내 배낭만 열기)
+	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
+		_open_loot_window(null)
 		get_viewport().set_input_as_handled()
 
 func _process(delta: float) -> void:
 	if player:
 		chunk_manager.update_chunks(player.global_position)
+		
+		# 레이드 제한 시간 감소
+		if raid_time_remaining > 0:
+			raid_time_remaining -= delta
+			var minutes = int(raid_time_remaining) / 60
+			var seconds = int(raid_time_remaining) % 60
+			if raid_timer_label:
+				raid_timer_label.text = "탈출 시간: %02d:%02d" % [minutes, seconds]
+				if raid_time_remaining < 60:
+					raid_timer_label.add_theme_color_override("font_color", Color.RED)
+			if raid_time_remaining <= 0:
+				GameManager.end_raid("mia")
 		
 		# 적 주기적 스폰
 		enemy_spawn_timer -= delta
@@ -175,7 +226,7 @@ func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector
 			
 		_open_loot_window(inv, loot_title)
 
-func _open_loot_window(target_inv: Inventory, title: String) -> void:
+func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	get_tree().paused = true
 	current_loot_window = LootWindowScene.instantiate()
 	$UI.add_child(current_loot_window)

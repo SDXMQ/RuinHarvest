@@ -11,53 +11,228 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_hout")
 
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="Background" type="ColorRect" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.117647, 0.12549, 0.164706, 1)
+color = Color(0.08, 0.09, 0.12, 1)
 
-[node name="Title" type="Label" parent="."]
+[node name="TopBar" type="Panel" parent="."]
 layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -100.0
-offset_top = 40.0
-offset_right = 100.0
-offset_bottom = 80.0
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 60.0
 grow_horizontal = 2
-theme_override_font_sizes/font_size = 32
-text = "Hideout"
-horizontal_alignment = 1
 
-[node name="RaidButton" type="Button" parent="."]
+[node name="DayLabel" type="Label" parent="TopBar"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 30.0
+offset_top = -15.0
+offset_right = 230.0
+offset_bottom = 15.0
+grow_vertical = 2
+theme_override_font_sizes/font_size = 20
+text = "생존 1일차 (DAY 1)"
+vertical_alignment = 1
+
+[node name="MoneyLabel" type="Label" parent="TopBar"]
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -15.0
+offset_right = -30.0
+offset_bottom = 15.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.9, 0.8, 0.3, 1)
+theme_override_font_sizes/font_size = 18
+text = "자금: 5,000 RUB"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="CenterArea" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = 70.0
+offset_bottom = -90.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="HBox" type="HBoxContainer" parent="CenterArea"]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -20.0
-offset_right = 100.0
-offset_bottom = 30.0
+offset_left = -450.0
+offset_top = -220.0
+offset_right = 450.0
+offset_bottom = 220.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_color = Color(1, 0.27451, 0.27451, 1)
-text = "레이드 출격"
+theme_override_constants/separation = 40
 
-[node name="MenuButton" type="Button" parent="."]
+[node name="PlayerPanel" type="Panel" parent="CenterArea/HBox"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="CenterArea/HBox/PlayerPanel"]
 layout_mode = 1
-anchors_preset = 2
-anchor_top = 1.0
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 10.0
+offset_bottom = 35.0
+grow_horizontal = 2
+text = "출격용 배낭 (12칸)"
+horizontal_alignment = 1
+
+[node name="Grid" type="GridContainer" parent="CenterArea/HBox/PlayerPanel"]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -116.0
+offset_top = -140.0
+offset_right = 116.0
+offset_bottom = 140.0
+grow_horizontal = 2
+grow_vertical = 2
+columns = 4
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="StashPanel" type="Panel" parent="CenterArea/HBox"]
+custom_minimum_size = Vector2(560, 0)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="CenterArea/HBox/StashPanel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 10.0
+offset_bottom = 35.0
+grow_horizontal = 2
+text = "은신처 영구 보관함 (Stash)"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/HBox/StashPanel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 40.0
+offset_left = 15.0
+offset_top = 45.0
+offset_right = -15.0
+offset_bottom = -15.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Grid" type="GridContainer" parent="CenterArea/HBox/StashPanel/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+columns = 8
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="BottomBar" type="Panel" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
 offset_top = -80.0
-offset_right = 140.0
-offset_bottom = -40.0
+grow_horizontal = 2
 grow_vertical = 0
-text = "메인 메뉴"
+
+[node name="MenuButton" type="Button" parent="BottomBar"]
+custom_minimum_size = Vector2(140, 44)
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 30.0
+offset_top = -22.0
+offset_right = 170.0
+offset_bottom = 22.0
+grow_vertical = 2
+text = "메인 메뉴로 저장"
+
+[node name="RaidButton" type="Button" parent="BottomBar"]
+custom_minimum_size = Vector2(200, 48)
+layout_mode = 1
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+offset_left = -230.0
+offset_top = -24.0
+offset_right = -30.0
+offset_bottom = 24.0
+grow_horizontal = 0
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
+theme_override_font_sizes/font_size = 18
+text = "레이드 출격 (RAID)"
+
+[node name="ResultDialog" type="Panel" parent="."]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -250.0
+offset_top = -150.0
+offset_right = 250.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="ResultDialog"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = -20.0
+offset_bottom = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="Title" type="Label" parent="ResultDialog/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 22
+text = "결과"
+horizontal_alignment = 1
+
+[node name="Desc" type="Label" parent="ResultDialog/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+text = "설명"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="CloseBtn" type="Button" parent="ResultDialog/VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "확인"

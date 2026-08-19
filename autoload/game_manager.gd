@@ -116,35 +116,43 @@ func start_raid() -> void:
 	current_state = GameState.IN_GAME
 	EventBus.raid_started.emit()
 
-func end_raid(result: String) -> void:
+var last_raid_result: Dictionary = {}
+
+func end_raid(result: String, looted_items: Array = []) -> void:
 	# result: "survived" (탈출), "kia" (사망), "mia" (시간 초과)
-	var details: Dictionary = {
+	last_raid_result = {
+		"result": result,
+		"day": current_world_data.get("current_day", 1),
 		"time_spent": time_elapsed_in_raid,
-		"kills": 0, # 추후 연결
-		"looted_value": 0 # 추후 연결
+		"items": looted_items
 	}
 	
 	if result == "survived":
-		current_world_data["current_day"] += 1
-		# 획득한 아이템을 스태쉬로 이전하는 로직 호출
-	elif result == "kia" or result == "mia":
-		# 하드코어 난이도면 세이브 삭제 처리
-		var diff = current_world_data.get("difficulty", "normal")
-		if GameSettings.DIFFICULTY_PRESETS.has(diff) and GameSettings.DIFFICULTY_PRESETS[diff]["permadeath"]:
-			SaveManager.delete_save(current_save_slot)
-			current_save_slot = ""
-			current_world_data.clear()
+		if current_world_data.has("current_day"):
+			current_world_data["current_day"] += 1
 		else:
-			# 일반 난이도의 경우: 소지품 초기화 등
-			pass
+			current_world_data["current_day"] = 2
 			
-	EventBus.raid_ended.emit(result, details)
-	
-	if current_save_slot != "":
-		SaveManager.save_game(current_world_data, current_save_slot)
-		
-	# 레이드 결과창(Hideout 등으로 복귀) 씬으로 이동
-	if result == "survived":
-		change_state(GameState.HIDEOUT)
+		# 획득한 아이템을 스태쉬로 복사
+		if not current_world_data.has("hideout"):
+			current_world_data["hideout"] = {"stash": []}
+		elif not current_world_data["hideout"].has("stash"):
+			current_world_data["hideout"]["stash"] = []
+			
+		for item in looted_items:
+			if item:
+				current_world_data["hideout"]["stash"].append(item.duplicate())
+				
+		if current_save_slot != "":
+			SaveManager.save_game(current_world_data, current_save_slot)
 	else:
-		change_state(GameState.GAME_OVER)
+		# 사망/실종 처리
+		var diff = current_world_data.get("difficulty", "normal")
+		if GameSettings.DIFFICULTY_PRESETS.has(diff) and GameSettings.DIFFICULTY_PRESETS[diff].get("permadeath", false):
+			if current_save_slot != "":
+				SaveManager.delete_save(current_save_slot)
+				current_save_slot = ""
+				current_world_data.clear()
+	
+	EventBus.raid_ended.emit(result)
+	change_state(GameState.HIDEOUT)
