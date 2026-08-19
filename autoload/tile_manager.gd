@@ -12,18 +12,24 @@ const TILE_GRASS = Vector2i(0, 0)
 const TILE_DIRT = Vector2i(1, 0)
 const TILE_ROAD = Vector2i(2, 0)
 const TILE_CONCRETE = Vector2i(3, 0)
+const TILE_FLOOR_WOOD = Vector2i(4, 0)
+const TILE_FLOOR_TILE = Vector2i(5, 0)
+const TILE_ROAD_LINE = Vector2i(6, 0)
 
 const OBJ_TREE = Vector2i(0, 1)
 const OBJ_ROCK = Vector2i(1, 1)
 const OBJ_WALL = Vector2i(2, 1)
 const OBJ_CRATE = Vector2i(3, 1)
+const OBJ_BARREL = Vector2i(4, 1)
+const OBJ_CAR = Vector2i(5, 1)
+const OBJ_DOOR = Vector2i(6, 1)
 
 func _ready() -> void:
 	_generate_procedural_tileset()
 
 func _generate_procedural_tileset() -> void:
-	# 4x2 타일 아틀라스 이미지 생성 (가로 4칸, 세로 2칸)
-	var img = Image.create_empty(4 * TILE_SIZE, 2 * TILE_SIZE, false, Image.FORMAT_RGBA8)
+	# 7x2 타일 아틀라스 이미지 생성 (가로 7칸, 세로 2칸)
+	var img = Image.create_empty(7 * TILE_SIZE, 2 * TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# 색상 정의
 	var colors = {
@@ -31,6 +37,9 @@ func _generate_procedural_tileset() -> void:
 		TILE_DIRT: Color(0.55, 0.45, 0.3),
 		TILE_ROAD: Color(0.3, 0.3, 0.35),
 		TILE_CONCRETE: Color(0.6, 0.6, 0.65),
+		TILE_FLOOR_WOOD: Color(0.6, 0.45, 0.3),
+		TILE_FLOOR_TILE: Color(0.7, 0.7, 0.7),
+		TILE_ROAD_LINE: Color(0.8, 0.8, 0.2)
 	}
 	
 	# 바닥 타일 그리기 (y=0)
@@ -41,7 +50,10 @@ func _generate_procedural_tileset() -> void:
 	_draw_tree(img, OBJ_TREE.x * TILE_SIZE, OBJ_TREE.y * TILE_SIZE)
 	_draw_rock(img, OBJ_ROCK.x * TILE_SIZE, OBJ_ROCK.y * TILE_SIZE)
 	_fill_rect(img, OBJ_WALL.x * TILE_SIZE, OBJ_WALL.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.4, 0.3, 0.25)) # 벽
-	_draw_crate(img, OBJ_CRATE.x * TILE_SIZE, OBJ_CRATE.y * TILE_SIZE) # 상자
+	_draw_crate(img, OBJ_CRATE.x * TILE_SIZE, OBJ_CRATE.y * TILE_SIZE)
+	_draw_barrel(img, OBJ_BARREL.x * TILE_SIZE, OBJ_BARREL.y * TILE_SIZE)
+	_draw_car(img, OBJ_CAR.x * TILE_SIZE, OBJ_CAR.y * TILE_SIZE)
+	_fill_rect(img, OBJ_DOOR.x * TILE_SIZE, OBJ_DOOR.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.5, 0.25, 0.1)) # 문
 	
 	var texture = ImageTexture.create_from_image(img)
 	
@@ -63,7 +75,7 @@ func _generate_procedural_tileset() -> void:
 	tileset.add_source(source, 0)
 		
 	# 오브젝트 타일 등록 및 충돌체 설정
-	var objects = [OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE]
+	var objects = [OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_CAR, OBJ_DOOR]
 	for coords in objects:
 		source.create_tile(coords)
 		var tile_data = source.get_tile_data(coords, 0)
@@ -77,16 +89,17 @@ func _generate_procedural_tileset() -> void:
 			])
 			
 			# 나무나 바위는 충돌 크기를 약간 줄임
-			if coords == OBJ_TREE or coords == OBJ_ROCK:
+			if coords == OBJ_TREE or coords == OBJ_ROCK or coords == OBJ_BARREL:
 				poly = PackedVector2Array([
 					Vector2(-TILE_SIZE*0.4, -TILE_SIZE*0.4),
 					Vector2(TILE_SIZE*0.4, -TILE_SIZE*0.4),
 					Vector2(TILE_SIZE*0.4, TILE_SIZE*0.4),
 					Vector2(-TILE_SIZE*0.4, TILE_SIZE*0.4)
 				])
-				
-			tile_data.add_collision_polygon(0)
-			tile_data.set_collision_polygon_points(0, 0, poly)
+			# 문은 충돌체를 갖지 않게 하거나, 닫혔을 때만 적용 가능. 일단 통과 가능하게 처리(충돌 없음).
+			if coords != OBJ_DOOR:
+				tile_data.add_collision_polygon(0)
+				tile_data.set_collision_polygon_points(0, 0, poly)
 
 # ==========================================================
 # 이미지 드로잉 헬퍼
@@ -127,3 +140,24 @@ func _draw_crate(img: Image, x: int, y: int) -> void:
 				img.set_pixel(x + ix, y + iy, Color(0.3, 0.2, 0.1))
 			else:
 				img.set_pixel(x + ix, y + iy, Color(0.5, 0.35, 0.2))
+
+func _draw_barrel(img: Image, x: int, y: int) -> void:
+	var cx = x + TILE_SIZE / 2
+	var cy = y + TILE_SIZE / 2
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var dx = x + ix - cx
+			var dy = y + iy - cy
+			var dist = sqrt(dx*dx + dy*dy)
+			if dist < TILE_SIZE * 0.4:
+				img.set_pixel(x + ix, y + iy, Color(0.2, 0.25, 0.8)) # 파란색 드럼통
+			elif dist < TILE_SIZE * 0.45:
+				img.set_pixel(x + ix, y + iy, Color(0.1, 0.1, 0.2))
+
+func _draw_car(img: Image, x: int, y: int) -> void:
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			if ix > 2 and ix < TILE_SIZE-3 and iy > 4 and iy < TILE_SIZE-4:
+				img.set_pixel(x + ix, y + iy, Color(0.8, 0.2, 0.2)) # 빨간색 폐차
+			elif ix > 6 and ix < TILE_SIZE-7 and iy > 8 and iy < TILE_SIZE-8:
+				img.set_pixel(x + ix, y + iy, Color(0.1, 0.1, 0.1)) # 유리창

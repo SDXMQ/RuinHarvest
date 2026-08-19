@@ -10,9 +10,7 @@ var loaded_chunks: Dictionary = {}
 var active_chunks: Array[Vector2i] = []
 var render_distance: int = 4
 
-var noise: FastNoiseLite
-var biome_noise: FastNoiseLite
-var rng: RandomNumberGenerator
+var generator: WorldGenerator
 
 var ground_layer: TileMapLayer
 var object_layer: TileMapLayer
@@ -21,16 +19,8 @@ signal chunk_loaded(chunk_pos: Vector2i, data: Dictionary)
 signal chunk_unloaded(chunk_pos: Vector2i)
 
 func _ready() -> void:
-	noise = FastNoiseLite.new()
-	noise.seed = randi()
-	noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	
-	biome_noise = FastNoiseLite.new()
-	biome_noise.seed = noise.seed + 1
-	biome_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	
-	rng = RandomNumberGenerator.new()
-	rng.seed = noise.seed
+	# WorldGenerator 초기화
+	generator = WorldGenerator.new(randi())
 	
 	# 동적으로 TileMapLayer 생성
 	ground_layer = TileMapLayer.new()
@@ -75,7 +65,7 @@ func update_chunks(player_pos: Vector2) -> void:
 	active_chunks = new_active_chunks
 
 func load_chunk(chunk_pos: Vector2i) -> void:
-	var chunk_data = generate_chunk(chunk_pos)
+	var chunk_data = generator.generate_chunk(chunk_pos)
 	loaded_chunks[chunk_pos] = chunk_data
 	
 	# 타일맵 적용
@@ -109,60 +99,3 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 				
 		loaded_chunks.erase(chunk_pos)
 		chunk_unloaded.emit(chunk_pos)
-
-func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
-	var tiles: Array[Vector2i] = []
-	var objects: Array[Vector2i] = []
-	tiles.resize(CHUNK_SIZE * CHUNK_SIZE)
-	objects.resize(CHUNK_SIZE * CHUNK_SIZE)
-	
-	var start_wx = chunk_pos.x * CHUNK_SIZE
-	var start_wy = chunk_pos.y * CHUNK_SIZE
-	
-	# 임시 건물 배치(바이옴) 로직 준비
-	# 중앙에서 거리가 멀어질수록 노이즈 기반 숲/군사기지 생성
-	for ly in range(CHUNK_SIZE):
-		for lx in range(CHUNK_SIZE):
-			var idx = ly * CHUNK_SIZE + lx
-			var wx = start_wx + lx
-			var wy = start_wy + ly
-			
-			var dist = sqrt(wx * wx + wy * wy)
-			var b_val = biome_noise.get_noise_2d(wx * 2.0, wy * 2.0)
-			
-			var tile_coords = TileManager.TILE_GRASS
-			var obj_coords = Vector2i(-1, -1)
-			
-			if b_val > 0.3:
-				tile_coords = TileManager.TILE_DIRT
-			elif b_val < -0.4:
-				tile_coords = TileManager.TILE_GRASS
-				
-			# 원점 기준 + 모양 거대 도로망 시뮬레이션
-			if abs(wx % 20) < 2 or abs(wy % 20) < 2:
-				tile_coords = TileManager.TILE_ROAD
-			
-			# 건물/오브젝트 배치
-			if tile_coords != TileManager.TILE_ROAD:
-				if rng.randf() < 0.08:
-					if rng.randf() > 0.4:
-						obj_coords = TileManager.OBJ_TREE
-					else:
-						obj_coords = TileManager.OBJ_ROCK
-				
-				# 아주 드물게 파밍 상자(Crate) 생성
-				if rng.randf() < 0.005:
-					obj_coords = TileManager.OBJ_CRATE
-					
-				# 특정 노이즈 구역(도시/군사기지) 건물 벽체 생성 (간단 시뮬레이션)
-				if b_val > 0.55 and rng.randf() < 0.6:
-					tile_coords = TileManager.TILE_CONCRETE
-					obj_coords = TileManager.OBJ_WALL
-					
-			tiles[idx] = tile_coords
-			objects[idx] = obj_coords
-			
-	return {
-		"tiles": tiles,
-		"objects": objects
-	}
