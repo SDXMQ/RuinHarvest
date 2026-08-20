@@ -158,73 +158,154 @@ func _die() -> void:
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
-	var radius = 13.0
-	if enemy_type == EnemyType.TANK: radius = 18.0
-	elif enemy_type == EnemyType.RUNNER: radius = 11.0
 	
-	# 몸통 색상 (좀비 피부: 암녹색/회색)
+	# 기본 크기 비례
+	var scale_f = 1.0
+	if enemy_type == EnemyType.TANK: scale_f = 1.4
+	elif enemy_type == EnemyType.RUNNER: scale_f = 0.85
+	
+	# 색상 정의
 	var body_color = Color(0.3, 0.45, 0.3)
-	if enemy_type == EnemyType.RUNNER: body_color = Color(0.4, 0.3, 0.3)
-	elif enemy_type == EnemyType.TANK: body_color = Color(0.2, 0.35, 0.25)
-	
-	# 외곽선
-	visuals.draw_circle(Vector2.ZERO, radius + 2, Color(0.1, 0.1, 0.1))
-	
-	# 몸체 (옷)
-	var cloth_color = Color(0.35, 0.35, 0.4) # 기본 회색 옷
-	if enemy_type == EnemyType.RUNNER: cloth_color = Color(0.4, 0.2, 0.2) # 붉은 계열 옷
-	if enemy_type == EnemyType.TANK: cloth_color = Color(0.2, 0.3, 0.4) # 두꺼운 패딩 느낌
-	visuals.draw_circle(Vector2.ZERO, radius, cloth_color)
-	
-	# 찢어진 옷 틈새로 피부가 보이게 (절차적 무늬)
-	# 랜덤 시드를 위치 기반으로 잡거나 그냥 고정 시드로 그릴 수 있지만, 간단한 선분들로 찢어짐 표현
-	visuals.draw_line(Vector2(-3, -5), Vector2(4, -8), body_color, 3.0)
-	visuals.draw_line(Vector2(-6, 4), Vector2(0, 7), body_color, 4.0)
-	if enemy_type == EnemyType.TANK:
-		visuals.draw_line(Vector2(5, 5), Vector2(8, -4), body_color, 5.0)
+	var cloth_color = Color(0.35, 0.35, 0.4)
+	if enemy_type == EnemyType.RUNNER: 
+		body_color = Color(0.4, 0.3, 0.3)
+		cloth_color = Color(0.4, 0.2, 0.2)
+	elif enemy_type == EnemyType.TANK: 
+		body_color = Color(0.2, 0.35, 0.25)
+		cloth_color = Color(0.2, 0.3, 0.4)
 		
-	# 혈흔 (피격된 흔적이나 원래 묻어있는 피)
+	# --- 1. 좀비 몸통 (구부정한 어깨와 불규칙한 체형을 다각형으로 표현) ---
+	var shoulder_width = 14.0 * scale_f
+	var body_length = 10.0 * scale_f
+	var chest_width = 12.0 * scale_f
+	
+	# 불규칙한 옷/몸통 다각형 (외곽선용)
+	var body_points = PackedVector2Array([
+		Vector2(-body_length, -chest_width),  # 등 좌측
+		Vector2(-body_length, chest_width),   # 등 우측
+		Vector2(0, shoulder_width),           # 우측 어깨
+		Vector2(body_length, chest_width*0.8),# 앞가슴 우측
+		Vector2(body_length, -chest_width*0.8),# 앞가슴 좌측
+		Vector2(0, -shoulder_width)           # 좌측 어깨
+	])
+	
+	var colors_outline = PackedColorArray()
+	var colors_cloth = PackedColorArray()
+	for i in range(body_points.size()):
+		colors_outline.append(Color(0.1, 0.1, 0.1))
+		colors_cloth.append(cloth_color)
+		
+	# 약간 더 크게 외곽선 폴리곤 그리기
+	var outline_points = PackedVector2Array()
+	for p in body_points:
+		outline_points.append(p * 1.15)
+	
+	visuals.draw_polygon(outline_points, colors_outline)
+	visuals.draw_polygon(body_points, colors_cloth)
+	
+	# --- 2. 찢어진 옷 (다각형 틈새로 피부가 드러남) ---
+	var torn_points1 = PackedVector2Array([
+		Vector2(body_length*0.5, -shoulder_width*0.6),
+		Vector2(0, -shoulder_width*0.8),
+		Vector2(body_length*0.2, -shoulder_width*0.4)
+	])
+	visuals.draw_polygon(torn_points1, PackedColorArray([body_color, body_color, body_color]))
+	
+	if enemy_type == EnemyType.TANK:
+		var torn_points2 = PackedVector2Array([
+			Vector2(-body_length*0.5, chest_width*0.5),
+			Vector2(-body_length*0.8, chest_width*0.8),
+			Vector2(-body_length*0.2, chest_width*0.9)
+		])
+		visuals.draw_polygon(torn_points2, PackedColorArray([body_color, body_color, body_color]))
+		
+	# --- 3. 혈흔 (불규칙 다각형 점) ---
 	var hp_ratio = hp / max_hp
 	if hp_ratio < 0.7:
-		visuals.draw_circle(Vector2(-4, -2), 4.0, Color(0.5, 0.0, 0.0, 0.7))
+		var blood1 = PackedVector2Array([Vector2(-4, -4), Vector2(-8, -2), Vector2(-5, 3), Vector2(-2, 0)])
+		visuals.draw_polygon(blood1, PackedColorArray([Color(0.5, 0, 0, 0.8), Color(0.5, 0, 0, 0.8), Color(0.5, 0, 0, 0.8), Color(0.5, 0, 0, 0.8)]))
 	if hp_ratio < 0.4:
-		visuals.draw_circle(Vector2(3, 5), 5.0, Color(0.4, 0.0, 0.0, 0.8))
+		visuals.draw_polygon(PackedVector2Array([Vector2(4, 5), Vector2(8, 7), Vector2(6, 10), Vector2(2, 8)]), 
+			PackedColorArray([Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9)]))
+
+	# --- 4. 머리 (약간 타원형 혹은 다각형) ---
+	var head_radius_x = 7.0 * scale_f
+	var head_radius_y = 8.0 * scale_f
+	var head_offset = Vector2(body_length * 0.4, 0)
 	
-	# 머리 (어깨 위로 솟아오른 느낌)
-	visuals.draw_circle(Vector2(radius * 0.2, 0), radius * 0.65, body_color)
+	var head_points = PackedVector2Array()
+	var head_colors = PackedColorArray()
+	var head_outlines = PackedColorArray()
+	var sides = 12
+	for i in range(sides):
+		var angle = (i / float(sides)) * TAU
+		# 앞쪽 주둥이를 살짝 뾰족하게
+		var rx = head_radius_x
+		if cos(angle) > 0: rx += 2.0 * scale_f * cos(angle)
+		var p = head_offset + Vector2(cos(angle) * rx, sin(angle) * head_radius_y)
+		head_points.append(p)
+		head_colors.append(body_color)
+		head_outlines.append(Color(0.1, 0.1, 0.1))
+		
+	var head_outline_points = PackedVector2Array()
+	for p in head_points:
+		head_outline_points.append(head_offset + (p - head_offset) * 1.2)
+		
+	visuals.draw_polygon(head_outline_points, head_outlines)
+	visuals.draw_polygon(head_points, head_colors)
 	
 	# 붉은 눈 (시선 방향)
-	var eye_offset = Vector2(radius * 0.6, 0)
-	visuals.draw_circle(eye_offset + Vector2(0, -3), 2.5, Color.RED)
-	visuals.draw_circle(eye_offset + Vector2(0, 3), 2.5, Color.RED)
+	var eye_offset = head_offset + Vector2(head_radius_x * 0.5, 0)
+	visuals.draw_circle(eye_offset + Vector2(0, -3.5*scale_f), 1.5*scale_f, Color.RED)
+	visuals.draw_circle(eye_offset + Vector2(0, 3.5*scale_f), 1.5*scale_f, Color.RED)
 	
-	# 양 팔 (좀비처럼 앞으로 뻗음)
-	var arm_len = radius * 1.2
+	# --- 5. 양 팔 (추적 시 손을 뻗음) ---
 	var reach = 0.0
-	if current_state == State.CHASE: reach = 4.0 # 추적 시 손을 더 뻗음
+	if current_state == State.CHASE: reach = 6.0 * scale_f
 	
-	# 팔 소매
-	visuals.draw_line(Vector2(0, -radius*0.8), Vector2(arm_len*0.6 + reach, -radius*0.8), cloth_color, 5.0)
-	visuals.draw_line(Vector2(0, radius*0.8), Vector2(arm_len*0.6 + reach, radius*0.8), cloth_color, 5.0)
+	# 팔 뼈대 다각형 (어깨에서 손까지 가늘어지는 형태)
+	var arm_y = shoulder_width * 0.8
+	var arm_len = 16.0 * scale_f + reach
 	
-	# 드러난 팔뚝
-	visuals.draw_line(Vector2(arm_len*0.6 + reach, -radius*0.8), Vector2(arm_len + reach, -radius*0.8), body_color, 4.0)
-	visuals.draw_line(Vector2(arm_len*0.6 + reach, radius*0.8), Vector2(arm_len + reach, radius*0.8), body_color, 4.0)
+	# 왼팔 (아래쪽)
+	var arm_l = PackedVector2Array([
+		Vector2(0, arm_y), Vector2(0, arm_y + 4*scale_f), 
+		Vector2(arm_len, arm_y + 2*scale_f), Vector2(arm_len, arm_y - 2*scale_f)
+	])
+	# 오른팔 (위쪽)
+	var arm_r = PackedVector2Array([
+		Vector2(0, -arm_y), Vector2(0, -arm_y - 4*scale_f), 
+		Vector2(arm_len, -arm_y - 2*scale_f), Vector2(arm_len, -arm_y + 2*scale_f)
+	])
 	
-	# 손
-	visuals.draw_circle(Vector2(arm_len + reach, -radius*0.8), 3.5, body_color)
-	visuals.draw_circle(Vector2(arm_len + reach, radius*0.8), 3.5, body_color)
+	var arm_colors = PackedColorArray([body_color, body_color, body_color, body_color])
+	var arm_outlines = PackedColorArray([Color(0.1, 0.1, 0.1), Color(0.1, 0.1, 0.1), Color(0.1, 0.1, 0.1), Color(0.1, 0.1, 0.1)])
+	
+	# 왼팔 외곽선 & 채우기
+	var arm_l_outline = PackedVector2Array()
+	for p in arm_l: arm_l_outline.append(p + (p - Vector2(arm_len/2, arm_y))*0.2)
+	visuals.draw_polygon(arm_l_outline, arm_outlines)
+	visuals.draw_polygon(arm_l, arm_colors)
+	
+	# 오른팔 외곽선 & 채우기
+	var arm_r_outline = PackedVector2Array()
+	for p in arm_r: arm_r_outline.append(p + (p - Vector2(arm_len/2, -arm_y))*0.2)
+	visuals.draw_polygon(arm_r_outline, arm_outlines)
+	visuals.draw_polygon(arm_r, arm_colors)
 	
 	# 피묻은 손
 	if enemy_type == EnemyType.RUNNER or current_state == State.CHASE:
-		visuals.draw_circle(Vector2(arm_len + reach + 1, -radius*0.8), 2.0, Color(0.6, 0, 0))
-		visuals.draw_circle(Vector2(arm_len + reach + 1, radius*0.8), 2.0, Color(0.6, 0, 0))
+		visuals.draw_circle(Vector2(arm_len, arm_y), 3.0*scale_f, Color(0.6, 0, 0))
+		visuals.draw_circle(Vector2(arm_len, -arm_y), 3.0*scale_f, Color(0.6, 0, 0))
+	else:
+		visuals.draw_circle(Vector2(arm_len, arm_y), 2.5*scale_f, body_color)
+		visuals.draw_circle(Vector2(arm_len, -arm_y), 2.5*scale_f, body_color)
 	
 	# HP 바 (피격 시 표시)
 	if hp < max_hp and hp > 0:
 		var bar_w = 26.0
 		var bar_h = 4.0
-		var bar_pos = Vector2(-bar_w/2.0, -radius - 12)
+		var bar_pos = Vector2(-bar_w/2.0, -18.0 * scale_f - 10.0)
 		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
 		var fill_w = (hp / max_hp) * bar_w
 		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.9, 0.2, 0.2))

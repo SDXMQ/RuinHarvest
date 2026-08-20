@@ -443,7 +443,6 @@ func _fire_weapon() -> void:
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
-	var radius = 14.0
 	
 	# 걷기 밥에 따른 Y 오프셋 및 회전
 	var bob_y = sin(walk_bob * 2.0) * 2.0
@@ -451,24 +450,79 @@ func _on_visuals_draw() -> void:
 	visuals.position = Vector2(0, bob_y)
 	visuals.rotation = bob_rot
 	
-	# 캐릭터 신체 (외곽선 포함)
-	visuals.draw_circle(Vector2.ZERO, radius + 2, Color(0.1, 0.1, 0.1)) # 외곽선
-	visuals.draw_circle(Vector2.ZERO, radius, Color(0.3, 0.5, 0.3))     # 셔츠 (초록색)
-	visuals.draw_circle(Vector2.ZERO, radius * 0.6, Color(0.9, 0.8, 0.7)) # 머리/피부
+	var skin_color = Color(0.9, 0.8, 0.7)
 	
-	# 손과 무기 렌더링
-	var aim_dir = Vector2(radius * 1.2, 0)
+	# --- 1. 방탄 조끼 (Tactical Vest) / 상체 ---
+	# 다각형으로 어깨 및 몸통 각지게 표현
+	var vest_points = PackedVector2Array([
+		Vector2(-10, -12), # 등 좌측
+		Vector2(-10, 12),  # 등 우측
+		Vector2(2, 14),    # 우측 어깨 앞
+		Vector2(12, 8),    # 앞가슴 우측
+		Vector2(12, -8),   # 앞가슴 좌측
+		Vector2(2, -14)    # 좌측 어깨 앞
+	])
 	
-	# 무기 (반동 적용)
-	var weapon_pos = aim_dir - Vector2(recoil_offset, 0)
-	visuals.draw_line(Vector2(5, 4), weapon_pos + Vector2(0, 4), Color.BLACK, 4.0)
+	var vest_colors = PackedColorArray()
+	var vest_outline = PackedColorArray()
+	for p in vest_points:
+		vest_colors.append(Color(0.2, 0.3, 0.2)) # 진녹색 조끼
+		vest_outline.append(Color(0.1, 0.1, 0.1))
+		
+	var vest_outline_pts = PackedVector2Array()
+	for p in vest_points:
+		vest_outline_pts.append(p * 1.15)
+		
+	visuals.draw_polygon(vest_outline_pts, vest_outline)
+	visuals.draw_polygon(vest_points, vest_colors)
 	
-	# 손 (무기를 잡은 손)
-	visuals.draw_circle(weapon_pos + Vector2(-4, 4), 3.5, Color(0.9, 0.8, 0.7)) # 오른손
-	visuals.draw_circle(Vector2(6, -4), 3.5, Color(0.9, 0.8, 0.7)) # 왼손
+	# 조끼 주머니 디테일 (작은 사각형들)
+	visuals.draw_rect(Rect2(Vector2(2, 3), Vector2(6, 4)), Color(0.15, 0.25, 0.15))
+	visuals.draw_rect(Rect2(Vector2(2, -7), Vector2(6, 4)), Color(0.15, 0.25, 0.15))
 	
-	# 총구 화염 스파크 (총구 앞에서만 렌더)
+	# --- 2. 머리 (헬멧 또는 각진 실루엣) ---
+	var head_radius = 8.0
+	visuals.draw_circle(Vector2(2, 0), head_radius + 1.5, Color.BLACK)
+	visuals.draw_circle(Vector2(2, 0), head_radius, skin_color)
+	
+	# 모자(야구모자 챙) 또는 헬멧 앞부분
+	var hat_pts = PackedVector2Array([
+		Vector2(2, -7), Vector2(2, 7), Vector2(12, 5), Vector2(12, -5)
+	])
+	visuals.draw_polygon(hat_pts, PackedColorArray([Color(0.15, 0.15, 0.15), Color(0.15, 0.15, 0.15), Color(0.15, 0.15, 0.15), Color(0.15, 0.15, 0.15)]))
+
+	# --- 3. 팔과 무기 ---
+	var weapon_recoil_pos = Vector2(-recoil_offset, 0)
+	
+	# 오른팔 (무기 방아쇠 쪽)
+	var right_shoulder = Vector2(0, 10)
+	var right_hand = Vector2(12, 6) + weapon_recoil_pos
+	visuals.draw_line(right_shoulder, right_hand, Color(0.25, 0.35, 0.25), 5.0)
+	visuals.draw_circle(right_hand, 3.5, skin_color) # 오른손
+	
+	# 왼팔 (총열 쪽)
+	var left_shoulder = Vector2(2, -10)
+	var left_hand = Vector2(18, 0) + weapon_recoil_pos
+	visuals.draw_line(left_shoulder, left_hand, Color(0.25, 0.35, 0.25), 5.0)
+	visuals.draw_circle(left_hand, 3.5, skin_color) # 왼손
+	
+	# 무기 (소총/권총 형태를 다각형으로 조합)
+	# 권총 손잡이
+	visuals.draw_rect(Rect2(right_hand + Vector2(-2, -2), Vector2(4, 6)), Color(0.1, 0.1, 0.1))
+	# 총열 (앞으로 길게)
+	var barrel_rect = Rect2(right_hand + Vector2(2, -3), Vector2(14, 4))
+	visuals.draw_rect(barrel_rect, Color(0.15, 0.15, 0.15))
+	
+	# --- 4. 총구 화염 스파크 ---
 	if muzzle_flash_timer > 0.0:
-		var flash_tip = weapon_pos + Vector2(8, 4)
-		visuals.draw_circle(flash_tip, 5.0, Color(1.0, 0.9, 0.3, 0.9)) # 밝은 코어
-		visuals.draw_circle(flash_tip + Vector2(3, 0), 3.0, Color(1.0, 0.5, 0.1, 0.8)) # 외곽 스파크
+		var flash_tip = right_hand + Vector2(16, -1)
+		var flash_poly = PackedVector2Array([
+			flash_tip + Vector2(0, -3),
+			flash_tip + Vector2(8, 0),
+			flash_tip + Vector2(0, 3),
+			flash_tip + Vector2(12, 0) # 더 길게 뻗는 섬광
+		])
+		visuals.draw_polygon(flash_poly, PackedColorArray([
+			Color(1.0, 0.9, 0.3, 0.9), Color(1.0, 0.7, 0.1, 0.8), 
+			Color(1.0, 0.9, 0.3, 0.9), Color(1.0, 0.5, 0.1, 0.8)
+		]))
