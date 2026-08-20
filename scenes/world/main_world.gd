@@ -40,12 +40,21 @@ var raid_time_remaining: float = 300.0 # 5분
 
 const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
 
+var particle_system: Node2D
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
 	
 	# 후처리 셰이더 레이어 추가
 	var pp = PostProcessLayerScene.instantiate()
 	add_child(pp)
+	
+	# 파티클 시스템 추가
+	var ps_script = load("res://systems/particle_system.gd")
+	particle_system = Node2D.new()
+	particle_system.name = "ParticleSystem"
+	particle_system.set_script(ps_script)
+	add_child(particle_system)
 	
 	if compass_bar:
 		compass_bar.draw.connect(_on_compass_draw)
@@ -486,7 +495,7 @@ func _enter_building_interior(tile_pos: Vector2i) -> void:
 			"return_pos": player.global_position
 		}
 		
-	get_tree().change_scene_to_file("res://scenes/interior/building_interior_scene.tscn")
+	TransitionManager.change_scene("res://scenes/interior/building_interior_scene.tscn", "fade", 0.6)
 
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	get_tree().paused = true

@@ -317,4 +317,4 @@ func _exit_interior() -> void:
 		}
 		
 	if SoundManager: SoundManager.play("menu_select")
-	get_tree().change_scene_to_file("res://scenes/world/main_world.tscn")
+	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 0.6)

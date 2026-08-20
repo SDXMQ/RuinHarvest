@@ -27,7 +27,7 @@ func _load_save(slot_idx: int) -> void:
 	# 현재는 구현용 껍데기이므로 강제로 hideout 진입
 	if GameManager:
 		GameManager.current_state = GameManager.GameState.HIDEOUT
-	get_tree().change_scene_to_file("res://scenes/hideout/hideout.tscn")
+	TransitionManager.change_scene("res://scenes/hideout/hideout.tscn", "fade", 0.8)
 	queue_free()
 
 func _unhandled_input(event: InputEvent) -> void:

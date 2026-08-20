@@ -112,6 +112,12 @@ func take_damage(amount: float, hit_dir: Vector2) -> void:
 	knockback_velocity = hit_dir.normalized() * 180.0
 	queue_redraw()
 	
+	# 피격 파티클 (피 + 타격 이펙트)
+	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+	if ps:
+		ps.emit("blood", global_position.x, global_position.y, 6)
+		ps.emit("hit", global_position.x, global_position.y, 3)
+	
 	if SoundManager:
 		SoundManager.play("hit_melee")
 		

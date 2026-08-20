@@ -24,7 +24,7 @@ func _on_new_game_pressed() -> void:
 	if GameManager:
 		GameManager.start_new_game()
 	else:
-		get_tree().change_scene_to_file("res://scenes/hideout/hideout.tscn")
+		TransitionManager.change_scene("res://scenes/hideout/hideout.tscn", "fade", 0.8)
 
 func _on_continue_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")

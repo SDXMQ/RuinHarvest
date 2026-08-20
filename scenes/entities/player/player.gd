@@ -179,6 +179,12 @@ func _try_attack() -> void:
 			muzzle_light.energy = 1.5
 		queue_redraw()
 		
+		# 총구 스파크 + 탄피 파티클
+		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+		if ps:
+			ps.emit("muzzle", spawn_pos.x, spawn_pos.y, 4, rotation)
+			ps.emit("bullet_shell", spawn_pos.x, spawn_pos.y, 1, rotation)
+		
 		# 총알 발사
 		var bullet_scene = load("res://scenes/entities/projectiles/bullet.tscn")
 		if bullet_scene:
@@ -190,6 +196,11 @@ func _try_attack() -> void:
 			SoundManager.play("hit_ranged")
 	else:
 		# 근접 공격 (전방 40px 부채꼴 범위 공격)
+		# 슬래시 파티클
+		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+		if ps:
+			ps.emit("slash", spawn_pos.x, spawn_pos.y, 6, rotation)
+		
 		if SoundManager:
 			SoundManager.play("hit_melee")
 			

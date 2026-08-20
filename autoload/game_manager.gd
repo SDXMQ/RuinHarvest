@@ -45,10 +45,10 @@ func change_state(new_state: GameState) -> void:
 	match current_state:
 		GameState.MAIN_MENU:
 			get_tree().paused = false
-			get_tree().change_scene_to_file("res://scenes/main_menu/main_menu.tscn")
+			TransitionManager.change_scene("res://scenes/main_menu/main_menu.tscn", "fade", 0.8)
 		GameState.HIDEOUT:
 			get_tree().paused = false
-			get_tree().change_scene_to_file("res://scenes/hideout/hideout.tscn")
+			TransitionManager.change_scene("res://scenes/hideout/hideout.tscn", "fade", 0.8)
 		GameState.RAID_LOADING:
 			# 로딩 씬 표시 후 실제 인게임 씬 전환
 			pass
@@ -69,7 +69,7 @@ func toggle_pause() -> void:
 # ============================================================
 # 세이브/로드 연계
 # ============================================================
-func start_new_game(world_settings: Dictionary) -> void:
+func start_new_game(world_settings: Dictionary = {}) -> void:
 	current_save_slot = "save_" + str(Time.get_unix_time_from_system())
 	
 	# 기본 초기 데이터 세팅
@@ -111,8 +111,7 @@ func load_game(slot_name: String) -> void:
 func start_raid() -> void:
 	time_elapsed_in_raid = 0.0
 	change_state(GameState.RAID_LOADING)
-	# (비동기 로딩을 통한 씬 전환 구현을 추가할 수 있습니다)
-	get_tree().change_scene_to_file("res://scenes/world/main_world.tscn")
+	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 1.0)
 	current_state = GameState.IN_GAME
 	EventBus.raid_started.emit()
 
