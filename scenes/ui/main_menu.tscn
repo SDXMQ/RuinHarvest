@@ -1,0 +1,86 @@
+[gd_scene format=3 uid="uid://mainmenu0000"]
+
+[ext_resource type="Script" path="res://scenes/ui/main_menu.gd" id="1_menu"]
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.08, 0.08, 0.1, 1)
+
+[node name="Title" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -250.0
+offset_top = 100.0
+offset_right = 250.0
+offset_bottom = 180.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.9, 0.3, 0.2, 1)
+theme_override_font_sizes/font_size = 48
+text = "R U I N   H A R V E S T"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -150.0
+offset_top = 175.0
+offset_right = 150.0
+offset_bottom = 205.0
+grow_horizontal = 2
+theme_override_colors/font_color = Color(0.6, 0.6, 0.6, 1)
+theme_override_font_sizes/font_size = 18
+text = "30 Days of Survival"
+horizontal_alignment = 1
+
+[node name="VBox" type="VBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -100.0
+offset_top = -20.0
+offset_right = 100.0
+offset_bottom = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 15
+
+[node name="BtnNewGame" type="Button" parent="VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "새 게임 (New Game)"
+
+[node name="BtnContinue" type="Button" parent="VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "이어하기 (Continue)"
+
+[node name="BtnSettings" type="Button" parent="VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "설정 (Settings)"
+
+[node name="BtnExit" type="Button" parent="VBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "종료 (Exit)"

@@ -1,0 +1,146 @@
+[gd_scene format=3 uid="uid://cw7c5frsq7iyx"]
+
+[ext_resource type="Script" path="res://scenes/ui/settings_window.gd" id="1_sett"]
+
+[node name="SettingsWindow" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_sett")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.784314)
+
+[node name="Panel" type="PanelContainer" parent="."]
+custom_minimum_size = Vector2(400, 300)
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = 150.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="VBox" type="VBoxContainer" parent="Panel"]
+layout_mode = 2
+
+[node name="Header" type="HBoxContainer" parent="Panel/VBox"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Panel/VBox/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 18
+text = "설정 (Settings)"
+horizontal_alignment = 1
+
+[node name="CloseBtn" type="Button" parent="Panel/VBox/Header"]
+custom_minimum_size = Vector2(30, 30)
+layout_mode = 2
+text = "X"
+
+[node name="TabContainer" type="TabContainer" parent="Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="비디오" type="MarginContainer" parent="Panel/VBox/TabContainer"]
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="Panel/VBox/TabContainer/비디오"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="FullscreenBtn" type="CheckButton" parent="Panel/VBox/TabContainer/비디오/VBox"]
+layout_mode = 2
+text = "전체화면 (Fullscreen)"
+
+[node name="Label" type="Label" parent="Panel/VBox/TabContainer/비디오/VBox"]
+layout_mode = 2
+text = "해상도 (Resolution)"
+
+[node name="ResolutionOpt" type="OptionButton" parent="Panel/VBox/TabContainer/비디오/VBox"]
+layout_mode = 2
+
+[node name="오디오" type="MarginContainer" parent="Panel/VBox/TabContainer"]
+visible = false
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="Panel/VBox/TabContainer/오디오"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="MasterLbl" type="Label" parent="Panel/VBox/TabContainer/오디오/VBox"]
+layout_mode = 2
+text = "마스터 볼륨 (Master Volume)"
+
+[node name="MasterVol" type="HSlider" parent="Panel/VBox/TabContainer/오디오/VBox"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="BGMLbl" type="Label" parent="Panel/VBox/TabContainer/오디오/VBox"]
+layout_mode = 2
+text = "배경음악 (BGM Volume)"
+
+[node name="BGMVol" type="HSlider" parent="Panel/VBox/TabContainer/오디오/VBox"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="SFXLbl" type="Label" parent="Panel/VBox/TabContainer/오디오/VBox"]
+layout_mode = 2
+text = "효과음 (SFX Volume)"
+
+[node name="SFXVol" type="HSlider" parent="Panel/VBox/TabContainer/오디오/VBox"]
+layout_mode = 2
+max_value = 1.0
+step = 0.05
+value = 0.8
+
+[node name="게임플레이" type="MarginContainer" parent="Panel/VBox/TabContainer"]
+visible = false
+layout_mode = 2
+theme_override_constants/margin_left = 20
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 20
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="Panel/VBox/TabContainer/게임플레이"]
+layout_mode = 2
+theme_override_constants/separation = 15
+
+[node name="Label" type="Label" parent="Panel/VBox/TabContainer/게임플레이/VBox"]
+layout_mode = 2
+text = "언어 (Language) - 추후 지원"
+
+[node name="LanguageOpt" type="OptionButton" parent="Panel/VBox/TabContainer/게임플레이/VBox"]
+layout_mode = 2
+disabled = true
+item_count = 1
+selected = 0
+popup/item_0/text = "한국어"
+popup/item_0/id = 0
