@@ -125,6 +125,7 @@ func _setup_player() -> void:
 		player.is_bleeding = s.get("is_bleeding", false)
 		player.is_fractured = s.get("is_fractured", false)
 		player.is_infected = s.get("is_infected", false)
+		player.set_flashlight(s.get("flashlight_enabled", true))
 		
 	player_inventory = Inventory.new()
 	player_inventory.max_slots = 12
@@ -311,7 +312,8 @@ func _exit_interior() -> void:
 			"thirst": player.thirst,
 			"is_bleeding": player.is_bleeding,
 			"is_fractured": player.is_fractured,
-			"is_infected": player.is_infected
+			"is_infected": player.is_infected,
+			"flashlight_enabled": player.flashlight_enabled
 		}
 		
 	if SoundManager: SoundManager.play("menu_select")

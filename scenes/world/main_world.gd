@@ -83,6 +83,7 @@ func _ready() -> void:
 		player.is_bleeding = s.get("is_bleeding", false)
 		player.is_fractured = s.get("is_fractured", false)
 		player.is_infected = s.get("is_infected", false)
+		player.set_flashlight(s.get("flashlight_enabled", true))
 		GameManager.current_world_data.erase("player_stats")
 		
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
@@ -467,7 +468,8 @@ func _enter_building_interior(tile_pos: Vector2i) -> void:
 			"thirst": player.thirst,
 			"is_bleeding": player.is_bleeding,
 			"is_fractured": player.is_fractured,
-			"is_infected": player.is_infected
+			"is_infected": player.is_infected,
+			"flashlight_enabled": player.flashlight_enabled
 		}
 		
 		# 바이옴에 따른 건물 타입 결정
