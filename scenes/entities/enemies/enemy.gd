@@ -169,30 +169,62 @@ func _on_visuals_draw() -> void:
 	
 	# 외곽선
 	visuals.draw_circle(Vector2.ZERO, radius + 2, Color(0.1, 0.1, 0.1))
-	# 몸체
-	visuals.draw_circle(Vector2.ZERO, radius, body_color)
+	
+	# 몸체 (옷)
+	var cloth_color = Color(0.35, 0.35, 0.4) # 기본 회색 옷
+	if enemy_type == EnemyType.RUNNER: cloth_color = Color(0.4, 0.2, 0.2) # 붉은 계열 옷
+	if enemy_type == EnemyType.TANK: cloth_color = Color(0.2, 0.3, 0.4) # 두꺼운 패딩 느낌
+	visuals.draw_circle(Vector2.ZERO, radius, cloth_color)
+	
+	# 찢어진 옷 틈새로 피부가 보이게 (절차적 무늬)
+	# 랜덤 시드를 위치 기반으로 잡거나 그냥 고정 시드로 그릴 수 있지만, 간단한 선분들로 찢어짐 표현
+	visuals.draw_line(Vector2(-3, -5), Vector2(4, -8), body_color, 3.0)
+	visuals.draw_line(Vector2(-6, 4), Vector2(0, 7), body_color, 4.0)
+	if enemy_type == EnemyType.TANK:
+		visuals.draw_line(Vector2(5, 5), Vector2(8, -4), body_color, 5.0)
+		
+	# 혈흔 (피격된 흔적이나 원래 묻어있는 피)
+	var hp_ratio = hp / max_hp
+	if hp_ratio < 0.7:
+		visuals.draw_circle(Vector2(-4, -2), 4.0, Color(0.5, 0.0, 0.0, 0.7))
+	if hp_ratio < 0.4:
+		visuals.draw_circle(Vector2(3, 5), 5.0, Color(0.4, 0.0, 0.0, 0.8))
+	
+	# 머리 (어깨 위로 솟아오른 느낌)
+	visuals.draw_circle(Vector2(radius * 0.2, 0), radius * 0.65, body_color)
 	
 	# 붉은 눈 (시선 방향)
 	var eye_offset = Vector2(radius * 0.6, 0)
-	visuals.draw_circle(eye_offset + Vector2(0, -4), 2.5, Color.RED)
-	visuals.draw_circle(eye_offset + Vector2(0, 4), 2.5, Color.RED)
+	visuals.draw_circle(eye_offset + Vector2(0, -3), 2.5, Color.RED)
+	visuals.draw_circle(eye_offset + Vector2(0, 3), 2.5, Color.RED)
 	
 	# 양 팔 (좀비처럼 앞으로 뻗음)
 	var arm_len = radius * 1.2
 	var reach = 0.0
 	if current_state == State.CHASE: reach = 4.0 # 추적 시 손을 더 뻗음
 	
-	visuals.draw_line(Vector2(0, -radius*0.8), Vector2(arm_len + reach, -radius*0.8), body_color, 5.0)
-	visuals.draw_line(Vector2(0, radius*0.8), Vector2(arm_len + reach, radius*0.8), body_color, 5.0)
+	# 팔 소매
+	visuals.draw_line(Vector2(0, -radius*0.8), Vector2(arm_len*0.6 + reach, -radius*0.8), cloth_color, 5.0)
+	visuals.draw_line(Vector2(0, radius*0.8), Vector2(arm_len*0.6 + reach, radius*0.8), cloth_color, 5.0)
 	
-	visuals.draw_circle(Vector2(arm_len + reach, -radius*0.8), 3.5, Color(0.4, 0.5, 0.4))
-	visuals.draw_circle(Vector2(arm_len + reach, radius*0.8), 3.5, Color(0.4, 0.5, 0.4))
+	# 드러난 팔뚝
+	visuals.draw_line(Vector2(arm_len*0.6 + reach, -radius*0.8), Vector2(arm_len + reach, -radius*0.8), body_color, 4.0)
+	visuals.draw_line(Vector2(arm_len*0.6 + reach, radius*0.8), Vector2(arm_len + reach, radius*0.8), body_color, 4.0)
+	
+	# 손
+	visuals.draw_circle(Vector2(arm_len + reach, -radius*0.8), 3.5, body_color)
+	visuals.draw_circle(Vector2(arm_len + reach, radius*0.8), 3.5, body_color)
+	
+	# 피묻은 손
+	if enemy_type == EnemyType.RUNNER or current_state == State.CHASE:
+		visuals.draw_circle(Vector2(arm_len + reach + 1, -radius*0.8), 2.0, Color(0.6, 0, 0))
+		visuals.draw_circle(Vector2(arm_len + reach + 1, radius*0.8), 2.0, Color(0.6, 0, 0))
 	
 	# HP 바 (피격 시 표시)
 	if hp < max_hp and hp > 0:
 		var bar_w = 26.0
 		var bar_h = 4.0
-		var bar_pos = Vector2(-bar_w/2.0, -radius - 10)
+		var bar_pos = Vector2(-bar_w/2.0, -radius - 12)
 		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
 		var fill_w = (hp / max_hp) * bar_w
 		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.9, 0.2, 0.2))
