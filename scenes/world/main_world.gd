@@ -17,6 +17,7 @@ extends Node2D
 @onready var extract_bar: ProgressBar = $UI/HUD/ExtractProgressBar
 @onready var day_night_modulate: CanvasModulate = $DayNightModulate
 @onready var compass_bar: Control = $UI/HUD/CompassBar
+@onready var event_log_vbox: VBoxContainer = $UI/HUD/EventLog
 
 const MapWindowScene = preload("res://scenes/ui/map_window.tscn")
 var current_map_window: Control = null
@@ -42,6 +43,9 @@ func _ready() -> void:
 	
 	if compass_bar:
 		compass_bar.draw.connect(_on_compass_draw)
+		
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.connect(_on_event_logged)
 	
 	# 플레이어 인벤토리 생성 및 데이터 복원
 	player_inventory = Inventory.new()
@@ -105,6 +109,13 @@ func _ready() -> void:
 		
 	# 탈출 지점 3개 스폰 (동, 서, 남 방향 약 600~900px 거리)
 	_spawn_extraction_zones()
+	
+	GameManager.current_state = GameManager.GameState.IN_GAME
+	
+	# 작전 개시 및 초기 상태 안내 로그 출력
+	_on_event_logged("★ [작전 개시] 30일간의 생존 레이드가 시작되었습니다.")
+	if WeatherSystem:
+		_on_event_logged("🌦️ 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
 
 func _spawn_extraction_zones() -> void:
 	extraction_points_data.clear()
@@ -136,6 +147,54 @@ func _on_extract_progress(cur: float, max_t: float) -> void:
 func _on_extract_cancelled() -> void:
 	if extract_bar:
 		extract_bar.visible = false
+
+func _on_event_logged(msg: String) -> void:
+	if not event_log_vbox: return
+	
+	var panel = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.08, 0.12, 0.85)
+	style.border_width_left = 4
+	style.border_color = Color(1.0, 0.8, 0.2)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_right = 4
+	panel.add_theme_stylebox_override("panel", style)
+	
+	var lbl = Label.new()
+	lbl.text = msg
+	lbl.add_theme_font_size_override("font_size", 13)
+	
+	# 이벤트 성격별 테두리 및 폰트 색상 구분
+	if msg.begins_with("★"):
+		style.border_color = Color(1.0, 0.8, 0.2)
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
+	elif msg.begins_with("✓") or msg.begins_with("📦"):
+		style.border_color = Color(0.3, 0.9, 0.4)
+		lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+	elif msg.begins_with("✗") or msg.begins_with("💀"):
+		style.border_color = Color(0.9, 0.3, 0.3)
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+	elif msg.begins_with("🌦️") or msg.begins_with("🌅"):
+		style.border_color = Color(0.3, 0.7, 1.0)
+		lbl.add_theme_color_override("font_color", Color(0.6, 0.85, 1.0))
+		
+	panel.add_child(lbl)
+	event_log_vbox.add_child(panel)
+	
+	# 최대 6개 로그 유지
+	while event_log_vbox.get_child_count() > 6:
+		var oldest = event_log_vbox.get_child(0)
+		oldest.queue_free()
+		event_log_vbox.remove_child(oldest)
+	
+	var tween = create_tween()
+	tween.tween_interval(7.0) # 7초 대기
+	tween.tween_property(panel, "modulate:a", 0.0, 1.5) # 1.5초간 부드럽게 페이드아웃
+	tween.tween_callback(panel.queue_free)
 
 func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	if not player: return

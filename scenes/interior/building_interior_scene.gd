@@ -14,6 +14,7 @@ extends Node2D
 @onready var thirst_bar: ProgressBar = $UI/HUD/Panel/VBox/ThirstBar
 @onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
 @onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
+@onready var event_log_vbox: VBoxContainer = $UI/HUD/EventLog
 
 # 일시정지 메뉴
 @onready var pause_menu: Control = $UI/PauseMenu
@@ -38,6 +39,9 @@ func _ready() -> void:
 	
 	resume_btn.pressed.connect(_toggle_pause)
 	exit_btn.pressed.connect(_on_exit_pressed)
+	
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.connect(_on_event_logged)
 	
 	# 남은 레이드 시간 복원
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
@@ -211,6 +215,52 @@ func _on_interact_prompt(show: bool, text: String) -> void:
 		interact_prompt.text = text
 	elif interact_prompt:
 		interact_prompt.visible = false
+
+func _on_event_logged(msg: String) -> void:
+	if not event_log_vbox: return
+	
+	var panel = PanelContainer.new()
+	var style = StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.08, 0.12, 0.85)
+	style.border_width_left = 4
+	style.border_color = Color(1.0, 0.8, 0.2)
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	style.corner_radius_top_right = 4
+	style.corner_radius_bottom_right = 4
+	panel.add_theme_stylebox_override("panel", style)
+	
+	var lbl = Label.new()
+	lbl.text = msg
+	lbl.add_theme_font_size_override("font_size", 13)
+	
+	if msg.begins_with("★"):
+		style.border_color = Color(1.0, 0.8, 0.2)
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
+	elif msg.begins_with("✓") or msg.begins_with("📦") or msg.begins_with("💊"):
+		style.border_color = Color(0.3, 0.9, 0.4)
+		lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
+	elif msg.begins_with("✗") or msg.begins_with("💀"):
+		style.border_color = Color(0.9, 0.3, 0.3)
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
+	elif msg.begins_with("🌦️") or msg.begins_with("🌅"):
+		style.border_color = Color(0.3, 0.7, 1.0)
+		lbl.add_theme_color_override("font_color", Color(0.6, 0.85, 1.0))
+		
+	panel.add_child(lbl)
+	event_log_vbox.add_child(panel)
+	
+	while event_log_vbox.get_child_count() > 6:
+		var oldest = event_log_vbox.get_child(0)
+		oldest.queue_free()
+		event_log_vbox.remove_child(oldest)
+	
+	var tween = create_tween()
+	tween.tween_interval(7.0)
+	tween.tween_property(panel, "modulate:a", 0.0, 1.5)
+	tween.tween_callback(panel.queue_free)
 
 func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_loot_window != null: return

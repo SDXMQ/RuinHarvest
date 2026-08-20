@@ -178,6 +178,18 @@ theme_override_font_sizes/font_size = 18
 text = "[E] 상호작용"
 horizontal_alignment = 1
 
+[node name="EventLog" type="VBoxContainer" parent="UI/HUD"]
+layout_mode = 1
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+offset_left = 20.0
+offset_top = -50.0
+offset_right = 420.0
+offset_bottom = 250.0
+grow_vertical = 2
+theme_override_constants/separation = 8
+
 [node name="PauseMenu" type="Control" parent="UI"]
 process_mode = 2
 visible = false

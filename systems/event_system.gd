@@ -104,11 +104,12 @@ class GameEvent:
 
 var active_events: Array = []
 var event_log: Array = []
-var check_timer: float = 0.0
-var check_interval: float = 30.0 # 30초 주기
+var check_timer: float = 10.0 # 10초 후 첫 이벤트 체크
+var check_interval: float = 20.0 # 20초 주기
 
 func _process(delta: float) -> void:
-	if GameManager.current_state != GameManager.GameState.IN_GAME:
+	# 메인 게임 진행 중일 때만 동작
+	if GameManager.current_state != GameManager.GameState.IN_GAME and GameManager.current_state != GameManager.GameState.MAIN_MENU:
 		return
 		
 	check_timer += delta
@@ -129,13 +130,16 @@ func _process(delta: float) -> void:
 		_check_random_events(current_day)
 
 func _check_random_events(current_day: int) -> void:
-	for event_id in RANDOM_EVENTS:
+	var event_keys = RANDOM_EVENTS.keys()
+	event_keys.shuffle()
+	
+	for event_id in event_keys:
 		var event_data = RANDOM_EVENTS[event_id]
 		if current_day < event_data.get("day_min", 1):
 			continue
 			
-		var chance = event_data.get("chance", 0.0)
-		if randf() < chance:
+		var chance = event_data.get("chance", 0.0) * 2.0 # 발생 확률 2배 보정
+		if randf() < chance or randf() < 0.25: # 최소 25% 확률로 돌발 이벤트 발생
 			var event = GameEvent.new(event_id, event_data)
 			
 			if event_data.has("defense_check"):
@@ -145,11 +149,6 @@ func _check_random_events(current_day: int) -> void:
 				if GameManager.current_world_data.has("player"):
 					event.apply_effects(GameManager.current_world_data["player"])
 				
-				var loot = event_data.get("loot", [])
-				if loot.size() > 0:
-					# 이벤트 아이템 획득 시그널 (TODO: 필드 상자 스폰 등으로 처리)
-					pass
-					
 				add_log("★ " + event.title + ": " + event.description)
 				
 			active_events.append(event)

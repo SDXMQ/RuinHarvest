@@ -11,12 +11,6 @@ var player_listings: Array = []
 var next_listing_id: int = 1
 var next_player_listing_id: int = 1
 
-const NICKNAMES = [
-	"PMC_Killa", "Scav_Lover", "Nikita_Fan", "LootGoblin", "Tarkov_Pro",
-	"Rat_Pack", "Chad_Alpha", "SledgeHammer", "Bandit_99", "Trader_Joe",
-	"Prapor_Junior", "Stash_Master", "PMC_1982", "Scav_Boss_Fan", "Ruin_Harvester"
-]
-
 func _ready() -> void:
 	_initialize_market()
 
@@ -88,16 +82,11 @@ func refresh_listings(in_game_day: int) -> void:
 			var max_stack = data.get("max_stack", 5)
 			count = rng.randi_range(1, max(2, max_stack / 2))
 			
-		var seller = NICKNAMES[rng.randi_range(0, NICKNAMES.size() - 1)]
-		if rng.randf() < 0.3:
-			seller = "PMC_" + str(rng.randi_range(1000, 9999))
-			
 		listings.append({
 			"id": next_listing_id,
 			"item_name": item_name,
 			"count": count,
-			"price": price,
-			"seller": seller
+			"price": price
 		})
 		next_listing_id += 1
 		

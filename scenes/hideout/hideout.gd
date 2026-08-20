@@ -14,6 +14,10 @@ extends Control
 @onready var trader_items_vbox: VBoxContainer = $CenterArea/TabContainer/TradersTab/VBox/Scroll/ItemsVBox
 @onready var trader_sell_grid: HBoxContainer = $CenterArea/TabContainer/TradersTab/VBox/SellArea/Scroll/SellGrid
 
+# 플리마켓 탭
+@onready var market_items_vbox: VBoxContainer = $CenterArea/TabContainer/MarketTab/VBox/Scroll/MarketItemsVBox
+@onready var market_register_grid: HBoxContainer = $CenterArea/TabContainer/MarketTab/VBox/RegisterArea/Scroll/RegisterGrid
+
 # 하단 바
 @onready var raid_button: Button = $BottomBar/RaidButton
 @onready var menu_button: Button = $BottomBar/MenuButton
@@ -54,10 +58,21 @@ func _ready() -> void:
 	player_inv.inventory_changed.connect(_on_inventory_changed)
 	stash_inv.inventory_changed.connect(_on_inventory_changed)
 	
+	tab_container.tab_changed.connect(_on_tab_changed)
+	
 	_load_data()
 	_check_last_raid_result()
 	_refresh_stash_ui()
 	_refresh_trader_ui()
+	_refresh_market_ui()
+
+func _on_tab_changed(tab: int) -> void:
+	if tab == 0:
+		_refresh_stash_ui()
+	elif tab == 1:
+		_refresh_trader_ui()
+	elif tab == 2:
+		_refresh_market_ui()
 
 func _load_data() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
@@ -257,6 +272,110 @@ func _sell_item(slot_idx: int, item_id: String, amount: int, unit_price: int) ->
 	
 	if SoundManager: SoundManager.play("menu_select")
 	_refresh_trader_ui()
+	_sync_save_data()
+
+# ============================================================
+# 플리마켓 UI 로직
+# ============================================================
+func _refresh_market_ui() -> void:
+	if not FleaMarket: return
+	
+	for child in market_items_vbox.get_children():
+		child.queue_free()
+		
+	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	
+	for listing in FleaMarket.listings:
+		var item_id = listing["item_name"]
+		var price = listing["price"]
+		var amount = listing["count"]
+		var item_meta = ItemDatabase.get_item_data(item_id)
+		
+		var panel = PanelContainer.new()
+		var hbox = HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 16)
+		panel.add_child(hbox)
+		
+		var name_lbl = Label.new()
+		name_lbl.text = "%s (x%d)" % [item_meta.get("name", item_id), amount]
+		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_child(name_lbl)
+		
+		var price_lbl = Label.new()
+		price_lbl.text = "%d RUB" % (price * amount)
+		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+		hbox.add_child(price_lbl)
+		
+		var buy_btn = Button.new()
+		buy_btn.text = "구매"
+		buy_btn.custom_minimum_size = Vector2(60, 32)
+		buy_btn.disabled = (user_rubles < price * amount)
+		buy_btn.pressed.connect(func(): _buy_market_item(listing, price * amount))
+		hbox.add_child(buy_btn)
+		
+		market_items_vbox.add_child(panel)
+		
+	_refresh_market_register_ui()
+
+func _refresh_market_register_ui() -> void:
+	for child in market_register_grid.get_children():
+		child.queue_free()
+		
+	for i in range(player_inv.max_slots):
+		var item = player_inv.items[i]
+		if item:
+			var data = ItemDatabase.get_item_data(item["id"])
+			if item["id"] == "Scav 식별줄(Dogtag)":
+				continue
+				
+			var current_price = FleaMarket.get_current_price(item["id"])
+			
+			var btn = Button.new()
+			btn.custom_minimum_size = Vector2(100, 50)
+			btn.text = "%s\n시장가 %d RUB" % [data["name"], current_price]
+			btn.add_theme_font_size_override("font_size", 10)
+			btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+			btn.pressed.connect(func(): _register_market_item(i, item["id"], item["amount"], current_price))
+			market_register_grid.add_child(btn)
+
+func _buy_market_item(listing: Dictionary, total_price: int) -> void:
+	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	if user_rubles < total_price: return
+	
+	GameManager.current_world_data["player"]["rubles"] -= total_price
+	_update_money_label()
+	
+	var remaining = player_inv.add_item(listing["item_name"], listing["count"])
+	if remaining > 0:
+		stash_inv.add_item(listing["item_name"], remaining)
+		
+	FleaMarket.listings.erase(listing)
+	if SoundManager: SoundManager.play("menu_select")
+	
+	_refresh_market_ui()
+	_sync_save_data()
+
+func _register_market_item(slot_idx: int, item_id: String, amount: int, current_price: int) -> void:
+	# 5% 수수료 (선불)
+	var fee = max(1, int(current_price * amount * 0.05))
+	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	
+	if user_rubles < fee:
+		EventBus.popup_message.emit("등록 수수료(%d RUB)가 부족합니다." % fee, Color.RED)
+		return
+		
+	GameManager.current_world_data["player"]["rubles"] -= fee
+	_update_money_label()
+	
+	FleaMarket.register_item(item_id, amount, current_price)
+	
+	player_inv.items[slot_idx] = null
+	player_inv.inventory_changed.emit()
+	
+	EventBus.popup_message.emit("플리마켓에 매물이 등록되었습니다.", Color.GREEN)
+	if SoundManager: SoundManager.play("menu_select")
+	
+	_refresh_market_ui()
 	_sync_save_data()
 
 # ============================================================

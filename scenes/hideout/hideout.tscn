@@ -258,6 +258,80 @@ layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 8
+[node name="MarketTab" type="TabBar" parent="CenterArea/TabContainer"]
+visible = false
+layout_mode = 2
+text = "📈 플리마켓 (암시장)"
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/MarketTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 15.0
+offset_right = -20.0
+offset_bottom = -15.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+
+[node name="Header" type="Panel" parent="CenterArea/TabContainer/MarketTab/VBox"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+
+[node name="DescLabel" type="Label" parent="CenterArea/TabContainer/MarketTab/VBox/Header"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 12.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "암시장 매물 목록"
+vertical_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/MarketTab/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="MarketItemsVBox" type="VBoxContainer" parent="CenterArea/TabContainer/MarketTab/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="RegisterArea" type="Panel" parent="CenterArea/TabContainer/MarketTab/VBox"]
+custom_minimum_size = Vector2(0, 110)
+layout_mode = 2
+
+[node name="RegisterTitle" type="Label" parent="CenterArea/TabContainer/MarketTab/VBox/RegisterArea"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_left = 10.0
+offset_top = 4.0
+offset_bottom = 24.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 12
+text = "💰 내 배낭 아이템 등록하기 (클릭 시 플리마켓 매물로 등록)"
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/MarketTab/VBox/RegisterArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 10.0
+offset_top = 28.0
+offset_right = -10.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="RegisterGrid" type="HBoxContainer" parent="CenterArea/TabContainer/MarketTab/VBox/RegisterArea/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
 
 [node name="BottomBar" type="Panel" parent="."]
 layout_mode = 1

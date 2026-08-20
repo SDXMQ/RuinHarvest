@@ -88,38 +88,60 @@ func _on_slot_clicked(index: int, is_player: bool) -> void:
 				
 	if target_index != -1:
 		src_inv.move_item(index, target_index, dest_inv)
+		if not is_player and EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("📦 획득: %s" % data.get("name", item_id))
 
 func _use_item(index: int, item_id: String, data: Dictionary) -> void:
-	var main_world = get_node_or_null("/root/MainWorld")
-	var player = main_world.player if main_world else null
+	var player = null
+	var cur_scene = get_tree().current_scene
+	if cur_scene and "player" in cur_scene and cur_scene.player:
+		player = cur_scene.player
+	elif get_node_or_null("/root/MainWorld") and get_node("/root/MainWorld").player:
+		player = get_node("/root/MainWorld").player
+	else:
+		player = get_tree().get_first_node_in_group("player")
 	
 	var effects = data.get("effects", {})
 	var used = false
+	var effect_descriptions: Array = []
 	
 	if player:
 		if effects.has("hunger"):
 			player.hunger = min(player.max_hunger, player.hunger + effects["hunger"])
 			used = true
+			effect_descriptions.append("허기 +%d" % effects["hunger"])
 		if effects.has("thirst"):
 			player.thirst = min(player.max_thirst, player.thirst + effects["thirst"])
 			used = true
+			effect_descriptions.append("갈증 +%d" % effects["thirst"])
 		if effects.has("hp"):
 			player.hp = min(player.max_hp, player.hp + effects["hp"])
 			used = true
+			effect_descriptions.append("체력 +%d" % effects["hp"])
 		if effects.get("cures_bleeding", false):
 			player.is_bleeding = false
 			used = true
+			effect_descriptions.append("출혈 치료")
 		if effects.get("cures_fracture", false):
 			player.is_fractured = false
 			used = true
+			effect_descriptions.append("골절 치료")
 		if effects.has("stamina"):
 			player.stamina = min(player.max_stamina, player.stamina + effects["stamina"])
 			used = true
+			effect_descriptions.append("스태미너 +%d" % effects["stamina"])
 			
 		if used:
+			player.stats_changed.emit()
 			player_inv.remove_item_at(index, 1)
 			if SoundManager:
 				SoundManager.play("menu_select")
+				
+			var item_name = data.get("name", item_id)
+			var desc_str = ", ".join(effect_descriptions)
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("💊 [%s] 사용 (%s)" % [item_name, desc_str])
+				
 			_refresh_ui()
 
 func _unhandled_input(event: InputEvent) -> void:
