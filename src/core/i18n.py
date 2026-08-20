@@ -40,6 +40,9 @@ STRINGS = {
         "particle_low": "낮음",
         "particle_normal": "보통",
         "particle_high": "높음",
+        "shader_effects": "후처리 셰이더:",
+        "enabled": "켜짐",
+        "disabled": "꺼짐",
         "language": "언어:",
         "apply": "적용",
 
@@ -370,6 +373,9 @@ STRINGS = {
         "particle_low": "Low",
         "particle_normal": "Medium",
         "particle_high": "High",
+        "shader_effects": "Post Shaders:",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
         "language": "Language:",
         "apply": "Apply",
 

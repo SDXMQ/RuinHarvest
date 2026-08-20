@@ -283,11 +283,65 @@ class InteriorSystem:
                 hit_enemies.append(closest_e)
 
         if weapon_type == "melee":
+            MELEE_ARC = math.pi * 0.4
             SoundGenerator.play("melee_swing")
             self.game.player.stamina = max(0, self.game.player.stamina - 5)
+
+            # 무기별 이펙트 색상 차별화
+            if weapon in ("나이프", "마체테", "군용 나이프", "도끼"):
+                slash_color = (190, 235, 255)
+            elif weapon in ("야구방망이", "쇠지렛대", "파이프"):
+                slash_color = (255, 210, 110)
+            else:
+                slash_color = (240, 245, 255)
+
+            self.game.combat_system.slash_effects.append({
+                "x": px, "y": py,
+                "angle": attack_angle, "arc": MELEE_ARC,
+                "range": attack_range,
+                "timer": 0.16, "max_timer": 0.16,
+                "color": slash_color,
+                "weapon": weapon or "fist",
+            })
+            for _ in range(3):
+                self.game.game_particles.emit(lambda: ParticleEmitters.slash_wind(px * TILE_SIZE, py * TILE_SIZE, attack_angle))
+            if self.interior_camera:
+                self.interior_camera.shake(2.0, 0.08)
         else:
             SoundGenerator.play("gunshot")
             self.game._trigger_gunshot_noise(px, py, True)
+            self.game.flash_timer = 0.35
+
+            # 총구 화염 & 탄피
+            muzzle_dist = 0.75
+            muzzle_x = px + math.cos(attack_angle) * muzzle_dist
+            muzzle_y = py + math.sin(attack_angle) * muzzle_dist
+
+            self.game.combat_system.muzzle_flashes.append({
+                "x": muzzle_x, "y": muzzle_y,
+                "angle": attack_angle,
+                "timer": 0.08, "max_timer": 0.08,
+                "size": 1.3 if weapon == "샷건" else 1.0,
+            })
+            self.game.game_particles.emit(lambda: ParticleEmitters.bullet_shell(muzzle_x * TILE_SIZE, muzzle_y * TILE_SIZE, attack_angle))
+            for _ in range(4):
+                self.game.game_particles.emit(lambda: ParticleEmitters.muzzle_sparks(muzzle_x * TILE_SIZE, muzzle_y * TILE_SIZE, attack_angle))
+            self.game.game_particles.emit(lambda: ParticleEmitters.smoke(muzzle_x * TILE_SIZE, muzzle_y * TILE_SIZE))
+
+            if self.interior_camera:
+                shake_pwr = 6.0 if weapon in ("샷건", "저격총", "레버액션 소총") else 3.8
+                self.interior_camera.shake(shake_pwr, 0.14)
+
+            # 탄도선
+            end_x = hit_enemies[0].x if hit_enemies else px + math.cos(attack_angle) * attack_range
+            end_y = hit_enemies[0].y if hit_enemies else py + math.sin(attack_angle) * attack_range
+            self.game.combat_system.tracers.append({
+                "start": (muzzle_x, muzzle_y),
+                "end": (end_x, end_y),
+                "color": (255, 235, 130),
+                "timer": 0.22,
+                "max_timer": 0.22
+            })
 
         for e in hit_enemies:
             e.take_damage(damage)
@@ -295,8 +349,11 @@ class InteriorSystem:
             self.game.combat_system.damage_numbers.append((e.x, e.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
             if weapon_type == "melee":
                 SoundGenerator.play("hit_melee")
-                self.interior_camera.shake(3, 0.15)
-            self.game.game_particles.emit(lambda: ParticleEmitters.blood(e.x * TILE_SIZE, e.y * TILE_SIZE))
+                if self.interior_camera:
+                    self.interior_camera.shake(3.5, 0.12)
+            for _ in range(4):
+                self.game.game_particles.emit(lambda: ParticleEmitters.hit_effect(e.x * TILE_SIZE, e.y * TILE_SIZE))
+                self.game.game_particles.emit(lambda: ParticleEmitters.blood(e.x * TILE_SIZE, e.y * TILE_SIZE))
             
             kb_dist = 1.0 if weapon_type == "melee" else 0.5
             angle = math.atan2(e.y - py, e.x - px)

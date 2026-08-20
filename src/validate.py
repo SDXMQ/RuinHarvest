@@ -702,6 +702,50 @@ def test_sandbox_weight_exemption():
 
 check("샌드박스 무게 한도 및 속도 패널티 면제 검증", test_sandbox_weight_exemption)
 
+# 22. 포스트 프로세싱 셰이더 파이프라인 검증
+print("\n[22] 그래픽 포스트 프로세싱 파이프라인")
+def test_post_processing_pipeline():
+    import pygame
+    from post_process import PostProcessor
+    from main import Game
+    
+    # 1. PostProcessor 생성 및 리사이즈 검증
+    pp = PostProcessor(800, 600, enable_shaders=True)
+    assert pp.width == 800
+    assert pp.height == 600
+    pp.resize(1280, 720)
+    assert pp.width == 1280
+    assert pp.height == 720
+    
+    # 2. 서피스 렌더링 및 이펙트 처리 검증
+    src_surf = pygame.Surface((1280, 720))
+    src_surf.fill((100, 150, 200))
+    dst_surf = pygame.Surface((1280, 720))
+    
+    uniforms = {
+        'time': 1.0,
+        'vignette': 0.6,
+        'bloom': 0.5,
+        'color_grade': 1.0,
+        'grade_color': (1.1, 0.9, 0.8),
+        'chromatic': 0.5,
+        'grain': 0.3,
+        'low_hp_pulse': 0.4,
+        'flash': 0.2,
+    }
+    
+    # 에러 없이 포스트 프로세싱이 수행되어야 함
+    pp.process(src_surf, dst_surf, uniforms)
+    
+    # 3. Game 클래스 연동 및 _build_shader_uniforms 검증
+    g = Game()
+    uni = g._build_shader_uniforms()
+    assert isinstance(uni, dict)
+    assert 'time' in uni and 'vignette' in uni and 'grade_color' in uni
+    assert len(uni['grade_color']) == 3
+
+check("그래픽 포스트 프로세싱 셰이더 파이프라인", test_post_processing_pipeline)
+
 # 결과 요약
 logger.info("\n" + "=" * 60)
 if errors:
@@ -712,3 +756,4 @@ else:
     logger.info("✅ 모든 검증 통과!")
 logger.info("=" * 60)
 sys.exit(len(errors))
+

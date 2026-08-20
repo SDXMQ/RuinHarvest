@@ -412,7 +412,7 @@ class WorldSceneRenderer:
             self.temp_alpha_surf.fill((0, 0, 0, 0))
         temp_alpha_surf = self.temp_alpha_surf
 
-        # 1. 탄막 궤적 (Bullet Tracers)
+        # 1. 탄막 궤적 (Bullet Tracers - 2중 글로우 코어 렌더링)
         for tr in self.game.combat_system.tracers:
             if tr["timer"] <= 0:
                 continue
@@ -420,18 +420,100 @@ class WorldSceneRenderer:
             sx1, sy1 = cam.world_to_screen(tr["start"][0], tr["start"][1])
             sx2, sy2 = cam.world_to_screen(tr["end"][0], tr["end"][1])
             
-            # 남은 시간에 따라 페이드 아웃
             alpha_ratio = tr["timer"] / tr["max_timer"]
-            alpha = max(0, min(255, int(200 * alpha_ratio)))
             color = tr["color"]
-            rgba_color = (color[0], color[1], color[2], alpha)
             
-            # 점점 얇아지는 궤적선
-            width = max(1, int(3 * alpha_ratio))
-            pygame.draw.line(temp_alpha_surf, rgba_color, (sx1, sy1), (sx2, sy2), width)
+            # 외곽 글로우
+            glow_alpha = max(0, min(255, int(160 * alpha_ratio)))
+            glow_rgba = (color[0], color[1], color[2], glow_alpha)
+            glow_width = max(2, int(5 * alpha_ratio))
+            pygame.draw.line(temp_alpha_surf, glow_rgba, (sx1, sy1), (sx2, sy2), glow_width)
+            
+            # 중심부 고광도 화이트 코어
+            core_alpha = max(0, min(255, int(240 * alpha_ratio)))
+            core_color = (255, 255, 240, core_alpha)
+            core_width = max(1, int(2 * alpha_ratio))
+            pygame.draw.line(temp_alpha_surf, core_color, (sx1, sy1), (sx2, sy2), core_width)
 
-        # 2. AI 조준선 / 레이저 사이트 (Laser Sights)
-        # 플레이어 시야 내의 적이나 교전 상태의 적의 조준선을 실시간 렌더링
+        # 2. 총구 화염 (Muzzle Flash Starburst)
+        for mf in getattr(self.game.combat_system, "muzzle_flashes", []):
+            if mf["timer"] <= 0:
+                continue
+            
+            msx, msy = cam.world_to_screen(mf["x"], mf["y"])
+            ang = mf["angle"]
+            ratio = mf["timer"] / mf["max_timer"]
+            flash_size = 14 * mf.get("size", 1.0) * ratio
+            
+            # 외부 방사형 주황 글로우 원
+            glow_r = int(flash_size * 1.8)
+            if glow_r > 0:
+                pygame.draw.circle(temp_alpha_surf, (255, 140, 40, int(120 * ratio)), (msx, msy), glow_r)
+            
+            # 별모양 불꽃 다각형 (총구 앞쪽으로 길게 뻗는 스파이크)
+            spike_len_main = flash_size * 2.2
+            spike_len_side = flash_size * 1.2
+            pts = [
+                (msx + math.cos(ang) * spike_len_main, msy + math.sin(ang) * spike_len_main),
+                (msx + math.cos(ang + 1.2) * (spike_len_side * 0.4), msy + math.sin(ang + 1.2) * (spike_len_side * 0.4)),
+                (msx + math.cos(ang + 1.8) * spike_len_side, msy + math.sin(ang + 1.8) * spike_len_side),
+                (msx + math.cos(ang + 2.8) * (flash_size * 0.5), msy + math.sin(ang + 2.8) * (flash_size * 0.5)),
+                (msx + math.cos(ang - 2.8) * (flash_size * 0.5), msy + math.sin(ang - 2.8) * (flash_size * 0.5)),
+                (msx + math.cos(ang - 1.8) * spike_len_side, msy + math.sin(ang - 1.8) * spike_len_side),
+                (msx + math.cos(ang - 1.2) * (spike_len_side * 0.4), msy + math.sin(ang - 1.2) * (spike_len_side * 0.4)),
+            ]
+            if len(pts) >= 3:
+                pygame.draw.polygon(temp_alpha_surf, (255, 235, 120, int(220 * ratio)), [(int(px), int(py)) for px, py in pts])
+            
+            # 중심부 백색 섬광 코어
+            core_r = max(2, int(flash_size * 0.6))
+            pygame.draw.circle(temp_alpha_surf, (255, 255, 240, int(250 * ratio)), (msx, msy), core_r)
+
+        # 3. 근접 베기 부채꼴 잔상 (Slash Arc Ribbon)
+        for sl in getattr(self.game.combat_system, "slash_effects", []):
+            if sl["timer"] <= 0:
+                continue
+            
+            csx, csy = cam.world_to_screen(sl["x"], sl["y"])
+            ang = sl["angle"]
+            arc = sl["arc"]
+            r_px = int(sl["range"] * TILE_SIZE * cam.zoom)
+            ratio = sl["timer"] / sl["max_timer"]
+            
+            c = sl.get("color", (220, 240, 255))
+            alpha_base = int(180 * (ratio ** 0.8))
+            
+            # 부채꼴 외곽 및 내부 메쉬 생성
+            segments = 14
+            half_arc = arc / 2.0
+            start_ang = ang - half_arc
+            end_ang = ang + half_arc
+            
+            outer_pts = []
+            inner_pts = []
+            
+            for i in range(segments + 1):
+                cur_ang = start_ang + (end_ang - start_ang) * (i / segments)
+                # 바깥쪽 호
+                ox = csx + math.cos(cur_ang) * r_px
+                oy = csy + math.sin(cur_ang) * r_px
+                outer_pts.append((ox, oy))
+                # 안쪽 호
+                ix = csx + math.cos(cur_ang) * (r_px * 0.45)
+                iy = csy + math.sin(cur_ang) * (r_px * 0.45)
+                inner_pts.append((ix, iy))
+            
+            # 리본 다각형 채우기
+            poly_pts = outer_pts + inner_pts[::-1]
+            if len(poly_pts) >= 3:
+                pygame.draw.polygon(temp_alpha_surf, (*c[:3], alpha_base), [(int(px), int(py)) for px, py in poly_pts])
+            
+            # 날카로운 바깥쪽 칼날 궤적 하이라이트 라인
+            highlight_color = (255, 255, 255, min(255, alpha_base + 60))
+            if len(outer_pts) >= 2:
+                pygame.draw.lines(temp_alpha_surf, highlight_color, False, [(int(px), int(py)) for px, py in outer_pts], 2)
+
+        # 4. AI 조준선 / 레이저 사이트 (Laser Sights)
         enemies = []
         if self.game.current_interior:
             enemies = self.game.interior_enemies
@@ -445,7 +527,6 @@ class WorldSceneRenderer:
             
             target = getattr(enemy, "target", None)
             if enemy.state == "engage" and enemy.can_see_target and target is not None:
-                # 타겟 위치 좌표 획득
                 if hasattr(target, "x"):
                     tx, ty = target.x + 0.5, target.y + 0.5
                 elif isinstance(target, tuple):
@@ -456,23 +537,17 @@ class WorldSceneRenderer:
                 sx1, sy1 = cam.world_to_screen(enemy.x + 0.5, enemy.y + 0.5)
                 sx2, sy2 = cam.world_to_screen(tx, ty)
                 
-                # 팩션 종류에 따라 레이저 빔 연출 차별화
                 is_pmc = getattr(enemy, "faction", "scav") == "pmc"
-                
-                # 실시간으로 밝기가 깜빡여 보이게 함 (펄싱 효과)
                 pulse = 100 + int(math.sin(t_val * 25) * 50)
                 
                 if is_pmc:
-                    # PMC: 정밀한 연두빛 레이저
                     laser_color = (100, 255, 100, min(255, pulse + 20))
                     width = 1
                 else:
-                    # Scav: 투박하고 어두운 붉은색 레이저
                     laser_color = (255, 80, 50, max(40, pulse - 30))
                     width = 1
                 
                 pygame.draw.line(temp_alpha_surf, laser_color, (sx1, sy1), (sx2, sy2), width)
-                # 레이저 끝점의 조준 도트 렌더링
                 pygame.draw.circle(temp_alpha_surf, (laser_color[0], laser_color[1], laser_color[2], min(255, laser_color[3] + 60)), (int(sx2), int(sy2)), 2)
 
         surface.blit(temp_alpha_surf, (0, 0))

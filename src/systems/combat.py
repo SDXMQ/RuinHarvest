@@ -22,9 +22,11 @@ class CombatSystem:
     """전투 로직 관리"""
 
     def __init__(self):
-        self.hit_effects = []   # [(x, y, timer)]
+        self.hit_effects = []     # [(x, y, timer)]
         self.damage_numbers = []  # [(x, y, damage, timer, color)]
-        self.tracers = []       # [{"start": (x,y), "end": (x,y), "color": (r,g,b), "timer": t, "max_timer": t}]
+        self.tracers = []         # [{"start": (x,y), "end": (x,y), "color": (r,g,b), "timer": t, "max_timer": t}]
+        self.slash_effects = []   # [{"x": x, "y": y, "angle": a, "arc": arc, "range": r, "timer": t, "max_timer": t, "color": c, "weapon": w}]
+        self.muzzle_flashes = []  # [{"x": x, "y": y, "angle": a, "timer": t, "max_timer": t, "size": s}]
 
     def update(self, dt):
         self.hit_effects = [(x, y, t - dt) for x, y, t in self.hit_effects if t > 0]
@@ -34,7 +36,15 @@ class CombatSystem:
             tr["timer"] -= dt
         self.tracers = [tr for tr in self.tracers if tr["timer"] > 0]
 
-    def player_attack(self, player, entity_manager, world, camera=None):
+        for s in self.slash_effects:
+            s["timer"] -= dt
+        self.slash_effects = [s for s in self.slash_effects if s["timer"] > 0]
+
+        for m in self.muzzle_flashes:
+            m["timer"] -= dt
+        self.muzzle_flashes = [m for m in self.muzzle_flashes if m["timer"] > 0]
+
+    def player_attack(self, player, entity_manager, world, camera=None, particle_system=None):
         """플레이어 공격 (camera 필요: 마우스→월드 좌표 변환)"""
         if not player.attack_cooldown.is_ready("attack"):
             return None
@@ -63,10 +73,40 @@ class CombatSystem:
         results = []
 
         if weapon_type == "melee":
-            # 근접 공격 - 부채꼴 60° (±30°) 판정
-            MELEE_ARC = math.pi / 3  # 60도
+            # 근접 공격 - 부채꼴 70° 판정 및 베기 이펙트
+            MELEE_ARC = math.pi * 0.4  # 약 72도
             targets = entity_manager.get_nearby_enemies(center_x, center_y, attack_range + 0.5)
 
+            # 무기별 이펙트 색상 차별화
+            if weapon in ("나이프", "마체테", "군용 나이프", "도끼"):
+                slash_color = (190, 235, 255)  # 날카로운 은청색
+            elif weapon in ("야구방망이", "쇠지렛대", "파이프"):
+                slash_color = (255, 210, 110)  # 묵직한 황금색
+            else:
+                slash_color = (240, 245, 255)  # 백색 풍압
+
+            self.slash_effects.append({
+                "x": center_x,
+                "y": center_y,
+                "angle": attack_angle,
+                "arc": MELEE_ARC,
+                "range": attack_range,
+                "timer": 0.16,
+                "max_timer": 0.16,
+                "color": slash_color,
+                "weapon": weapon or "fist",
+            })
+
+            # 파티클 및 카메라 가벼운 타격 진동
+            if particle_system:
+                from particles import ParticleEmitters
+                for _ in range(3):
+                    particle_system.emit(lambda: ParticleEmitters.slash_wind(center_x * 32, center_y * 32, attack_angle))
+
+            if camera:
+                camera.shake(intensity=2.0, duration=0.08)
+
+            hit_any = False
             for enemy in targets:
                 zx = enemy.x + 0.5
                 zy = enemy.y + 0.5
@@ -76,6 +116,7 @@ class CombatSystem:
                 if angle_diff(target_angle, attack_angle) > MELEE_ARC / 2:
                     continue  # 부채꼴 밖 → 미스
 
+                hit_any = True
                 actual_damage = damage + random.randint(-2, 3)
                 kb_dir = direction_to(player.x, player.y, enemy.x, enemy.y)
                 enemy.take_damage(actual_damage, kb_dir)
@@ -84,9 +125,18 @@ class CombatSystem:
                 self.damage_numbers.append((enemy.x, enemy.y - 0.5, actual_damage, 1.0, (255, 255, 100)))
                 results.append(("hit", enemy, actual_damage))
 
+                if particle_system:
+                    from particles import ParticleEmitters
+                    for _ in range(4):
+                        particle_system.emit(lambda: ParticleEmitters.hit_effect(zx * 32, zy * 32))
+                        particle_system.emit(lambda: ParticleEmitters.blood(zx * 32, zy * 32, kb_dir))
+
                 if enemy.is_dead:
                     player.killed_enemies += 1
                     results.append(("kill", enemy, 0))
+
+            if hit_any and camera:
+                camera.shake(intensity=3.5, duration=0.12)
 
         elif weapon_type == "ranged":
             ammo_type = weapon_data.get("ammo")
@@ -99,8 +149,9 @@ class CombatSystem:
                 # 반동 누적 (연사 시 정확도 감소)
                 player.recoil_stack = min(15.0, player.recoil_stack + weapon_data.get("recoil", 3.0))
 
-                # 총성 발사 신호 (어그로 트리거용)
+                # 총성 발사 신호 (어그로 트리거 및 플래시용)
                 results.append(("gunshot_fired", None, 0))
+                results.append(("flash", None, 0.35))
 
                 # 탄 퍼짐 적용 (반동 + 기본 스프레드)
                 base_spread = weapon_data.get("spread", 0.05)  # 라디안
@@ -112,8 +163,35 @@ class CombatSystem:
                     recoil_spread *= 0.5
 
                 total_spread = base_spread + recoil_spread
-                # 탄퍼짐 각도 가우시안 오프셋 적용
                 attack_angle += random.gauss(0, total_spread)
+
+                # 총구 위치 계산
+                muzzle_dist = 0.75
+                muzzle_x = center_x + math.cos(attack_angle) * muzzle_dist
+                muzzle_y = center_y + math.sin(attack_angle) * muzzle_dist
+
+                # 1. 총구 화염 (Muzzle Flash)
+                self.muzzle_flashes.append({
+                    "x": muzzle_x,
+                    "y": muzzle_y,
+                    "angle": attack_angle,
+                    "timer": 0.08,
+                    "max_timer": 0.08,
+                    "size": 1.3 if weapon == "샷건" else 1.0,
+                })
+
+                # 2. 탄피 배출 & 스파크 & 연기 파티클
+                if particle_system:
+                    from particles import ParticleEmitters
+                    particle_system.emit(lambda: ParticleEmitters.bullet_shell(muzzle_x * 32, muzzle_y * 32, attack_angle))
+                    for _ in range(4):
+                        particle_system.emit(lambda: ParticleEmitters.muzzle_sparks(muzzle_x * 32, muzzle_y * 32, attack_angle))
+                    particle_system.emit(lambda: ParticleEmitters.smoke(muzzle_x * 32, muzzle_y * 32))
+
+                # 3. 사격 반동 화면 진동
+                if camera:
+                    shake_power = 6.0 if weapon in ("샷건", "저격총", "레버액션 소총") else 3.8
+                    camera.shake(intensity=shake_power, duration=0.14)
 
                 # 마우스 방향에서 가장 가까운 적 (±15° 내)
                 RANGED_ARC = math.pi / 6  # 30도
@@ -128,7 +206,7 @@ class CombatSystem:
                     if angle_diff(t_angle, attack_angle) <= RANGED_ARC:
                         valid.append(z)
 
-                start_x, start_y = center_x, center_y
+                start_x, start_y = muzzle_x, muzzle_y
                 if valid:
                     target = min(valid, key=lambda z: distance(z.x + 0.5, z.y + 0.5, center_x, center_y))
                     dist = distance(target.x + 0.5, target.y + 0.5, center_x, center_y)
@@ -146,6 +224,12 @@ class CombatSystem:
                     self.damage_numbers.append((target.x, target.y - 0.5, actual_damage, 1.0, (255, 200, 50)))
                     results.append(("hit", target, actual_damage))
 
+                    if particle_system:
+                        from particles import ParticleEmitters
+                        for _ in range(5):
+                            particle_system.emit(lambda: ParticleEmitters.hit_effect(end_x * 32, end_y * 32))
+                            particle_system.emit(lambda: ParticleEmitters.blood(end_x * 32, end_y * 32, kb_dir))
+
                     if target.is_dead:
                         player.killed_enemies += 1
                         results.append(("kill", target, 0))
@@ -156,9 +240,9 @@ class CombatSystem:
                 self.tracers.append({
                     "start": (start_x, start_y),
                     "end": (end_x, end_y),
-                    "color": (255, 220, 100),
-                    "timer": 0.2,
-                    "max_timer": 0.2
+                    "color": (255, 235, 130),
+                    "timer": 0.22,
+                    "max_timer": 0.22
                 })
 
         attack_speed = weapon_data.get("attack_speed", 0.5)

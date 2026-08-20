@@ -340,7 +340,7 @@ class SettingsUI:
     def handle_event(self, event):
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             mx, my = event.pos
-            panel_w, panel_h = 420, 390
+            panel_w, panel_h = 420, 430
             px = (self.sw - panel_w) // 2
             py = (self.sh - panel_h) // 2
 
@@ -363,8 +363,13 @@ class SettingsUI:
             elif px + 370 <= mx <= px + 390 and pq_y <= my <= pq_y + 25:
                 self.game_settings.particles_quality = (self.game_settings.particles_quality + 1) % 4
 
+            # 셰이더 토글
+            shader_y = py + 180
+            if px + 200 <= mx <= px + 350 and shader_y <= my <= shader_y + 30:
+                self.game_settings.shader_effects = not self.game_settings.shader_effects
+
             # 언어 변경
-            lang_y = py + 180
+            lang_y = py + 220
             if px + 200 <= mx <= px + 220 and lang_y <= my <= lang_y + 25:
                 self.lang_index = (self.lang_index - 1) % len(self.langs)
             elif px + 370 <= mx <= px + 390 and lang_y <= my <= lang_y + 25:
@@ -393,7 +398,7 @@ class SettingsUI:
         font = FontManager.get(14)
         font_small = FontManager.get(11)
 
-        panel_w, panel_h = 420, 390
+        panel_w, panel_h = 420, 430
         px = (self.sw - panel_w) // 2
         py = (self.sh - panel_h) // 2
 
@@ -446,8 +451,18 @@ class SettingsUI:
         arrow_r_pq = font.render("▶", True, Colors.UI_ACCENT)
         surface.blit(arrow_r_pq, (px + 370, pq_y))
 
+        # 셰이더 후처리
+        shader_y = py + 180
+        shader_label = font.render(t("shader_effects"), True, Colors.UI_TEXT)
+        surface.blit(shader_label, (px + 20, shader_y))
+
+        sh_text = t("enabled") if self.game_settings.shader_effects else t("disabled")
+        sh_color = Colors.UI_SUCCESS if self.game_settings.shader_effects else Colors.UI_TEXT_DIM
+        sh_surf = font.render(f"[ {sh_text} ]", True, sh_color)
+        surface.blit(sh_surf, (px + 200, shader_y))
+
         # 언어
-        lang_y = py + 180
+        lang_y = py + 220
         lang_label = font.render(t("language"), True, Colors.UI_TEXT)
         surface.blit(lang_label, (px + 20, lang_y))
 

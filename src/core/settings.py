@@ -430,6 +430,11 @@ class GameSettings:
         self.screen_shake = True
         self.particles_quality = 2  # 0=끔, 1=낮음, 2=보통, 3=높음
         self.language = "ko"
+        self.shader_effects = True
+        self.shader_vignette = 0.5
+        self.shader_bloom = 0.5
+        self.shader_color_grade = 1.0
+        self.shader_grain = 0.3
         self.load()
 
     def save(self):
@@ -443,6 +448,11 @@ class GameSettings:
             "screen_shake": self.screen_shake,
             "particles_quality": self.particles_quality,
             "language": self.language,
+            "shader_effects": self.shader_effects,
+            "shader_vignette": self.shader_vignette,
+            "shader_bloom": self.shader_bloom,
+            "shader_color_grade": self.shader_color_grade,
+            "shader_grain": self.shader_grain,
         }
         try:
             with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
@@ -464,6 +474,11 @@ class GameSettings:
                 self.screen_shake = data.get("screen_shake", True)
                 self.particles_quality = data.get("particles_quality", 2)
                 self.language = data.get("language", "ko")
+                self.shader_effects = data.get("shader_effects", True)
+                self.shader_vignette = data.get("shader_vignette", 0.5)
+                self.shader_bloom = data.get("shader_bloom", 0.5)
+                self.shader_color_grade = data.get("shader_color_grade", 1.0)
+                self.shader_grain = data.get("shader_grain", 0.3)
                 
                 # 로드 후 i18n 언어 즉시 적용
                 try:

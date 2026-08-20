@@ -306,3 +306,53 @@ class ParticleEmitters:
             friction=0.95,
             glow=True,
         )
+
+    @staticmethod
+    def bullet_shell(x, y, angle):
+        """탄피 배출 (총구 우측/후방으로 튕김)"""
+        # 발사 각도 기준 약 90도~130도 우측/후방 방향으로 튕김
+        eject_angle = angle + math.pi / 2 + random.uniform(-0.3, 0.4)
+        speed = random.uniform(1.5, 3.5)
+        return Particle(
+            x, y,
+            math.cos(eject_angle) * speed, math.sin(eject_angle) * speed - random.uniform(0.5, 1.5),
+            life=random.uniform(0.4, 0.7),
+            size=random.uniform(1.5, 2.5),
+            color=(235, 195, 75),  # 황동색
+            gravity=0.15,
+            friction=0.92,
+            shrink=False,
+            fade=True,
+        )
+
+    @staticmethod
+    def muzzle_sparks(x, y, angle):
+        """총구 화염 미세 스파크"""
+        spread_angle = angle + random.uniform(-0.35, 0.35)
+        speed = random.uniform(3.0, 7.0)
+        return Particle(
+            x, y,
+            math.cos(spread_angle) * speed, math.sin(spread_angle) * speed,
+            life=random.uniform(0.08, 0.2),
+            size=random.uniform(1.0, 2.5),
+            color=random.choice([(255, 255, 200), (255, 200, 80), (255, 120, 30)]),
+            gravity=0.02,
+            friction=0.88,
+            glow=True,
+        )
+
+    @staticmethod
+    def slash_wind(x, y, angle):
+        """근접 휘두르기 바람/검기 파티클"""
+        spread_angle = angle + random.uniform(-0.5, 0.5)
+        speed = random.uniform(2.0, 4.5)
+        return Particle(
+            x, y,
+            math.cos(spread_angle) * speed, math.sin(spread_angle) * speed,
+            life=random.uniform(0.12, 0.25),
+            size=random.uniform(2.0, 4.0),
+            color=random.choice([(230, 240, 255, 160), (180, 220, 255, 180), (255, 255, 255, 200)]),
+            gravity=0.0,
+            friction=0.85,
+            glow=True,
+        )

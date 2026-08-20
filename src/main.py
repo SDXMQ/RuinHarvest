@@ -34,6 +34,7 @@ from renderer import (TileRenderer, CharacterRenderer, EnvironmentRenderer,
 from particles import ParticleSystem, ParticleEmitters
 from transitions import TransitionManager
 from world_renderer import WorldSceneRenderer
+from post_process import PostProcessor
 from ui import (FontManager, HUD, InventoryUI, CraftingUI, DialogueUI,
                 EventLogUI, MainMenuUI, WorldCreationUI, SettingsUI,
                 PauseUI, EndingUI, SaveSlotsUI)
@@ -146,6 +147,11 @@ class Game:
         self.prev_state = None
         self.dt = 0.0
         self.show_raid_start_popup = False
+        self.flash_timer = 0.0
+
+        # 후처리 셰이더 프로세서
+        self.render_surface = pygame.Surface((self.screen_w, self.screen_h))
+        self.post_processor = PostProcessor(self.screen_w, self.screen_h, self.game_settings.shader_effects)
 
     def _create_window(self):
         """창 생성"""
@@ -158,6 +164,9 @@ class Game:
         self.screen = pygame.display.set_mode(
             (self.screen_w, self.screen_h), flags
         )
+        self.render_surface = pygame.Surface((self.screen_w, self.screen_h))
+        if hasattr(self, 'post_processor') and self.post_processor:
+            self.post_processor.resize(self.screen_w, self.screen_h)
 
     def _init_ui(self):
         """UI 초기화"""
@@ -657,19 +666,12 @@ class Game:
     def _handle_exterior_attack(self):
         # 공격
         results = self.combat_system.player_attack(
-            self.player, self.entity_manager, self.world, self.camera
+            self.player, self.entity_manager, self.world, self.camera, self.game_particles
         )
         if results:
             for action, target, dmg in results:
                 if action == "hit":
                     SoundGenerator.play("hit_melee")
-                    self.camera.shake(3, 0.15)
-                    # 피 파티클
-                    if target:
-                        self.game_particles.emit(
-                            lambda: ParticleEmitters.blood(
-                                target.x * TILE_SIZE, target.y * TILE_SIZE),
-                            5)
                 elif action == "kill":
                     SoundGenerator.play("enemy_die")
                     self.event_system.add_log(t("log_enemy_killed"))
@@ -683,6 +685,8 @@ class Game:
                 elif action == "gunshot_fired":
                     SoundGenerator.play("gunshot")
                     self._trigger_gunshot_noise(self.player.x, self.player.y, False)
+                elif action == "flash":
+                    self.flash_timer = 0.35
 
 
     def _trigger_gunshot_noise(self, px, py, is_interior):
@@ -723,6 +727,9 @@ class Game:
 
     def _update(self, dt):
         """상태별 업데이트"""
+        if hasattr(self, 'flash_timer') and self.flash_timer > 0:
+            self.flash_timer = max(0.0, self.flash_timer - dt * 6.0)
+
         self.transition.update(dt)
         if self.transition.is_active:
             return
@@ -1001,11 +1008,71 @@ class Game:
         import gc
         gc.collect()
 
+    def _build_shader_uniforms(self):
+        """현재 게임 상태 기반 셰이더 Uniform 계산"""
+        t_now = pytime.time()
+        vignette = getattr(self.game_settings, 'shader_vignette', 0.5)
+        bloom = getattr(self.game_settings, 'shader_bloom', 0.5)
+        color_grade = getattr(self.game_settings, 'shader_color_grade', 1.0)
+        grain = getattr(self.game_settings, 'shader_grain', 0.3)
+
+        # 기본 색조 (중립)
+        grade_color = (1.0, 1.0, 1.0)
+        low_hp_pulse = 0.0
+        chromatic = 0.0
+
+        if self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR) and self.player:
+            # 1. 시간대별 컬러 그레이딩 톤
+            if self.time_system:
+                hour = self.time_system.hour
+                if 5 <= hour < 7:     # 새벽 (따스한 황금빛)
+                    grade_color = (1.08, 0.95, 0.85)
+                elif 7 <= hour < 18:  # 낮 (자연광)
+                    grade_color = (1.0, 1.0, 1.0)
+                elif 18 <= hour < 20: # 황혼 (붉은 노을)
+                    grade_color = (1.15, 0.88, 0.72)
+                else:                 # 밤 (차가운 푸른 톤)
+                    grade_color = (0.75, 0.82, 1.15)
+
+            # 2. 날씨 효과 추가 톤
+            if self.weather_system:
+                wtype = getattr(self.weather_system, 'current_weather', 'clear')
+                if wtype in ('rain', 'storm'):
+                    grade_color = (grade_color[0] * 0.88, grade_color[1] * 0.92, grade_color[2] * 1.05)
+                elif wtype == 'fog':
+                    grade_color = (grade_color[0] * 0.9, grade_color[1] * 0.9, grade_color[2] * 0.95)
+
+            # 3. 체력 비례 펄스 & 출혈
+            if self.player.hp < self.player.max_hp * 0.35:
+                low_hp_pulse = (self.player.max_hp * 0.35 - self.player.hp) / (self.player.max_hp * 0.35)
+            if getattr(self.player, 'bleeding', False):
+                low_hp_pulse = max(low_hp_pulse, 0.3)
+
+            # 4. 피격/골절 색수차
+            if getattr(self.player, 'invincible_timer', 0) > 0:
+                chromatic = min(1.0, self.player.invincible_timer / 0.5)
+            elif getattr(self.player, 'broken_bone', False):
+                chromatic = 0.15
+
+        return {
+            'time': t_now,
+            'vignette': vignette,
+            'bloom': bloom,
+            'color_grade': color_grade,
+            'grade_color': grade_color,
+            'chromatic': chromatic,
+            'grain': grain,
+            'low_hp_pulse': low_hp_pulse,
+            'flash': getattr(self, 'flash_timer', 0.0),
+        }
+
     # ============================================================
     # 렌더링
     # ============================================================
     def _draw(self):
-        """상태별 렌더링"""
+        """상태별 렌더링 (월드 후처리 셰이더 + 선명한 UI 오버레이 파이프라인)"""
+        target = self.render_surface if (hasattr(self, 'render_surface') and self.render_surface) else self.screen
+
         if self.state == GameState.MAIN_MENU:
             self.main_menu_ui.draw(self.screen)
             self.menu_particles.draw(self.screen)
@@ -1017,18 +1084,40 @@ class Game:
             self.settings_ui.draw(self.screen)
 
         elif self.state == GameState.PLAYING:
-            self._draw_gameplay()
+            # 1. 월드 렌더링 (후처리 서피스에 드로우)
+            self._draw_gameplay_world(target)
+            # 2. 셰이더 후처리 (비네팅, 컬러 그레이딩 등) -> 화면 버퍼 출력
+            if hasattr(self, 'post_processor') and self.post_processor:
+                uniforms = self._build_shader_uniforms()
+                self.post_processor.process(target, self.screen, uniforms)
+            # 3. 선명한 UI 오버레이 (비네팅/셰이더에 가려지지 않음)
+            self._draw_gameplay_ui(self.screen)
 
         elif self.state == GameState.BUILDING_INTERIOR:
-            self._draw_interior_gameplay()
+            # 1. 건물 내부 월드 렌더링
+            self._draw_interior_world(target)
+            # 2. 셰이더 후처리 -> 화면 버퍼 출력
+            if hasattr(self, 'post_processor') and self.post_processor:
+                uniforms = self._build_shader_uniforms()
+                self.post_processor.process(target, self.screen, uniforms)
+            # 3. 선명한 UI 오버레이
+            self._draw_interior_ui(self.screen)
 
         elif self.state == GameState.PAUSED:
             if self.prev_state == GameState.HIDEOUT:
                 self.hideout_ui.draw(self.screen, self.player)
             elif self.current_interior:
-                self._draw_interior_gameplay()
+                self._draw_interior_world(target)
+                if hasattr(self, 'post_processor') and self.post_processor:
+                    uniforms = self._build_shader_uniforms()
+                    self.post_processor.process(target, self.screen, uniforms)
+                self._draw_interior_ui(self.screen)
             else:
-                self._draw_gameplay()
+                self._draw_gameplay_world(target)
+                if hasattr(self, 'post_processor') and self.post_processor:
+                    uniforms = self._build_shader_uniforms()
+                    self.post_processor.process(target, self.screen, uniforms)
+                self._draw_gameplay_ui(self.screen)
             self.pause_ui.draw(self.screen)
 
         elif self.state == GameState.ENDING:
@@ -1040,31 +1129,28 @@ class Game:
         elif self.state == GameState.HIDEOUT:
             self.hideout_ui.draw(self.screen, self.player)
 
-        # 지도 오버레이 렌더링
+        # 지도 오버레이 렌더링 (가장 선명하게 표시)
         if self.map_ui and self.map_visible and self.state in (GameState.PLAYING, GameState.BUILDING_INTERIOR) and not self.show_raid_start_popup:
             self.map_ui.draw(self.screen, self.player, self.world)
 
         # 전환 효과
         self.transition.draw(self.screen)
 
-        # FPS 표시
+        # FPS 표시 (최종 화면 위에 오버레이)
         if self.game_settings.show_fps:
             font = FontManager.get(12)
             fps_text = font.render(f"FPS: {int(self.clock.get_fps())}", True, (100, 255, 100))
             self.screen.blit(fps_text, (self.screen_w - 80, 5))
 
-    def _draw_gameplay(self):
-        """게임플레이 렌더링"""
+    def _draw_gameplay_world(self, game_surface):
+        """게임 월드 렌더링 (후처리 적용 대상)"""
         if not self.world or not self.player or not self.camera:
-            self.screen.fill(Colors.BLACK)
+            game_surface.fill(Colors.BLACK)
             return
 
         # 하늘 색상
         sky_color = self.time_system.get_sky_color()
-        self.screen.fill(sky_color)
-
-        # 게임 월드를 렌더링할 서피스
-        game_surface = self.screen
+        game_surface.fill(sky_color)
 
         # 타일 렌더링
         self.world_renderer.draw_tiles(game_surface)
@@ -1107,8 +1193,10 @@ class Game:
         # 날씨 효과
         self.weather_system.draw_effects(game_surface, 0)
 
+    def _draw_gameplay_ui(self, ui_surface):
+        """게임플레이 UI 오버레이 (비네팅 없이 선명하게 표시)"""
         # UI (가장 위에)
-        self.hud.draw(game_surface, self.player, self.time_system,
+        self.hud.draw(ui_surface, self.player, self.time_system,
                      self.weather_system, self.current_day, self.total_days,
                      raid_time_left=self.raid_time_left,
                      world=self.world,
@@ -1118,65 +1206,50 @@ class Game:
                      extract_points=self.world.extraction_points if self.world else None)
 
         # 이벤트 로그
-        self.event_log_ui.draw(game_surface, self.event_system.event_log)
+        self.event_log_ui.draw(ui_surface, self.event_system.event_log)
 
         # 인벤토리 / 크래프팅
-        self.inventory_ui.draw(game_surface, self.player)
-        self.crafting_ui.draw(game_surface, self.player)
+        self.inventory_ui.draw(ui_surface, self.player)
+        self.crafting_ui.draw(ui_surface, self.player)
         
         if hasattr(self, "radio_ui") and self.radio_ui.visible:
-            self.radio_ui.draw(game_surface)
+            self.radio_ui.draw(ui_surface)
 
         # 대화
-        self.dialogue_ui.draw(game_surface)
+        self.dialogue_ui.draw(ui_surface)
 
         # 퀘스트 HUD
-        self._draw_quest_hud(game_surface)
+        self._draw_quest_hud(ui_surface)
 
         # 상호작용 힌트
-        self.world_renderer.draw_interaction_hint(game_surface)
+        self.world_renderer.draw_interaction_hint(ui_surface)
 
         # 레이드 진입 안내 팝업창
         if self.show_raid_start_popup:
-            self._draw_raid_start_popup(game_surface)
+            self._draw_raid_start_popup(ui_surface)
 
-    def _draw_interior_gameplay(self):
-        """건물 내부 게임플레이 및 UI 렌더링"""
+    def _draw_interior_world(self, game_surface):
+        """건물 내부 월드 렌더링"""
         if not self.player:
-            self.screen.fill(Colors.BLACK)
+            game_surface.fill(Colors.BLACK)
             return
+        self.world_renderer.draw_interior(game_surface)
 
-        self.world_renderer.draw_interior(self.screen)
+    def _draw_interior_ui(self, ui_surface):
+        """건물 내부 UI 오버레이"""
+        self._draw_gameplay_ui(ui_surface)
 
-        # UI (가장 위에)
-        self.hud.draw(self.screen, self.player, self.time_system,
-                     self.weather_system, self.current_day, self.total_days,
-                     raid_time_left=self.raid_time_left,
-                     world=self.world,
-                     extract_target=self.extract_target,
-                     extract_timer=self.extract_timer,
-                     dt=self.dt,
-                     extract_points=self.world.extraction_points if self.world else None)
+    def _draw_gameplay(self, target=None):
+        """게임플레이 통합 렌더링 (호환성 유지)"""
+        game_surface = target or self.screen
+        self._draw_gameplay_world(game_surface)
+        self._draw_gameplay_ui(game_surface)
 
-        # 이벤트 로그
-        self.event_log_ui.draw(self.screen, self.event_system.event_log)
-
-        # 인벤토리 / 크래프팅
-        self.inventory_ui.draw(self.screen, self.player)
-        self.crafting_ui.draw(self.screen, self.player)
-        
-        if hasattr(self, "radio_ui") and self.radio_ui.visible:
-            self.radio_ui.draw(self.screen)
-
-        # 대화
-        self.dialogue_ui.draw(self.screen)
-
-        # 퀘스트 HUD
-        self._draw_quest_hud(self.screen)
-
-        # 레이드 진입 안내 팝업창
-        if self.show_raid_start_popup:
-            self._draw_raid_start_popup(self.screen)
+    def _draw_interior_gameplay(self, target=None):
+        """건물 내부 통합 렌더링 (호환성 유지)"""
+        game_surface = target or self.screen
+        self._draw_interior_world(game_surface)
+        self._draw_interior_ui(game_surface)
 
     def _draw_quest_hud(self, surface):
         """퀘스트 진행 상황 HUD 렌더링"""
