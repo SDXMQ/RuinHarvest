@@ -21,10 +21,13 @@ var attack_radius: float = 28.0
 var wander_dir: Vector2 = Vector2.ZERO
 var wander_timer: float = 0.0
 var knockback_velocity: Vector2 = Vector2.ZERO
+var hit_flash_tween: Tween
 
 func _ready() -> void:
 	add_to_group("enemies")
 	_setup_stats_by_type()
+	if has_node("Visuals"):
+		get_node("Visuals").draw.connect(_on_visuals_draw)
 
 func _setup_stats_by_type() -> void:
 	match enemy_type:
@@ -97,6 +100,12 @@ func _physics_process(delta: float) -> void:
 					velocity = dir * speed
 					
 		move_and_slide()
+		
+		# 걷기 애니메이션 (몸 흔들림)
+		if velocity.length() > 5.0 and has_node("Visuals"):
+			var visuals = get_node("Visuals")
+			var bob = sin(Time.get_ticks_msec() * 0.01 * (speed / 70.0)) * 2.0
+			visuals.position.y = bob
 
 func _try_attack() -> void:
 	if attack_timer <= 0:
@@ -110,7 +119,12 @@ func take_damage(amount: float, hit_dir: Vector2) -> void:
 	hp -= amount
 	current_state = State.CHASE # 피격 시 즉시 추적 모드
 	knockback_velocity = hit_dir.normalized() * 180.0
-	queue_redraw()
+	
+	if has_node("Visuals"):
+		get_node("Visuals").queue_redraw()
+		_play_hit_flash()
+	else:
+		queue_redraw()
 	
 	# 피격 파티클 (피 + 타격 이펙트)
 	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
@@ -124,6 +138,16 @@ func take_damage(amount: float, hit_dir: Vector2) -> void:
 	if hp <= 0:
 		_die()
 
+func _play_hit_flash() -> void:
+	var visuals = get_node_or_null("Visuals")
+	if visuals and visuals.material:
+		if hit_flash_tween:
+			hit_flash_tween.kill()
+		hit_flash_tween = create_tween()
+		visuals.material.set_shader_parameter("flash_color", Color(1, 1, 1, 1)) # 흰색 플래시
+		visuals.material.set_shader_parameter("flash_modifier", 1.0)
+		hit_flash_tween.tween_property(visuals.material, "shader_parameter/flash_modifier", 0.0, 0.15)
+
 func _die() -> void:
 	current_state = State.DEAD
 	EventBus.enemy_killed.emit("zombie", "scav")
@@ -132,7 +156,8 @@ func _die() -> void:
 	# 향후 바닥 아이템 엔티티로 스폰 가능
 	queue_free()
 
-func _draw() -> void:
+func _on_visuals_draw() -> void:
+	var visuals = get_node("Visuals")
 	var radius = 13.0
 	if enemy_type == EnemyType.TANK: radius = 18.0
 	elif enemy_type == EnemyType.RUNNER: radius = 11.0
@@ -143,20 +168,31 @@ func _draw() -> void:
 	elif enemy_type == EnemyType.TANK: body_color = Color(0.2, 0.35, 0.25)
 	
 	# 외곽선
-	draw_circle(Vector2.ZERO, radius + 2, Color(0.1, 0.1, 0.1))
+	visuals.draw_circle(Vector2.ZERO, radius + 2, Color(0.1, 0.1, 0.1))
 	# 몸체
-	draw_circle(Vector2.ZERO, radius, body_color)
+	visuals.draw_circle(Vector2.ZERO, radius, body_color)
 	
 	# 붉은 눈 (시선 방향)
 	var eye_offset = Vector2(radius * 0.6, 0)
-	draw_circle(eye_offset + Vector2(0, -4), 2.5, Color.RED)
-	draw_circle(eye_offset + Vector2(0, 4), 2.5, Color.RED)
+	visuals.draw_circle(eye_offset + Vector2(0, -4), 2.5, Color.RED)
+	visuals.draw_circle(eye_offset + Vector2(0, 4), 2.5, Color.RED)
+	
+	# 양 팔 (좀비처럼 앞으로 뻗음)
+	var arm_len = radius * 1.2
+	var reach = 0.0
+	if current_state == State.CHASE: reach = 4.0 # 추적 시 손을 더 뻗음
+	
+	visuals.draw_line(Vector2(0, -radius*0.8), Vector2(arm_len + reach, -radius*0.8), body_color, 5.0)
+	visuals.draw_line(Vector2(0, radius*0.8), Vector2(arm_len + reach, radius*0.8), body_color, 5.0)
+	
+	visuals.draw_circle(Vector2(arm_len + reach, -radius*0.8), 3.5, Color(0.4, 0.5, 0.4))
+	visuals.draw_circle(Vector2(arm_len + reach, radius*0.8), 3.5, Color(0.4, 0.5, 0.4))
 	
 	# HP 바 (피격 시 표시)
 	if hp < max_hp and hp > 0:
 		var bar_w = 26.0
 		var bar_h = 4.0
 		var bar_pos = Vector2(-bar_w/2.0, -radius - 10)
-		draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
+		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
 		var fill_w = (hp / max_hp) * bar_w
-		draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.9, 0.2, 0.2))
+		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.9, 0.2, 0.2))

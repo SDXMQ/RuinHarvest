@@ -24,6 +24,7 @@ signal enemy_damaged(enemy: Node, amount: float, is_critical: bool)
 signal enemy_killed(enemy_type: String, faction: String, position: Vector2)
 signal projectile_fired(start_pos: Vector2, target_pos: Vector2, weapon_name: String)
 signal combat_effect_requested(effect_type: String, params: Dictionary)
+signal camera_shake_requested(intensity: float, duration: float)
 
 # 월드 및 환경 관련
 signal time_tick(hour: int, minute: int, total_minutes: float)

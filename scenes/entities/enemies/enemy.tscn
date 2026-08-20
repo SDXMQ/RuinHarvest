@@ -1,6 +1,12 @@
-[gd_scene load_steps=3 format=3 uid="uid://enemy0000"]
+[gd_scene load_steps=5 format=3 uid="uid://enemy0000"]
 
 [ext_resource type="Script" path="res://scenes/entities/enemies/enemy.gd" id="1_enmy"]
+[ext_resource type="Shader" path="res://graphics/shaders/hit_flash.gdshader" id="2_flash"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_enemy"]
+shader = ExtResource("2_flash")
+shader_parameter/flash_modifier = 0.0
+shader_parameter/flash_color = Color(1, 1, 1, 1)
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_e"]
 radius = 13.0
@@ -10,3 +16,7 @@ script = ExtResource("1_enmy")
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="."]
 shape = SubResource("CircleShape2D_e")
+
+[node name="Visuals" type="Node2D" parent="."]
+material = SubResource("ShaderMaterial_enemy")
+use_parent_material = true

@@ -29,6 +29,7 @@ TileManager="*res://autoload/tile_manager.gd"
 WeatherSystem="*res://systems/weather_system.gd"
 EventSystem="*res://systems/event_system.gd"
 FleaMarket="*res://systems/flea_market.gd"
+ItemIconManager="*res://autoload/item_icon_manager.gd"
 
 [display]
 

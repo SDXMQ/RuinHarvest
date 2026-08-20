@@ -26,7 +26,7 @@ var interactable_tile_pos: Vector2i = Vector2i(-1, -1)
 var interactable_type: Vector2i = Vector2i(-1, -1)
 
 # 무기 및 전투
-const BulletScene = preload("res://scenes/entities/projectiles/bullet.gd")
+const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
 var equipped_weapon: String = "권총"
 var attack_cooldown_timer: float = 0.0
 var weapon_fire_rate: float = 0.35 # 발사 간격 (초)
@@ -42,10 +42,22 @@ var muzzle_light: PointLight2D
 var flashlight_enabled: bool = true
 var muzzle_flash_timer: float = 0.0
 
+# 시각 효과 (Visuals) 관련 변수
+var walk_bob: float = 0.0
+var recoil_offset: float = 0.0
+var hit_flash_tween: Tween
+
 func _ready() -> void:
 	add_to_group("player")
 	EventBus.player_damaged.connect(_on_player_damaged)
+	EventBus.camera_shake_requested.connect(_on_camera_shake_requested)
 	_setup_lighting()
+	
+	if has_node("Camera2D"):
+		base_camera_pos = get_node("Camera2D").position
+	
+	if has_node("Visuals"):
+		get_node("Visuals").draw.connect(_on_visuals_draw)
 
 func _setup_lighting() -> void:
 	# 1. 발밑 주변 360도 은은한 조명 (반경 70px)
@@ -63,6 +75,11 @@ func _setup_lighting() -> void:
 	flashlight.offset = Vector2(160, 0) # 광원 중심을 전방으로 이동
 	flashlight.color = Color(1.0, 0.98, 0.9)
 	flashlight.energy = 1.4
+	
+	# 실시간 2D 그림자 차폐 (Occlusion) 적용
+	flashlight.shadow_enabled = true
+	flashlight.shadow_filter = PointLight2D.SHADOW_FILTER_PCF5 # 부드러운 그림자
+	
 	add_child(flashlight)
 	
 	# 3. 총구 전방 집중 화염 조명 (Directional Muzzle Flash Cone)
@@ -130,6 +147,14 @@ func _create_flashlight_cone_texture(width: int, height: int, cone_angle_deg: fl
 			
 	return ImageTexture.create_from_image(img)
 
+var shake_intensity: float = 0.0
+var shake_timer: float = 0.0
+var base_camera_pos: Vector2 = Vector2.ZERO
+
+func _on_camera_shake_requested(intensity: float, duration: float) -> void:
+	shake_intensity = intensity
+	shake_timer = duration
+
 func _process(delta: float) -> void:
 	if attack_cooldown_timer > 0:
 		attack_cooldown_timer -= delta
@@ -149,6 +174,17 @@ func _process(delta: float) -> void:
 	_handle_survival_stats(delta)
 	_update_interaction()
 	_handle_combat(delta)
+	
+	# 카메라 셰이크 처리
+	if shake_timer > 0:
+		shake_timer -= delta
+		if has_node("Camera2D"):
+			var cam = get_node("Camera2D")
+			# 부드러운 셰이크를 위해 노이즈 사용 (여기서는 랜덤)
+			cam.position = base_camera_pos + Vector2(randf_range(-1, 1), randf_range(-1, 1)) * shake_intensity * (shake_timer / 0.5)
+	else:
+		if has_node("Camera2D"):
+			get_node("Camera2D").position = base_camera_pos
 
 func _unhandled_input(event: InputEvent) -> void:
 	# F 키 손전등 ON/OFF 토글
@@ -351,11 +387,6 @@ func _update_interaction() -> void:
 	
 	# 상호작용 실행 (꾹 누르기 방지 쿨다운 적용)
 	if can_interact and interact_cooldown <= 0.0:
-		if Input.is_action_just_pressed("interact") or (Input.is_physical_key_pressed(KEY_E) and Input.is_action_just_pressed("move_right") == false):
-			# 임시로 is_physical_key_pressed 대신 action 위주로 처리하거나 짧은 쿨다운으로 연타 방지
-			pass
-		
-		# Input 맵 이슈를 우회하면서도 연타를 막기 위해 E키 상태를 프레임 단위가 아닌 쿨다운으로 제어
 		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_just_pressed("interact"):
 			interact_cooldown = 0.5 # 0.5초 쿨다운
 			object_interacted.emit(check_pos, interactable_tile_pos, interactable_type)
@@ -367,28 +398,77 @@ func _on_player_damaged(amount: float, source: String) -> void:
 		is_infected = true
 	elif source == "gunfire" and randf() < 0.5:
 		is_bleeding = true
+		
+	# 피격 플래시 효과 및 카메라 셰이크
+	_play_hit_flash()
+	EventBus.camera_shake_requested.emit(8.0, 0.3)
+
+func _play_hit_flash() -> void:
+	var visuals = get_node_or_null("Visuals")
+	if visuals and visuals.material:
+		if hit_flash_tween:
+			hit_flash_tween.kill()
+		hit_flash_tween = create_tween()
+		visuals.material.set_shader_parameter("flash_color", Color(1, 0, 0, 1)) # 붉은 플래시
+		visuals.material.set_shader_parameter("flash_modifier", 1.0)
+		hit_flash_tween.tween_property(visuals.material, "shader_parameter/flash_modifier", 0.0, 0.2)
 
 func _die() -> void:
 	EventBus.player_died.emit()
 	# Game Over 로직
 
-func _draw() -> void:
-	# 캐릭터 그리기 (플레이어 반경 14)
+func _fire_weapon() -> void:
+	attack_cooldown_timer = weapon_fire_rate
+	recoil_offset = 6.0 # 반동
+	
+	# 투사체 발사
+	var bullet = BulletScene.instantiate()
+	bullet.global_position = global_position + Vector2(20, 0).rotated(rotation)
+	bullet.rotation = rotation
+	get_tree().current_scene.add_child(bullet)
+	
+	# 총구 화염 및 조명 켬
+	muzzle_flash_timer = 0.08
+	if muzzle_light:
+		muzzle_light.enabled = true
+		
+	if has_node("Visuals"):
+		get_node("Visuals").queue_redraw()
+	
+	# 소음
+	if SoundManager:
+		SoundManager.play("gun_fire")
+		# 좀비 어그로를 끄는 이벤트 방출 가능
+		EventBus.noise_created.emit(global_position, 600.0)
+
+func _on_visuals_draw() -> void:
+	var visuals = get_node("Visuals")
 	var radius = 14.0
 	
-	# 외곽선
-	draw_circle(Vector2.ZERO, radius + 2, Color.BLACK)
-	# 셔츠 (초록색)
-	draw_circle(Vector2.ZERO, radius, Color(0.3, 0.5, 0.3))
-	# 머리/피부 (가운데 살구색)
-	draw_circle(Vector2.ZERO, radius * 0.6, Color(0.9, 0.8, 0.7))
-	# 앞을 가리키는 총구 / 시선
-	var aim_dir = Vector2(radius * 1.2, 0)
-	draw_line(Vector2.ZERO, aim_dir, Color.BLACK, 4.0)
-	draw_circle(aim_dir, 3.0, Color.RED)
+	# 걷기 밥에 따른 Y 오프셋 및 회전
+	var bob_y = sin(walk_bob * 2.0) * 2.0
+	var bob_rot = sin(walk_bob) * 0.1
+	visuals.position = Vector2(0, bob_y)
+	visuals.rotation = bob_rot
 	
-	# 총구 화염 스파크 (총구 앞에서만 작게 1~2프레임 렌더)
+	# 캐릭터 신체 (외곽선 포함)
+	visuals.draw_circle(Vector2.ZERO, radius + 2, Color(0.1, 0.1, 0.1)) # 외곽선
+	visuals.draw_circle(Vector2.ZERO, radius, Color(0.3, 0.5, 0.3))     # 셔츠 (초록색)
+	visuals.draw_circle(Vector2.ZERO, radius * 0.6, Color(0.9, 0.8, 0.7)) # 머리/피부
+	
+	# 손과 무기 렌더링
+	var aim_dir = Vector2(radius * 1.2, 0)
+	
+	# 무기 (반동 적용)
+	var weapon_pos = aim_dir - Vector2(recoil_offset, 0)
+	visuals.draw_line(Vector2(5, 4), weapon_pos + Vector2(0, 4), Color.BLACK, 4.0)
+	
+	# 손 (무기를 잡은 손)
+	visuals.draw_circle(weapon_pos + Vector2(-4, 4), 3.5, Color(0.9, 0.8, 0.7)) # 오른손
+	visuals.draw_circle(Vector2(6, -4), 3.5, Color(0.9, 0.8, 0.7)) # 왼손
+	
+	# 총구 화염 스파크 (총구 앞에서만 렌더)
 	if muzzle_flash_timer > 0.0:
-		var flash_tip = aim_dir + Vector2(6, 0)
-		draw_circle(flash_tip, 5.0, Color(1.0, 0.9, 0.3, 0.9)) # 밝은 코어
-		draw_circle(flash_tip + Vector2(3, 0), 3.0, Color(1.0, 0.5, 0.1, 0.8)) # 외곽 스파크
+		var flash_tip = weapon_pos + Vector2(8, 4)
+		visuals.draw_circle(flash_tip, 5.0, Color(1.0, 0.9, 0.3, 0.9)) # 밝은 코어
+		visuals.draw_circle(flash_tip + Vector2(3, 0), 3.0, Color(1.0, 0.5, 0.1, 0.8)) # 외곽 스파크
