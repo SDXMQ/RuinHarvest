@@ -21,7 +21,7 @@ const OBJ_ROCK = Vector2i(1, 1)
 const OBJ_WALL = Vector2i(2, 1)
 const OBJ_CRATE = Vector2i(3, 1)
 const OBJ_BARREL = Vector2i(4, 1)
-const OBJ_CAR = Vector2i(5, 1)
+const OBJ_DEBRIS = Vector2i(5, 1)
 const OBJ_DOOR = Vector2i(6, 1)
 const OBJ_FRIDGE = Vector2i(0, 2)
 
@@ -53,7 +53,7 @@ func _generate_procedural_tileset() -> void:
 	_fill_rect_noisy(img, OBJ_WALL.x * TILE_SIZE, OBJ_WALL.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.4, 0.3, 0.25)) # 벽
 	_draw_crate(img, OBJ_CRATE.x * TILE_SIZE, OBJ_CRATE.y * TILE_SIZE)
 	_draw_barrel(img, OBJ_BARREL.x * TILE_SIZE, OBJ_BARREL.y * TILE_SIZE)
-	_draw_car(img, OBJ_CAR.x * TILE_SIZE, OBJ_CAR.y * TILE_SIZE)
+	_draw_debris(img, OBJ_DEBRIS.x * TILE_SIZE, OBJ_DEBRIS.y * TILE_SIZE)
 	_fill_rect_noisy(img, OBJ_DOOR.x * TILE_SIZE, OBJ_DOOR.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.5, 0.25, 0.1)) # 문
 	_draw_fridge(img, OBJ_FRIDGE.x * TILE_SIZE, OBJ_FRIDGE.y * TILE_SIZE)
 	
@@ -80,7 +80,7 @@ func _generate_procedural_tileset() -> void:
 	tileset.add_source(source, 0)
 		
 	# 오브젝트 타일 등록 및 충돌체 설정
-	var objects = [OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_CAR, OBJ_DOOR, OBJ_FRIDGE]
+	var objects = [OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS, OBJ_DOOR, OBJ_FRIDGE]
 	for coords in objects:
 		source.create_tile(coords)
 		var tile_data = source.get_tile_data(coords, 0)
@@ -94,7 +94,7 @@ func _generate_procedural_tileset() -> void:
 			])
 			
 			# 나무나 바위는 충돌 크기를 약간 줄임
-			if coords == OBJ_TREE or coords == OBJ_ROCK or coords == OBJ_BARREL:
+			if coords == OBJ_TREE or coords == OBJ_ROCK or coords == OBJ_BARREL or coords == OBJ_DEBRIS:
 				poly = PackedVector2Array([
 					Vector2(-TILE_SIZE*0.4, -TILE_SIZE*0.4),
 					Vector2(TILE_SIZE*0.4, -TILE_SIZE*0.4),
@@ -108,7 +108,7 @@ func _generate_procedural_tileset() -> void:
 				tile_data.set_collision_polygon_points(0, 0, poly)
 				
 				# 빛 차폐(Occluder) 등록 (투명도 없는 물체 위주)
-				if coords in [OBJ_WALL, OBJ_CRATE, OBJ_CAR, OBJ_ROCK, OBJ_FRIDGE]:
+				if coords in [OBJ_WALL, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE]:
 					var occluder = OccluderPolygon2D.new()
 					occluder.polygon = poly
 					tile_data.add_occluder_polygon(0)
@@ -192,44 +192,14 @@ func _draw_barrel(img: Image, x: int, y: int) -> void:
 			elif dist < TILE_SIZE * 0.4:
 				img.set_pixel(x + ix, y + iy, Color(0.1, 0.1, 0.1)) # 테두리
 
-func _draw_car(img: Image, x: int, y: int) -> void:
-	# 녹슨 폐차를 픽셀아트로 정교하게 표현
-	for iy in range(TILE_SIZE):
-		for ix in range(TILE_SIZE):
-			var px = x + ix
-			var py = y + iy
-			
-			# 차량 기본 뼈대
-			if ix >= 4 and ix <= TILE_SIZE - 4 and iy >= 2 and iy <= TILE_SIZE - 2:
-				var is_window = false
-				# 앞유리 / 뒷유리 영역
-				if (iy >= 8 and iy <= 12) or (iy >= 20 and iy <= 24):
-					if ix >= 6 and ix <= TILE_SIZE - 6:
-						is_window = true
-				
-				if is_window:
-					# 깨진 유리 (어둡고 가끔 노이즈)
-					var c = Color(0.1, 0.15, 0.2)
-					if randf() < 0.1: c = Color(0.3, 0.35, 0.4) # 깨진 반사광
-					img.set_pixel(px, py, c)
-				else:
-					# 녹슨 철판 (기본은 바랜 빨간/파란/노란색 중 하나인데 전체적으로 녹슬게 표현)
-					var base_car_color = Color(0.4, 0.2, 0.2) # 녹슨 붉은 차
-					# 노이즈를 섞어 심하게 부식된 느낌
-					var noise = (randf() - 0.5) * 0.2
-					var rust = Color(0.6, 0.35, 0.15) # 주황빛 녹
-					if randf() < 0.3:
-						base_car_color = rust
-						
-					base_car_color.r = clamp(base_car_color.r + noise, 0.0, 1.0)
-					base_car_color.g = clamp(base_car_color.g + noise, 0.0, 1.0)
-					base_car_color.b = clamp(base_car_color.b + noise, 0.0, 1.0)
-					
-					# 외곽선(범퍼 등)은 더 어둡게
-					if ix == 4 or ix == TILE_SIZE - 4 or iy == 2 or iy == TILE_SIZE - 2:
-						base_car_color = Color(0.1, 0.1, 0.1)
-						
-					img.set_pixel(px, py, base_car_color)
+func _draw_debris(img: Image, x: int, y: int) -> void:
+	# 부서진 철조각이나 쓰레기 더미 잔해로 렌더링
+	for i in range(8):
+		var dx = randi_range(4, TILE_SIZE-4)
+		var dy = randi_range(4, TILE_SIZE-4)
+		var size = randi_range(2, 6)
+		var col = Color(randf_range(0.3, 0.5), randf_range(0.3, 0.4), randf_range(0.3, 0.4))
+		img.fill_rect(Rect2i(x + dx, y + dy, size, size), col)
 
 func _draw_fridge(img: Image, x: int, y: int) -> void:
 	# 버려지고 더러운 흰색 냉장고 (위에서 본 모습, 약간 정사각형에 가까운 직사각형)

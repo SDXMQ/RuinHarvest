@@ -66,6 +66,8 @@ func is_building_area(wx: int, wy: int) -> bool:
 func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 	var tiles: Array[Vector2i] = []
 	var objects: Array[Vector2i] = []
+	var entities: Array[Dictionary] = [] # 엔티티(프리팹) 스폰 리스트
+	
 	tiles.resize(CHUNK_SIZE * CHUNK_SIZE)
 	objects.resize(CHUNK_SIZE * CHUNK_SIZE)
 	
@@ -111,9 +113,26 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 				else:
 					obj_coords = TileManager.OBJ_WALL
 			elif road:
-				# 도로 위 버려진 차
-				if rng.randf() < 0.02 and tile_coords != TileManager.TILE_ROAD_LINE:
-					obj_coords = TileManager.OBJ_CAR
+				# 도로 위 버려진 차 엔티티 스폰 (확률 낮춤, 차량 크기가 커졌으므로)
+				if rng.randf() < 0.005 and tile_coords != TileManager.TILE_ROAD_LINE:
+					# 도로의 방향 파악 (세로 도로인지 가로 도로인지)
+					var rot = 0.0
+					if abs(wx) % 40 < 4 or (abs(wx) % 20 < 2 and biome != "residential"):
+						# 세로 도로
+						rot = 0.0 if rng.randf() > 0.5 else PI
+					else:
+						# 가로 도로
+						rot = PI / 2.0 if rng.randf() > 0.5 else -PI / 2.0
+						
+					# 살짝 삐뚤어지게
+					rot += rng.randf_range(-0.15, 0.15)
+					
+					entities.append({
+						"type": "car",
+						"wx": wx,
+						"wy": wy,
+						"rotation": rot
+					})
 			else:
 				# 자연 프랍
 				if rng.randf() < 0.1:
@@ -133,5 +152,6 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 			
 	return {
 		"tiles": tiles,
-		"objects": objects
+		"objects": objects,
+		"entities": entities
 	}

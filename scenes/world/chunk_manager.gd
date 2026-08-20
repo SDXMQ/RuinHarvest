@@ -39,6 +39,9 @@ func _ready() -> void:
 		ground_layer.tile_set = TileManager.tileset
 		object_layer.tile_set = TileManager.tileset
 
+const CarScene = preload("res://scenes/world/objects/car.tscn")
+var chunk_entities: Dictionary = {} # chunk_pos (Vector2i) -> Array[Node]
+
 func update_chunks(player_pos: Vector2) -> void:
 	var center_chunk_x: int = floor(player_pos.x / (CHUNK_SIZE * TILE_SIZE))
 	var center_chunk_y: int = floor(player_pos.y / (CHUNK_SIZE * TILE_SIZE))
@@ -67,6 +70,7 @@ func update_chunks(player_pos: Vector2) -> void:
 func load_chunk(chunk_pos: Vector2i) -> void:
 	var chunk_data = generator.generate_chunk(chunk_pos)
 	loaded_chunks[chunk_pos] = chunk_data
+	chunk_entities[chunk_pos] = []
 	
 	# 타일맵 적용
 	var start_wx = chunk_pos.x * CHUNK_SIZE
@@ -85,6 +89,17 @@ func load_chunk(chunk_pos: Vector2i) -> void:
 			if chunk_data["objects"][idx] != Vector2i(-1, -1):
 				object_layer.set_cell(Vector2i(wx, wy), 0, chunk_data["objects"][idx])
 	
+	# 동적 엔티티 스폰
+	if chunk_data.has("entities"):
+		for ent_data in chunk_data["entities"]:
+			if ent_data["type"] == "car":
+				var car = CarScene.instantiate()
+				var world_pos = Vector2(ent_data["wx"] * TILE_SIZE + TILE_SIZE/2.0, ent_data["wy"] * TILE_SIZE + TILE_SIZE/2.0)
+				car.position = world_pos
+				car.rotation_angle = ent_data["rotation"]
+				object_layer.add_child(car)
+				chunk_entities[chunk_pos].append(car)
+				
 	chunk_loaded.emit(chunk_pos, chunk_data)
 
 func unload_chunk(chunk_pos: Vector2i) -> void:
@@ -97,5 +112,13 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 				ground_layer.erase_cell(Vector2i(start_wx + lx, start_wy + ly))
 				object_layer.erase_cell(Vector2i(start_wx + lx, start_wy + ly))
 				
+		# 스폰된 엔티티 제거
+		if chunk_entities.has(chunk_pos):
+			for ent in chunk_entities[chunk_pos]:
+				if is_instance_valid(ent):
+					ent.queue_free()
+			chunk_entities.erase(chunk_pos)
+				
 		loaded_chunks.erase(chunk_pos)
 		chunk_unloaded.emit(chunk_pos)
+
