@@ -38,7 +38,9 @@ signal object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i)
 # 손전등 및 조명
 var flashlight: PointLight2D
 var ambient_light: PointLight2D
+var muzzle_light: PointLight2D
 var flashlight_enabled: bool = true
+var muzzle_flash_timer: float = 0.0
 
 func _ready() -> void:
 	add_to_group("player")
@@ -62,6 +64,25 @@ func _setup_lighting() -> void:
 	flashlight.color = Color(1.0, 0.98, 0.9)
 	flashlight.energy = 1.4
 	add_child(flashlight)
+	
+	# 3. 총구 전방 집중 화염 조명 (Directional Muzzle Flash Cone)
+	muzzle_light = PointLight2D.new()
+	muzzle_light.name = "MuzzleLight"
+	muzzle_light.texture = _create_flashlight_cone_texture(240, 180, 100.0)
+	muzzle_light.offset = Vector2(120, 0) # 전방 120px 중심의 100도 부채꼴 화염
+	muzzle_light.color = Color(1.0, 0.85, 0.4)
+	muzzle_light.energy = 0.0
+	muzzle_light.enabled = false
+	add_child(muzzle_light)
+	
+	set_flashlight(flashlight_enabled)
+
+func set_flashlight(enabled: bool) -> void:
+	flashlight_enabled = enabled
+	if flashlight:
+		flashlight.enabled = flashlight_enabled
+	if ambient_light:
+		ambient_light.enabled = flashlight_enabled
 
 func _create_radial_gradient(size: int, intensity: float) -> GradientTexture2D:
 	var grad = Gradient.new()
@@ -113,19 +134,29 @@ func _process(delta: float) -> void:
 	if attack_cooldown_timer > 0:
 		attack_cooldown_timer -= delta
 		
+	# 총구 화염 조명 감쇠
+	if muzzle_flash_timer > 0.0:
+		muzzle_flash_timer -= delta
+		if muzzle_flash_timer <= 0.0:
+			if muzzle_light:
+				muzzle_light.enabled = false
+				muzzle_light.energy = 0.0
+		else:
+			if muzzle_light:
+				muzzle_light.energy = (muzzle_flash_timer / 0.05) * 1.5
+		queue_redraw()
+		
 	_handle_survival_stats(delta)
 	_update_interaction()
 	_handle_combat(delta)
-	
-	# F 키 손전등 토글
-	if Input.is_physical_key_pressed(KEY_F) or Input.is_action_just_pressed("flashlight"):
-		if interact_cooldown <= 0.0:
-			interact_cooldown = 0.3
-			flashlight_enabled = not flashlight_enabled
-			if flashlight:
-				flashlight.enabled = flashlight_enabled
-			if SoundManager:
-				SoundManager.play("menu_select")
+
+func _unhandled_input(event: InputEvent) -> void:
+	# F 키 손전등 ON/OFF 토글
+	if event.is_action_pressed("flashlight") or (event is InputEventKey and event.physical_keycode == KEY_F and event.pressed and not event.echo):
+		set_flashlight(not flashlight_enabled)
+		if SoundManager:
+			SoundManager.play("menu_select")
+		get_viewport().set_input_as_handled()
 
 func _handle_combat(_delta: float) -> void:
 	if Input.is_action_just_pressed("attack") or Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -141,6 +172,13 @@ func _try_attack() -> void:
 	var spawn_pos = global_position + aim_dir * 18.0
 	
 	if equipped_weapon == "권총" or equipped_weapon == "레버액션 소총":
+		# 국소 총구 화염 발광 (0.05초)
+		muzzle_flash_timer = 0.05
+		if muzzle_light:
+			muzzle_light.enabled = true
+			muzzle_light.energy = 1.5
+		queue_redraw()
+		
 		# 총알 발사
 		var bullet_scene = load("res://scenes/entities/projectiles/bullet.tscn")
 		if bullet_scene:
@@ -337,3 +375,9 @@ func _draw() -> void:
 	var aim_dir = Vector2(radius * 1.2, 0)
 	draw_line(Vector2.ZERO, aim_dir, Color.BLACK, 4.0)
 	draw_circle(aim_dir, 3.0, Color.RED)
+	
+	# 총구 화염 스파크 (총구 앞에서만 작게 1~2프레임 렌더)
+	if muzzle_flash_timer > 0.0:
+		var flash_tip = aim_dir + Vector2(6, 0)
+		draw_circle(flash_tip, 5.0, Color(1.0, 0.9, 0.3, 0.9)) # 밝은 코어
+		draw_circle(flash_tip + Vector2(3, 0), 3.0, Color(1.0, 0.5, 0.1, 0.8)) # 외곽 스파크

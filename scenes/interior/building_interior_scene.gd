@@ -34,8 +34,14 @@ var current_crafting_window: Control = null
 
 var raid_time_remaining: float = 300.0
 
+const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	
+	# 후처리 셰이더 추가
+	var pp = PostProcessLayerScene.instantiate()
+	add_child(pp)
 	
 	resume_btn.pressed.connect(_toggle_pause)
 	exit_btn.pressed.connect(_on_exit_pressed)

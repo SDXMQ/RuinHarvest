@@ -38,8 +38,14 @@ var max_enemies_count: int = 15
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 300.0 # 5분
 
+const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
+	
+	# 후처리 셰이더 레이어 추가
+	var pp = PostProcessLayerScene.instantiate()
+	add_child(pp)
 	
 	if compass_bar:
 		compass_bar.draw.connect(_on_compass_draw)
