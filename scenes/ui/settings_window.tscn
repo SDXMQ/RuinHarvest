@@ -135,7 +135,7 @@ theme_override_constants/separation = 15
 
 [node name="Label" type="Label" parent="Panel/VBox/TabContainer/게임플레이/VBox"]
 layout_mode = 2
-text = "언어 (Language) - 추후 지원"
+text = "언어 (Language)"
 
 [node name="LanguageOpt" type="OptionButton" parent="Panel/VBox/TabContainer/게임플레이/VBox"]
 layout_mode = 2
@@ -144,3 +144,14 @@ item_count = 1
 selected = 0
 popup/item_0/text = "한국어"
 popup/item_0/id = 0
+
+[node name="LogLabel" type="Label" parent="Panel/VBox/TabContainer/게임플레이/VBox"]
+layout_mode = 2
+text = "이벤트 로그 최대 개수: 3개"
+
+[node name="LogCountSlider" type="HSlider" parent="Panel/VBox/TabContainer/게임플레이/VBox"]
+layout_mode = 2
+min_value = 1.0
+max_value = 8.0
+step = 1.0
+value = 3.0

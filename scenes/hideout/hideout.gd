@@ -28,11 +28,17 @@ extends Control
 @onready var result_desc: Label = $ResultDialog/VBox/Desc
 @onready var result_close_btn: Button = $ResultDialog/VBox/CloseBtn
 
+const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
+var tooltip: PanelContainer
+
 var player_inv: Inventory
 var stash_inv: Inventory
 var current_trader_id: String = "prapor"
 
 func _ready() -> void:
+	tooltip = TooltipScene.instantiate()
+	add_child(tooltip)
+	
 	raid_button.pressed.connect(_on_raid_pressed)
 	menu_button.pressed.connect(_on_menu_pressed)
 	result_close_btn.pressed.connect(_on_result_close_pressed)
@@ -66,7 +72,12 @@ func _ready() -> void:
 	_refresh_trader_ui()
 	_refresh_market_ui()
 
+func _process(_delta: float) -> void:
+	if tooltip and tooltip.visible:
+		tooltip.update_position(get_global_mouse_position())
+
 func _on_tab_changed(tab: int) -> void:
+	if tooltip: tooltip.hide()
 	if tab == 0:
 		_refresh_stash_ui()
 	elif tab == 1:
@@ -83,15 +94,11 @@ func _load_data() -> void:
 		
 		# 배낭 데이터 로드
 		var p_inv_data = w_data.get("player", {}).get("inventory", [])
-		for item in p_inv_data:
-			if item:
-				player_inv.add_item(item["id"], item["amount"])
+		player_inv.load_items(p_inv_data)
 		
 		# 창고 데이터 로드
 		var stash_data = w_data.get("hideout", {}).get("stash", [])
-		for item in stash_data:
-			if item:
-				stash_inv.add_item(item["id"], item["amount"])
+		stash_inv.load_items(stash_data)
 
 func _update_money_label() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
@@ -99,6 +106,7 @@ func _update_money_label() -> void:
 		money_label.text = "자금: %d RUB" % rubles
 
 func _on_inventory_changed() -> void:
+	if tooltip: tooltip.hide()
 	_refresh_stash_ui()
 	_refresh_trader_sell_ui()
 	_sync_save_data()
@@ -137,13 +145,66 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 		
 	for i in range(inv.max_slots):
 		var btn = Button.new()
-		btn.custom_minimum_size = Vector2(52, 52)
+		btn.custom_minimum_size = Vector2(56, 56)
+		btn.clip_contents = true
 		var item = inv.items[i]
 		
 		if item:
 			var data = ItemDatabase.get_item_data(item["id"])
-			btn.text = "%s\nx%d" % [data["name"], item["amount"]]
-			btn.add_theme_font_size_override("font_size", 10)
+			if ItemIconManager:
+				btn.icon = ItemIconManager.get_icon(item["id"])
+				btn.expand_icon = true
+				btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+				
+			btn.mouse_entered.connect(func():
+				if tooltip and item:
+					tooltip.display_item(item, data)
+					tooltip.update_position(get_global_mouse_position())
+			)
+			btn.mouse_exited.connect(func():
+				if tooltip: tooltip.hide()
+			)
+			
+			if item["amount"] > 1:
+				var amt_lbl = Label.new()
+				amt_lbl.text = "x%d" % item["amount"]
+				amt_lbl.add_theme_font_size_override("font_size", 12)
+				amt_lbl.add_theme_color_override("font_color", Color(1.0, 0.95, 0.4))
+				amt_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
+				amt_lbl.add_theme_constant_override("shadow_offset_x", 1)
+				amt_lbl.add_theme_constant_override("shadow_offset_y", 1)
+				amt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				amt_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				amt_lbl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+				amt_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+				amt_lbl.offset_right = -4
+				amt_lbl.offset_bottom = -2
+				btn.add_child(amt_lbl)
+				
+			# 내구도 바 (슬롯 하단 미니 게이지)
+			var max_dur = data.get("max_durability", 0)
+			if max_dur > 0:
+				var cur_dur = item.get("durability", max_dur)
+				var dur_mini_bar = ProgressBar.new()
+				dur_mini_bar.show_percentage = false
+				dur_mini_bar.custom_minimum_size = Vector2(46, 4)
+				dur_mini_bar.max_value = max_dur
+				dur_mini_bar.value = cur_dur
+				dur_mini_bar.position = Vector2(5, 48)
+				dur_mini_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				
+				var fill_style = StyleBoxFlat.new()
+				var ratio = float(cur_dur) / float(max_dur)
+				if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
+				elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
+				else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
+				dur_mini_bar.add_theme_stylebox_override("fill", fill_style)
+				
+				var bg_style = StyleBoxFlat.new()
+				bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.7)
+				dur_mini_bar.add_theme_stylebox_override("background", bg_style)
+				btn.add_child(dur_mini_bar)
 		else:
 			btn.text = ""
 			
@@ -205,6 +266,15 @@ func _refresh_trader_ui() -> void:
 		hbox.add_theme_constant_override("separation", 16)
 		panel.add_child(hbox)
 		
+		# 아이템 아이콘
+		if ItemIconManager:
+			var icon_rect = TextureRect.new()
+			icon_rect.custom_minimum_size = Vector2(32, 32)
+			icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon_rect.texture = ItemIconManager.get_icon(item_id)
+			hbox.add_child(icon_rect)
+		
 		var name_lbl = Label.new()
 		name_lbl.text = "%s (x%d)" % [item_meta.get("name", item_id), amount]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -239,6 +309,9 @@ func _refresh_trader_sell_ui() -> void:
 			
 			var btn = Button.new()
 			btn.custom_minimum_size = Vector2(100, 50)
+			if ItemIconManager:
+				btn.icon = ItemIconManager.get_icon(item["id"])
+				btn.expand_icon = true
 			btn.text = "%s\n+%d RUB" % [data["name"], sell_price * item["amount"]]
 			btn.add_theme_font_size_override("font_size", 10)
 			btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
@@ -296,6 +369,14 @@ func _refresh_market_ui() -> void:
 		hbox.add_theme_constant_override("separation", 16)
 		panel.add_child(hbox)
 		
+		if ItemIconManager:
+			var icon_rect = TextureRect.new()
+			icon_rect.custom_minimum_size = Vector2(32, 32)
+			icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon_rect.texture = ItemIconManager.get_icon(item_id)
+			hbox.add_child(icon_rect)
+		
 		var name_lbl = Label.new()
 		name_lbl.text = "%s (x%d)" % [item_meta.get("name", item_id), amount]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -332,6 +413,9 @@ func _refresh_market_register_ui() -> void:
 			
 			var btn = Button.new()
 			btn.custom_minimum_size = Vector2(100, 50)
+			if ItemIconManager:
+				btn.icon = ItemIconManager.get_icon(item["id"])
+				btn.expand_icon = true
 			btn.text = "%s\n시장가 %d RUB" % [data["name"], current_price]
 			btn.add_theme_font_size_override("font_size", 10)
 			btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))

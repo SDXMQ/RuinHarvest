@@ -117,37 +117,43 @@ var items: Dictionary = {
 		"category": ItemCategory.WEAPON,
 		"description": "녹슨 쇠파이프.",
 		"stackable": false, "weight": 1.5, "damage": 10, "range": 1.0,
-		"attack_speed": 0.5, "type": "melee", "rarity": 0.5, "value": 1500
+		"attack_speed": 0.5, "type": "melee", "rarity": 0.5, "value": 1500,
+		"max_durability": 100
 	},
 	"나이프": {
 		"category": ItemCategory.WEAPON,
 		"description": "날카로운 사냥용 나이프.",
 		"stackable": false, "weight": 0.5, "damage": 12, "range": 0.8,
-		"attack_speed": 0.3, "type": "melee", "rarity": 0.35, "value": 3000
+		"attack_speed": 0.3, "type": "melee", "rarity": 0.35, "value": 3000,
+		"max_durability": 100
 	},
 	"야구방망이": {
 		"category": ItemCategory.WEAPON,
 		"description": "알루미늄 야구방망이. 넓은 타격 범위.",
 		"stackable": false, "weight": 1.8, "damage": 18, "range": 1.3,
-		"attack_speed": 0.7, "type": "melee", "rarity": 0.25, "value": 4500
+		"attack_speed": 0.7, "type": "melee", "rarity": 0.25, "value": 4500,
+		"max_durability": 100
 	},
 	"도끼": {
 		"category": ItemCategory.WEAPON,
 		"description": "목재 벌목용 도끼. 강력하지만 느리다.",
 		"stackable": false, "weight": 2.5, "damage": 25, "range": 1.1,
-		"attack_speed": 0.9, "type": "melee", "rarity": 0.2, "value": 7000
+		"attack_speed": 0.9, "type": "melee", "rarity": 0.2, "value": 7000,
+		"max_durability": 100
 	},
 	"권총": {
 		"category": ItemCategory.WEAPON,
 		"description": "9mm 권총. 탄약 필요.",
 		"stackable": false, "weight": 1.0, "damage": 14, "range": 8.0,
-		"attack_speed": 0.4, "type": "ranged", "ammo": "탄약", "rarity": 0.1, "value": 18000
+		"attack_speed": 0.4, "type": "ranged", "ammo": "탄약", "rarity": 0.1, "value": 18000,
+		"max_durability": 100
 	},
 	"레버액션 소총": {
 		"category": ItemCategory.WEAPON,
 		"description": "클래식한 레버액션 소총. 강력하지만 재장전이 느리다.",
 		"stackable": false, "weight": 3.5, "damage": 22, "range": 12.0,
-		"attack_speed": 1.2, "type": "ranged", "ammo": "탄약", "rarity": 0.05, "value": 35000
+		"attack_speed": 1.2, "type": "ranged", "ammo": "탄약", "rarity": 0.05, "value": 35000,
+		"max_durability": 100
 	},
 	"수류탄": {
 		"category": ItemCategory.WEAPON,
@@ -171,13 +177,15 @@ var items: Dictionary = {
 		"category": ItemCategory.EQUIPMENT,
 		"description": "오염된 공기를 차단하는 방독면.",
 		"stackable": false, "weight": 0.8, "equip_slot": "head",
-		"effects": {"poison_resist": true}, "rarity": 0.2, "value": 6000
+		"effects": {"poison_resist": true}, "rarity": 0.2, "value": 6000,
+		"max_durability": 100
 	},
 	"방탄조끼": {
 		"category": ItemCategory.EQUIPMENT,
 		"description": "방탄 재질의 조끼. 대미지를 크게 줄여준다.",
 		"stackable": false, "weight": 3.0, "equip_slot": "body",
-		"defense": 15, "rarity": 0.1, "value": 15000
+		"defense": 15, "rarity": 0.1, "value": 15000,
+		"max_durability": 100
 	},
 	"운동화": {
 		"category": ItemCategory.EQUIPMENT,

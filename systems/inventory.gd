@@ -11,9 +11,26 @@ signal inventory_changed
 var items: Array = []
 
 func _ready() -> void:
+	if items.is_empty():
+		items.resize(max_slots)
+		for i in range(max_slots):
+			items[i] = null
+
+func load_items(item_list: Array) -> void:
 	items.resize(max_slots)
 	for i in range(max_slots):
-		items[i] = null
+		if i < item_list.size() and item_list[i] != null:
+			items[i] = item_list[i].duplicate()
+		else:
+			items[i] = null
+	inventory_changed.emit()
+
+func get_item_count(id: String) -> int:
+	var total = 0
+	for item in items:
+		if item and item["id"] == id:
+			total += item["amount"]
+	return total
 
 func add_item(id: String, amount: int) -> int:
 	var item_data = ItemDatabase.get_item_data(id)
@@ -38,7 +55,10 @@ func add_item(id: String, amount: int) -> int:
 	for i in range(max_slots):
 		if items[i] == null:
 			var to_add = min(max_stack, remaining)
-			items[i] = {"id": id, "amount": to_add}
+			var item_dict = {"id": id, "amount": to_add}
+			if item_data.has("max_durability"):
+				item_dict["durability"] = item_data["max_durability"]
+			items[i] = item_dict
 			remaining -= to_add
 			if remaining <= 0:
 				inventory_changed.emit()

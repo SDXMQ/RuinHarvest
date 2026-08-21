@@ -58,6 +58,15 @@ func _refresh_ui() -> void:
 		hbox.add_theme_constant_override("separation", 16)
 		entry_panel.add_child(hbox)
 		
+		# 제작 아이템 아이콘
+		if ItemIconManager:
+			var icon_rect = TextureRect.new()
+			icon_rect.custom_minimum_size = Vector2(36, 36)
+			icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon_rect.texture = ItemIconManager.get_icon(result_id)
+			hbox.add_child(icon_rect)
+		
 		# 아이템 이름 및 설명
 		var info_vbox = VBoxContainer.new()
 		info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL

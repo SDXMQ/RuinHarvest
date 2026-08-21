@@ -121,4 +121,3 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 				
 		loaded_chunks.erase(chunk_pos)
 		chunk_unloaded.emit(chunk_pos)
-

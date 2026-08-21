@@ -7,6 +7,9 @@ extends Control
 @onready var sfx_vol: HSlider = $Panel/VBox/TabContainer/오디오/VBox/SFXVol
 @onready var bgm_vol: HSlider = $Panel/VBox/TabContainer/오디오/VBox/BGMVol
 
+@onready var log_label: Label = $Panel/VBox/TabContainer/게임플레이/VBox/LogLabel
+@onready var log_count_slider: HSlider = $Panel/VBox/TabContainer/게임플레이/VBox/LogCountSlider
+
 signal window_closed
 
 var resolutions = [
@@ -26,6 +29,11 @@ func _ready() -> void:
 		if DisplayServer.window_get_size() == res:
 			resolution_opt.selected = i
 			
+	# 로그 개수 슬라이더 초기화
+	if GameSettings:
+		log_count_slider.value = GameSettings.max_event_logs
+		log_label.text = "이벤트 로그 최대 개수: %d개" % GameSettings.max_event_logs
+			
 	# 시그널 연결
 	fullscreen_btn.toggled.connect(_on_fullscreen_toggled)
 	resolution_opt.item_selected.connect(_on_resolution_selected)
@@ -34,9 +42,18 @@ func _ready() -> void:
 	bgm_vol.value_changed.connect(func(v): _on_volume_changed(1, v))
 	sfx_vol.value_changed.connect(func(v): _on_volume_changed(2, v))
 	
+	log_count_slider.value_changed.connect(_on_log_count_changed)
+	
 	var close_btn = $Panel/VBox/Header/CloseBtn
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
+
+func _on_log_count_changed(value: float) -> void:
+	var count = int(value)
+	log_label.text = "이벤트 로그 최대 개수: %d개" % count
+	if GameSettings:
+		GameSettings.max_event_logs = count
+		GameSettings.save_settings()
 
 func _on_fullscreen_toggled(toggled_on: bool) -> void:
 	if toggled_on:

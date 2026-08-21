@@ -85,7 +85,12 @@ func start_new_game(world_settings: Dictionary = {}) -> void:
 			"stress": 0.0,
 			"stamina": 100.0,
 			"rubles": 5000,
-			"inventory": [],
+			"inventory": [
+				{"id": "권총", "amount": 1},
+				{"id": "탄약", "amount": 30},
+				{"id": "붕대", "amount": 2},
+				{"id": "생수", "amount": 1}
+			],
 			"equipment": {}
 		},
 		"hideout": {
@@ -126,32 +131,41 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		"items": looted_items
 	}
 	
+	if not current_world_data.has("player"):
+		current_world_data["player"] = {}
+	if not current_world_data.has("hideout"):
+		current_world_data["hideout"] = {"stash": []}
+	elif not current_world_data["hideout"].has("stash"):
+		current_world_data["hideout"]["stash"] = []
+	
 	if result == "survived":
 		if current_world_data.has("current_day"):
 			current_world_data["current_day"] += 1
 		else:
 			current_world_data["current_day"] = 2
 			
-		# 획득한 아이템을 스태쉬로 복사
-		if not current_world_data.has("hideout"):
-			current_world_data["hideout"] = {"stash": []}
-		elif not current_world_data["hideout"].has("stash"):
-			current_world_data["hideout"]["stash"] = []
-			
+		# 탈출 성공: 레이드에서 가져온 배낭 아이템들을 플레이어 소지품으로 정확히 보존
+		var saved_items = []
 		for item in looted_items:
 			if item:
-				current_world_data["hideout"]["stash"].append(item.duplicate())
-				
+				saved_items.append(item.duplicate())
+		current_world_data["player"]["inventory"] = saved_items
+		
 		if current_save_slot != "":
 			SaveManager.save_game(current_world_data, current_save_slot)
 	else:
-		# 사망/실종 처리
+		# 사망/실종: 배낭에 있던 모든 아이템 분실 (창고 스태쉬는 안전하게 보존)
+		current_world_data["player"]["inventory"] = []
+		
 		var diff = current_world_data.get("difficulty", "normal")
 		if GameSettings.DIFFICULTY_PRESETS.has(diff) and GameSettings.DIFFICULTY_PRESETS[diff].get("permadeath", false):
 			if current_save_slot != "":
 				SaveManager.delete_save(current_save_slot)
 				current_save_slot = ""
 				current_world_data.clear()
+		else:
+			if current_save_slot != "":
+				SaveManager.save_game(current_world_data, current_save_slot)
 	
 	EventBus.raid_ended.emit(result)
 	change_state(GameState.HIDEOUT)

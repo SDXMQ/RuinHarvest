@@ -200,6 +200,33 @@ func _handle_combat(_delta: float) -> void:
 		if get_tree().paused: return
 		_try_attack()
 
+var inventory: Inventory = null
+
+func _has_ammo() -> bool:
+	if not inventory: return true
+	for item in inventory.items:
+		if item and item["id"] == "탄약" and item["amount"] > 0:
+			return true
+	return false
+
+func _consume_ammo() -> bool:
+	if not inventory: return true
+	for i in range(inventory.max_slots):
+		var item = inventory.items[i]
+		if item and item["id"] == "탄약" and item["amount"] > 0:
+			inventory.remove_item_at(i, 1)
+			return true
+	return false
+
+func _degrade_weapon(amount: float = 1.0) -> void:
+	if not inventory: return
+	for item in inventory.items:
+		if item and (item["id"] == equipped_weapon or (equipped_weapon == "권총" and item["id"] == "권총")):
+			if item.has("durability"):
+				item["durability"] = max(0, item["durability"] - amount)
+				inventory.inventory_changed.emit()
+				break
+
 func _try_attack() -> void:
 	if attack_cooldown_timer > 0: return
 	attack_cooldown_timer = weapon_fire_rate
@@ -208,6 +235,18 @@ func _try_attack() -> void:
 	var spawn_pos = global_position + aim_dir * 18.0
 	
 	if equipped_weapon == "권총" or equipped_weapon == "레버액션 소총":
+		# 탄약 확인 및 소모
+		if not _has_ammo():
+			if SoundManager:
+				SoundManager.play("menu_select")
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ [탄약 부족] 발사할 탄약(9mm)이 없습니다!")
+			return
+			
+		_consume_ammo()
+		_degrade_weapon(1.0) # 사격 시 무기 내구도 1 감소
+		recoil_offset = 6.0 # 총기 반동
+		
 		# 국소 총구 화염 발광 (0.05초)
 		muzzle_flash_timer = 0.05
 		if muzzle_light:
@@ -361,20 +400,50 @@ func _update_interaction() -> void:
 	var can_interact = false
 	var prompt_text = ""
 	
-	if object_layer:
+	# 1. 물리 엔티티 기반 상호작용 (우선)
+	var space_state = get_world_2d().direct_space_state
+	var query = PhysicsPointQueryParameters2D.new()
+	query.position = check_pos
+	query.collision_mask = 1 | 2 # 엔티티/환경
+	query.collide_with_bodies = true
+	query.collide_with_areas = true
+	
+	var results = space_state.intersect_point(query)
+	var found_entity = false
+	
+	for res in results:
+		var collider = res["collider"]
+		if collider and collider.get("interactable_type") != null:
+			var i_type = collider.get("interactable_type")
+			if typeof(i_type) == TYPE_VECTOR2I and i_type == Vector2i(5, 1):
+				can_interact = true
+				prompt_text = "[E] 폐차 트렁크 열기"
+				interactable_type = i_type
+				
+				# 엔티티 상호작용 시, tile_pos 대신 엔티티의 고유 좌표(타일맵 좌표로 변환된 값) 사용
+				if object_layer:
+					interactable_tile_pos = object_layer.local_to_map(collider.global_position)
+				else:
+					interactable_tile_pos = Vector2i(int(collider.global_position.x / 32), int(collider.global_position.y / 32))
+					
+				found_entity = true
+				break
+				
+	# 2. 타일맵 기반 상호작용 (엔티티가 없으면 실행)
+	if not found_entity and object_layer:
 		var t_pos = object_layer.local_to_map(check_pos)
 		var tile_coords = object_layer.get_cell_atlas_coords(t_pos)
 		
-		# 상호작용 가능한 타일인지 확인 (TileManager 상수 사용)
+		# 상호작용 가능한 타일인지 확인
 		if tile_coords == Vector2i(3, 1): # OBJ_CRATE
 			can_interact = true
 			prompt_text = "[E] 수색하기"
 		elif tile_coords == Vector2i(4, 1): # OBJ_BARREL
 			can_interact = true
 			prompt_text = "[E] 가구 수색하기"
-		elif tile_coords == Vector2i(5, 1): # OBJ_CAR
+		elif tile_coords == Vector2i(5, 1): # OBJ_DEBRIS/CAR (잔해)
 			can_interact = true
-			prompt_text = "[E] 폐차 수색하기"
+			prompt_text = "[E] 잔해물 뒤지기"
 		elif tile_coords == Vector2i(6, 1): # OBJ_DOOR
 			can_interact = true
 			prompt_text = "[E] 문 열기/나가기"

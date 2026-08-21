@@ -19,6 +19,13 @@ extends Node2D
 @onready var compass_bar: Control = $UI/HUD/CompassBar
 @onready var event_log_vbox: VBoxContainer = $UI/HUD/EventLog
 
+# 좌하단 무기 상태 패널
+@onready var weapon_panel: Panel = $UI/HUD/WeaponPanel
+@onready var weapon_icon: TextureRect = $UI/HUD/WeaponPanel/HBox/WeaponIcon
+@onready var weapon_name_label: Label = $UI/HUD/WeaponPanel/HBox/VBox/WeaponNameLabel
+@onready var ammo_label: Label = $UI/HUD/WeaponPanel/HBox/VBox/AmmoLabel
+@onready var weapon_durability_bar: ProgressBar = $UI/HUD/WeaponPanel/HBox/VBox/DurabilityBar
+
 const MapWindowScene = preload("res://scenes/ui/map_window.tscn")
 var current_map_window: Control = null
 var extraction_points_data: Array = []
@@ -69,9 +76,7 @@ func _ready() -> void:
 	
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
-		for item in p_items:
-			if item:
-				player_inventory.add_item(item["id"], item["amount"])
+		player_inventory.load_items(p_items)
 	
 	# 플레이어 인스턴스화
 	player = PlayerScene.instantiate()
@@ -100,11 +105,13 @@ func _ready() -> void:
 		GameManager.current_world_data.erase("raid_time_remaining")
 		
 	player.position = spawn_pos
+	player.inventory = player_inventory
 	entities_layer.add_child(player)
 	
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
+	player_inventory.inventory_changed.connect(_on_player_stats_changed)
 	
 	# 일시정지 메뉴 버튼 시그널 연결
 	resume_btn.pressed.connect(_on_resume_pressed)
@@ -167,6 +174,8 @@ func _on_extract_cancelled() -> void:
 func _on_event_logged(msg: String) -> void:
 	if not event_log_vbox: return
 	
+	var max_logs = GameSettings.max_event_logs if GameSettings else 3
+	
 	var panel = PanelContainer.new()
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.08, 0.12, 0.85)
@@ -188,10 +197,10 @@ func _on_event_logged(msg: String) -> void:
 	if msg.begins_with("★"):
 		style.border_color = Color(1.0, 0.8, 0.2)
 		lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
-	elif msg.begins_with("✓") or msg.begins_with("📦"):
+	elif msg.begins_with("✓") or msg.begins_with("📦") or msg.begins_with("💊"):
 		style.border_color = Color(0.3, 0.9, 0.4)
 		lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
-	elif msg.begins_with("✗") or msg.begins_with("💀"):
+	elif msg.begins_with("✗") or msg.begins_with("💀") or msg.begins_with("⚠️"):
 		style.border_color = Color(0.9, 0.3, 0.3)
 		lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
 	elif msg.begins_with("🌦️") or msg.begins_with("🌅"):
@@ -201,15 +210,15 @@ func _on_event_logged(msg: String) -> void:
 	panel.add_child(lbl)
 	event_log_vbox.add_child(panel)
 	
-	# 최대 6개 로그 유지
-	while event_log_vbox.get_child_count() > 6:
+	# 새 로그 추가 시 설정된 최대치를 초과하면 가장 오래된 로그(맨 위)를 즉시 제거
+	while event_log_vbox.get_child_count() > max_logs:
 		var oldest = event_log_vbox.get_child(0)
 		oldest.queue_free()
 		event_log_vbox.remove_child(oldest)
 	
 	var tween = create_tween()
-	tween.tween_interval(7.0) # 7초 대기
-	tween.tween_property(panel, "modulate:a", 0.0, 1.5) # 1.5초간 부드럽게 페이드아웃
+	tween.tween_interval(5.0) # 5초 대기
+	tween.tween_property(panel, "modulate:a", 0.0, 1.0) # 1.0초간 부드럽게 페이드아웃
 	tween.tween_callback(panel.queue_free)
 
 func _spawn_enemy_near_player(dist: float = 350.0) -> void:
@@ -396,6 +405,7 @@ func _update_day_night_cycle() -> void:
 	day_night_modulate.color = target_color
 
 func _on_player_stats_changed() -> void:
+	if not player: return
 	if hp_bar:
 		hp_bar.value = player.hp
 		hp_bar.get_node("Label").text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
@@ -413,6 +423,46 @@ func _on_player_stats_changed() -> void:
 		if player.is_fractured: statuses.append("골절")
 		if player.is_infected: statuses.append("감염")
 		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+		
+	# 좌하단 무기 상태 패널 갱신
+	if weapon_panel:
+		var eq_wep = player.equipped_weapon
+		var wep_data = ItemDatabase.get_item_data(eq_wep)
+		if weapon_name_label:
+			weapon_name_label.text = eq_wep
+		if weapon_icon and ItemIconManager:
+			weapon_icon.texture = ItemIconManager.get_icon(eq_wep)
+			
+		var ammo_count = player_inventory.get_item_count("탄약") if player_inventory else 0
+		if ammo_label:
+			if eq_wep == "권총" or eq_wep == "레버액션 소총":
+				ammo_label.text = "🔫 %d / 9mm" % ammo_count
+				if ammo_count == 0:
+					ammo_label.add_theme_color_override("font_color", Color.RED)
+				else:
+					ammo_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.6))
+			else:
+				ammo_label.text = "⚔️ 근접 무기"
+				ammo_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
+				
+		# 무기 내구도 바
+		if weapon_durability_bar:
+			var max_dur = wep_data.get("max_durability", 100.0)
+			var cur_dur = max_dur
+			if player_inventory:
+				for item in player_inventory.items:
+					if item and item["id"] == eq_wep:
+						cur_dur = item.get("durability", max_dur)
+						break
+			weapon_durability_bar.max_value = max_dur
+			weapon_durability_bar.value = cur_dur
+			
+			var fill_style = StyleBoxFlat.new()
+			var ratio = float(cur_dur) / float(max_dur)
+			if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
+			elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
+			else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
+			weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
 		
 func _on_interact_prompt(show: bool, text: String) -> void:
 	if interact_prompt and current_loot_window == null:
@@ -521,9 +571,17 @@ func _on_resume_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	_toggle_pause()
 
+func get_backpack_items() -> Array:
+	var items_arr = []
+	if player_inventory:
+		for item in player_inventory.items:
+			if item:
+				items_arr.append(item.duplicate())
+	return items_arr
+
 func _on_exit_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	get_tree().paused = false
 	if GameManager:
 		GameManager.is_paused = false
-		GameManager.end_raid("survived") # 테스트 편의용 안전 탈출 복귀
+		GameManager.end_raid("survived", get_backpack_items())

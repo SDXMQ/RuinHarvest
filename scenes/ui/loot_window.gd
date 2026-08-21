@@ -6,10 +6,21 @@ extends Control
 @onready var loot_panel: Panel = $Center/HBox/LootPanel
 @onready var title_label: Label = $Center/HBox/LootPanel/Title
 
+const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
+var tooltip: PanelContainer
+
 var player_inv: Inventory
 var loot_inv: Inventory
 
 signal window_closed
+
+func _ready() -> void:
+	tooltip = TooltipScene.instantiate()
+	add_child(tooltip)
+
+func _process(_delta: float) -> void:
+	if tooltip and tooltip.visible:
+		tooltip.update_position(get_global_mouse_position())
 
 func setup(p_inv: Inventory, l_inv: Inventory = null, loot_title: String = "") -> void:
 	player_inv = p_inv
@@ -29,6 +40,7 @@ func setup(p_inv: Inventory, l_inv: Inventory = null, loot_title: String = "") -
 	_refresh_ui()
 
 func _refresh_ui() -> void:
+	if tooltip: tooltip.hide()
 	_populate_grid(player_grid, player_inv, true)
 	if loot_inv:
 		_populate_grid(loot_grid, loot_inv, false)
@@ -41,15 +53,69 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 	# 슬롯 생성
 	for i in range(inv.max_slots):
 		var slot_btn = Button.new()
-		slot_btn.custom_minimum_size = Vector2(48, 48)
+		slot_btn.custom_minimum_size = Vector2(56, 56)
+		slot_btn.clip_contents = true
 		var item = inv.items[i]
 		
 		if item:
 			var data = ItemDatabase.get_item_data(item["id"])
-			# 임시 텍스처(단색) 대신 텍스트로 표시
-			slot_btn.text = "%s\nx%d" % [data["name"], item["amount"]]
-			slot_btn.add_theme_color_override("font_color", data.get("color", Color.WHITE))
-			slot_btn.add_theme_font_size_override("font_size", 10)
+			# 아이템 픽셀 아이콘 적용
+			if ItemIconManager:
+				slot_btn.icon = ItemIconManager.get_icon(item["id"])
+				slot_btn.expand_icon = true
+				slot_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				slot_btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
+			
+			# 마우스 호버 시 플로팅 툴팁 표시
+			slot_btn.mouse_entered.connect(func():
+				if tooltip and item:
+					tooltip.display_item(item, data)
+					tooltip.update_position(get_global_mouse_position())
+			)
+			slot_btn.mouse_exited.connect(func():
+				if tooltip: tooltip.hide()
+			)
+			
+			# 수량 표시 (2개 이상일 때 우측 하단 라벨)
+			if item["amount"] > 1:
+				var amt_lbl = Label.new()
+				amt_lbl.text = "x%d" % item["amount"]
+				amt_lbl.add_theme_font_size_override("font_size", 12)
+				amt_lbl.add_theme_color_override("font_color", Color(1.0, 0.95, 0.4))
+				amt_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
+				amt_lbl.add_theme_constant_override("shadow_offset_x", 1)
+				amt_lbl.add_theme_constant_override("shadow_offset_y", 1)
+				amt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				amt_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+				amt_lbl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+				amt_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+				amt_lbl.offset_right = -4
+				amt_lbl.offset_bottom = -2
+				slot_btn.add_child(amt_lbl)
+				
+			# 내구도 바 (슬롯 하단 미니 게이지)
+			var max_dur = data.get("max_durability", 0)
+			if max_dur > 0:
+				var cur_dur = item.get("durability", max_dur)
+				var dur_mini_bar = ProgressBar.new()
+				dur_mini_bar.show_percentage = false
+				dur_mini_bar.custom_minimum_size = Vector2(46, 4)
+				dur_mini_bar.max_value = max_dur
+				dur_mini_bar.value = cur_dur
+				dur_mini_bar.position = Vector2(5, 48)
+				dur_mini_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				
+				var fill_style = StyleBoxFlat.new()
+				var ratio = float(cur_dur) / float(max_dur)
+				if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
+				elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
+				else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
+				dur_mini_bar.add_theme_stylebox_override("fill", fill_style)
+				
+				var bg_style = StyleBoxFlat.new()
+				bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.7)
+				dur_mini_bar.add_theme_stylebox_override("background", bg_style)
+				slot_btn.add_child(dur_mini_bar)
 		else:
 			slot_btn.text = ""
 			

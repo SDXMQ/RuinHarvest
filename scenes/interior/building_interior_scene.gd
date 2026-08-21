@@ -133,13 +133,13 @@ func _setup_player() -> void:
 	
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
-		for item in p_items:
-			if item:
-				player_inventory.add_item(item["id"], item["amount"])
+		player_inventory.load_items(p_items)
 				
+	player.inventory = player_inventory
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
+	player_inventory.inventory_changed.connect(_on_player_stats_changed)
 	_on_player_stats_changed()
 
 func _process(delta: float) -> void:
@@ -172,7 +172,9 @@ func _on_player_stats_changed() -> void:
 		if player.is_bleeding: statuses.append("출혈")
 		if player.is_fractured: statuses.append("골절")
 		if player.is_infected: statuses.append("감염")
-		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+		var status_str = ", ".join(statuses) if statuses.size() > 0 else "정상"
+		var ammo_count = player_inventory.get_item_count("탄약") if player_inventory else 0
+		status_label.text = "상태: %s  |  🔫 9mm: %d발" % [status_str, ammo_count]
 
 func _unhandled_input(event: InputEvent) -> void:
 	if current_loot_window != null or current_crafting_window != null:
@@ -226,6 +228,8 @@ func _on_interact_prompt(show: bool, text: String) -> void:
 func _on_event_logged(msg: String) -> void:
 	if not event_log_vbox: return
 	
+	var max_logs = GameSettings.max_event_logs if GameSettings else 3
+	
 	var panel = PanelContainer.new()
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.06, 0.08, 0.12, 0.85)
@@ -249,7 +253,7 @@ func _on_event_logged(msg: String) -> void:
 	elif msg.begins_with("✓") or msg.begins_with("📦") or msg.begins_with("💊"):
 		style.border_color = Color(0.3, 0.9, 0.4)
 		lbl.add_theme_color_override("font_color", Color(0.6, 1.0, 0.6))
-	elif msg.begins_with("✗") or msg.begins_with("💀"):
+	elif msg.begins_with("✗") or msg.begins_with("💀") or msg.begins_with("⚠️"):
 		style.border_color = Color(0.9, 0.3, 0.3)
 		lbl.add_theme_color_override("font_color", Color(1.0, 0.5, 0.5))
 	elif msg.begins_with("🌦️") or msg.begins_with("🌅"):
@@ -259,14 +263,14 @@ func _on_event_logged(msg: String) -> void:
 	panel.add_child(lbl)
 	event_log_vbox.add_child(panel)
 	
-	while event_log_vbox.get_child_count() > 6:
+	while event_log_vbox.get_child_count() > max_logs:
 		var oldest = event_log_vbox.get_child(0)
 		oldest.queue_free()
 		event_log_vbox.remove_child(oldest)
 	
 	var tween = create_tween()
-	tween.tween_interval(7.0)
-	tween.tween_property(panel, "modulate:a", 0.0, 1.5)
+	tween.tween_interval(5.0)
+	tween.tween_property(panel, "modulate:a", 0.0, 1.0)
 	tween.tween_callback(panel.queue_free)
 
 func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:

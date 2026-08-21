@@ -3,6 +3,8 @@ extends StaticBody2D
 var body_color: Color
 var rotation_angle: float = 0.0
 
+var interactable_type: Vector2i = Vector2i(5, 1) # 기존 OBJ_CAR(폐차)와 동일한 타입 코드
+
 func _ready() -> void:
 	# 차량의 외형 색상 랜덤화
 	var colors = [Color(0.6, 0.2, 0.2), Color(0.2, 0.3, 0.6), Color(0.5, 0.5, 0.5), Color(0.8, 0.7, 0.2), Color(0.15, 0.2, 0.15)]
