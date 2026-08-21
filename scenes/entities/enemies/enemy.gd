@@ -146,6 +146,20 @@ func _physics_process(delta: float) -> void:
 					rotation = dir_to_p.angle()
 					_try_attack()
 				else:
+					# 앞쪽 창문 타일 감지 및 파괴 침입
+					var forward_pos = global_position + Vector2.RIGHT.rotated(rotation) * 20.0
+					var chunk_mgr = get_node_or_null("/root/MainWorld/ChunkManager")
+					if chunk_mgr and chunk_mgr.object_layer:
+						var t_pos = chunk_mgr.object_layer.local_to_map(forward_pos)
+						if chunk_mgr.object_layer.get_cell_atlas_coords(t_pos) == TileManager.OBJ_WINDOW:
+							if attack_timer <= 0:
+								chunk_mgr.object_layer.set_cell(t_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+								EventBus.noise_created.emit(forward_pos, 400.0, "break")
+								EventBus.window_broken.emit(t_pos)
+								EventBus.event_logged.emit("🧟 좀비가 창문을 깨부수고 침입합니다!")
+								if SoundManager: SoundManager.play("hit_melee")
+								attack_timer = 1.0
+					
 					var steer_dir = _get_steered_direction(target_player.global_position)
 					rotation = lerp_angle(rotation, steer_dir.angle(), delta * 10.0)
 					velocity = steer_dir * speed

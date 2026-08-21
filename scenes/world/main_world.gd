@@ -114,6 +114,18 @@ func _ready() -> void:
 		player.set_flashlight(s.get("flashlight_enabled", true))
 		GameManager.current_world_data.erase("player_stats")
 		
+	# 커스텀/샌드박스 설정 반영
+	if GameManager and GameManager.current_world_data.has("world_settings"):
+		var ws = GameManager.current_world_data["world_settings"]
+		if ws.has("raid_duration_minutes"):
+			var r_mins = ws["raid_duration_minutes"]
+			raid_time_remaining = r_mins * 60.0
+			raid_total_time = raid_time_remaining
+		if ws.has("zombie_multiplier"):
+			max_enemies_count = int(22 * ws["zombie_multiplier"])
+		if ws.has("day_night_cycle_duration") and ws["day_night_cycle_duration"] > 0:
+			day_night_cycle_duration = ws["day_night_cycle_duration"]
+
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
 		raid_time_remaining = GameManager.current_world_data["raid_time_remaining"]
 		GameManager.current_world_data.erase("raid_time_remaining")
@@ -140,8 +152,9 @@ func _ready() -> void:
 	chunk_manager.update_chunks(player.global_position)
 	_on_player_stats_changed()
 	
-	# 시작 시 주변에 초기 좀비 2마리 스폰 (플레이어와 안전거리 확보)
-	for i in range(2):
+	# 시작 시 주변에 초기 좀비 스폰 (설정된 밀도 반영)
+	var init_zombies = int(2 * (GameManager.current_world_data.get("world_settings", {}).get("zombie_multiplier", 1.0) if GameManager else 1.0))
+	for i in range(init_zombies):
 		_spawn_enemy_near_player(350.0 + i * 80.0)
 		
 	# 탈출 지점 3개 스폰 (1800~2500px 원거리 배치)
@@ -537,14 +550,19 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		# 닫힌 문 열기 -> 열린 문으로 타일 교체 및 소음 발생
 		if chunk_manager and chunk_manager.object_layer:
 			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
-		EventBus.noise_created.emit(world_pos, 150.0, "door")
+		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
 		EventBus.event_logged.emit("🚪 문을 열었습니다.")
 		if SoundManager: SoundManager.play("menu_select")
 		return
 	elif type == Vector2i(7, 1): # OBJ_DOOR_OPEN
-		# 열린 문 -> 실내 진입
-		_enter_building_interior(tile_pos)
+		# 열린 문 닫기 -> 닫힌 문으로 교체
+		if chunk_manager and chunk_manager.object_layer:
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_CLOSED)
+		EventBus.noise_created.emit(world_pos, 120.0, "door")
+		EventBus.door_toggled.emit(tile_pos, false)
+		EventBus.event_logged.emit("🚪 문을 닫았습니다.")
+		if SoundManager: SoundManager.play("menu_select")
 		return
 	elif type == Vector2i(1, 2): # OBJ_WINDOW
 		# 창문 깨기 -> 깨진 창문으로 타일 교체 및 큰 소음 발생
@@ -573,43 +591,6 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			
 		_open_loot_window(inv, loot_title)
 
-func _enter_building_interior(tile_pos: Vector2i) -> void:
-	if SoundManager: SoundManager.play("menu_select")
-	
-	# 현재 플레이어 데이터 및 배낭 저장
-	if GameManager and not GameManager.current_world_data.is_empty():
-		var saved_items = []
-		for item in player_inventory.items:
-			if item:
-				saved_items.append(item.duplicate())
-		GameManager.current_world_data["player"]["inventory"] = saved_items
-		GameManager.current_world_data["raid_time_remaining"] = raid_time_remaining
-		GameManager.current_world_data["player_stats"] = {
-			"hp": player.hp,
-			"stamina": player.stamina,
-			"hunger": player.hunger,
-			"thirst": player.thirst,
-			"is_bleeding": player.is_bleeding,
-			"is_fractured": player.is_fractured,
-			"is_infected": player.is_infected,
-			"flashlight_enabled": player.flashlight_enabled
-		}
-		
-		# 바이옴에 따른 건물 타입 결정
-		var b_type = "house"
-		if chunk_manager and chunk_manager.generator:
-			var biome = chunk_manager.generator.get_biome(tile_pos.x, tile_pos.y)
-			if biome == "military": b_type = "military"
-			elif biome == "commercial": b_type = "store"
-			elif biome == "industrial": b_type = "hospital"
-			
-		GameManager.current_world_data["current_interior"] = {
-			"type": b_type,
-			"seed": tile_pos.x * 73856093 ^ tile_pos.y * 19349663,
-			"return_pos": player.global_position
-		}
-		
-	TransitionManager.change_scene("res://scenes/interior/building_interior_scene.tscn", "fade", 0.6)
 
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	get_tree().paused = true

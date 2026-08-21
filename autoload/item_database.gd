@@ -378,8 +378,12 @@ var loot_tables: Dictionary = {
 	],
 	"car": [
 		{"id": "고철", "chance": 0.4}, {"id": "비상용 배터리", "chance": 0.2},
-		{"id": "은반지", "chance": 0.1}, {"id": "금시계", "chance": 0.05},
+		{"id": "나침반", "chance": 0.1}, {"id": "금시계", "chance": 0.05},
 		{"id": "지도", "chance": 0.05}
+	],
+	"fridge": [
+		{"id": "식량통조림", "chance": 0.5}, {"id": "생수", "chance": 0.5},
+		{"id": "초콜릿", "chance": 0.3}, {"id": "에너지드링크", "chance": 0.25}
 	],
 	"house": [
 		{"id": "식량통조림", "chance": 0.3}, {"id": "생수", "chance": 0.3},

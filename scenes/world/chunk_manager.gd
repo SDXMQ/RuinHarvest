@@ -1,8 +1,7 @@
 # res://scenes/world/chunk_manager.gd
 extends Node
 
-## 플레이어 위치 기반 청크 동적 로딩 및 TileMapLayer 렌더링
-
+## 플레이어 위치 기반 청크 동적 로딩 및 TileMapLayer 렌더링 (바닥, 오브젝트, 지붕)
 const CHUNK_SIZE: int = 16
 const TILE_SIZE: int = 32
 
@@ -14,6 +13,14 @@ var generator: WorldGenerator
 
 var ground_layer: TileMapLayer
 var object_layer: TileMapLayer
+var roof_layer: TileMapLayer
+
+const CarScene = preload("res://scenes/world/objects/car.tscn")
+var chunk_entities: Dictionary = {} # chunk_pos (Vector2i) -> Array[Node]
+
+# 현재 플레이어가 들어가 있는 건물 정보
+var current_inside_building: Dictionary = {}
+var hidden_roof_cells: Array[Vector2i] = []
 
 signal chunk_loaded(chunk_pos: Vector2i, data: Dictionary)
 signal chunk_unloaded(chunk_pos: Vector2i)
@@ -34,18 +41,25 @@ func _ready() -> void:
 	object_layer.y_sort_enabled = true # y-sorting 활성화
 	add_child(object_layer)
 	
+	roof_layer = TileMapLayer.new()
+	roof_layer.name = "RoofLayer"
+	roof_layer.z_index = 10 # 플레이어 및 오브젝트 위를 덮는 지붕 레이어
+	add_child(roof_layer)
+	
 	# TileManager에서 생성된 절차적 타일셋 할당
 	if TileManager.tileset:
 		ground_layer.tile_set = TileManager.tileset
 		object_layer.tile_set = TileManager.tileset
-
-const CarScene = preload("res://scenes/world/objects/car.tscn")
-var chunk_entities: Dictionary = {} # chunk_pos (Vector2i) -> Array[Node]
+		roof_layer.tile_set = TileManager.tileset
 
 func update_chunks(player_pos: Vector2) -> void:
+	var player_tile_x = int(floor(player_pos.x / TILE_SIZE))
+	var player_tile_y = int(floor(player_pos.y / TILE_SIZE))
+	
+	_update_roof_visibility(player_tile_x, player_tile_y)
+	
 	var center_chunk_x: int = floor(player_pos.x / (CHUNK_SIZE * TILE_SIZE))
 	var center_chunk_y: int = floor(player_pos.y / (CHUNK_SIZE * TILE_SIZE))
-	var center_chunk = Vector2i(center_chunk_x, center_chunk_y)
 	
 	var new_active_chunks: Array[Vector2i] = []
 	
@@ -67,29 +81,69 @@ func update_chunks(player_pos: Vector2) -> void:
 		
 	active_chunks = new_active_chunks
 
+func _update_roof_visibility(tile_x: int, tile_y: int) -> void:
+	if not generator: return
+	
+	var b = generator.get_building_at(tile_x, tile_y)
+	
+	# 건물이 바뀌었는지 확인
+	var current_b_seed = current_inside_building.get("seed", -1)
+	var new_b_seed = b.get("seed", -1)
+	
+	if current_b_seed != new_b_seed:
+		# 이전 건물의 지붕 타일들 복원
+		if not hidden_roof_cells.is_empty():
+			for pos in hidden_roof_cells:
+				roof_layer.set_cell(pos, 0, TileManager.TILE_ROOF)
+			hidden_roof_cells.clear()
+			
+		current_inside_building = b
+		
+		# 새로운 건물에 들어갔으면 해당 건물의 지붕 타일 지우기
+		if not b.is_empty():
+			var bx = b["wx"]
+			var by = b["wy"]
+			var bw = b["width"]
+			var bh = b["height"]
+			
+			for ry in range(by, by + bh):
+				for rx in range(bx, bx + bw):
+					var cell_pos = Vector2i(rx, ry)
+					if roof_layer.get_cell_source_id(cell_pos) != -1:
+						hidden_roof_cells.append(cell_pos)
+						roof_layer.erase_cell(cell_pos)
+
 func load_chunk(chunk_pos: Vector2i) -> void:
 	var chunk_data = generator.generate_chunk(chunk_pos)
 	loaded_chunks[chunk_pos] = chunk_data
 	chunk_entities[chunk_pos] = []
 	
-	# 타일맵 적용
 	var start_wx = chunk_pos.x * CHUNK_SIZE
 	var start_wy = chunk_pos.y * CHUNK_SIZE
+	
+	var has_roofs = chunk_data.has("roofs")
 	
 	for ly in range(CHUNK_SIZE):
 		for lx in range(CHUNK_SIZE):
 			var idx = ly * CHUNK_SIZE + lx
 			var wx = start_wx + lx
 			var wy = start_wy + ly
+			var tile_pos = Vector2i(wx, wy)
 			
-			# 바닥
-			ground_layer.set_cell(Vector2i(wx, wy), 0, chunk_data["tiles"][idx])
+			# 바닥 타일
+			ground_layer.set_cell(tile_pos, 0, chunk_data["tiles"][idx])
 			
-			# 오브젝트
+			# 오브젝트 타일 (벽, 문, 창문, 가구 등)
 			if chunk_data["objects"][idx] != Vector2i(-1, -1):
-				object_layer.set_cell(Vector2i(wx, wy), 0, chunk_data["objects"][idx])
+				object_layer.set_cell(tile_pos, 0, chunk_data["objects"][idx])
+				
+			# 지붕 타일
+			if has_roofs and chunk_data["roofs"][idx] != Vector2i(-1, -1):
+				# 현재 플레이어가 숨겨둔 셀이 아닐 때만 렌더링
+				if not hidden_roof_cells.has(tile_pos):
+					roof_layer.set_cell(tile_pos, 0, chunk_data["roofs"][idx])
 	
-	# 동적 엔티티 스폰
+	# 동적 엔티티 스폰 (차량 등)
 	if chunk_data.has("entities"):
 		for ent_data in chunk_data["entities"]:
 			if ent_data["type"] == "car":
@@ -104,15 +158,16 @@ func load_chunk(chunk_pos: Vector2i) -> void:
 
 func unload_chunk(chunk_pos: Vector2i) -> void:
 	if loaded_chunks.has(chunk_pos):
-		# 타일맵에서 제거
 		var start_wx = chunk_pos.x * CHUNK_SIZE
 		var start_wy = chunk_pos.y * CHUNK_SIZE
 		for ly in range(CHUNK_SIZE):
 			for lx in range(CHUNK_SIZE):
-				ground_layer.erase_cell(Vector2i(start_wx + lx, start_wy + ly))
-				object_layer.erase_cell(Vector2i(start_wx + lx, start_wy + ly))
+				var pos = Vector2i(start_wx + lx, start_wy + ly)
+				ground_layer.erase_cell(pos)
+				object_layer.erase_cell(pos)
+				roof_layer.erase_cell(pos)
+				hidden_roof_cells.erase(pos)
 				
-		# 스폰된 엔티티 제거
 		if chunk_entities.has(chunk_pos):
 			for ent in chunk_entities[chunk_pos]:
 				if is_instance_valid(ent):

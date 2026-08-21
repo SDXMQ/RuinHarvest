@@ -1,11 +1,16 @@
 extends Control
 
 @onready var start_button: Button = $VBoxContainer/StartButton
+@onready var sandbox_button: Button = $VBoxContainer/SandboxButton
 @onready var load_button: Button = $VBoxContainer/LoadButton
 @onready var quit_button: Button = $VBoxContainer/QuitButton
 
+const SandboxMenuScene = preload("res://scenes/main_menu/sandbox_menu.tscn")
+
 func _ready() -> void:
 	start_button.pressed.connect(_on_start_pressed)
+	if sandbox_button:
+		sandbox_button.pressed.connect(_on_sandbox_pressed)
 	load_button.pressed.connect(_on_load_pressed)
 	quit_button.pressed.connect(_on_quit_pressed)
 	
@@ -26,6 +31,12 @@ func _on_start_pressed() -> void:
 	if GameManager:
 		# 임시로 바로 월드 생성/시작
 		GameManager.start_new_game(GameSettings.DEFAULT_WORLD_SETTINGS)
+
+func _on_sandbox_pressed() -> void:
+	if SoundManager:
+		SoundManager.play("menu_select")
+	var sand_menu = SandboxMenuScene.instantiate()
+	add_child(sand_menu)
 
 func _on_load_pressed() -> void:
 	if SoundManager:

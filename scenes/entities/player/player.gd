@@ -26,6 +26,8 @@ var is_running: bool = false
 var interactable_tile_pos: Vector2i = Vector2i(-1, -1)
 var interactable_type: Vector2i = Vector2i(-1, -1)
 var interact_cooldown: float = 0.0
+var vault_timer: float = 0.0
+const VAULT_DURATION: float = 1.0
 
 # 무기, 모딩 및 전투
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
@@ -449,10 +451,13 @@ func _update_interaction() -> void:
 			prompt_text = "[E] 문 열기"
 		elif tile_coords == Vector2i(7, 1):
 			can_interact = true
-			prompt_text = "[E] 진입하기"
+			prompt_text = "[E] 문 닫기"
 		elif tile_coords == Vector2i(1, 2):
 			can_interact = true
 			prompt_text = "[E] 창문 깨기"
+		elif tile_coords == Vector2i(2, 2):
+			can_interact = true
+			prompt_text = "[E 꾹 누르기] 창문 넘어가기"
 		elif tile_coords == Vector2i(5, 2):
 			can_interact = true
 			prompt_text = "[E] 조명 스위치 작동"
@@ -461,11 +466,36 @@ func _update_interaction() -> void:
 			interactable_tile_pos = t_pos
 			interactable_type = tile_coords
 	
+	# 창문 넘어가기(Vaulting) 홀드 처리
+	if can_interact and interactable_type == Vector2i(2, 2):
+		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_pressed("interact"):
+			vault_timer += get_process_delta_time()
+			queue_redraw()
+			if vault_timer >= VAULT_DURATION:
+				# 창문 타일 너머 반대편으로 플레이어 도약 이동
+				var fwd = Vector2.RIGHT.rotated(rotation)
+				global_position += fwd * 44.0
+				vault_timer = 0.0
+				interact_cooldown = 0.4
+				queue_redraw()
+				EventBus.noise_created.emit(global_position, 120.0, "vault")
+				EventBus.event_logged.emit("🏃 창문을 뛰어넘었습니다.")
+				if SoundManager: SoundManager.play("footstep")
+				return
+		else:
+			if vault_timer > 0:
+				vault_timer = 0.0
+				queue_redraw()
+	else:
+		if vault_timer > 0:
+			vault_timer = 0.0
+			queue_redraw()
+	
 	interact_prompt.emit(can_interact, prompt_text)
 	
-	if can_interact and interact_cooldown <= 0.0:
+	if can_interact and interact_cooldown <= 0.0 and interactable_type != Vector2i(2, 2):
 		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_just_pressed("interact"):
-			interact_cooldown = 0.4
+			interact_cooldown = 0.35
 			object_interacted.emit(check_pos, interactable_tile_pos, interactable_type)
 
 func _setup_lighting() -> void:
@@ -662,3 +692,16 @@ func _on_visuals_draw() -> void:
 			var laser_end = laser_start + Vector2(350, 0)
 			visuals.draw_line(laser_start, laser_end, Color(1.0, 0.15, 0.15, 0.65), 1.2)
 			visuals.draw_circle(laser_end, 2.5, Color(1.0, 0.25, 0.25, 0.9))
+
+	# 6. 창문 넘어가기(Vaulting) 프로그레스 바
+	if vault_timer > 0.0:
+		var ratio = clamp(vault_timer / VAULT_DURATION, 0.0, 1.0)
+		var bar_w = 36.0
+		var bar_h = 5.0
+		var bar_pos = Vector2(-bar_w / 2.0, -26.0)
+		
+		# 배경
+		visuals.draw_rect(Rect2(bar_pos + Vector2(-1, -1), Vector2(bar_w + 2, bar_h + 2)), Color(0, 0, 0, 0.8))
+		# 채우기 게이지 (노란색 -> 녹색)
+		var fill_color = Color(1.0, 0.8, 0.2).lerp(Color(0.2, 0.9, 0.3), ratio)
+		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), fill_color)

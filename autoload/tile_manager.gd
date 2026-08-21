@@ -36,6 +36,7 @@ const OBJ_WINDOW_BROKEN = Vector2i(2, 2) # 깨진 창문 (충돌 X, 차폐 X, �
 const OBJ_FENCE = Vector2i(3, 2)         # 울타리 (충돌 O, 차폐 X)
 const OBJ_GATE = Vector2i(4, 2)          # 열린 게이트 (통과 가능)
 const OBJ_LIGHT_SWITCH = Vector2i(5, 2)  # 조명 스위치 (벽 부착물)
+const TILE_ROOF = Vector2i(6, 2)         # 건물 지붕 (실외에서 덮는 지붕 타일)
 
 func _ready() -> void:
 	_generate_procedural_tileset()
@@ -79,6 +80,7 @@ func _generate_procedural_tileset() -> void:
 	_draw_fence(img, OBJ_FENCE.x * TILE_SIZE, OBJ_FENCE.y * TILE_SIZE)
 	_draw_gate(img, OBJ_GATE.x * TILE_SIZE, OBJ_GATE.y * TILE_SIZE)
 	_draw_light_switch(img, OBJ_LIGHT_SWITCH.x * TILE_SIZE, OBJ_LIGHT_SWITCH.y * TILE_SIZE)
+	_draw_roof(img, TILE_ROOF.x * TILE_SIZE, TILE_ROOF.y * TILE_SIZE)
 	
 	var texture = ImageTexture.create_from_image(img)
 	
@@ -371,11 +373,28 @@ func _draw_light_switch(img: Image, x: int, y: int) -> void:
 		for ix in range(TILE_SIZE):
 			var c = Color(0, 0, 0, 0)
 			if ix >= 10 and ix <= 22 and iy >= 8 and iy <= 24:
-				c = Color(0.85, 0.85, 0.8) # 흰색 플레이트
+				c = Color(0.85, 0.85, 0.8) # 회색 플레이트
 				if ix == 10 or ix == 22 or iy == 8 or iy == 24:
 					c = Color(0.3, 0.3, 0.3)
 				# 스위치 레버 (중앙)
 				elif ix >= 14 and ix <= 18 and iy >= 13 and iy <= 19:
-					c = Color(0.2, 0.6, 0.2) # ON 느낌 녹색 팁
+					c = Color(0.2, 0.6, 0.2) # ON 느낌 녹색 핀
 			if c.a > 0:
 				img.set_pixel(x + ix, y + iy, c)
+
+func _draw_roof(img: Image, x: int, y: int) -> void:
+	# 짙은 다크 네이비/차콜 아스팔트 기와 지붕 텍스처
+	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.18, 0.2, 0.24))
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			# 가로 슁글 라인 (8픽셀마다)
+			if iy % 8 == 0:
+				img.set_pixel(x + ix, y + iy, Color(0.12, 0.13, 0.16))
+			# 세로 기와 틈새 (지그재그)
+			var row = iy / 8
+			var offset = (row % 2) * 8
+			if (ix + offset) % 16 == 0:
+				img.set_pixel(x + ix, y + iy, Color(0.1, 0.11, 0.14))
+			# 약간의 밝은 하이라이트 라인
+			if iy % 8 == 1:
+				img.set_pixel(x + ix, y + iy, Color(0.24, 0.26, 0.3))

@@ -152,21 +152,42 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 		"seed": lot_seed
 	}
 
+func get_building_at(wx: int, wy: int) -> Dictionary:
+	var lot_x = int(floor(float(wx) / float(LOT_SIZE)))
+	var lot_y = int(floor(float(wy) / float(LOT_SIZE)))
+	
+	for ly in range(lot_y - 1, lot_y + 2):
+		for lx in range(lot_x - 1, lot_x + 2):
+			var b = _get_lot_building(lx, ly)
+			if not b.is_empty():
+				var bx = b["wx"]
+				var by = b["wy"]
+				var bw = b["width"]
+				var bh = b["height"]
+				if wx >= bx and wx < bx + bw and wy >= by and wy < by + bh:
+					return b
+	return {}
+
 # ==========================================================
-# 청크 생성 (타일, 오브젝트, 엔티티)
+# 청크 생성 (타일, 오브젝트, 지붕, 엔티티)
 # ==========================================================
 func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 	var tiles: Array[Vector2i] = []
 	var objects: Array[Vector2i] = []
+	var roofs: Array[Vector2i] = []
 	var entities: Array[Dictionary] = []
 	
 	tiles.resize(CHUNK_SIZE * CHUNK_SIZE)
 	objects.resize(CHUNK_SIZE * CHUNK_SIZE)
+	roofs.resize(CHUNK_SIZE * CHUNK_SIZE)
+	
+	for i in range(CHUNK_SIZE * CHUNK_SIZE):
+		roofs[i] = Vector2i(-1, -1)
 	
 	var start_wx = chunk_pos.x * CHUNK_SIZE
 	var start_wy = chunk_pos.y * CHUNK_SIZE
 	
-	# 1. 주변 Lot들에서 생성될 건물 리스트 수집
+	# 1. 주변 Lot에서 생성된 건물 리스트 수집
 	var min_lot_x = int(floor(float(start_wx - LOT_SIZE) / float(LOT_SIZE)))
 	var max_lot_x = int(floor(float(start_wx + CHUNK_SIZE + LOT_SIZE) / float(LOT_SIZE)))
 	var min_lot_y = int(floor(float(start_wy - LOT_SIZE) / float(LOT_SIZE)))
@@ -260,6 +281,7 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 						
 				if in_building:
 					tile_coords = preset.get("floor_tile", TileManager.TILE_FLOOR_WOOD)
+					roofs[idx] = TileManager.TILE_ROOF # 지붕 레이어에 지붕 타일 할당
 					
 					# 외벽 판정
 					var is_wall = false
@@ -277,6 +299,23 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 							obj_coords = TileManager.OBJ_WINDOW # 창문
 						else:
 							obj_coords = TileManager.OBJ_WALL # 벽
+					else:
+						# 실내 내부 가구 / 전리품 상자 배치
+						var furn_list = preset.get("furniture", [])
+						for f in furn_list:
+							if f.get("x") == rel_x and f.get("y") == rel_y:
+								var f_type = f.get("type", "crate")
+								if f_type == "fridge": obj_coords = TileManager.OBJ_FRIDGE
+								elif f_type == "barrel": obj_coords = TileManager.OBJ_BARREL
+								else: obj_coords = TileManager.OBJ_CRATE
+								break
+								
+						# 무작위 추가 가구/상자 스폰 (5% 확률)
+						if obj_coords == Vector2i(-1, -1) and chunk_rng.randf() < 0.05:
+							var r_roll = chunk_rng.randf()
+							if r_roll < 0.4: obj_coords = TileManager.OBJ_CRATE
+							elif r_roll < 0.7: obj_coords = TileManager.OBJ_BARREL
+							else: obj_coords = TileManager.OBJ_FRIDGE
 					continue
 					
 				# 2) 건물 출입구 앞 진입로 및 자갈길
@@ -360,5 +399,6 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 	return {
 		"tiles": tiles,
 		"objects": objects,
+		"roofs": roofs,
 		"entities": entities
 	}

@@ -74,6 +74,11 @@ custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "새 게임 (New Game)"
 
+[node name="SandboxButton" type="Button" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🛠️ 샌드박스 모드 (Sandbox)"
+
 [node name="LoadButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
