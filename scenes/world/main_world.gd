@@ -177,6 +177,17 @@ func _ready() -> void:
 	_on_event_logged("★ [작전 개시] 30분 생존 레이드가 시작되었습니다.")
 	if WeatherSystem:
 		_on_event_logged("🌦️ 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
+		
+	# 화면 우상단 샌드박스/치트 도구 버튼 추가
+	var tool_btn = Button.new()
+	tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
+	tool_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	tool_btn.offset_left = -160.0
+	tool_btn.offset_top = 10.0
+	tool_btn.offset_right = -10.0
+	tool_btn.offset_bottom = 44.0
+	tool_btn.pressed.connect(_open_item_spawner)
+	$UI.add_child(tool_btn)
 
 func _get_random_spawn_pos() -> Vector2:
 	var angle = randf() * TAU

@@ -21,6 +21,7 @@ var is_infected: bool = false
 var is_fractured: bool = false
 var is_exhausted: bool = false
 var is_running: bool = false
+var is_god_mode: bool = false
 
 # 상호작용 관련
 var interactable_tile_pos: Vector2i = Vector2i(-1, -1)
@@ -195,6 +196,14 @@ func _regen_stamina(delta: float, multiplier: float) -> void:
 		stamina += 10.0 * multiplier * delta
 
 func _handle_survival_stats(delta: float) -> void:
+	if is_god_mode:
+		hunger = max_hunger
+		thirst = max_thirst
+		hp = max_hp
+		stamina = max_stamina
+		stats_changed.emit()
+		return
+		
 	hunger -= 0.15 * delta
 	thirst -= 0.25 * delta
 	
@@ -591,6 +600,7 @@ func _on_camera_shake_requested(intensity: float, duration: float) -> void:
 	shake_timer = duration
 
 func _on_player_damaged(amount: float, source: String) -> void:
+	if is_god_mode: return
 	hp -= amount
 	if source == "zombie" and randf() < 0.3:
 		is_infected = true

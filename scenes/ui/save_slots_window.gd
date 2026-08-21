@@ -104,6 +104,12 @@ func _delete_save(filename: String) -> void:
 	SaveManager.delete_save(filename)
 	_refresh_slots()
 
+func _on_open_folder_pressed() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	SaveManager.ensure_save_dir()
+	var global_path = ProjectSettings.globalize_path(SaveManager.SAVE_DIR)
+	OS.shell_open(global_path)
+
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event.is_action_pressed("pause"):
 		_on_close_pressed()

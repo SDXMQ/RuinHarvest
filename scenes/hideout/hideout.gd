@@ -43,6 +43,13 @@ func _ready() -> void:
 	menu_button.pressed.connect(_on_menu_pressed)
 	result_close_btn.pressed.connect(_on_result_close_pressed)
 	
+	# 상단 바에 샌드박스 도구 버튼 추가
+	if has_node("TopBar"):
+		var tool_btn = Button.new()
+		tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
+		tool_btn.pressed.connect(_open_item_spawner)
+		$TopBar.add_child(tool_btn)
+	
 	# 상인 버튼 연결
 	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
 	var therapist_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/TherapistBtn

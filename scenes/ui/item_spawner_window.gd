@@ -1,14 +1,24 @@
 # res://scenes/ui/item_spawner_window.gd
 extends Control
 
-## 샌드박스/크리에이티브 모드 전용 아이템 및 무기 스포너
+## 샌드박스/크리에이티브 모드 전용 아이템 스포너 & 치트 관리자
 
 signal window_closed
 
 @onready var search_input: LineEdit = $Center/Panel/VBox/SearchHBox/SearchInput
 @onready var category_opt: OptionButton = $Center/Panel/VBox/SearchHBox/CategoryOpt
+@onready var amount_spin: SpinBox = $Center/Panel/VBox/SearchHBox/AmountSpin
 @onready var item_grid: GridContainer = $Center/Panel/VBox/Scroll/ItemGrid
 @onready var close_btn: Button = $Center/Panel/BottomHBox/CloseBtn
+
+# 치트 툴바 노드
+@onready var add_money_10k_btn: Button = $Center/Panel/VBox/CheatToolbar/AddMoney10kBtn
+@onready var add_money_100k_btn: Button = $Center/Panel/VBox/CheatToolbar/AddMoney100kBtn
+@onready var heal_all_btn: Button = $Center/Panel/VBox/CheatToolbar/HealAllBtn
+@onready var cure_all_btn: Button = $Center/Panel/VBox/CheatToolbar/CureAllBtn
+@onready var god_mode_check: CheckBox = $Center/Panel/VBox/CheatToolbar/GodModeCheck
+@onready var add_time_btn: Button = $Center/Panel/VBox/CheatToolbar/AddTimeBtn
+@onready var clear_inv_btn: Button = $Center/Panel/VBox/CheatToolbar/ClearInvBtn
 
 var all_spawnable_items: Array[Dictionary] = []
 var tooltip: PanelContainer = null
@@ -25,6 +35,20 @@ func _ready() -> void:
 	search_input.text_changed.connect(func(_new_text): _filter_and_render_items())
 	category_opt.item_selected.connect(func(_idx): _filter_and_render_items())
 	
+	# 치트 버튼 시그널 연결
+	add_money_10k_btn.pressed.connect(func(): _add_money(10000))
+	add_money_100k_btn.pressed.connect(func(): _add_money(100000))
+	heal_all_btn.pressed.connect(_heal_all_stats)
+	cure_all_btn.pressed.connect(_cure_all_conditions)
+	god_mode_check.toggled.connect(_toggle_god_mode)
+	add_time_btn.pressed.connect(_add_raid_time)
+	clear_inv_btn.pressed.connect(_clear_inventory)
+	
+	# 현재 무적 상태 동기화
+	var player = _get_player()
+	if player and "is_god_mode" in player:
+		god_mode_check.button_pressed = player.is_god_mode
+		
 	_filter_and_render_items()
 
 func _setup_categories() -> void:
@@ -44,6 +68,7 @@ func _collect_all_items() -> void:
 	# 1. 총기 리시버 수집
 	for r_id in WeaponPartsDatabase.RECEIVERS.keys():
 		var r_data = WeaponPartsDatabase.RECEIVERS[r_id]
+		var caliber_name = r_data.get("default_ammo", "9mm")
 		all_spawnable_items.append({
 			"id": r_id,
 			"name": r_data["name"],
@@ -52,7 +77,7 @@ func _collect_all_items() -> void:
 			"data": {
 				"name": r_data["name"],
 				"category": "총기",
-				"description": "%s 규격 총기 리시버. 모딩 가능." % r_data.get("default_ammo", "9mm"),
+				"description": "%s 규격 총기 리시버. 모딩 가능." % caliber_name,
 				"value": r_data.get("value", 8000),
 				"weight": r_data.get("weight", 1.5)
 			}
@@ -102,7 +127,6 @@ func _collect_all_items() -> void:
 		elif c_type == ItemDatabase.ItemCategory.FOOD or c_type == ItemDatabase.ItemCategory.WATER: cat_idx = 5
 		elif c_type == ItemDatabase.ItemCategory.WEAPON: cat_idx = 1
 		
-		# 중복 검사
 		var exists = false
 		for item in all_spawnable_items:
 			if item["id"] == i_id:
@@ -142,7 +166,7 @@ func _create_item_button(item_info: Dictionary) -> void:
 	var item_data = item_info["data"]
 	
 	var btn = Button.new()
-	btn.custom_minimum_size = Vector2(130, 70)
+	btn.custom_minimum_size = Vector2(140, 68)
 	btn.mouse_filter = Control.MOUSE_FILTER_PASS
 	
 	var vbox = VBoxContainer.new()
@@ -152,7 +176,7 @@ func _create_item_button(item_info: Dictionary) -> void:
 	btn.add_child(vbox)
 	
 	var icon_rect = TextureRect.new()
-	icon_rect.custom_minimum_size = Vector2(32, 32)
+	icon_rect.custom_minimum_size = Vector2(30, 30)
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -171,7 +195,7 @@ func _create_item_button(item_info: Dictionary) -> void:
 	
 	btn.mouse_entered.connect(func():
 		if tooltip:
-			tooltip.display_item({"id": item_id, "amount": 1}, item_data)
+			tooltip.display_item({"id": item_id, "amount": int(amount_spin.value)}, item_data)
 			tooltip.update_position(get_global_mouse_position())
 	)
 	btn.mouse_exited.connect(func():
@@ -180,11 +204,10 @@ func _create_item_button(item_info: Dictionary) -> void:
 	
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
-			if event.button_index == MOUSE_BUTTON_LEFT:
-				_spawn_item_to_player(item_id, item_data, 1)
-			elif event.button_index == MOUSE_BUTTON_RIGHT:
-				var amt = item_data.get("max_stack", 30)
-				_spawn_item_to_player(item_id, item_data, amt)
+			var req_amount = int(amount_spin.value)
+			if event.button_index == MOUSE_BUTTON_RIGHT:
+				req_amount = item_data.get("max_stack", 30)
+			_spawn_item_to_player(item_id, item_data, req_amount)
 	)
 	
 	item_grid.add_child(btn)
@@ -196,7 +219,7 @@ func _spawn_item_to_player(item_id: String, item_data: Dictionary, amount: int) 
 		if added:
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("✨ [크리에이티브] %s x%d 지급 완료" % [item_data.get("name", item_id), amount])
+				EventBus.event_logged.emit("✨ [치트/스폰] %s x%d 지급 완료" % [item_data.get("name", item_id), amount])
 		else:
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("⚠️ 인벤토리 공간이 부족합니다.")
@@ -204,12 +227,93 @@ func _spawn_item_to_player(item_id: String, item_data: Dictionary, amount: int) 
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⚠️ 플레이어 인벤토리를 찾을 수 없습니다.")
 
+# ============================================================
+# 치트 / 크리에이티브 관리자 기능
+# ============================================================
+func _add_money(amount: int) -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	if GameManager and not GameManager.current_world_data.is_empty():
+		if not GameManager.current_world_data.has("player"):
+			GameManager.current_world_data["player"] = {}
+		var cur_rubles = GameManager.current_world_data["player"].get("rubles", 0)
+		cur_rubles += amount
+		GameManager.current_world_data["player"]["rubles"] = cur_rubles
+		
+		# 은신처 UI 갱신 (열려있다면)
+		var cur_scene = get_tree().current_scene
+		if cur_scene and "money_label" in cur_scene and cur_scene.money_label:
+			cur_scene.money_label.text = "자금: %d 루블" % cur_rubles
+			
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("💰 자금 치트: +%d 루블 (총 %d 루블)" % [amount, cur_rubles])
+
+func _heal_all_stats() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var player = _get_player()
+	if player:
+		player.hp = player.max_hp
+		player.stamina = player.max_stamina
+		player.hunger = player.max_hunger
+		player.thirst = player.max_thirst
+		player.stats_changed.emit()
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("❤️ 플레이어 체력/스태미너/허기/갈증 100% 완충 완료!")
+
+func _cure_all_conditions() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var player = _get_player()
+	if player:
+		player.is_bleeding = false
+		player.is_fractured = false
+		player.is_infected = false
+		player.stats_changed.emit()
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🩹 모든 상태이상(출혈, 골절, 감염)이 치료되었습니다.")
+
+func _toggle_god_mode(enabled: bool) -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var player = _get_player()
+	if player:
+		player.set("is_god_mode", enabled)
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🛡️ 무적 모드: %s" % ("활성화 (ON)" if enabled else "비활성화 (OFF)"))
+
+func _add_raid_time() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var cur_scene = get_tree().current_scene
+	if cur_scene and "raid_time_remaining" in cur_scene:
+		cur_scene.raid_time_remaining += 600.0 # +10분
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⏳ 레이드 시간 10분 연장 완료!")
+
+func _clear_inventory() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var player_inv = _get_player_inventory()
+	if player_inv:
+		for i in range(player_inv.max_slots):
+			player_inv.remove_item_at(i, 999)
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🗑️ 가방 인벤토리를 모두 비웠습니다.")
+
+# ============================================================
+# 플레이어 & 인벤토리 참조 헬퍼
+# ============================================================
+func _get_player() -> Node:
+	var cur_scene = get_tree().current_scene
+	if cur_scene and "player" in cur_scene and cur_scene.player:
+		return cur_scene.player
+	elif get_node_or_null("/root/MainWorld") and get_node("/root/MainWorld").player:
+		return get_node("/root/MainWorld").player
+	return get_tree().get_first_node_in_group("player")
+
 func _get_player_inventory() -> Inventory:
 	var cur_scene = get_tree().current_scene
 	if cur_scene and "player_inventory" in cur_scene and cur_scene.player_inventory:
 		return cur_scene.player_inventory
 	elif cur_scene and "player" in cur_scene and cur_scene.player and cur_scene.player.inventory:
 		return cur_scene.player.inventory
+	elif cur_scene and "player_inv" in cur_scene and cur_scene.player_inv:
+		return cur_scene.player_inv
 	return null
 
 func _unhandled_input(event: InputEvent) -> void:

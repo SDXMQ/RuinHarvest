@@ -30,7 +30,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="Center"]
-custom_minimum_size = Vector2(560, 460)
+custom_minimum_size = Vector2(580, 480)
 layout_mode = 2
 
 [node name="VBox" type="VBoxContainer" parent="Center/Panel"]
@@ -74,4 +74,21 @@ text = "저장된 게임 데이터가 없습니다."
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="Footer" type="HBoxContainer" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="OpenFolderBtn" type="Button" parent="Center/Panel/VBox/Footer"]
+layout_mode = 2
+size_flags_horizontal = 3
+custom_minimum_size = Vector2(0, 36)
+text = "📂 세이브 폴더 열기 (Open Save Folder)"
+
+[node name="RefreshBtn" type="Button" parent="Center/Panel/VBox/Footer"]
+layout_mode = 2
+custom_minimum_size = Vector2(100, 36)
+text = "🔄 새로고침"
+
 [connection signal="pressed" from="Center/Panel/VBox/Header/CloseBtn" to="." method="_on_close_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/Footer/OpenFolderBtn" to="." method="_on_open_folder_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/Footer/RefreshBtn" to="." method="_refresh_slots"]
