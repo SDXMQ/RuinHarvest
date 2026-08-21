@@ -16,4 +16,6 @@ data_*/
 mono_crash.*.json
 
 #original game
-RuinHarvest_pygame-ce/
+RuinHarvest_Pygame/
+RuinHarvest.exe
+RuinHarvest.pck

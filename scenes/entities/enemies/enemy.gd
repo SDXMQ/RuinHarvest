@@ -2,7 +2,7 @@
 extends CharacterBody2D
 
 enum EnemyType { ZOMBIE, RUNNER, TANK }
-enum State { IDLE, WANDER, CHASE, ATTACK, HURT, DEAD }
+enum State { IDLE, WANDER, CHASE, ATTACK, INVESTIGATE, HURT, DEAD }
 
 @export var enemy_type: EnemyType = EnemyType.ZOMBIE
 
@@ -23,11 +23,24 @@ var wander_timer: float = 0.0
 var knockback_velocity: Vector2 = Vector2.ZERO
 var hit_flash_tween: Tween
 
+# 소음 및 느낌표 시스템
+var target_noise_pos: Vector2 = Vector2.ZERO
+var investigate_timer: float = 0.0
+var alert_timer: float = 0.0
+var alert_icon_type: String = "!" # "!" or "?"
+
 func _ready() -> void:
 	add_to_group("enemies")
 	_setup_stats_by_type()
 	if has_node("Visuals"):
 		get_node("Visuals").draw.connect(_on_visuals_draw)
+	
+	if EventBus.has_signal("noise_created"):
+		EventBus.noise_created.connect(_on_noise_created)
+
+func _exit_tree() -> void:
+	if EventBus and EventBus.noise_created.is_connected(_on_noise_created):
+		EventBus.noise_created.disconnect(_on_noise_created)
 
 func _setup_stats_by_type() -> void:
 	match enemy_type:
@@ -45,9 +58,33 @@ func _setup_stats_by_type() -> void:
 			damage = 25.0
 	hp = max_hp
 
+func _on_noise_created(pos: Vector2, radius: float, source_type: String) -> void:
+	if hp <= 0:
+		return
+	var dist = global_position.distance_to(pos)
+	if dist <= radius:
+		alert_to_position(pos, source_type)
+
+func alert_to_position(pos: Vector2, source_type: String = "") -> void:
+	if hp <= 0 or current_state == State.CHASE:
+		return
+	target_noise_pos = pos
+	current_state = State.INVESTIGATE
+	investigate_timer = randf_range(4.0, 7.0)
+	alert_timer = 2.0
+	alert_icon_type = "!" if (source_type == "gunshot" or source_type == "break") else "?"
+	if has_node("Visuals"):
+		get_node("Visuals").queue_redraw()
+
 func _physics_process(delta: float) -> void:
 	if hp <= 0:
 		return
+		
+	# 느낌표 타이머 감소
+	if alert_timer > 0:
+		alert_timer -= delta
+		if alert_timer <= 0 and has_node("Visuals"):
+			get_node("Visuals").queue_redraw()
 		
 	# 플레이어 탐색
 	if not is_instance_valid(target_player):
@@ -69,6 +106,11 @@ func _physics_process(delta: float) -> void:
 		
 		# 감지 범위 내 진입 시 추적
 		if dist <= detection_radius:
+			if current_state != State.CHASE:
+				alert_timer = 2.0
+				alert_icon_type = "!"
+				if has_node("Visuals"):
+					get_node("Visuals").queue_redraw()
 			current_state = State.CHASE
 		elif current_state == State.CHASE and dist > detection_radius * 1.5:
 			current_state = State.IDLE
@@ -89,15 +131,24 @@ func _physics_process(delta: float) -> void:
 				if wander_timer <= 0:
 					current_state = State.IDLE
 					wander_timer = randf_range(1.0, 3.0)
+			State.INVESTIGATE:
+				investigate_timer -= delta
+				var steer_dir = _get_steered_direction(target_noise_pos)
+				rotation = lerp_angle(rotation, steer_dir.angle(), delta * 8.0)
+				velocity = steer_dir * (speed * 0.7)
+				if global_position.distance_to(target_noise_pos) < 24.0 or investigate_timer <= 0:
+					current_state = State.IDLE
+					wander_timer = 2.0
 			State.CHASE:
-				var dir = global_position.direction_to(target_player.global_position)
-				rotation = dir.angle()
-				
 				if dist <= attack_radius:
 					velocity = Vector2.ZERO
+					var dir_to_p = global_position.direction_to(target_player.global_position)
+					rotation = dir_to_p.angle()
 					_try_attack()
 				else:
-					velocity = dir * speed
+					var steer_dir = _get_steered_direction(target_player.global_position)
+					rotation = lerp_angle(rotation, steer_dir.angle(), delta * 10.0)
+					velocity = steer_dir * speed
 					
 		move_and_slide()
 		
@@ -106,6 +157,41 @@ func _physics_process(delta: float) -> void:
 			var visuals = get_node("Visuals")
 			var bob = sin(Time.get_ticks_msec() * 0.01 * (speed / 70.0)) * 2.0
 			visuals.position.y = bob
+
+func _get_steered_direction(target_pos: Vector2) -> Vector2:
+	var desired_dir = global_position.direction_to(target_pos)
+	var space_state = get_world_2d().direct_space_state
+	
+	# 8방향 가중치 계산 (Context Steering)
+	var num_rays = 8
+	var best_dir = desired_dir
+	var best_score = -999.0
+	
+	for i in range(num_rays):
+		var angle = (float(i) / float(num_rays)) * TAU
+		var dir = Vector2.RIGHT.rotated(angle)
+		
+		# 플레이어 방향과의 일치도 (Dot product)
+		var interest = dir.dot(desired_dir)
+		
+		# 전방 장애물 레이캐스트
+		var ray_query = PhysicsRayQueryParameters2D.new()
+		ray_query.from = global_position
+		ray_query.to = global_position + dir * 32.0 # 1타일 거리
+		ray_query.exclude = [self]
+		ray_query.collision_mask = 1 # 벽/오브젝트 레이어
+		
+		var result = space_state.intersect_ray(ray_query)
+		var danger = 0.0
+		if not result.is_empty():
+			danger = 2.0 # 장애물이 있으면 큰 페널티
+			
+		var score = interest - danger
+		if score > best_score:
+			best_score = score
+			best_dir = dir
+			
+	return best_dir
 
 func _try_attack() -> void:
 	if attack_timer <= 0:
@@ -309,3 +395,24 @@ func _on_visuals_draw() -> void:
 		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
 		var fill_w = (hp / max_hp) * bar_w
 		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.9, 0.2, 0.2))
+
+	# 느낌표/물음표 경고 아이콘 (소음 감지 또는 플레이어 발견 시)
+	if alert_timer > 0:
+		var icon_pos = Vector2(0, -22.0 * scale_f - 12.0)
+		var icon_col = Color(1.0, 0.2, 0.2) if alert_icon_type == "!" else Color(1.0, 0.8, 0.2)
+		# 배경 원 (깜빡임 효과)
+		var bg_alpha = clamp(alert_timer, 0.0, 1.0)
+		visuals.draw_circle(icon_pos, 8.0, Color(0.1, 0.1, 0.1, 0.8 * bg_alpha))
+		visuals.draw_arc(icon_pos, 8.0, 0, TAU, 16, icon_col * Color(1, 1, 1, bg_alpha), 1.5)
+		
+		if alert_icon_type == "!":
+			# 느낌표 막대
+			visuals.draw_line(icon_pos + Vector2(0, -4), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.5)
+			# 느낌표 점
+			visuals.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
+		else:
+			# 물음표 점
+			visuals.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
+			# 물음표 곡선
+			visuals.draw_arc(icon_pos + Vector2(0, -2), 3.0, -PI, 0, 8, icon_col * Color(1, 1, 1, bg_alpha), 2.0)
+			visuals.draw_line(icon_pos + Vector2(3, -2), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.0)

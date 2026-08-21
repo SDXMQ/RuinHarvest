@@ -8,6 +8,7 @@ const TILE_SIZE: int = 32
 var tileset: TileSet
 
 # 타일 아틀라스 좌표 매핑 (x, y)
+# 바닥 타일 (y=0)
 const TILE_GRASS = Vector2i(0, 0)
 const TILE_DIRT = Vector2i(1, 0)
 const TILE_ROAD = Vector2i(2, 0)
@@ -15,15 +16,26 @@ const TILE_CONCRETE = Vector2i(3, 0)
 const TILE_FLOOR_WOOD = Vector2i(4, 0)
 const TILE_FLOOR_TILE = Vector2i(5, 0)
 const TILE_ROAD_LINE = Vector2i(6, 0)
+const TILE_GRAVEL = Vector2i(7, 0) # 자갈길
 
+# 오브젝트 타일 (y=1)
 const OBJ_TREE = Vector2i(0, 1)
 const OBJ_ROCK = Vector2i(1, 1)
 const OBJ_WALL = Vector2i(2, 1)
 const OBJ_CRATE = Vector2i(3, 1)
 const OBJ_BARREL = Vector2i(4, 1)
 const OBJ_DEBRIS = Vector2i(5, 1)
-const OBJ_DOOR = Vector2i(6, 1)
+const OBJ_DOOR_CLOSED = Vector2i(6, 1) # 닫힌 문 (충돌+차폐)
+const OBJ_DOOR_OPEN = Vector2i(7, 1)   # 열린 문 (통과 가능)
+const OBJ_DOOR = OBJ_DOOR_CLOSED       # 기존 호환성
+
+# 특수 및 건물 부착물 타일 (y=2)
 const OBJ_FRIDGE = Vector2i(0, 2)
+const OBJ_WINDOW = Vector2i(1, 2)        # 온전한 창문 (충돌 O, 차폐 X)
+const OBJ_WINDOW_BROKEN = Vector2i(2, 2) # 깨진 창문 (충돌 X, 차폐 X, 통과 가능)
+const OBJ_FENCE = Vector2i(3, 2)         # 울타리 (충돌 O, 차폐 X)
+const OBJ_GATE = Vector2i(4, 2)          # 열린 게이트 (통과 가능)
+const OBJ_LIGHT_SWITCH = Vector2i(5, 2)  # 조명 스위치 (벽 부착물)
 
 func _ready() -> void:
 	_generate_procedural_tileset()
@@ -46,16 +58,27 @@ func _generate_procedural_tileset() -> void:
 	# 바닥 타일 그리기 (y=0)
 	for coords in colors.keys():
 		_fill_rect_noisy(img, coords.x * TILE_SIZE, coords.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, colors[coords])
+	
+	# 자갈길 그리기
+	_draw_gravel(img, TILE_GRAVEL.x * TILE_SIZE, TILE_GRAVEL.y * TILE_SIZE)
 		
-	# 오브젝트 타일 그리기 (y=1, y=2)
+	# 오브젝트 타일 그리기 (y=1)
 	_draw_tree(img, OBJ_TREE.x * TILE_SIZE, OBJ_TREE.y * TILE_SIZE)
 	_draw_rock(img, OBJ_ROCK.x * TILE_SIZE, OBJ_ROCK.y * TILE_SIZE)
 	_fill_rect_noisy(img, OBJ_WALL.x * TILE_SIZE, OBJ_WALL.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.4, 0.3, 0.25)) # 벽
 	_draw_crate(img, OBJ_CRATE.x * TILE_SIZE, OBJ_CRATE.y * TILE_SIZE)
 	_draw_barrel(img, OBJ_BARREL.x * TILE_SIZE, OBJ_BARREL.y * TILE_SIZE)
 	_draw_debris(img, OBJ_DEBRIS.x * TILE_SIZE, OBJ_DEBRIS.y * TILE_SIZE)
-	_fill_rect_noisy(img, OBJ_DOOR.x * TILE_SIZE, OBJ_DOOR.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.5, 0.25, 0.1)) # 문
+	_draw_door_closed(img, OBJ_DOOR_CLOSED.x * TILE_SIZE, OBJ_DOOR_CLOSED.y * TILE_SIZE)
+	_draw_door_open(img, OBJ_DOOR_OPEN.x * TILE_SIZE, OBJ_DOOR_OPEN.y * TILE_SIZE)
+	
+	# 특수 타일 그리기 (y=2)
 	_draw_fridge(img, OBJ_FRIDGE.x * TILE_SIZE, OBJ_FRIDGE.y * TILE_SIZE)
+	_draw_window(img, OBJ_WINDOW.x * TILE_SIZE, OBJ_WINDOW.y * TILE_SIZE)
+	_draw_broken_window(img, OBJ_WINDOW_BROKEN.x * TILE_SIZE, OBJ_WINDOW_BROKEN.y * TILE_SIZE)
+	_draw_fence(img, OBJ_FENCE.x * TILE_SIZE, OBJ_FENCE.y * TILE_SIZE)
+	_draw_gate(img, OBJ_GATE.x * TILE_SIZE, OBJ_GATE.y * TILE_SIZE)
+	_draw_light_switch(img, OBJ_LIGHT_SWITCH.x * TILE_SIZE, OBJ_LIGHT_SWITCH.y * TILE_SIZE)
 	
 	var texture = ImageTexture.create_from_image(img)
 	
@@ -74,45 +97,62 @@ func _generate_procedural_tileset() -> void:
 	source.texture_region_size = Vector2i(TILE_SIZE, TILE_SIZE)
 	
 	# 바닥 타일 등록
-	for coords in colors.keys():
+	for coords in [TILE_GRASS, TILE_DIRT, TILE_ROAD, TILE_CONCRETE, TILE_FLOOR_WOOD, TILE_FLOOR_TILE, TILE_ROAD_LINE, TILE_GRAVEL]:
 		source.create_tile(coords)
 		
 	tileset.add_source(source, 0)
 		
-	# 오브젝트 타일 등록 및 충돌체 설정
-	var objects = [OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS, OBJ_DOOR, OBJ_FRIDGE]
-	for coords in objects:
+	# 오브젝트 타일 등록 및 충돌체/차폐체 설정
+	var all_objects = [
+		OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS,
+		OBJ_DOOR_CLOSED, OBJ_DOOR_OPEN, OBJ_FRIDGE,
+		OBJ_WINDOW, OBJ_WINDOW_BROKEN, OBJ_FENCE, OBJ_GATE, OBJ_LIGHT_SWITCH
+	]
+	
+	for coords in all_objects:
 		source.create_tile(coords)
 		var tile_data = source.get_tile_data(coords, 0)
 		if tile_data:
-			# 꽉 차는 사각형 충돌체/차폐체 생성
-			var poly = PackedVector2Array([
+			# 기본 꽉 찬 사각형 폴리곤
+			var full_poly = PackedVector2Array([
 				Vector2(-TILE_SIZE/2.0, -TILE_SIZE/2.0),
 				Vector2(TILE_SIZE/2.0, -TILE_SIZE/2.0),
 				Vector2(TILE_SIZE/2.0, TILE_SIZE/2.0),
 				Vector2(-TILE_SIZE/2.0, TILE_SIZE/2.0)
 			])
 			
-			# 나무나 바위는 충돌 크기를 약간 줄임
-			if coords == OBJ_TREE or coords == OBJ_ROCK or coords == OBJ_BARREL or coords == OBJ_DEBRIS:
-				poly = PackedVector2Array([
+			# 충돌체 설정
+			var has_collision = false
+			var col_poly = full_poly
+			
+			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_CRATE, OBJ_FRIDGE]:
+				has_collision = true
+				col_poly = full_poly
+			elif coords in [OBJ_TREE, OBJ_ROCK, OBJ_BARREL, OBJ_DEBRIS]:
+				has_collision = true
+				col_poly = PackedVector2Array([
 					Vector2(-TILE_SIZE*0.4, -TILE_SIZE*0.4),
 					Vector2(TILE_SIZE*0.4, -TILE_SIZE*0.4),
 					Vector2(TILE_SIZE*0.4, TILE_SIZE*0.4),
 					Vector2(-TILE_SIZE*0.4, TILE_SIZE*0.4)
 				])
+			elif coords in [OBJ_WINDOW, OBJ_FENCE]:
+				# 창문과 울타리는 이동을 막음
+				has_collision = true
+				col_poly = full_poly
+			# OBJ_DOOR_OPEN, OBJ_WINDOW_BROKEN, OBJ_GATE, OBJ_LIGHT_SWITCH는 충돌 없음 (통과 가능)
 			
-			# 문은 충돌체를 갖지 않게 하거나, 닫혔을 때만 적용 가능. 일단 통과 가능하게 처리(충돌 없음).
-			if coords != OBJ_DOOR:
+			if has_collision:
 				tile_data.add_collision_polygon(0)
-				tile_data.set_collision_polygon_points(0, 0, poly)
+				tile_data.set_collision_polygon_points(0, 0, col_poly)
 				
-				# 빛 차폐(Occluder) 등록 (투명도 없는 물체 위주)
-				if coords in [OBJ_WALL, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE]:
-					var occluder = OccluderPolygon2D.new()
-					occluder.polygon = poly
-					tile_data.add_occluder_polygon(0)
-					tile_data.set_occluder_polygon(0, 0, occluder)
+			# 빛 차폐(Occluder) 등록 (빛을 막는 벽, 닫힌 문, 상자, 바위, 냉장고 등)
+			# 창문, 깨진 창문, 울타리, 게이트, 열린 문은 빛을 통과시킴!
+			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE]:
+				var occluder = OccluderPolygon2D.new()
+				occluder.polygon = full_poly
+				tile_data.add_occluder_polygon(0)
+				tile_data.set_occluder_polygon(0, 0, occluder)
 
 # ==========================================================
 # 이미지 드로잉 헬퍼
@@ -225,3 +265,117 @@ func _draw_fridge(img: Image, x: int, y: int) -> void:
 						c = Color(0.4, 0.4, 0.4)
 				
 				img.set_pixel(px, py, c)
+
+func _draw_gravel(img: Image, x: int, y: int) -> void:
+	# 흙 베이스
+	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.45, 0.4, 0.35))
+	# 자갈 돌멩이들
+	for i in range(12):
+		var gx = randi_range(2, TILE_SIZE - 5)
+		var gy = randi_range(2, TILE_SIZE - 5)
+		var gw = randi_range(2, 4)
+		var gh = randi_range(2, 4)
+		var gc = Color(randf_range(0.5, 0.7), randf_range(0.5, 0.65), randf_range(0.5, 0.6))
+		img.fill_rect(Rect2i(x + gx, y + gy, gw, gh), gc)
+
+func _draw_door_closed(img: Image, x: int, y: int) -> void:
+	# 문틀 및 닫힌 나무 문
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var c = Color(0.45, 0.25, 0.12)
+			# 테두리 문틀
+			if ix < 3 or ix > TILE_SIZE - 4 or iy < 3 or iy > TILE_SIZE - 4:
+				c = Color(0.25, 0.15, 0.08)
+			# 나무 판자 세로 홈
+			elif ix % 7 == 0:
+				c = Color(0.35, 0.2, 0.1)
+			# 손잡이 (황동)
+			if ix >= TILE_SIZE - 8 and ix <= TILE_SIZE - 6 and iy >= TILE_SIZE/2 - 2 and iy <= TILE_SIZE/2 + 2:
+				c = Color(0.85, 0.7, 0.2)
+			img.set_pixel(x + ix, y + iy, c)
+
+func _draw_door_open(img: Image, x: int, y: int) -> void:
+	# 열린 문 (문틀은 열려있고 바닥이 보이며 문짝이 한쪽에 젖혀짐)
+	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.6, 0.45, 0.3)) # 통로 바닥
+	# 문틀 가장자리
+	for iy in range(TILE_SIZE):
+		img.set_pixel(x, iy, Color(0.25, 0.15, 0.08))
+		img.set_pixel(x + TILE_SIZE - 1, iy, Color(0.25, 0.15, 0.08))
+	# 젖혀진 문짝 (좌측에 수직으로 붙어있음)
+	for iy in range(4, TILE_SIZE - 4):
+		for ix in range(1, 5):
+			img.set_pixel(x + ix, y + iy, Color(0.45, 0.25, 0.12))
+
+func _draw_window(img: Image, x: int, y: int) -> void:
+	# 창틀 및 반투명 푸른 유리
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var c = Color(0.3, 0.5, 0.7, 0.6) # 유리
+			# 창틀 (벽체와 일치하는 나무/콘크리트 틀)
+			if ix < 3 or ix > TILE_SIZE - 4 or iy < 3 or iy > TILE_SIZE - 4:
+				c = Color(0.35, 0.25, 0.2)
+			# 십자 창살
+			elif ix == TILE_SIZE/2 or ix == TILE_SIZE/2 - 1 or iy == TILE_SIZE/2 or iy == TILE_SIZE/2 - 1:
+				c = Color(0.35, 0.25, 0.2)
+			# 유리 하이라이트
+			elif (ix + iy) % 8 == 0 and ix > 4 and ix < TILE_SIZE - 5:
+				c = Color(0.6, 0.8, 1.0, 0.85)
+			img.set_pixel(x + ix, y + iy, c)
+
+func _draw_broken_window(img: Image, x: int, y: int) -> void:
+	# 깨진 창문 (창틀 일부만 남고 유리 파편과 구멍)
+	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.2, 0.2, 0.2, 0.3)) # 빈 공간
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			# 부서진 창틀
+			if ix < 3 or ix > TILE_SIZE - 4 or iy < 3 or iy > TILE_SIZE - 4:
+				img.set_pixel(x + ix, y + iy, Color(0.35, 0.25, 0.2))
+			# 가장자리에 뾰족하게 남은 유리 조각들
+			elif (ix < 7 and (iy < 8 or iy > TILE_SIZE - 9)) or (ix > TILE_SIZE - 8 and iy < 10):
+				img.set_pixel(x + ix, y + iy, Color(0.4, 0.65, 0.85, 0.8))
+
+func _draw_fence(img: Image, x: int, y: int) -> void:
+	# 나무 울타리 (투명 배경에 말뚝과 가로목)
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var c = Color(0, 0, 0, 0)
+			# 가로 연결목 2줄
+			if (iy >= 8 and iy <= 11) or (iy >= 20 and iy <= 23):
+				c = Color(0.5, 0.35, 0.2)
+			# 세로 말뚝 3개
+			if (ix >= 4 and ix <= 8) or (ix >= 14 and ix <= 18) or (ix >= 24 and ix <= 28):
+				if iy >= 4:
+					c = Color(0.58, 0.4, 0.22)
+					# 뾰족한 상단
+					if iy < 8 and (ix == 4 or ix == 8 or ix == 14 or ix == 18 or ix == 24 or ix == 28):
+						c = Color(0, 0, 0, 0)
+			if c.a > 0:
+				img.set_pixel(x + ix, y + iy, c)
+
+func _draw_gate(img: Image, x: int, y: int) -> void:
+	# 열린 게이트 (양쪽 기둥만 있고 중앙은 개방)
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var c = Color(0, 0, 0, 0)
+			# 좌측 기둥, 우측 기둥
+			if (ix <= 6 or ix >= TILE_SIZE - 7) and iy >= 2:
+				c = Color(0.45, 0.3, 0.15)
+				if ix == 0 or ix == 6 or ix == TILE_SIZE - 7 or ix == TILE_SIZE - 1:
+					c = Color(0.3, 0.2, 0.1)
+			if c.a > 0:
+				img.set_pixel(x + ix, y + iy, c)
+
+func _draw_light_switch(img: Image, x: int, y: int) -> void:
+	# 벽면의 조명 스위치 박스
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var c = Color(0, 0, 0, 0)
+			if ix >= 10 and ix <= 22 and iy >= 8 and iy <= 24:
+				c = Color(0.85, 0.85, 0.8) # 흰색 플레이트
+				if ix == 10 or ix == 22 or iy == 8 or iy == 24:
+					c = Color(0.3, 0.3, 0.3)
+				# 스위치 레버 (중앙)
+				elif ix >= 14 and ix <= 18 and iy >= 13 and iy <= 19:
+					c = Color(0.2, 0.6, 0.2) # ON 느낌 녹색 팁
+			if c.a > 0:
+				img.set_pixel(x + ix, y + iy, c)

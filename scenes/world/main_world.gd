@@ -39,27 +39,38 @@ const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
 var current_loot_window: Control = null
 
 const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
-var enemy_spawn_timer: float = 2.0
-var max_enemies_count: int = 15
+var enemy_spawn_timer: float = 10.0
+var max_enemies_count: int = 22
 
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
-var raid_time_remaining: float = 300.0 # 5분
+var raid_time_remaining: float = 1800.0 # 30분
+var raid_total_time: float = 1800.0
 
 const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
 
 var particle_system: Node2D
 
 func _ready() -> void:
-	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 월드 스크립트 실행 유지
+	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 메인 노드는 입력(UI) 처리를 위해 유지
 	
-	# 후처리 셰이더 레이어 추가
+	if chunk_manager:
+		chunk_manager.process_mode = Node.PROCESS_MODE_PAUSABLE
+	if player:
+		player.process_mode = Node.PROCESS_MODE_PAUSABLE
+	if has_node("Entities"):
+		$Entities.process_mode = Node.PROCESS_MODE_PAUSABLE
+		
+	if pause_menu:
+		pause_menu.process_mode = Node.PROCESS_MODE_ALWAYS
+		
+	# 포스트프로세싱 및 파티클
 	var pp = PostProcessLayerScene.instantiate()
 	add_child(pp)
 	
-	# 파티클 시스템 추가
 	var ps_script = load("res://systems/particle_system.gd")
 	particle_system = Node2D.new()
 	particle_system.name = "ParticleSystem"
+	particle_system.process_mode = Node.PROCESS_MODE_PAUSABLE
 	particle_system.set_script(ps_script)
 	add_child(particle_system)
 	
@@ -86,6 +97,9 @@ func _ready() -> void:
 		if info.has("return_pos"):
 			spawn_pos = info["return_pos"]
 		GameManager.current_world_data.erase("current_interior")
+	else:
+		# 첫 레이드 출격 시 맵 중심 안전지대 주변 (300~600px) 랜덤 스폰
+		spawn_pos = _get_random_spawn_pos()
 		
 	# 복귀 시 스탯 및 타이머 복원
 	if GameManager and GameManager.current_world_data.has("player_stats"):
@@ -126,26 +140,37 @@ func _ready() -> void:
 	chunk_manager.update_chunks(player.global_position)
 	_on_player_stats_changed()
 	
-	# 시작 시 주변에 초기 좀비 3마리 스폰
-	for i in range(3):
-		_spawn_enemy_near_player(200.0 + i * 50.0)
+	# 시작 시 주변에 초기 좀비 2마리 스폰 (플레이어와 안전거리 확보)
+	for i in range(2):
+		_spawn_enemy_near_player(350.0 + i * 80.0)
 		
-	# 탈출 지점 3개 스폰 (동, 서, 남 방향 약 600~900px 거리)
+	# 탈출 지점 3개 스폰 (1800~2500px 원거리 배치)
 	_spawn_extraction_zones()
 	
 	GameManager.current_state = GameManager.GameState.IN_GAME
 	
 	# 작전 개시 및 초기 상태 안내 로그 출력
-	_on_event_logged("★ [작전 개시] 30일간의 생존 레이드가 시작되었습니다.")
+	_on_event_logged("★ [작전 개시] 30분 생존 레이드가 시작되었습니다.")
 	if WeatherSystem:
 		_on_event_logged("🌦️ 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
 
+func _get_random_spawn_pos() -> Vector2:
+	var angle = randf() * TAU
+	var dist = randf_range(300.0, 600.0)
+	var candidate = Vector2.RIGHT.rotated(angle) * dist
+	return candidate
+
 func _spawn_extraction_zones() -> void:
 	extraction_points_data.clear()
-	var angles = [0.0, 2.0944, 4.18879] # 0도, 120도, 240도
+	var base_angle = randf() * TAU
+	var angles = [
+		base_angle,
+		base_angle + TAU / 3.0 + randf_range(-0.25, 0.25),
+		base_angle + 2.0 * TAU / 3.0 + randf_range(-0.25, 0.25)
+	]
 	for i in range(angles.size()):
 		var angle = angles[i]
-		var dist = 800.0
+		var dist = randf_range(1800.0, 2400.0) # 원거리 탈출구
 		var pos = Vector2.RIGHT.rotated(angle) * dist
 		var zone = ExtractionZoneScene.instantiate()
 		zone.position = pos
@@ -263,10 +288,25 @@ func _unhandled_input(event: InputEvent) -> void:
 		_open_crafting_window()
 		get_viewport().set_input_as_handled()
 		
+	# 총기 모딩창 열기 (B 키)
+	if event is InputEventKey and event.physical_keycode == KEY_B and event.pressed:
+		_open_weapon_modding_window()
+		get_viewport().set_input_as_handled()
+		
 	# 전술 지도 열기 (M 키)
 	if event.is_action_pressed("map") or (event is InputEventKey and event.physical_keycode == KEY_M and event.pressed):
 		_open_map_window()
 		get_viewport().set_input_as_handled()
+
+func _open_weapon_modding_window() -> void:
+	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")
+	if modding_script:
+		get_tree().paused = true
+		var win = modding_script.new()
+		$UI.add_child(win)
+		var cur_w = player.equipped_weapon_data if player else {}
+		win.setup(player_inventory, null, cur_w)
+		win.window_closed.connect(func(): _on_player_stats_changed())
 
 func _open_crafting_window() -> void:
 	get_tree().paused = true
@@ -357,8 +397,8 @@ func _process(delta: float) -> void:
 		if compass_bar:
 			compass_bar.queue_redraw()
 		
-		# 레이드 제한 시간 감소 및 낮/밤 조명 제어
-		if raid_time_remaining > 0:
+		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신
+		if not get_tree().paused and raid_time_remaining > 0:
 			raid_time_remaining -= delta
 			var minutes = int(raid_time_remaining) / 60
 			var seconds = int(raid_time_remaining) % 60
@@ -367,8 +407,11 @@ func _process(delta: float) -> void:
 				if raid_time_remaining < 60:
 					raid_timer_label.add_theme_color_override("font_color", Color.RED)
 			if raid_time_remaining <= 0:
-				GameManager.end_raid("mia")
+				EventBus.event_logged.emit("탈출 시간 초과. 작전 실패.")
+				if GameManager: GameManager.end_raid("mia")
 				
+		# 환경 조명 변화
+		if not get_tree().paused:
 			_update_day_night_cycle()
 		
 		# 적 주기적 스폰
@@ -471,7 +514,7 @@ func _on_interact_prompt(show: bool, text: String) -> void:
 	elif interact_prompt:
 		interact_prompt.visible = false
 		
-func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
+func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_loot_window != null: return
 	
 	var table_name = ""
@@ -490,8 +533,29 @@ func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector
 		table_name = "car"
 		loot_title = "폐차 트렁크"
 		slots = 8
-	elif type == Vector2i(6, 1): # Door
+	elif type == Vector2i(6, 1): # OBJ_DOOR_CLOSED
+		# 닫힌 문 열기 -> 열린 문으로 타일 교체 및 소음 발생
+		if chunk_manager and chunk_manager.object_layer:
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
+		EventBus.noise_created.emit(world_pos, 150.0, "door")
+		EventBus.door_toggled.emit(tile_pos, true)
+		EventBus.event_logged.emit("🚪 문을 열었습니다.")
+		if SoundManager: SoundManager.play("menu_select")
+		return
+	elif type == Vector2i(7, 1): # OBJ_DOOR_OPEN
+		# 열린 문 -> 실내 진입
 		_enter_building_interior(tile_pos)
+		return
+	elif type == Vector2i(1, 2): # OBJ_WINDOW
+		# 창문 깨기 -> 깨진 창문으로 타일 교체 및 큰 소음 발생
+		if chunk_manager and chunk_manager.object_layer:
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+		EventBus.noise_created.emit(world_pos, 400.0, "break")
+		EventBus.window_broken.emit(tile_pos)
+		EventBus.event_logged.emit("💥 창문이 깨졌습니다! (큰 소음 발생)")
+		if SoundManager: SoundManager.play("hit_melee")
+		var ps = get_node_or_null("ParticleSystem")
+		if ps: ps.emit("spark", world_pos.x, world_pos.y, 10)
 		return
 		
 	if table_name != "":

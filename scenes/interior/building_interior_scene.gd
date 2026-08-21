@@ -66,7 +66,10 @@ func _ready() -> void:
 	
 	_setup_tilemap()
 	_setup_furnitures()
+	_setup_enemies()
 	_setup_player()
+
+const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
 
 func _setup_tilemap() -> void:
 	if TileManager.tileset:
@@ -80,24 +83,33 @@ func _setup_tilemap() -> void:
 	for y in range(h):
 		for x in range(w):
 			var t_type = tiles[y * w + x]
+			var pos = Vector2i(x, y)
 			if t_type == 0: # 벽
-				tile_map.set_cell(Vector2i(x, y), 0, TileManager.TILE_CONCRETE)
-				objects_layer.set_cell(Vector2i(x, y), 0, TileManager.OBJ_WALL)
+				tile_map.set_cell(pos, 0, TileManager.TILE_CONCRETE)
+				objects_layer.set_cell(pos, 0, TileManager.OBJ_WALL)
 			elif t_type == 1: # 바닥
-				tile_map.set_cell(Vector2i(x, y), 0, TileManager.TILE_FLOOR_WOOD)
+				tile_map.set_cell(pos, 0, TileManager.TILE_FLOOR_WOOD)
 			elif t_type == 2: # 출구 문
-				tile_map.set_cell(Vector2i(x, y), 0, TileManager.TILE_ROAD)
-				objects_layer.set_cell(Vector2i(x, y), 0, TileManager.OBJ_DOOR)
+				tile_map.set_cell(pos, 0, TileManager.TILE_FLOOR_WOOD)
+				objects_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_OPEN)
+			elif t_type == 3: # 창문
+				tile_map.set_cell(pos, 0, TileManager.TILE_CONCRETE)
+				objects_layer.set_cell(pos, 0, TileManager.OBJ_WINDOW)
+			elif t_type == 4: # 조명 스위치
+				tile_map.set_cell(pos, 0, TileManager.TILE_CONCRETE)
+				objects_layer.set_cell(pos, 0, TileManager.OBJ_LIGHT_SWITCH)
 
 func _setup_furnitures() -> void:
-	for f in interior_data["furnitures"]:
+	for f in interior_data.get("furnitures", []):
 		var pos = f["pos"]
 		var f_type = f["type"]
 		
 		var obj_coord = TileManager.OBJ_CRATE
 		if f_type == "무기함" or f_type == "금고":
 			obj_coord = TileManager.OBJ_CRATE
-		elif f_type == "냉장고" or f_type == "약품장":
+		elif f_type == "냉장고":
+			obj_coord = TileManager.OBJ_FRIDGE
+		elif f_type == "약품장" or f_type == "선반":
 			obj_coord = TileManager.OBJ_BARREL
 			
 		objects_layer.set_cell(pos, 0, obj_coord)
@@ -108,6 +120,14 @@ func _setup_furnitures() -> void:
 		for item in f["loot"]:
 			inv.add_item(item["id"], item["amount"])
 		furniture_inventories[pos] = {"type": f_type, "inv": inv}
+
+func _setup_enemies() -> void:
+	for e in interior_data.get("enemies", []):
+		var z = EnemyScene.instantiate()
+		var z_pos = e["pos"]
+		z.position = Vector2((z_pos.x + 0.5) * 32.0, (z_pos.y + 0.5) * 32.0)
+		z.enemy_type = e.get("type", 0)
+		entities_layer.add_child(z)
 
 func _setup_player() -> void:
 	player = PlayerScene.instantiate()
@@ -273,17 +293,32 @@ func _on_event_logged(msg: String) -> void:
 	tween.tween_property(panel, "modulate:a", 0.0, 1.0)
 	tween.tween_callback(panel.queue_free)
 
-func _on_object_interacted(_world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
+func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_loot_window != null: return
 	
-	if tile_pos == interior_data["exit_pos"] or type == TileManager.OBJ_DOOR:
+	if tile_pos == interior_data.get("exit_pos", Vector2i(-1, -1)) or type == TileManager.OBJ_DOOR_CLOSED or type == TileManager.OBJ_DOOR_OPEN:
 		_exit_interior()
+		return
+		
+	if type == TileManager.OBJ_LIGHT_SWITCH:
+		# 조명 스위치 토글
+		_toggle_indoor_lights()
+		return
+		
+	if type == TileManager.OBJ_WINDOW:
+		# 창문 깨기
+		if has_node("ObjectsLayer"):
+			get_node("ObjectsLayer").set_cell(tile_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+		EventBus.noise_created.emit(world_pos, 400.0, "break")
+		EventBus.window_broken.emit(tile_pos)
+		EventBus.event_logged.emit("💥 실내 창문이 깨졌습니다!")
+		if SoundManager: SoundManager.play("hit_melee")
 		return
 		
 	if furniture_inventories.has(tile_pos):
 		var f_data = furniture_inventories[tile_pos]
 		_open_loot_window(f_data["inv"], f_data["type"])
-	elif type == TileManager.OBJ_CRATE or type == TileManager.OBJ_BARREL:
+	elif type == TileManager.OBJ_CRATE or type == TileManager.OBJ_BARREL or type == TileManager.OBJ_FRIDGE:
 		var inv = Inventory.new()
 		inv.max_slots = 6
 		add_child(inv)
@@ -322,3 +357,45 @@ func _exit_interior() -> void:
 		
 	if SoundManager: SoundManager.play("menu_select")
 	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 0.6)
+
+var is_indoor_light_on: bool = false
+var ceiling_light: PointLight2D = null
+
+func _toggle_indoor_lights() -> void:
+	is_indoor_light_on = not is_indoor_light_on
+	
+	if SoundManager: SoundManager.play("menu_select")
+	
+	if is_indoor_light_on:
+		if ceiling_light == null:
+			ceiling_light = PointLight2D.new()
+			ceiling_light.name = "CeilingLight"
+			var w = interior_data.get("width", 24) * 32.0
+			var h = interior_data.get("height", 18) * 32.0
+			ceiling_light.position = Vector2(w / 2.0, h / 2.0)
+			
+			var grad = Gradient.new()
+			grad.colors = PackedColorArray([Color(1, 1, 1, 0.9), Color(1, 1, 1, 0)])
+			grad.offsets = PackedFloat32Array([0.0, 1.0])
+			var tex = GradientTexture2D.new()
+			tex.gradient = grad
+			tex.fill = GradientTexture2D.FILL_RADIAL
+			tex.fill_from = Vector2(0.5, 0.5)
+			tex.fill_to = Vector2(1.0, 0.5)
+			tex.width = int(max(w, h) * 1.5)
+			tex.height = int(max(w, h) * 1.5)
+			
+			ceiling_light.texture = tex
+			ceiling_light.color = Color(1.0, 0.95, 0.8)
+			ceiling_light.energy = 1.3
+			ceiling_light.shadow_enabled = true
+			ceiling_light.shadow_filter = PointLight2D.SHADOW_FILTER_PCF5
+			add_child(ceiling_light)
+		else:
+			ceiling_light.enabled = true
+			
+		EventBus.event_logged.emit("💡 실내 조명을 켰습니다.")
+	else:
+		if ceiling_light:
+			ceiling_light.enabled = false
+		EventBus.event_logged.emit("💡 실내 조명을 껐습니다.")

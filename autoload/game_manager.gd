@@ -23,7 +23,7 @@ var current_world_data: Dictionary = {}
 
 var is_paused: bool = false
 var raid_start_time: float = 0.0
-var raid_duration_minutes: float = 10.0 # 레이드 기본 제한 시간(분)
+var raid_duration_minutes: float = 30.0 # 레이드 기본 제한 시간(분)
 var time_elapsed_in_raid: float = 0.0
 
 func _ready() -> void:

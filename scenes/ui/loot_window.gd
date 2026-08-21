@@ -12,15 +12,21 @@ var tooltip: PanelContainer
 var player_inv: Inventory
 var loot_inv: Inventory
 
+var item_use_cooldown: float = 0.0
+const ITEM_USE_COOLDOWN_TIME: float = 1.5
+
 signal window_closed
 
 func _ready() -> void:
 	tooltip = TooltipScene.instantiate()
 	add_child(tooltip)
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if tooltip and tooltip.visible:
 		tooltip.update_position(get_global_mouse_position())
+		
+	if item_use_cooldown > 0:
+		item_use_cooldown -= delta
 
 func setup(p_inv: Inventory, l_inv: Inventory = null, loot_title: String = "") -> void:
 	player_inv = p_inv
@@ -46,11 +52,9 @@ func _refresh_ui() -> void:
 		_populate_grid(loot_grid, loot_inv, false)
 
 func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> void:
-	# 기존 슬롯 비우기
 	for child in grid.get_children():
 		child.queue_free()
 		
-	# 슬롯 생성
 	for i in range(inv.max_slots):
 		var slot_btn = Button.new()
 		slot_btn.custom_minimum_size = Vector2(56, 56)
@@ -59,14 +63,12 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 		
 		if item:
 			var data = ItemDatabase.get_item_data(item["id"])
-			# 아이템 픽셀 아이콘 적용
 			if ItemIconManager:
 				slot_btn.icon = ItemIconManager.get_icon(item["id"])
 				slot_btn.expand_icon = true
 				slot_btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 				slot_btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
 			
-			# 마우스 호버 시 플로팅 툴팁 표시
 			slot_btn.mouse_entered.connect(func():
 				if tooltip and item:
 					tooltip.display_item(item, data)
@@ -76,7 +78,6 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 				if tooltip: tooltip.hide()
 			)
 			
-			# 수량 표시 (2개 이상일 때 우측 하단 라벨)
 			if item["amount"] > 1:
 				var amt_lbl = Label.new()
 				amt_lbl.text = "x%d" % item["amount"]
@@ -93,7 +94,6 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 				amt_lbl.offset_bottom = -2
 				slot_btn.add_child(amt_lbl)
 				
-			# 내구도 바 (슬롯 하단 미니 게이지)
 			var max_dur = data.get("max_durability", 0)
 			if max_dur > 0:
 				var cur_dur = item.get("durability", max_dur)
@@ -119,8 +119,76 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 		else:
 			slot_btn.text = ""
 			
+		# 드래그 앤 드롭
+		slot_btn.set_drag_forwarding(
+			func(_at_pos): return _get_slot_drag_data(i, is_player),
+			func(_at_pos, data): return _can_slot_drop_data(data),
+			func(_at_pos, data): _on_slot_drop_data(data, i, is_player)
+		)
+		
+		# 우클릭 사용 / 더블클릭 빠른이동
+		slot_btn.gui_input.connect(func(event: InputEvent):
+			if event is InputEventMouseButton and event.pressed:
+				if event.button_index == MOUSE_BUTTON_RIGHT:
+					_on_slot_right_clicked(i, is_player)
+				elif event.button_index == MOUSE_BUTTON_LEFT and event.double_click:
+					_on_slot_clicked(i, is_player)
+		)
+		
 		slot_btn.pressed.connect(func(): _on_slot_clicked(i, is_player))
 		grid.add_child(slot_btn)
+
+func _get_slot_drag_data(index: int, is_player: bool) -> Variant:
+	var src_inv = player_inv if is_player else loot_inv
+	if src_inv == null or src_inv.items[index] == null:
+		return null
+		
+	var item = src_inv.items[index]
+	var preview = TextureRect.new()
+	preview.texture = ItemIconManager.get_icon(item["id"]) if ItemIconManager else null
+	preview.custom_minimum_size = Vector2(48, 48)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.modulate = Color(1, 1, 1, 0.75)
+	
+	var control = Control.new()
+	control.add_child(preview)
+	preview.position = -Vector2(24, 24)
+	set_drag_preview(control)
+	
+	return {
+		"src_index": index,
+		"src_is_player": is_player,
+		"item": item
+	}
+
+func _can_slot_drop_data(data: Variant) -> bool:
+	return data is Dictionary and data.has("src_index")
+
+func _on_slot_drop_data(data: Variant, target_index: int, target_is_player: bool) -> void:
+	if not _can_slot_drop_data(data):
+		return
+		
+	var src_index = data["src_index"]
+	var src_is_player = data["src_is_player"]
+	
+	var src_inv = player_inv if src_is_player else loot_inv
+	var dest_inv = player_inv if target_is_player else loot_inv
+	
+	if src_inv == null or dest_inv == null:
+		return
+		
+	src_inv.move_item(src_index, target_index, dest_inv)
+	if SoundManager: SoundManager.play("menu_select")
+	_refresh_ui()
+
+func _on_slot_right_clicked(index: int, is_player: bool) -> void:
+	var src_inv = player_inv if is_player else loot_inv
+	if src_inv == null or src_inv.items[index] == null:
+		return
+		
+	var item_id = src_inv.items[index]["id"]
+	var data = ItemDatabase.get_item_data(item_id)
+	_use_item(index, item_id, data)
 
 func _on_slot_clicked(index: int, is_player: bool) -> void:
 	var src_inv = player_inv if is_player else loot_inv
@@ -132,12 +200,12 @@ func _on_slot_clicked(index: int, is_player: bool) -> void:
 	var item_id = src_inv.items[index]["id"]
 	var data = ItemDatabase.get_item_data(item_id)
 	
-	# 상자가 없는 단일 인벤토리 모드인 경우: 아이템 사용(먹기/치료)
+	# 상자가 없는 단일 인벤토리 모드: 아이템 사용
 	if dest_inv == null:
 		_use_item(index, item_id, data)
 		return
 		
-	# 상자가 있는 루팅 모드인 경우: 상자/가방 간 아이템 이동
+	# 상자가 있는 루팅 모드: 빠른 이동
 	var max_stack = data.get("max_stack", 1)
 	var target_index = -1
 	for i in range(dest_inv.max_slots):
@@ -158,6 +226,11 @@ func _on_slot_clicked(index: int, is_player: bool) -> void:
 			EventBus.event_logged.emit("📦 획득: %s" % data.get("name", item_id))
 
 func _use_item(index: int, item_id: String, data: Dictionary) -> void:
+	if item_use_cooldown > 0:
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⏳ 아이템 사용 쿨다운 중입니다 (%.1f초)" % item_use_cooldown)
+		return
+		
 	var player = null
 	var cur_scene = get_tree().current_scene
 	if cur_scene and "player" in cur_scene and cur_scene.player:
@@ -198,6 +271,7 @@ func _use_item(index: int, item_id: String, data: Dictionary) -> void:
 			effect_descriptions.append("스태미너 +%d" % effects["stamina"])
 			
 		if used:
+			item_use_cooldown = ITEM_USE_COOLDOWN_TIME
 			player.stats_changed.emit()
 			player_inv.remove_item_at(index, 1)
 			if SoundManager:

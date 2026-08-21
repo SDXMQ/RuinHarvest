@@ -208,8 +208,58 @@ func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> voi
 		else:
 			btn.text = ""
 			
+		# 은신처 드래그 앤 드롭
+		btn.set_drag_forwarding(
+			func(_at_pos): return _get_hideout_drag_data(i, is_player),
+			func(_at_pos, data): return _can_hideout_drop_data(data),
+			func(_at_pos, data): _on_hideout_drop_data(data, i, is_player)
+		)
+		
 		btn.pressed.connect(func(): _on_slot_clicked(i, is_player))
 		grid.add_child(btn)
+
+func _get_hideout_drag_data(index: int, is_player: bool) -> Variant:
+	var src = player_inv if is_player else stash_inv
+	if src == null or src.items[index] == null:
+		return null
+		
+	var item = src.items[index]
+	var preview = TextureRect.new()
+	preview.texture = ItemIconManager.get_icon(item["id"]) if ItemIconManager else null
+	preview.custom_minimum_size = Vector2(48, 48)
+	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview.modulate = Color(1, 1, 1, 0.75)
+	
+	var control = Control.new()
+	control.add_child(preview)
+	preview.position = -Vector2(24, 24)
+	set_drag_preview(control)
+	
+	return {
+		"src_index": index,
+		"src_is_player": is_player,
+		"item": item
+	}
+
+func _can_hideout_drop_data(data: Variant) -> bool:
+	return data is Dictionary and data.has("src_index")
+
+func _on_hideout_drop_data(data: Variant, target_index: int, target_is_player: bool) -> void:
+	if not _can_hideout_drop_data(data):
+		return
+		
+	var src_index = data["src_index"]
+	var src_is_player = data["src_is_player"]
+	
+	var src = player_inv if src_is_player else stash_inv
+	var dest = player_inv if target_is_player else stash_inv
+	
+	if src == null or dest == null:
+		return
+		
+	src.move_item(src_index, target_index, dest)
+	if SoundManager: SoundManager.play("menu_select")
+	_refresh_stash_ui()
 
 func _on_slot_clicked(index: int, is_player: bool) -> void:
 	var src = player_inv if is_player else stash_inv
@@ -499,3 +549,16 @@ func _on_menu_pressed() -> void:
 		if GameManager.current_save_slot != "":
 			SaveManager.save_game(GameManager.current_world_data, GameManager.current_save_slot)
 		GameManager.change_state(GameManager.GameState.MAIN_MENU)
+
+func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_B:
+			_open_weapon_modding_window()
+
+func _open_weapon_modding_window() -> void:
+	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")
+	if modding_script:
+		var win = modding_script.new()
+		add_child(win)
+		win.setup(player_inv, stash_inv)
+		win.window_closed.connect(func(): _on_inventory_changed())

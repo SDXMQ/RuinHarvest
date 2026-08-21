@@ -200,6 +200,16 @@ var items: Dictionary = {
 		"description": "LED 손전등. 밤에 시야를 밝혀준다.",
 		"stackable": false, "weight": 0.3, "effects": {"night_vision": true}, "rarity": 0.35, "value": 2000
 	},
+	"망원경": {
+		"category": ItemCategory.TOOL,
+		"description": "군용 5배율 관측용 망원경. 우클릭 시 넓은 시야로 원거리를 정찰할 수 있다.",
+		"stackable": false, "weight": 0.6, "effects": {"telescope_zoom": 5.0}, "rarity": 0.08, "value": 14000
+	},
+	"고배율_망원경": {
+		"category": ItemCategory.TOOL,
+		"description": "10배율 초고성능 군용 관측 망원경. 극도로 먼 거리의 적과 지형을 정찰한다.",
+		"stackable": false, "weight": 1.0, "effects": {"telescope_zoom": 10.0}, "rarity": 0.03, "value": 38000
+	},
 	"비상용 배터리": {
 		"category": ItemCategory.TOOL,
 		"description": "충전식 비상 배터리. 여러 장비에 사용 가능.",
@@ -214,6 +224,65 @@ var items: Dictionary = {
 		"category": ItemCategory.TOOL,
 		"description": "혹독한 오염 지대에서도 정상 작동하는 전술 군용 나침반.",
 		"stackable": false, "weight": 0.2, "rarity": 0.05, "value": 10000
+	},
+
+	# === 탄약류 ===
+	"9mm": {
+		"category": ItemCategory.WEAPON,
+		"description": "9x19mm 권총/SMG 표준 탄약.",
+		"stackable": true, "max_stack": 60, "weight": 0.02, "rarity": 0.3, "value": 150
+	},
+	".45ACP": {
+		"category": ItemCategory.WEAPON,
+		"description": ".45 ACP 대구경 권총탄. 높은 저지력.",
+		"stackable": true, "max_stack": 50, "weight": 0.03, "rarity": 0.2, "value": 250
+	},
+	"5.56mm": {
+		"category": ItemCategory.WEAPON,
+		"description": "5.56x45mm NATO 고속 소총탄.",
+		"stackable": true, "max_stack": 60, "weight": 0.03, "rarity": 0.15, "value": 350
+	},
+	"7.62mm": {
+		"category": ItemCategory.WEAPON,
+		"description": "7.62x39mm 고위력 관통 소총탄.",
+		"stackable": true, "max_stack": 40, "weight": 0.04, "rarity": 0.1, "value": 450
+	},
+	"12게이지_벅샷": {
+		"category": ItemCategory.WEAPON,
+		"description": "12게이지 8펠릿 산탄. 근거리 파괴력 극대화.",
+		"stackable": true, "max_stack": 20, "weight": 0.05, "rarity": 0.2, "value": 300
+	},
+	"12게이지_슬러그": {
+		"category": ItemCategory.WEAPON,
+		"description": "12게이지 중량 슬러그탄. 단발 관통력 극대화.",
+		"stackable": true, "max_stack": 20, "weight": 0.06, "rarity": 0.08, "value": 500
+	},
+
+	# === 리시버류 ===
+	"M9_리시버": {
+		"category": ItemCategory.WEAPON,
+		"description": "M9 베레타 권총 리시버. 모딩 가능.",
+		"stackable": false, "weight": 0.5, "type": "receiver", "rarity": 0.15, "value": 8000
+	},
+	"AK_리시버": {
+		"category": ItemCategory.WEAPON,
+		"description": "AK-47 소총 리시버. 강력한 7.62mm 화력 지원.",
+		"stackable": false, "weight": 1.8, "type": "receiver", "rarity": 0.08, "value": 24000
+	},
+	"M4_리시버": {
+		"category": ItemCategory.WEAPON,
+		"description": "M4A1 카빈 리시버. 3개 레일과 높은 확장성.",
+		"stackable": false, "weight": 1.6, "type": "receiver", "rarity": 0.05, "value": 32000
+	},
+	"레밍턴_리시버": {
+		"category": ItemCategory.WEAPON,
+		"description": "레밍턴 870 펌프액션 샷건 리시버.",
+		"stackable": false, "weight": 2.1, "type": "receiver", "rarity": 0.1, "value": 18000
+	},
+	"SV98_리시버": {
+		"category": ItemCategory.WEAPON,
+		"description": "SV-98 정밀 볼트액션 저격 리시버.",
+		"stackable": false, "weight": 3.0, "type": "receiver", "rarity": 0.03, "value": 45000
 	},
 
 	# === 재료 ===
@@ -376,6 +445,27 @@ func get_item_data(id: String) -> Dictionary:
 		var d = items[id].duplicate()
 		d["name"] = id
 		return d
+		
+	# 무기 부품 데이터베이스 조회
+	if WeaponPartsDatabase.PARTS.has(id):
+		var p = WeaponPartsDatabase.PARTS[id].duplicate()
+		p["category"] = ItemCategory.TOOL
+		p["stackable"] = false
+		p["max_stack"] = 1
+		p["weight"] = p.get("weight", 0.3)
+		p["description"] = "[총기 부품: %s] %s" % [p.get("slot", ""), p.get("name", id)]
+		return p
+		
+	# 리시버 데이터베이스 조회
+	if WeaponPartsDatabase.RECEIVERS.has(id):
+		var r = WeaponPartsDatabase.RECEIVERS[id].duplicate()
+		r["category"] = ItemCategory.WEAPON
+		r["stackable"] = false
+		r["max_stack"] = 1
+		r["type"] = "receiver"
+		r["description"] = "[총기 리시버] %s" % r.get("name", id)
+		return r
+		
 	return {"name": id, "weight": 0.1, "max_stack": 1, "value": 500}
 
 func generate_loot(table_name: String, rolls: int = 3) -> Array[Dictionary]:

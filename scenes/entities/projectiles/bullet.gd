@@ -30,7 +30,18 @@ func _on_body_entered(body: Node2D) -> void:
 	if body.has_method("take_damage"):
 		body.take_damage(damage, direction)
 		queue_free()
-	elif body is TileMapLayer or body is StaticBody2D:
+	elif body is TileMapLayer:
+		var layer = body as TileMapLayer
+		var hit_tile_pos = layer.local_to_map(global_position + direction * 4.0)
+		var coords = layer.get_cell_atlas_coords(hit_tile_pos)
+		if coords == TileManager.OBJ_WINDOW:
+			layer.set_cell(hit_tile_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+			EventBus.noise_created.emit(global_position, 400.0, "break")
+			EventBus.window_broken.emit(hit_tile_pos)
+			EventBus.event_logged.emit("💥 총격으로 창문이 깨졌습니다!")
+			if SoundManager: SoundManager.play("hit_melee")
+		queue_free()
+	elif body is StaticBody2D:
 		queue_free()
 
 func _draw() -> void:
