@@ -7,6 +7,7 @@ extends Control
 
 const SandboxMenuScene = preload("res://scenes/main_menu/sandbox_menu.tscn")
 const NewGameCustomScene = preload("res://scenes/main_menu/new_game_custom_window.tscn")
+const SaveSlotsWindowScene = preload("res://scenes/ui/save_slots_window.tscn")
 
 func _ready() -> void:
 	start_button.pressed.connect(_on_start_pressed)
@@ -38,12 +39,8 @@ func _on_sandbox_pressed() -> void:
 func _on_load_pressed() -> void:
 	if SoundManager:
 		SoundManager.play("menu_select")
-		
-	var saves = SaveManager.get_save_files()
-	if saves.size() > 0:
-		GameManager.load_game(saves[0].filename)
-	else:
-		print("No saves found.")
+	var load_win = SaveSlotsWindowScene.instantiate()
+	add_child(load_win)
 
 func _on_quit_pressed() -> void:
 	get_tree().quit()
