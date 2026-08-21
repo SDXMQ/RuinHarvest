@@ -38,6 +38,9 @@ var container_inventories: Dictionary = {} # tile_pos -> Inventory
 const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
 var current_loot_window: Control = null
 
+const ItemSpawnerScene = preload("res://scenes/ui/item_spawner_window.tscn")
+var current_spawner_window: Control = null
+
 const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
 var enemy_spawn_timer: float = 10.0
 var max_enemies_count: int = 22
@@ -45,6 +48,7 @@ var max_enemies_count: int = 22
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분
 var raid_total_time: float = 1800.0
+var day_night_cycle_duration: float = 300.0 # 낮/밤 1주기 시간(초)
 
 const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
 
@@ -159,6 +163,13 @@ func _ready() -> void:
 		
 	# 탈출 지점 3개 스폰 (1800~2500px 원거리 배치)
 	_spawn_extraction_zones()
+	
+	if EventBus.has_signal("event_logged"):
+		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
+		if is_sandbox:
+			EventBus.event_logged.emit("🛠️ 샌드박스 모드: [F1] 키를 눌러 모든 무기/부품을 소환할 수 있습니다.")
+		else:
+			EventBus.event_logged.emit("★ 레이드 시작: 탈출 지점을 찾아 안전하게 탈출하십시오. [F1: 치트/스포너]")
 	
 	GameManager.current_state = GameManager.GameState.IN_GAME
 	
@@ -310,6 +321,21 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("map") or (event is InputEventKey and event.physical_keycode == KEY_M and event.pressed):
 		_open_map_window()
 		get_viewport().set_input_as_handled()
+		
+	# 크리에이티브 아이템 스포너 열기 (F1 키)
+	if event is InputEventKey and event.physical_keycode == KEY_F1 and event.pressed:
+		_open_item_spawner()
+		get_viewport().set_input_as_handled()
+
+func _open_item_spawner() -> void:
+	if current_spawner_window != null: return
+	get_tree().paused = true
+	current_spawner_window = ItemSpawnerScene.instantiate()
+	$UI.add_child(current_spawner_window)
+	current_spawner_window.window_closed.connect(func():
+		current_spawner_window = null
+		_on_player_stats_changed()
+	)
 
 func _open_weapon_modding_window() -> void:
 	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")
@@ -442,7 +468,15 @@ func _process(delta: float) -> void:
 
 func _update_day_night_cycle() -> void:
 	if not day_night_modulate: return
-	var progress = 1.0 - (raid_time_remaining / 300.0) # 0.0 (시작) ~ 1.0 (끝)
+	
+	# 영구 주간 (duration < 0) 설정 시 항상 밝은 낮 유지
+	if day_night_cycle_duration <= 0.0:
+		day_night_modulate.color = Color(1.0, 1.0, 1.0)
+		return
+		
+	var time_elapsed = raid_total_time - raid_time_remaining
+	var cycle_pos = fposmod(time_elapsed, day_night_cycle_duration)
+	var progress = cycle_pos / day_night_cycle_duration # 0.0 ~ 1.0 순환 사이클
 	
 	# 낮 -> 황혼 -> 밤 -> 새벽 사이클
 	var target_color: Color

@@ -554,6 +554,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_B:
 			_open_weapon_modding_window()
+		elif event.physical_keycode == KEY_F1:
+			_open_item_spawner()
+
+func _open_item_spawner() -> void:
+	var spawner_scene = preload("res://scenes/ui/item_spawner_window.tscn")
+	if spawner_scene:
+		var win = spawner_scene.instantiate()
+		add_child(win)
+		win.window_closed.connect(func(): _on_inventory_changed())
 
 func _open_weapon_modding_window() -> void:
 	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")

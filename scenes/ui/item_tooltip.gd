@@ -1,4 +1,5 @@
 # res://scenes/ui/item_tooltip.gd
+class_name ItemTooltip
 extends PanelContainer
 
 @onready var name_label: Label = $VBox/NameLabel

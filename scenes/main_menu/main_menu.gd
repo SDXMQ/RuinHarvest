@@ -6,6 +6,7 @@ extends Control
 @onready var quit_button: Button = $VBoxContainer/QuitButton
 
 const SandboxMenuScene = preload("res://scenes/main_menu/sandbox_menu.tscn")
+const NewGameCustomScene = preload("res://scenes/main_menu/new_game_custom_window.tscn")
 
 func _ready() -> void:
 	start_button.pressed.connect(_on_start_pressed)
@@ -21,16 +22,12 @@ func _ready() -> void:
 		start_button.text = I18nManager.t("new_game")
 		load_button.text = I18nManager.t("load_game")
 		quit_button.text = I18nManager.t("quit")
-		
-	# BGM 시작 (나중에 추가)
 
 func _on_start_pressed() -> void:
 	if SoundManager:
 		SoundManager.play("menu_select")
-		
-	if GameManager:
-		# 임시로 바로 월드 생성/시작
-		GameManager.start_new_game(GameSettings.DEFAULT_WORLD_SETTINGS)
+	var custom_win = NewGameCustomScene.instantiate()
+	add_child(custom_win)
 
 func _on_sandbox_pressed() -> void:
 	if SoundManager:

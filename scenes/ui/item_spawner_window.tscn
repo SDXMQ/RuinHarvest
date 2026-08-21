@@ -1,0 +1,110 @@
+[gd_scene format=3 uid="uid://spawner0001"]
+
+[ext_resource type="Script" path="res://scenes/ui/item_spawner_window.gd" id="1_spawn"]
+
+[node name="ItemSpawnerWindow" type="Control"]
+process_mode = 2
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_spawn")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.65)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="Panel" parent="Center"]
+custom_minimum_size = Vector2(720, 520)
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Center/Panel"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_top = 12.0
+offset_bottom = 40.0
+grow_horizontal = 2
+theme_override_font_sizes/font_size = 18
+text = "🛠️ 크리에이티브 아이템 스포너 (Item Spawner)"
+horizontal_alignment = 1
+
+[node name="VBox" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 46.0
+offset_right = -16.0
+offset_bottom = -54.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="SearchHBox" type="HBoxContainer" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="SearchInput" type="LineEdit" parent="Center/Panel/VBox/SearchHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "아이템 이름 검색..."
+
+[node name="CategoryOpt" type="OptionButton" parent="Center/Panel/VBox/SearchHBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 0)
+
+[node name="Scroll" type="ScrollContainer" parent="Center/Panel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ItemGrid" type="GridContainer" parent="Center/Panel/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+columns = 5
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+
+[node name="BottomHBox" type="HBoxContainer" parent="Center/Panel"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = -44.0
+offset_right = -16.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="HintLabel" type="Label" parent="Center/Panel/BottomHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.7, 0.75, 0.8, 1)
+theme_override_font_sizes/font_size = 13
+text = "좌클릭: 1개 지급 | 우클릭: 1스택 지급"
+
+[node name="CloseBtn" type="Button" parent="Center/Panel/BottomHBox"]
+layout_mode = 2
+custom_minimum_size = Vector2(100, 0)
+text = "닫기 (F1 / ESC)"
+
+[connection signal="pressed" from="Center/Panel/BottomHBox/CloseBtn" to="." method="_on_close_pressed"]

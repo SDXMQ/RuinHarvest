@@ -24,7 +24,7 @@ var loot_inv: Inventory = null
 @onready var apply_btn: Button = $Center/HBox/WeaponModPanel/VBox/ButtonsHBox/ApplyBtn
 @onready var disassemble_btn: Button = $Center/HBox/WeaponModPanel/VBox/ButtonsHBox/DisassembleBtn
 
-var tooltip: ItemTooltip = null
+var tooltip: PanelContainer = null
 var item_use_cooldown: float = 0.0
 const ITEM_USE_COOLDOWN_TIME: float = 1.5
 
@@ -79,7 +79,8 @@ func _setup_modding_receivers() -> void:
 	receiver_opt.clear()
 	for r_id in WeaponPartsDatabase.RECEIVERS.keys():
 		var r_data = WeaponPartsDatabase.RECEIVERS[r_id]
-		receiver_opt.add_item("%s (%s)" % [r_data["name"], r_data["caliber"]])
+		var caliber_name = r_data.get("default_ammo", "9mm")
+		receiver_opt.add_item("%s (%s)" % [r_data["name"], caliber_name])
 
 func _sync_receiver_ui() -> void:
 	var rec_id = current_modding_weapon.get("receiver", "M9_리시버")
