@@ -374,7 +374,7 @@ func switch_weapon_slot(slot_name: String) -> void:
 			weapon_dict["attachments"] = {}
 			
 		# WeaponPartsDatabase를 통해 부착물 포함 스탯 계산
-		equipped_weapon_data = WeaponPartsDatabase.compute_weapon_stats(weapon_dict)
+		equipped_weapon_data = WeaponPartsDatabase.compute_weapon_from_dict(weapon_dict)
 		var w_name = weapon_dict.get("name", "")
 		if w_name == "":
 			var idata = ItemDatabase.get_item_data(rec_id)

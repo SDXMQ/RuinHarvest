@@ -136,6 +136,40 @@ const RECEIVERS = {
 		"value": 18000,
 		"weight": 2.1
 	},
+	"레버액션_리시버": {
+		"name": "윈체스터 레버액션 소총",
+		"category": "rifle",
+		"base_damage": 38.0,
+		"base_range": 16.0,
+		"base_rpm": 65,
+		"base_recoil": 38.0,
+		"base_accuracy": 85.0,
+		"ammo_types": [".45ACP", "7.62mm", "탄약"],
+		"default_ammo": ".45ACP",
+		"slots": {
+			"barrel": 1, "muzzle": 1, "stock": 1,
+			"optic": 1, "rail": 2
+		},
+		"value": 35000,
+		"weight": 2.8
+	},
+	"레버액션 소총": {
+		"name": "윈체스터 레버액션 소총",
+		"category": "rifle",
+		"base_damage": 38.0,
+		"base_range": 16.0,
+		"base_rpm": 65,
+		"base_recoil": 38.0,
+		"base_accuracy": 85.0,
+		"ammo_types": [".45ACP", "7.62mm", "탄약"],
+		"default_ammo": ".45ACP",
+		"slots": {
+			"barrel": 1, "muzzle": 1, "stock": 1,
+			"optic": 1, "rail": 2
+		},
+		"value": 35000,
+		"weight": 2.8
+	},
 	"SV98_리시버": {
 		"name": "SV-98 정밀 저격 리시버",
 		"category": "sniper",
@@ -154,6 +188,38 @@ const RECEIVERS = {
 		"weight": 3.0
 	}
 }
+
+static func resolve_receiver_id(item_id: String) -> String:
+	if RECEIVERS.has(item_id):
+		return item_id
+	if item_id == "레버액션 소총" or item_id == "레버액션_소총" or item_id.contains("레버액션"):
+		return "레버액션_리시버"
+	elif item_id == "M4A1 소총" or item_id == "M4A1" or item_id.contains("M4"):
+		return "M4_리시버"
+	elif item_id == "AK-47 돌격소총" or item_id == "AK-47" or item_id.contains("AK"):
+		return "AK_리시버"
+	elif item_id == "9mm 권총" or item_id == "권총" or item_id.contains("베레타") or item_id.contains("M9"):
+		return "M9_리시버"
+	elif item_id == "산탄총" or item_id.contains("샷건") or item_id.contains("레밍턴"):
+		return "레밍턴_리시버"
+	elif item_id.contains("SV98") or item_id.contains("SV-98") or item_id.contains("저격"):
+		return "SV98_리시버"
+	return item_id
+
+static func is_modifiable_weapon(item: Dictionary) -> bool:
+	if item.is_empty(): return false
+	var it_id = item.get("id", "")
+	if RECEIVERS.has(it_id) or item.get("type", "") == "assembled_weapon":
+		return true
+	var res_id = resolve_receiver_id(it_id)
+	if RECEIVERS.has(res_id):
+		return true
+	var d = ItemDatabase.get_item_data(it_id)
+	var cat = d.get("category", -1)
+	var it_type = d.get("type", "")
+	if cat == ItemDatabase.ItemCategory.WEAPON and (it_type == "ranged" or it_id.contains("소총") or it_id.contains("권총") or it_id.contains("샷건")):
+		return true
+	return false
 
 # ============================================================
 # 3. 부품 정의 (Weapon Parts)
@@ -310,8 +376,20 @@ const PARTS = {
 # ============================================================
 # 4. 스탯 계산 엔진 (Compute Stats)
 # ============================================================
-static func compute_weapon_stats(receiver_id: String, parts: Dictionary, loaded_ammo: String = "") -> Dictionary:
-	var receiver = RECEIVERS.get(receiver_id, RECEIVERS["M9_리시버"])
+static func compute_weapon_from_dict(weapon_dict: Dictionary) -> Dictionary:
+	var rec_id = weapon_dict.get("receiver", weapon_dict.get("id", "M9_리시버"))
+	var parts = weapon_dict.get("parts", weapon_dict.get("attachments", {}))
+	var ammo = weapon_dict.get("loaded_ammo", "")
+	var stats = compute_weapon_stats(rec_id, parts, ammo)
+	var res = weapon_dict.duplicate(true)
+	res["computed_stats"] = stats
+	return res
+
+static func compute_weapon_stats(receiver_id: String, parts: Dictionary = {}, loaded_ammo: String = "") -> Dictionary:
+	var receiver = RECEIVERS.get(receiver_id, RECEIVERS.get("M9_리시버", {}))
+	if receiver.is_empty():
+		receiver = RECEIVERS["M9_리시버"]
+		
 	var ammo_id = loaded_ammo if loaded_ammo != "" else receiver.get("default_ammo", "9mm")
 	var ammo_data = AMMO_TYPES.get(ammo_id, AMMO_TYPES["9mm"])
 	
@@ -332,7 +410,8 @@ static func compute_weapon_stats(receiver_id: String, parts: Dictionary, loaded_
 		"laser_sight": false,
 		"pellets": ammo_data.get("pellets", 1),
 		"penetration": ammo_data.get("penetration", 10),
-		"ammo_type": ammo_id
+		"ammo_type": ammo_id,
+		"ammo_types": receiver.get("ammo_types", [ammo_id])
 	}
 	
 	# 부품 보정치 누적
@@ -422,6 +501,13 @@ static func create_default_weapon(receiver_id: String) -> Dictionary:
 				"optic": "8배율_스나이퍼_스코프",
 				"stock": "PRS_정밀_저격_스톡",
 				"magazine": "표준_탄창",
+				"rail": []
+			}
+		"레버액션_리시버", "레버액션 소총":
+			parts = {
+				"barrel": "정밀_롱헤비_총열",
+				"optic": "2배율_조준경",
+				"stock": "PRS_정밀_저격_스톡",
 				"rail": []
 			}
 			

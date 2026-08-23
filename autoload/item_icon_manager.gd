@@ -49,6 +49,8 @@ func _generate_icon(item_id: String) -> Texture2D:
 		_draw_shoes(img, size)
 		
 	# === 5. 총기 리시버 및 완제품 ===
+	elif item_id.contains("레버액션") or lower_id.contains("lever"):
+		_draw_receiver(img, "lever", size)
 	elif item_id.contains("M4") or item_id.contains("m4"):
 		_draw_receiver(img, "m4", size)
 	elif item_id.contains("AK") or item_id.contains("ak"):
@@ -359,6 +361,21 @@ func _draw_receiver(img: Image, rec_type: String, size: int) -> void:
 			for y in range(15, 20): img.set_pixel(x, y, Color(0.25, 0.38, 0.22)) # 올리브 스톡
 		# 볼트 핸들
 		img.set_pixel(13, 12, Color(0.7, 0.7, 0.75))
+	elif rec_type == "lever":
+		# 윈체스터 레버액션 소총 (스틸 배럴/리시버 + 목재 개머리판/포어엔드 + 레버 루프)
+		for x in range(3, 29):
+			for y in range(13, 16): img.set_pixel(x, y, Color(0.25, 0.28, 0.3))
+		# 목재 포어엔드
+		for x in range(16, 25):
+			for y in range(15, 18): img.set_pixel(x, y, Color(0.5, 0.28, 0.12))
+		# 목재 개머리판
+		for x in range(3, 11):
+			for y in range(14, 22): img.set_pixel(x, y, Color(0.5, 0.28, 0.12))
+		# 레버 루프
+		for x in range(11, 15):
+			img.set_pixel(x, 19, Color(0.2, 0.2, 0.25))
+		img.set_pixel(11, 18, Color(0.2, 0.2, 0.25))
+		img.set_pixel(14, 18, Color(0.2, 0.2, 0.25))
 
 # ============================================================
 # 3. 구경별 탄약 드로잉
