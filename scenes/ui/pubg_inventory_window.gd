@@ -853,6 +853,16 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 		if ItemIconManager: wep_btn.icon = ItemIconManager.get_icon(weapon_dict.get("id", ""))
 	top_hbox.add_child(wep_btn)
 	
+	wep_btn.mouse_entered.connect(func():
+		if not is_dragging and tooltip and not weapon_dict.is_empty():
+			var d = ItemDatabase.get_item_data(weapon_dict.get("id", ""))
+			tooltip.display_item(weapon_dict, d)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	wep_btn.mouse_exited.connect(func():
+		if tooltip: tooltip.hide()
+	)
+	
 	# 드롭 타겟 등록
 	drop_targets.append({"control": wep_btn, "type": "weapon", "slot_key": slot_key})
 	
@@ -863,6 +873,7 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 				if is_dragging:
 					_try_equip_weapon(slot_key)
 				elif not weapon_dict.is_empty():
+					if tooltip: tooltip.hide()
 					_start_drag("weapon_slot", weapon_dict, Vector2i.ZERO, slot_key)
 			elif event.button_index == MOUSE_BUTTON_RIGHT and not weapon_dict.is_empty():
 				# 우클릭 시 가방으로 탈착
@@ -870,6 +881,7 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 				if rem <= 0:
 					equipment_data[slot_key] = {}
 					_update_weapons_ui()
+					if tooltip: tooltip.hide()
 					if SoundManager: SoundManager.play("menu_select")
 	)
 	

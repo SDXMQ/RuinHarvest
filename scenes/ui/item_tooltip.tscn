@@ -54,11 +54,21 @@ theme_override_font_sizes/font_size = 11
 text = "아이템 설명 텍스트가 여기에 표시됩니다."
 autowrap_mode = 2
 
-[node name="StatsLabel" type="Label" parent="VBox"]
+[node name="AttachmentsLabel" type="RichTextLabel" parent="VBox"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
-theme_override_font_sizes/font_size = 11
-text = "⚔️ 공격력: 14"
+mouse_filter = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+theme_override_font_sizes/normal_font_size = 11
+
+[node name="StatsLabel" type="RichTextLabel" parent="VBox"]
+layout_mode = 2
+mouse_filter = 2
+bbcode_enabled = true
+fit_content = true
+scroll_active = false
+theme_override_font_sizes/normal_font_size = 11
 
 [node name="DurabilityContainer" type="VBoxContainer" parent="VBox"]
 layout_mode = 2

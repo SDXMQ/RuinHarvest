@@ -622,24 +622,41 @@ func _connect_equipment_slots() -> void:
 		var s_name: String = s_pair[1]
 		drop_targets.append({"control": btn, "slot_name": s_name})
 		
+		var captured_btn = btn
+		var captured_slot = s_name
+		
+		btn.mouse_entered.connect(func():
+			if not is_dragging and tooltip:
+				var equipped = equipment_data.get(captured_slot, {})
+				if not equipped.is_empty():
+					var idata = ItemDatabase.get_item_data(equipped.get("id", ""))
+					tooltip.display_item(equipped, idata)
+					tooltip.update_position(get_global_mouse_position())
+		)
+		btn.mouse_exited.connect(func():
+			if tooltip: tooltip.hide()
+		)
+		
 		btn.gui_input.connect(func(event: InputEvent):
 			if event is InputEventMouseButton and event.pressed:
 				if event.button_index == MOUSE_BUTTON_LEFT:
 					if is_dragging:
-						_try_equip_hideout_item(s_name)
+						_try_equip_hideout_item(captured_slot)
 					else:
-						var equipped = equipment_data.get(s_name, {})
+						var equipped = equipment_data.get(captured_slot, {})
 						if not equipped.is_empty():
-							_start_drag("equipment", equipped, Vector2i.ZERO, s_name)
+							if tooltip: tooltip.hide()
+							_start_drag("equipment", equipped, Vector2i.ZERO, captured_slot)
 				elif event.button_index == MOUSE_BUTTON_RIGHT:
 					# 우클릭 시 창고로 탈착
-					var equipped = equipment_data.get(s_name, {})
+					var equipped = equipment_data.get(captured_slot, {})
 					if not equipped.is_empty():
 						var rem = stash_grid_mgr.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
 						if rem <= 0:
-							equipment_data[s_name] = {}
+							equipment_data[captured_slot] = {}
 							_apply_backpack_grid_size()
 							_update_equipment_ui()
+							if tooltip: tooltip.hide()
 							if SoundManager: SoundManager.play("menu_select")
 		)
 
