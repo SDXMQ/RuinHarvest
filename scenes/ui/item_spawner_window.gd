@@ -213,19 +213,62 @@ func _create_item_button(item_info: Dictionary) -> void:
 	item_grid.add_child(btn)
 
 func _spawn_item_to_player(item_id: String, item_data: Dictionary, amount: int) -> void:
-	var player_inv = _get_player_inventory()
-	if player_inv:
-		var added = player_inv.add_item(item_id, amount)
-		if added:
-			if SoundManager: SoundManager.play("menu_select")
-			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("✨ [치트/스폰] %s x%d 지급 완료" % [item_data.get("name", item_id), amount])
-		else:
-			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 인벤토리 공간이 부족합니다.")
-	else:
+	var cur_scene = get_tree().current_scene
+	var spawned_successfully = false
+	
+	# 아이템 딕셔너리 구성 (총기인 경우 기본 부품이 세팅된 완제품 무기로 생성)
+	var custom_dict = {"id": item_id, "amount": amount}
+	var rec_id = WeaponPartsDatabase.resolve_receiver_id(item_id)
+	if WeaponPartsDatabase.RECEIVERS.has(rec_id):
+		custom_dict = WeaponPartsDatabase.create_default_weapon(rec_id)
+		custom_dict["amount"] = 1
+		
+	# 1. 은신처 씬 (Hideout) 에서 스폰 (창고 우선, 가득 차면 배낭에 추가)
+	if cur_scene and "stash_grid_mgr" in cur_scene and cur_scene.stash_grid_mgr:
+		var rem = cur_scene.stash_grid_mgr.auto_add_item(item_id, amount, custom_dict)
+		if rem <= 0:
+			spawned_successfully = true
+		elif "player_grid_mgr" in cur_scene and cur_scene.player_grid_mgr:
+			var rem2 = cur_scene.player_grid_mgr.auto_add_item(item_id, rem, custom_dict)
+			if rem2 < rem:
+				spawned_successfully = true
+				
+		if spawned_successfully:
+			if cur_scene.has_method("_on_grid_changed"):
+				cur_scene._on_grid_changed()
+			if cur_scene.has_method("_refresh_workbench_ui"):
+				cur_scene._refresh_workbench_ui()
+				
+	# 2. 인게임 씬 (MainWorld / Player 2D Grid) 에서 스폰
+	elif cur_scene and "player" in cur_scene and cur_scene.player:
+		var p = cur_scene.player
+		if "grid_inventory" in p and p.grid_inventory:
+			var rem = p.grid_inventory.auto_add_item(item_id, amount, custom_dict)
+			if rem < amount:
+				spawned_successfully = true
+		elif "inventory" in p and p.inventory:
+			if p.inventory.has_method("auto_add_item"):
+				var rem = p.inventory.auto_add_item(item_id, amount, custom_dict)
+				if rem < amount: spawned_successfully = true
+			elif p.inventory.has_method("add_item"):
+				var added = p.inventory.add_item(item_id, amount)
+				if added: spawned_successfully = true
+				
+	# 3. 폴백 (구버전 1D 인벤토리)
+	if not spawned_successfully:
+		var p_inv = _get_player_inventory()
+		if p_inv and p_inv.has_method("add_item"):
+			var added = p_inv.add_item(item_id, amount)
+			if added: spawned_successfully = true
+
+	if spawned_successfully:
+		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 플레이어 인벤토리를 찾을 수 없습니다.")
+			EventBus.event_logged.emit("✨ [치트/스폰] %s x%d 지급 완료 (창고/가방)" % [item_data.get("name", item_id), amount])
+	else:
+		if SoundManager: SoundManager.play("hit_melee")
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 인벤토리/창고 공간이 부족하거나 대상을 찾을 수 없습니다.")
 
 # ============================================================
 # 치트 / 크리에이티브 관리자 기능
@@ -242,10 +285,10 @@ func _add_money(amount: int) -> void:
 		# 은신처 UI 갱신 (열려있다면)
 		var cur_scene = get_tree().current_scene
 		if cur_scene and "money_label" in cur_scene and cur_scene.money_label:
-			cur_scene.money_label.text = "자금: %d 루블" % cur_rubles
+			cur_scene.money_label.text = "자금: %d RUB" % cur_rubles
 			
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💰 자금 치트: +%d 루블 (총 %d 루블)" % [amount, cur_rubles])
+			EventBus.event_logged.emit("💰 자금 치트: +%d RUB (총 %d RUB)" % [amount, cur_rubles])
 
 func _heal_all_stats() -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -268,15 +311,15 @@ func _cure_all_conditions() -> void:
 		player.is_infected = false
 		player.stats_changed.emit()
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🩹 모든 상태이상(출혈, 골절, 감염)이 치료되었습니다.")
+			EventBus.event_logged.emit("🩹 모든 부상(출혈, 골절, 감염) 치료 완료!")
 
 func _toggle_god_mode(enabled: bool) -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	var player = _get_player()
 	if player:
-		player.set("is_god_mode", enabled)
+		player.is_god_mode = enabled
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🛡️ 무적 모드: %s" % ("활성화 (ON)" if enabled else "비활성화 (OFF)"))
+			EventBus.event_logged.emit("🛡️ 무적 모드 (God Mode): %s" % ("활성화" if enabled else "비활성화"))
 
 func _add_raid_time() -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -288,12 +331,27 @@ func _add_raid_time() -> void:
 
 func _clear_inventory() -> void:
 	if SoundManager: SoundManager.play("menu_select")
-	var player_inv = _get_player_inventory()
-	if player_inv:
-		for i in range(player_inv.max_slots):
-			player_inv.remove_item_at(i, 999)
-		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🗑️ 가방 인벤토리를 모두 비웠습니다.")
+	var cur_scene = get_tree().current_scene
+	var cleared = false
+	
+	if cur_scene and "player_grid_mgr" in cur_scene and cur_scene.player_grid_mgr:
+		cur_scene.player_grid_mgr.clear()
+		cleared = true
+		if cur_scene.has_method("_on_grid_changed"): cur_scene._on_grid_changed()
+	elif cur_scene and "player" in cur_scene and cur_scene.player:
+		var p = cur_scene.player
+		if "grid_inventory" in p and p.grid_inventory:
+			p.grid_inventory.clear()
+			cleared = true
+			
+	var p_inv = _get_player_inventory()
+	if p_inv and "max_slots" in p_inv:
+		for i in range(p_inv.max_slots):
+			p_inv.remove_item_at(i, 999)
+		cleared = true
+		
+	if cleared and EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("🗑️ 가방 인벤토리를 모두 비웠습니다.")
 
 # ============================================================
 # 플레이어 & 인벤토리 참조 헬퍼
