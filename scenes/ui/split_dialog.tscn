@@ -1,0 +1,78 @@
+[gd_scene load_steps=2 format=3 uid="uid://splitdiag01"]
+
+[ext_resource type="Script" path="res://scenes/ui/split_dialog.gd" id="1_split"]
+
+[node name="SplitDialog" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_split")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0, 0, 0, 0.5)
+
+[node name="Center" type="CenterContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Center"]
+custom_minimum_size = Vector2(280, 160)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Title" type="Label" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 14
+text = "아이템 수량 분할 (Split)"
+horizontal_alignment = 1
+
+[node name="HBox" type="HBoxContainer" parent="Center/Panel/VBox"]
+layout_mode = 2
+alignment = 1
+
+[node name="Slider" type="HSlider" parent="Center/Panel/VBox/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+min_value = 1.0
+max_value = 100.0
+value = 1.0
+
+[node name="Spin" type="SpinBox" parent="Center/Panel/VBox/HBox"]
+layout_mode = 2
+min_value = 1.0
+max_value = 100.0
+value = 1.0
+
+[node name="Buttons" type="HBoxContainer" parent="Center/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ConfirmBtn" type="Button" parent="Center/Panel/VBox/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "분할 이동"
+
+[node name="CancelBtn" type="Button" parent="Center/Panel/VBox/Buttons"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "취소"
+
+[connection signal="pressed" from="Center/Panel/VBox/Buttons/ConfirmBtn" to="." method="_on_confirm_pressed"]
+[connection signal="pressed" from="Center/Panel/VBox/Buttons/CancelBtn" to="." method="_on_cancel_pressed"]

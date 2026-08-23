@@ -87,83 +87,130 @@ text = "📦 보관함 & 배낭 (Stash)"
 
 [node name="HBox" type="HBoxContainer" parent="CenterArea/TabContainer/StashTab"]
 layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -450.0
-offset_top = -190.0
-offset_right = 450.0
-offset_bottom = 190.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_constants/separation = 40
-
-[node name="PlayerPanel" type="Panel" parent="CenterArea/TabContainer/StashTab/HBox"]
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-
-[node name="Title" type="Label" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 10.0
-offset_bottom = 35.0
-grow_horizontal = 2
-text = "출격용 배낭 (12칸)"
-horizontal_alignment = 1
-
-[node name="Grid" type="GridContainer" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -116.0
-offset_top = -120.0
-offset_right = 116.0
-offset_bottom = 120.0
-grow_horizontal = 2
-grow_vertical = 2
-columns = 4
-theme_override_constants/h_separation = 8
-theme_override_constants/v_separation = 8
-
-[node name="StashPanel" type="Panel" parent="CenterArea/TabContainer/StashTab/HBox"]
-custom_minimum_size = Vector2(560, 0)
-layout_mode = 2
-
-[node name="Title" type="Label" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel"]
-layout_mode = 1
-anchors_preset = 10
-anchor_right = 1.0
-offset_top = 10.0
-offset_bottom = 35.0
-grow_horizontal = 2
-text = "은신처 영구 보관함 (Stash 48칸)"
-horizontal_alignment = 1
-
-[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel"]
-layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_left = 15.0
-offset_top = 45.0
-offset_right = -15.0
-offset_bottom = -15.0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = -16.0
+offset_bottom = -12.0
 grow_horizontal = 2
 grow_vertical = 2
+theme_override_constants/separation = 16
 
-[node name="Grid" type="GridContainer" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel/Scroll"]
+[node name="PlayerPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox"]
+custom_minimum_size = Vector2(340, 0)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "🎒 출격용 배낭 (2D Grid)"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PlayerGridControl" type="Control" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox/Scroll"]
+custom_minimum_size = Vector2(300, 380)
+layout_mode = 2
+
+[node name="EquipPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox"]
+custom_minimum_size = Vector2(230, 0)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "👤 캐릭터 장비 설정"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SlotsVBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-columns = 8
-theme_override_constants/h_separation = 8
-theme_override_constants/v_separation = 8
+theme_override_constants/separation = 6
+
+[node name="HelmetSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🪖 헬멧"
+
+[node name="VestSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🦺 방탄복"
+
+[node name="BackpackSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🎒 배낭 (용량 결정)"
+
+[node name="BottomSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "👟 하의/신발"
+
+[node name="HSeparator" type="HSeparator" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+layout_mode = 2
+
+[node name="Primary1Slot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🔫 주무기 1"
+
+[node name="Primary2Slot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🔫 주무기 2"
+
+[node name="SidearmSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "🗡️ 보조 무기"
+
+[node name="ThrowableSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "💣 투척 무기"
+
+[node name="StashPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0.3, 1)
+theme_override_font_sizes/font_size = 14
+text = "🏢 은신처 창고 (10x12 대용량 보관함)"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StashGridControl" type="Control" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox/Scroll"]
+custom_minimum_size = Vector2(440, 528)
+layout_mode = 2
 
 [node name="TradersTab" type="TabBar" parent="CenterArea/TabContainer"]
 visible = false
@@ -328,6 +375,161 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="RegisterGrid" type="HBoxContainer" parent="CenterArea/TabContainer/MarketTab/VBox/RegisterArea/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="WorkbenchTab" type="TabBar" parent="CenterArea/TabContainer"]
+visible = false
+layout_mode = 2
+text = "🛠️ 총기 작업대 (Workbench)"
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 16.0
+offset_top = 12.0
+offset_right = -16.0
+offset_bottom = -12.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 10
+
+[node name="MainHBox" type="HBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 12
+
+[node name="WeaponListPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox"]
+custom_minimum_size = Vector2(210, 0)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/WeaponListPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/WeaponListPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "📋 내 보유 총기 목록"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/WeaponListPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="WeaponListVBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/WeaponListPanel/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 6
+
+[node name="ModdingCenterPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Title" type="Label" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 14
+text = "🔫 총기 실시간 비주얼 & 부착물 슬롯"
+horizontal_alignment = 1
+
+[node name="PreviewPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel/VBox"]
+custom_minimum_size = Vector2(0, 130)
+layout_mode = 2
+
+[node name="WorkbenchPreview" type="Control" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel/VBox/PreviewPanel"]
+layout_mode = 2
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SlotsGrid" type="GridContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel/VBox/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 6
+columns = 2
+
+[node name="StatsAndPresetPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox"]
+custom_minimum_size = Vector2(290, 0)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StatsTitle" type="Label" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "📊 무기 스탯 실시간 비교 (델타)"
+horizontal_alignment = 1
+
+[node name="StatsScroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="StatsVBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox/StatsScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="HSeparator" type="HSeparator" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+layout_mode = 2
+
+[node name="PresetTitle" type="Label" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.7, 1.0, 1)
+theme_override_font_sizes/font_size = 13
+text = "📐 추천 스마트 프리셋 (Presets)"
+horizontal_alignment = 1
+
+[node name="PresetButtonsVBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="PresetBuyButton" type="Button" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+text = "🛒 부족 부품 구매 후 일괄 조립"
+
+[node name="SaveWeaponBtn" type="Button" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.3, 1.0, 0.5, 1)
+text = "💾 모딩 완료 및 저장/장착"
+
+[node name="CompatPartsPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox"]
+custom_minimum_size = Vector2(0, 100)
+layout_mode = 2
+
+[node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/CompatPartsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="CompatTitle" type="Label" parent="CenterArea/TabContainer/WorkbenchTab/VBox/CompatPartsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.7, 0.85, 1.0, 1)
+theme_override_font_sizes/font_size = 12
+text = "🧰 내 보유 호환 부품 (클릭 시 원클릭 교체 / 우클릭 시 탈착)"
+
+[node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/CompatPartsPanel/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="CompatPartsHBox" type="HBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/CompatPartsPanel/VBox/Scroll"]
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3

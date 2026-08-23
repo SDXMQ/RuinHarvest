@@ -169,28 +169,104 @@ var items: Dictionary = {
 	# === 장비 ===
 	"가방": {
 		"category": ItemCategory.EQUIPMENT,
-		"description": "튼튼한 배낭. 인벤토리 최대 무게를 늘려준다.",
-		"stackable": false, "weight": 0.5, "equip_slot": "back",
+		"description": "튼튼한 배낭. 인벤토리를 6x4(24칸) 크기로 확장한다.",
+		"stackable": false, "weight": 0.5, "equip_slot": "backpack",
+		"grid_w": 2, "grid_h": 3, "backpack_grid": Vector2i(6, 4),
 		"weight_bonus": 15.0, "rarity": 0.15, "value": 8000
+	},
+	"1레벨_가방": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "1레벨 소형 배낭",
+		"description": "가벼운 소형 배낭. 인벤토리를 6x4(24칸) 크기로 확장한다.",
+		"stackable": false, "weight": 0.5, "equip_slot": "backpack",
+		"grid_w": 2, "grid_h": 2, "backpack_grid": Vector2i(6, 4),
+		"rarity": 0.3, "value": 6000
+	},
+	"2레벨_가방": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "2레벨 중형 전술 배낭",
+		"description": "표준형 군용 배낭. 인벤토리를 8x5(40칸) 크기로 확장한다.",
+		"stackable": false, "weight": 1.0, "equip_slot": "backpack",
+		"grid_w": 2, "grid_h": 3, "backpack_grid": Vector2i(8, 5),
+		"rarity": 0.15, "value": 14000
+	},
+	"3레벨_가방": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "3레벨 대형 배낭",
+		"description": "대용량 군용 배낭. 인벤토리를 10x6(60칸) 크기로 대폭 확장한다.",
+		"stackable": false, "weight": 1.8, "equip_slot": "backpack",
+		"grid_w": 3, "grid_h": 3, "backpack_grid": Vector2i(10, 6),
+		"rarity": 0.05, "value": 28000
+	},
+	"1레벨_헬멧": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "1레벨 오토바이 헬멧",
+		"description": "기본적인 머리 보호 헬멧. 방어력 +10.",
+		"stackable": false, "weight": 1.0, "equip_slot": "helmet",
+		"grid_w": 2, "grid_h": 2, "defense": 10, "rarity": 0.3, "value": 4000,
+		"max_durability": 80
+	},
+	"2레벨_헬멧": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "2레벨 군용 방탄모",
+		"description": "군용 케블라 헬멧. 방어력 +25.",
+		"stackable": false, "weight": 1.5, "equip_slot": "helmet",
+		"grid_w": 2, "grid_h": 2, "defense": 25, "rarity": 0.15, "value": 12000,
+		"max_durability": 120
+	},
+	"3레벨_헬멧": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "3레벨 스페츠나츠 헬멧",
+		"description": "중장갑 안면 바이저 헬멧. 방어력 +45.",
+		"stackable": false, "weight": 2.2, "equip_slot": "helmet",
+		"grid_w": 2, "grid_h": 2, "defense": 45, "rarity": 0.05, "value": 26000,
+		"max_durability": 180
 	},
 	"방독면": {
 		"category": ItemCategory.EQUIPMENT,
 		"description": "오염된 공기를 차단하는 방독면.",
-		"stackable": false, "weight": 0.8, "equip_slot": "head",
+		"stackable": false, "weight": 0.8, "equip_slot": "helmet",
+		"grid_w": 2, "grid_h": 2,
 		"effects": {"poison_resist": true}, "rarity": 0.2, "value": 6000,
 		"max_durability": 100
 	},
+	"1레벨_방탄복": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "1레벨 경찰 조끼",
+		"description": "가벼운 방탄조끼. 방어력 +15.",
+		"stackable": false, "weight": 2.0, "equip_slot": "vest",
+		"grid_w": 2, "grid_h": 2, "defense": 15, "rarity": 0.3, "value": 8000,
+		"max_durability": 100
+	},
+	"2레벨_방탄복": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "2레벨 군용 방탄복",
+		"description": "강화 세라믹 플레이트 방탄복. 방어력 +35.",
+		"stackable": false, "weight": 3.5, "equip_slot": "vest",
+		"grid_w": 2, "grid_h": 3, "defense": 35, "rarity": 0.15, "value": 18000,
+		"max_durability": 150
+	},
+	"3레벨_방탄복": {
+		"category": ItemCategory.EQUIPMENT,
+		"name": "3레벨 중갑 방탄복",
+		"description": "최고 등급의 풀아머 중장갑 방탄복. 방어력 +60.",
+		"stackable": false, "weight": 5.0, "equip_slot": "vest",
+		"grid_w": 3, "grid_h": 3, "defense": 60, "rarity": 0.05, "value": 35000,
+		"max_durability": 220
+	},
 	"방탄조끼": {
 		"category": ItemCategory.EQUIPMENT,
-		"description": "방탄 재질의 조끼. 대미지를 크게 줄여준다.",
-		"stackable": false, "weight": 3.0, "equip_slot": "body",
-		"defense": 15, "rarity": 0.1, "value": 15000,
+		"description": "방탄 재질의 조끼. 대미지를 줄여준다.",
+		"stackable": false, "weight": 3.0, "equip_slot": "vest",
+		"grid_w": 2, "grid_h": 2,
+		"defense": 20, "rarity": 0.1, "value": 15000,
 		"max_durability": 100
 	},
 	"운동화": {
 		"category": ItemCategory.EQUIPMENT,
 		"description": "가볍고 튼튼한 운동화. 이동 속도가 빨라진다.",
-		"stackable": false, "weight": 0.5, "equip_slot": "feet",
+		"stackable": false, "weight": 0.5, "equip_slot": "bottom",
+		"grid_w": 2, "grid_h": 1,
 		"speed_bonus": 0.3, "rarity": 0.3, "value": 5000
 	},
 
@@ -494,3 +570,77 @@ func _add_to_loot(results: Array, id: String, amount: int) -> void:
 			return
 			
 	results.append({"id": id, "amount": amount})
+
+func get_item_grid_size(id: String) -> Vector2i:
+	var data = get_item_data(id)
+	if data.has("grid_w") and data.has("grid_h"):
+		return Vector2i(data["grid_w"], data["grid_h"])
+		
+	var cat = data.get("category", -1)
+	var type = data.get("type", "")
+	
+	# 무기 부착물/파츠
+	if WeaponPartsDatabase and WeaponPartsDatabase.PARTS.has(id):
+		var pslot = WeaponPartsDatabase.PARTS[id].get("slot", "")
+		if pslot == "barrel" or pslot == "stock":
+			return Vector2i(1, 2)
+		return Vector2i(1, 1)
+	
+	# 무기 및 리시버
+	if cat == ItemCategory.WEAPON or type == "receiver":
+		if type == "melee":
+			return Vector2i(1, 3)
+		elif id == "권총" or id.begins_with("M9") or id.begins_with("MP5"):
+			return Vector2i(1, 2)
+		elif id == "수류탄":
+			return Vector2i(1, 1)
+		elif id == "탄약" or id.contains("9mm") or id.contains("5.56") or id.contains("7.62") or id.contains("12게이지") or id.contains(".45"):
+			return Vector2i(1, 1)
+		else:
+			return Vector2i(2, 4) # 소총, 샷건, 저격총 등
+			
+	# 장비 (헬멧, 조끼, 가방 등)
+	if cat == ItemCategory.EQUIPMENT:
+		var slot = data.get("equip_slot", "")
+		if slot == "helmet": return Vector2i(2, 2)
+		elif slot == "vest": return Vector2i(2, 2)
+		elif slot == "backpack": return Vector2i(2, 3)
+		elif slot == "bottom": return Vector2i(2, 1)
+		return Vector2i(2, 2)
+		
+	# 의료/치료
+	if cat == ItemCategory.MEDICAL:
+		if id.contains("상자") or id.contains("키트"):
+			return Vector2i(2, 2)
+		return Vector2i(1, 1)
+		
+	# 도구
+	if cat == ItemCategory.TOOL:
+		if id.contains("망원경"):
+			return Vector2i(1, 2)
+		return Vector2i(1, 1)
+		
+	return Vector2i(1, 1)
+
+func get_item_equip_slot(id: String) -> String:
+	var data = get_item_data(id)
+	if data.has("equip_slot"):
+		return data["equip_slot"]
+		
+	var cat = data.get("category", -1)
+	var type = data.get("type", "")
+	
+	if cat == ItemCategory.WEAPON or type == "receiver":
+		if id == "수류탄":
+			return "throwable"
+		elif type == "melee":
+			return "melee"
+		elif id == "권총" or id.begins_with("M9"):
+			return "sidearm"
+		else:
+			return "primary" # primary1 / primary2 호환
+			
+	if WeaponPartsDatabase.PARTS.has(id):
+		return "attachment"
+		
+	return ""

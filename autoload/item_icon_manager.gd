@@ -16,122 +16,456 @@ func get_icon(item_id: String) -> Texture2D:
 func _generate_icon(item_id: String) -> Texture2D:
 	var size = 32
 	var img = Image.create_empty(size, size, false, Image.FORMAT_RGBA8)
+	var lower_id = item_id.to_lower()
 	
-	match item_id:
-		# === 무기 및 탄약 ===
-		"권총", "pistol":
-			_draw_gun(img, Color(0.2, 0.2, 0.25), size)
-		"레버액션 소총", "shotgun", "rifle":
-			_draw_gun(img, Color(0.45, 0.3, 0.2), size, true)
-		"탄약", "9mm_ammo", "ammo":
-			_draw_ammo(img, Color(0.85, 0.75, 0.25), size)
-		"수류탄", "grenade":
-			_draw_grenade(img, size)
-		"파이프", "pipe":
-			_draw_melee(img, Color(0.55, 0.55, 0.6), "pipe", size)
-		"나이프", "knife":
-			_draw_melee(img, Color(0.8, 0.8, 0.85), "knife", size)
-		"야구방망이", "bat":
-			_draw_melee(img, Color(0.7, 0.7, 0.75), "bat", size)
-		"도끼", "axe":
-			_draw_axe(img, size)
-
-		# === 의료 ===
-		"붕대", "bandage":
-			_draw_bandage(img, size)
-		"진통제", "painkillers":
-			_draw_pills(img, size)
-		"구급상자", "medkit":
-			_draw_medkit(img, size)
-		"고급 치료킷", "advanced_medkit":
-			_draw_advanced_medkit(img, size)
-		"약초", "herb":
-			_draw_herb(img, size)
-
-		# === 식량 및 음료 ===
-		"생수", "water_bottle", "water":
-			_draw_bottle(img, Color(0.2, 0.6, 0.9), size)
-		"탄산음료", "soda":
-			_draw_can(img, Color(0.8, 0.2, 0.2), size)
-		"에너지 드링크", "energy_drink":
-			_draw_can(img, Color(0.2, 0.8, 0.3), size)
-		"커피", "coffee":
-			_draw_can(img, Color(0.4, 0.25, 0.15), size)
-		"식량통조림", "canned_food", "food":
-			_draw_can(img, Color(0.8, 0.45, 0.15), size)
-		"마른 빵", "bread":
-			_draw_bread(img, size)
-		"에너지바", "energy_bar":
-			_draw_energy_bar(img, size)
-		"고기 구이", "cooked_meat":
-			_draw_meat(img, size)
-		"전투 식량", "mre":
-			_draw_mre(img, size)
-		"농작물", "crop":
-			_draw_crop(img, size)
-
-		# === 장비 및 도구 ===
-		"손전등", "flashlight":
-			_draw_flashlight(img, size)
-		"비상용 배터리", "battery":
-			_draw_battery(img, size)
-		"가방", "backpack":
-			_draw_backpack(img, size)
-		"방독면", "gasmask":
-			_draw_gasmask(img, size)
-		"방탄조끼", "body_armor":
-			_draw_armor(img, size)
-		"운동화", "sneakers":
-			_draw_shoes(img, size)
-		"지도", "map":
-			_draw_map(img, size)
-		"군용 나침반", "compass":
-			_draw_compass(img, size)
-
-		# === 재료 및 부품 ===
-		"고철", "scrap":
-			_draw_scrap(img, size)
-		"나무", "wood":
-			_draw_wood(img, size)
-		"못", "nail":
-			_draw_nails(img, size)
-		"천", "cloth":
-			_draw_cloth(img, size)
-		"기계 부품", "mechanical_parts":
-			_draw_gears(img, size)
-		"폐전선", "wire":
-			_draw_wire(img, size)
-		"화약", "gunpowder":
-			_draw_gunpowder(img, size)
-		"CPU", "cpu":
-			_draw_cpu(img, size)
-		"그래픽카드", "gpu":
-			_draw_gpu(img, size)
-
-		# === 전리품 및 퀘스트 ===
-		"금시계", "gold_watch":
-			_draw_watch(img, Color(0.9, 0.75, 0.2), size)
-		"은반지", "silver_ring":
-			_draw_ring(img, Color(0.8, 0.85, 0.9), size)
-		"골동품", "antique":
-			_draw_vase(img, size)
-		"라디오 부품", "radio_parts":
-			_draw_radio_parts(img, size)
-		"장거리 무전기", "radio":
-			_draw_radio(img, size)
-		"암호화된 SSD", "encrypted_ssd", "ssd":
-			_draw_ssd(img, size)
-
-		_:
-			# 기본 더미 아이콘 (기하학적 상자)
-			_draw_generic_box(img, size)
-					
+	# === 1. 방탄복 / 조끼 ===
+	if item_id.contains("3레벨_방탄") or item_id.contains("3레벨_조끼") or lower_id.contains("armor_3") or lower_id.contains("heavy_armor"):
+		_draw_armor_tier(img, 3, size)
+	elif item_id.contains("2레벨_방탄") or item_id.contains("2레벨_조끼") or lower_id.contains("armor_2") or lower_id.contains("tactical_vest"):
+		_draw_armor_tier(img, 2, size)
+	elif item_id.contains("1레벨_방탄") or item_id.contains("1레벨_조끼") or item_id.contains("방탄") or item_id.contains("조끼") or lower_id.contains("armor"):
+		_draw_armor_tier(img, 1, size)
+		
+	# === 2. 헬멧 / 방독면 ===
+	elif item_id.contains("3레벨_헬멧") or lower_id.contains("helmet_3") or item_id.contains("스페츠나츠"):
+		_draw_helmet_tier(img, 3, size)
+	elif item_id.contains("2레벨_헬멧") or lower_id.contains("helmet_2") or item_id.contains("군용_헬멧"):
+		_draw_helmet_tier(img, 2, size)
+	elif item_id.contains("1레벨_헬멧") or item_id.contains("헬멧") or lower_id.contains("helmet"):
+		_draw_helmet_tier(img, 1, size)
+	elif item_id.contains("방독면") or lower_id.contains("gasmask"):
+		_draw_gasmask(img, size)
+		
+	# === 3. 배낭 / 가방 ===
+	elif item_id.contains("3레벨_가방") or item_id.contains("3레벨_배낭") or lower_id.contains("backpack_3"):
+		_draw_backpack_tier(img, 3, size)
+	elif item_id.contains("2레벨_가방") or item_id.contains("2레벨_배낭") or lower_id.contains("backpack_2"):
+		_draw_backpack_tier(img, 2, size)
+	elif item_id.contains("1레벨_가방") or item_id.contains("가방") or item_id.contains("배낭") or lower_id.contains("backpack"):
+		_draw_backpack_tier(img, 1, size)
+		
+	# === 4. 신발 ===
+	elif item_id.contains("운동화") or item_id.contains("신발") or lower_id.contains("sneaker") or lower_id.contains("boot"):
+		_draw_shoes(img, size)
+		
+	# === 5. 총기 리시버 및 완제품 ===
+	elif item_id.contains("M4") or item_id.contains("m4"):
+		_draw_receiver(img, "m4", size)
+	elif item_id.contains("AK") or item_id.contains("ak"):
+		_draw_receiver(img, "ak", size)
+	elif item_id.contains("M9") or item_id.contains("m9") or item_id.contains("베레타"):
+		_draw_receiver(img, "m9", size)
+	elif item_id.contains("레밍턴") or item_id.contains("870") or item_id.contains("샷건") or lower_id.contains("shotgun"):
+		_draw_receiver(img, "shotgun", size)
+	elif item_id.contains("SV98") or item_id.contains("sv98") or item_id.contains("저격") or lower_id.contains("sniper"):
+		_draw_receiver(img, "sv98", size)
+	elif item_id.contains("권총") or lower_id.contains("pistol"):
+		_draw_gun(img, Color(0.25, 0.25, 0.3), size)
+	elif item_id.contains("소총") or lower_id.contains("rifle"):
+		_draw_gun(img, Color(0.45, 0.3, 0.2), size, true)
+		
+	# === 6. 탄약류 ===
+	elif item_id.contains("5.56"):
+		_draw_ammo_type(img, "5.56mm", size)
+	elif item_id.contains("7.62"):
+		_draw_ammo_type(img, "7.62mm", size)
+	elif item_id.contains("12게이지") or item_id.contains("벅샷") or item_id.contains("슬러그"):
+		_draw_ammo_type(img, "12gauge", size)
+	elif item_id.contains("9mm") or item_id.contains(".45") or item_id.contains("탄약") or lower_id.contains("ammo"):
+		_draw_ammo_type(img, "9mm", size)
+	elif item_id.contains("수류탄") or lower_id.contains("grenade"):
+		_draw_grenade(img, size)
+		
+	# === 7. 총기 부착물 (파츠) ===
+	elif item_id.contains("조준경") or item_id.contains("사이트") or item_id.contains("ACOG") or item_id.contains("스코프") or lower_id.contains("optic") or lower_id.contains("scope"):
+		_draw_attachment(img, "optic", item_id, size)
+	elif item_id.contains("소음기") or item_id.contains("소염기") or item_id.contains("컴펜세이터") or lower_id.contains("muzzle"):
+		_draw_attachment(img, "muzzle", item_id, size)
+	elif item_id.contains("손잡이") or item_id.contains("그립") or lower_id.contains("grip"):
+		_draw_attachment(img, "grip", item_id, size)
+	elif item_id.contains("탄창") or lower_id.contains("mag"):
+		_draw_attachment(img, "magazine", item_id, size)
+	elif item_id.contains("개머리판") or item_id.contains("스톡") or lower_id.contains("stock"):
+		_draw_attachment(img, "stock", item_id, size)
+	elif item_id.contains("총열") or lower_id.contains("barrel"):
+		_draw_attachment(img, "barrel", item_id, size)
+		
+	# === 8. 근접 무기 ===
+	elif item_id.contains("도끼") or lower_id.contains("axe"):
+		_draw_axe(img, size)
+	elif item_id.contains("나이프") or item_id.contains("칼") or lower_id.contains("knife"):
+		_draw_melee(img, Color(0.8, 0.8, 0.85), "knife", size)
+	elif item_id.contains("야구방망이") or lower_id.contains("bat"):
+		_draw_melee(img, Color(0.7, 0.7, 0.75), "bat", size)
+	elif item_id.contains("파이프") or lower_id.contains("pipe"):
+		_draw_melee(img, Color(0.55, 0.55, 0.6), "pipe", size)
+		
+	# === 9. 의료품 ===
+	elif item_id.contains("고급") and item_id.contains("치료"):
+		_draw_advanced_medkit(img, size)
+	elif item_id.contains("구급상자") or item_id.contains("키트") or lower_id.contains("medkit"):
+		_draw_medkit(img, size)
+	elif item_id.contains("붕대") or lower_id.contains("bandage"):
+		_draw_bandage(img, size)
+	elif item_id.contains("진통제") or item_id.contains("약") or lower_id.contains("pills"):
+		_draw_pills(img, size)
+	elif item_id.contains("약초") or lower_id.contains("herb"):
+		_draw_herb(img, size)
+		
+	# === 10. 식량 및 음료 ===
+	elif item_id.contains("생수") or item_id.contains("물") or lower_id.contains("water"):
+		_draw_bottle(img, Color(0.2, 0.65, 0.95), size)
+	elif item_id.contains("탄산음료") or lower_id.contains("soda"):
+		_draw_can(img, Color(0.85, 0.2, 0.2), size)
+	elif item_id.contains("에너지 드링크") or lower_id.contains("energy"):
+		_draw_can(img, Color(0.2, 0.85, 0.35), size)
+	elif item_id.contains("커피") or lower_id.contains("coffee"):
+		_draw_can(img, Color(0.45, 0.28, 0.18), size)
+	elif item_id.contains("통조림") or item_id.contains("식량") or lower_id.contains("canned"):
+		_draw_can(img, Color(0.85, 0.5, 0.15), size)
+	elif item_id.contains("빵") or lower_id.contains("bread"):
+		_draw_bread(img, size)
+	elif item_id.contains("에너지바") or lower_id.contains("bar"):
+		_draw_energy_bar(img, size)
+	elif item_id.contains("고기") or lower_id.contains("meat"):
+		_draw_meat(img, size)
+	elif item_id.contains("전투 식량") or lower_id.contains("mre"):
+		_draw_mre(img, size)
+		
+	# === 11. 도구 및 잡품 ===
+	elif item_id.contains("손전등") or lower_id.contains("flashlight"):
+		_draw_flashlight(img, size)
+	elif item_id.contains("배터리") or lower_id.contains("battery"):
+		_draw_battery(img, size)
+	elif item_id.contains("지도") or lower_id.contains("map"):
+		_draw_map(img, size)
+	elif item_id.contains("나침반") or lower_id.contains("compass"):
+		_draw_compass(img, size)
+	elif item_id.contains("고철") or lower_id.contains("scrap"):
+		_draw_scrap(img, size)
+	elif item_id.contains("나무") or lower_id.contains("wood"):
+		_draw_wood(img, size)
+	elif item_id.contains("못") or lower_id.contains("nail"):
+		_draw_nails(img, size)
+	elif item_id.contains("천") or lower_id.contains("cloth"):
+		_draw_cloth(img, size)
+	elif item_id.contains("기계") or lower_id.contains("gear"):
+		_draw_gears(img, size)
+	elif item_id.contains("전선") or lower_id.contains("wire"):
+		_draw_wire(img, size)
+	elif item_id.contains("화약") or lower_id.contains("gunpowder"):
+		_draw_gunpowder(img, size)
+	elif item_id.contains("CPU") or lower_id.contains("cpu"):
+		_draw_cpu(img, size)
+	elif item_id.contains("그래픽") or lower_id.contains("gpu"):
+		_draw_gpu(img, size)
+	elif item_id.contains("금시계") or lower_id.contains("watch"):
+		_draw_watch(img, Color(0.95, 0.8, 0.2), size)
+	elif item_id.contains("은반지") or lower_id.contains("ring"):
+		_draw_ring(img, Color(0.85, 0.9, 0.95), size)
+	elif item_id.contains("골동품") or lower_id.contains("vase"):
+		_draw_vase(img, size)
+	elif item_id.contains("무전기") or item_id.contains("라디오"):
+		_draw_radio(img, size)
+	elif item_id.contains("SSD") or lower_id.contains("ssd"):
+		_draw_ssd(img, size)
+	else:
+		_draw_generic_box(img, size)
+		
 	return ImageTexture.create_from_image(img)
 
 # ============================================================
-# 개별 아이콘 픽셀 드로잉 함수들
+# 1. 방탄복 / 헬멧 / 배낭 티어별 정밀 드로잉
 # ============================================================
+func _draw_armor_tier(img: Image, tier: int, size: int) -> void:
+	var base_col = Color(0.2, 0.25, 0.35) # 1티어: 네이비 경찰 조끼
+	var accent_col = Color(0.3, 0.4, 0.55)
+	if tier == 2:
+		base_col = Color(0.28, 0.38, 0.22) # 2티어: 올리브 전술 방탄복
+		accent_col = Color(0.18, 0.26, 0.14)
+	elif tier == 3:
+		base_col = Color(0.12, 0.13, 0.15) # 3티어: 블랙 중장갑 플레이트 캐리어
+		accent_col = Color(0.25, 0.28, 0.3)
+		
+	# 몸통 조끼 실루엣
+	for x in range(7, 25):
+		for y in range(7, 26):
+			if y < 12 and (x < 11 or x > 20): continue # 어깨 파임
+			if y > 22 and (x < 9 or x > 22): continue
+			img.set_pixel(x, y, base_col)
+			
+	# 어깨 스트랩 및 벨크로
+	for x in range(11, 14):
+		for y in range(7, 12): img.set_pixel(x, y, accent_col)
+	for x in range(18, 21):
+		for y in range(7, 12): img.set_pixel(x, y, accent_col)
+		
+	# 티어별 특징 디테일
+	if tier == 1:
+		# 경찰 패치 / 지퍼 라인
+		for y in range(12, 24): img.set_pixel(15, y, Color(0.15, 0.15, 0.2))
+		for x in range(12, 19): img.set_pixel(x, 14, Color(0.8, 0.8, 0.3, 0.9)) # 패치
+	elif tier == 2:
+		# MOLLE 웨빙 3줄 및 매거진 파우치 2개
+		for y in [14, 18, 22]:
+			for x in range(9, 23):
+				if x % 2 == 0: img.set_pixel(x, y, accent_col)
+		# 탄창 파우치 2개
+		for x in range(10, 14):
+			for y in range(16, 22): img.set_pixel(x, y, Color(0.2, 0.3, 0.18))
+		for x in range(17, 21):
+			for y in range(16, 22): img.set_pixel(x, y, Color(0.2, 0.3, 0.18))
+	elif tier == 3:
+		# 대형 세라믹 플레이트 각인 및 목 보호대
+		for x in range(9, 23):
+			for y in range(13, 23):
+				if x == 9 or x == 22 or y == 13 or y == 22:
+					img.set_pixel(x, y, Color(0.35, 0.4, 0.45)) # 금속/세라믹 테두리
+		# 강화 패드
+		for x in range(12, 19):
+			for y in range(16, 20): img.set_pixel(x, y, Color(0.08, 0.08, 0.1))
 
+func _draw_helmet_tier(img: Image, tier: int, size: int) -> void:
+	var dome_col = Color(0.7, 0.2, 0.2) # 1티어: 붉은색 오토바이 헬멧
+	if tier == 2: dome_col = Color(0.3, 0.4, 0.25) # 2티어: 올리브 군용 방탄모
+	elif tier == 3: dome_col = Color(0.2, 0.22, 0.25) # 3티어: 스페츠나츠 알틴 헬멧
+	
+	# 헬멧 둥근 돔
+	for x in range(8, 24):
+		for y in range(7, 22):
+			var dx = (x - 15.5) / 7.5
+			var dy = (y - 14.0) / 7.0
+			if dx * dx + dy * dy <= 1.0:
+				img.set_pixel(x, y, dome_col)
+				
+	# 바이저 / 특징 디테일
+	if tier == 1:
+		# 오토바이 풀페이스 블랙 틴트 바이저
+		for x in range(12, 23):
+			for y in range(13, 18):
+				img.set_pixel(x, y, Color(0.1, 0.12, 0.15))
+		# 하이라이트
+		img.set_pixel(13, 14, Color(0.8, 0.8, 0.9, 0.8))
+	elif tier == 2:
+		# 방탄모 챙 & 야투경 마운트
+		for x in range(7, 25): img.set_pixel(x, 19, Color(0.22, 0.3, 0.18))
+		for x in range(14, 18):
+			for y in range(12, 16): img.set_pixel(x, y, Color(0.15, 0.15, 0.15))
+	elif tier == 3:
+		# 티타늄 안면 방탄 쉴드 & 슬릿
+		for x in range(11, 24):
+			for y in range(12, 21):
+				img.set_pixel(x, y, Color(0.35, 0.38, 0.4))
+		# 방탄 유리 슬릿
+		for x in range(13, 22):
+			img.set_pixel(x, 15, Color(0.2, 0.7, 0.9))
+			img.set_pixel(x, 16, Color(0.2, 0.7, 0.9))
+
+func _draw_backpack_tier(img: Image, tier: int, size: int) -> void:
+	var col = Color(0.45, 0.4, 0.3) # 1티어: 소형 카키 럭색
+	var min_x = 9
+	var max_x = 23
+	var min_y = 9
+	var max_y = 24
+	
+	if tier == 2:
+		col = Color(0.3, 0.4, 0.28) # 2티어: 중형 올리브 백팩
+		min_x = 7
+		max_x = 25
+		min_y = 8
+		max_y = 25
+	elif tier == 3:
+		col = Color(0.18, 0.18, 0.2) # 3티어: 대형 블랙 전술 백팩
+		min_x = 6
+		max_x = 26
+		min_y = 7
+		max_y = 26
+		
+	# 가방 본체
+	for x in range(min_x, max_x):
+		for y in range(min_y, max_y):
+			img.set_pixel(x, y, col)
+			
+	# 포켓 및 스트랩
+	for y in range(min_y + 4, max_y - 2):
+		img.set_pixel(min_x + 3, y, col.darkened(0.25))
+		img.set_pixel(max_x - 4, y, col.darkened(0.25))
+	for x in range(min_x + 2, max_x - 2):
+		img.set_pixel(x, min_y + 7, Color(0.15, 0.15, 0.15)) # 지퍼
+		
+	if tier >= 2:
+		# 사이드 포켓
+		for y in range(min_y + 6, max_y - 2):
+			img.set_pixel(min_x - 1, y, col.darkened(0.15))
+			img.set_pixel(max_x, y, col.darkened(0.15))
+	if tier == 3:
+		# 침낭 롤 / 압축 버클
+		for x in range(min_x, max_x):
+			img.set_pixel(x, min_y - 1, Color(0.35, 0.3, 0.25))
+			img.set_pixel(x, max_y, Color(0.35, 0.3, 0.25))
+
+# ============================================================
+# 2. 총기 리시버 및 완제품 드로잉
+# ============================================================
+func _draw_receiver(img: Image, rec_type: String, size: int) -> void:
+	if rec_type == "m4":
+		# M4A1 리시버 (상부 피카티니 레일, 탄창구, 버퍼튜브)
+		for x in range(5, 27):
+			for y in range(12, 17): img.set_pixel(x, y, Color(0.2, 0.22, 0.25))
+		# 피카티니 레일 요철
+		for x in range(6, 26):
+			if x % 2 == 0: img.set_pixel(x, 11, Color(0.35, 0.38, 0.4))
+		# 손잡이
+		for x in range(7, 12):
+			for y in range(17, 24): img.set_pixel(x, y, Color(0.15, 0.15, 0.18))
+		# 탄창 삽입구
+		for x in range(14, 19):
+			for y in range(17, 21): img.set_pixel(x, y, Color(0.22, 0.24, 0.28))
+	elif rec_type == "ak":
+		# AK-47 리시버 (목재 손잡이/핸드가드 + 스틸 리시버)
+		for x in range(5, 27):
+			for y in range(12, 17): img.set_pixel(x, y, Color(0.28, 0.3, 0.32))
+		# 가스 튜브 & 목재 핸드가드
+		for x in range(18, 27):
+			for y in range(11, 16): img.set_pixel(x, y, Color(0.55, 0.3, 0.15))
+		# 목재 손잡이
+		for x in range(6, 11):
+			for y in range(17, 24): img.set_pixel(x, y, Color(0.5, 0.28, 0.12))
+		# 곡선 탄창 삽입구
+		for x in range(13, 18):
+			for y in range(17, 21): img.set_pixel(x, y, Color(0.2, 0.2, 0.2))
+	elif rec_type == "m9":
+		# M9 베레타 권총
+		for x in range(8, 24):
+			for y in range(13, 17): img.set_pixel(x, y, Color(0.25, 0.25, 0.3))
+		for x in range(7, 13):
+			for y in range(17, 25): img.set_pixel(x, y, Color(0.18, 0.18, 0.2))
+		img.set_pixel(23, 14, Color(0.1, 0.1, 0.1)) # 총구
+	elif rec_type == "shotgun":
+		# 레밍턴 870 펌프액션 샷건
+		for x in range(4, 28):
+			for y in range(13, 17): img.set_pixel(x, y, Color(0.3, 0.32, 0.35))
+		# 펌프 포어엔드
+		for x in range(17, 24):
+			for y in range(16, 19): img.set_pixel(x, y, Color(0.2, 0.2, 0.2))
+		# 개머리판/손잡이
+		for x in range(4, 10):
+			for y in range(15, 23): img.set_pixel(x, y, Color(0.45, 0.28, 0.15))
+	elif rec_type == "sv98":
+		# SV-98 저격총 (올리브 스나이퍼 바디 + 롱 배럴)
+		for x in range(3, 29):
+			for y in range(13, 16): img.set_pixel(x, y, Color(0.2, 0.2, 0.2))
+		for x in range(6, 18):
+			for y in range(15, 20): img.set_pixel(x, y, Color(0.25, 0.38, 0.22)) # 올리브 스톡
+		# 볼트 핸들
+		img.set_pixel(13, 12, Color(0.7, 0.7, 0.75))
+
+# ============================================================
+# 3. 구경별 탄약 드로잉
+# ============================================================
+func _draw_ammo_type(img: Image, cal: String, size: int) -> void:
+	if cal == "12gauge":
+		# 샷건 쉘 2개 (빨간색 플라스틱 + 황동 바닥 림)
+		for i in range(2):
+			var ox = 9 + i * 8
+			for x in range(ox, ox + 6):
+				for y in range(10, 23):
+					var c = Color(0.85, 0.2, 0.2) if y < 19 else Color(0.85, 0.75, 0.2)
+					img.set_pixel(x, y, c)
+	elif cal == "5.56mm":
+		# 5.56 NATO 소총탄 (날렵한 녹색 팁 + 황동 탄피)
+		for i in range(3):
+			var ox = 7 + i * 7
+			for x in range(ox, ox + 5):
+				for y in range(10, 23):
+					var c = Color(0.85, 0.75, 0.25)
+					if y < 13: c = Color(0.3, 0.6, 0.3) # 그린 팁
+					elif y == 22: c = Color(0.3, 0.3, 0.3)
+					img.set_pixel(x, y, c)
+	elif cal == "7.62mm":
+		# 7.62mm 대구경 탄약 (구리 탄두 + 묵직한 황동 탄피)
+		for i in range(3):
+			var ox = 7 + i * 7
+			for x in range(ox, ox + 5):
+				for y in range(9, 24):
+					var c = Color(0.8, 0.65, 0.2)
+					if y < 14: c = Color(0.75, 0.45, 0.25) # 구리 탄두
+					elif y == 23: c = Color(0.25, 0.25, 0.25)
+					img.set_pixel(x, y, c)
+	else:
+		# 9mm / .45ACP 권총탄
+		_draw_ammo(img, Color(0.85, 0.75, 0.25), size)
+
+# ============================================================
+# 4. 총기 부착물(파츠) 드로잉
+# ============================================================
+func _draw_attachment(img: Image, part_category: String, full_id: String, size: int) -> void:
+	match part_category:
+		"optic":
+			# 조준경 / 스코프
+			if full_id.contains("8배율") or full_id.contains("스나이퍼"):
+				for x in range(6, 26):
+					for y in range(13, 19): img.set_pixel(x, y, Color(0.2, 0.22, 0.25))
+				for y in range(11, 21):
+					img.set_pixel(7, y, Color(0.2, 0.7, 0.9)) # 대물렌즈
+					img.set_pixel(25, y, Color(0.2, 0.7, 0.9))
+			elif full_id.contains("4배율") or full_id.contains("ACOG") or full_id.contains("2배율"):
+				for x in range(9, 23):
+					for y in range(12, 20): img.set_pixel(x, y, Color(0.25, 0.25, 0.3))
+				img.set_pixel(10, 15, Color(0.3, 0.8, 1.0))
+				img.set_pixel(10, 16, Color(0.3, 0.8, 1.0))
+			else:
+				# 레드닷 사이트
+				for x in range(10, 22):
+					for y in range(14, 21): img.set_pixel(x, y, Color(0.2, 0.2, 0.2))
+				img.set_pixel(16, 16, Color.RED) # 빨간 조준점
+				img.set_pixel(16, 17, Color.RED)
+		"muzzle":
+			# 소음기 / 컴펜세이터
+			if full_id.contains("소음기"):
+				for x in range(8, 24):
+					for y in range(13, 19):
+						var c = Color(0.2, 0.2, 0.22)
+						if x % 3 == 0: c = Color(0.12, 0.12, 0.14)
+						img.set_pixel(x, y, c)
+			else:
+				for x in range(10, 22):
+					for y in range(12, 20): img.set_pixel(x, y, Color(0.35, 0.38, 0.4))
+				for x in range(12, 19, 2):
+					img.set_pixel(x, 12, Color(0.1, 0.1, 0.1)) # 포트 구멍
+					img.set_pixel(x, 19, Color(0.1, 0.1, 0.1))
+		"grip":
+			# 수직 / 앵글 손잡이
+			for x in range(11, 21):
+				for y in range(10, 14): img.set_pixel(x, y, Color(0.2, 0.2, 0.25)) # 레일 마운트
+			for x in range(13, 19):
+				for y in range(14, 24): img.set_pixel(x, y, Color(0.15, 0.15, 0.18))
+		"magazine":
+			# 대용량 / 드럼 탄창
+			if full_id.contains("드럼"):
+				for x in range(9, 23):
+					for y in range(11, 25):
+						var dx = (x - 15.5) / 6.5
+						var dy = (y - 17.5) / 6.5
+						if dx * dx + dy * dy <= 1.0: img.set_pixel(x, y, Color(0.2, 0.22, 0.25))
+			else:
+				for x in range(10, 20):
+					for y in range(9, 25): img.set_pixel(x, y, Color(0.22, 0.24, 0.28))
+				for x in range(11, 19): img.set_pixel(x, 9, Color(0.85, 0.75, 0.2)) # 상단 탄약 노출
+		"stock":
+			# 전술 / 저격 개머리판
+			for x in range(8, 24):
+				for y in range(12, 20): img.set_pixel(x, y, Color(0.2, 0.22, 0.25))
+			for x in range(6, 10):
+				for y in range(10, 24): img.set_pixel(x, y, Color(0.12, 0.12, 0.15)) # 숄더 패드
+		_:
+			# 총열 등 기타
+			for x in range(6, 26):
+				for y in range(14, 18): img.set_pixel(x, y, Color(0.3, 0.32, 0.35))
+
+# ============================================================
+# 5. 기본 무기 및 도구 드로잉
+# ============================================================
 func _draw_gun(img: Image, color: Color, size: int, is_long: bool = false) -> void:
 	var length = 20 if is_long else 13
 	# 총열

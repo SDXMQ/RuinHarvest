@@ -1,0 +1,28 @@
+[gd_scene load_steps=3 format=3 uid="uid://grounditem01"]
+
+[ext_resource type="Script" path="res://scenes/entities/items/ground_item.gd" id="1_ground"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_item"]
+radius = 16.0
+
+[node name="GroundItem" type="Area2D" groups=["ground_items"]]
+collision_layer = 16
+collision_mask = 1
+script = ExtResource("1_ground")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("CircleShape2D_item")
+
+[node name="Sprite2D" type="Sprite2D" parent="."]
+
+[node name="Label" type="Label" parent="."]
+offset_left = -60.0
+offset_top = -24.0
+offset_right = 60.0
+offset_bottom = -8.0
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 11
+text = "아이템 이름"
+horizontal_alignment = 1
+vertical_alignment = 1

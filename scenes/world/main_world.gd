@@ -38,6 +38,9 @@ var container_inventories: Dictionary = {} # tile_pos -> Inventory
 const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
 var current_loot_window: Control = null
 
+const PubgInventoryScene = preload("res://scenes/ui/pubg_inventory_window.tscn")
+var current_pubg_window: Control = null
+
 const ItemSpawnerScene = preload("res://scenes/ui/item_spawner_window.tscn")
 var current_spawner_window: Control = null
 
@@ -137,6 +140,17 @@ func _ready() -> void:
 	player.position = spawn_pos
 	player.inventory = player_inventory
 	entities_layer.add_child(player)
+	
+	# 세이브 데이터의 인벤토리 및 장비 복원
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var p_data = GameManager.current_world_data.get("player", {})
+		var saved_items = p_data.get("inventory", [])
+		if player.inventory_grid:
+			for s_item in saved_items:
+				if s_item and not s_item.is_empty():
+					player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
+		if p_data.has("equipment") and not p_data["equipment"].is_empty():
+			player.equipment = p_data["equipment"].duplicate(true)
 	
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
@@ -313,9 +327,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
 		
-	# 인벤토리 열기 (Tab 또는 I 키로 내 배낭만 열기)
+	# 인벤토리 열기 (Tab 또는 I 키로 배그 4단 인벤토리 열기)
 	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
-		_open_loot_window(null)
+		_open_pubg_inventory()
 		get_viewport().set_input_as_handled()
 		
 	# 제작창 열기 (C 키)
@@ -528,23 +542,33 @@ func _on_player_stats_changed() -> void:
 	# 좌하단 무기 상태 패널 갱신
 	if weapon_panel:
 		var eq_wep = player.equipped_weapon
-		var wep_data = ItemDatabase.get_item_data(eq_wep)
+		var wep_data = ItemDatabase.get_item_data(player.equipped_weapon_data.get("id", eq_wep))
+		var slot_disp = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
 		if weapon_name_label:
-			weapon_name_label.text = eq_wep
+			weapon_name_label.text = "[%s] %s" % [slot_disp, eq_wep]
 		if weapon_icon and ItemIconManager:
-			weapon_icon.texture = ItemIconManager.get_icon(eq_wep)
+			weapon_icon.texture = ItemIconManager.get_icon(player.equipped_weapon_data.get("id", eq_wep))
 			
-		var ammo_count = player_inventory.get_item_count("탄약") if player_inventory else 0
 		if ammo_label:
-			if eq_wep == "권총" or eq_wep == "레버액션 소총":
-				ammo_label.text = "🔫 %d / 9mm" % ammo_count
-				if ammo_count == 0:
+			if player.equipped_weapon_data.is_empty():
+				ammo_label.text = "👊 맨손 (주먹)"
+				ammo_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			elif player.active_weapon_slot == "throwable" or player.equipped_weapon_data.get("type", "") == "throwable":
+				var amt = player.equipped_weapon_data.get("amount", 1)
+				ammo_label.text = "💣 수량: %d개" % amt
+				ammo_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+			else:
+				var cur_mag = player.equipped_weapon_data.get("current_magazine_ammo", 0)
+				var stats = player.equipped_weapon_data.get("computed_stats", {})
+				var mag_size = stats.get("magazine_size", 15)
+				var reserve_ammo = player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0
+				var cal = player._get_compatible_ammo_types()[0] if player.has_method("_get_compatible_ammo_types") and player._get_compatible_ammo_types().size() > 0 else "탄약"
+				
+				ammo_label.text = "🔫 %d / %d  [%s: %d]" % [cur_mag, mag_size, cal, reserve_ammo]
+				if cur_mag == 0:
 					ammo_label.add_theme_color_override("font_color", Color.RED)
 				else:
 					ammo_label.add_theme_color_override("font_color", Color(0.4, 1.0, 0.6))
-			else:
-				ammo_label.text = "⚔️ 근접 무기"
-				ammo_label.add_theme_color_override("font_color", Color(0.8, 0.8, 0.8))
 				
 		# 무기 내구도 바
 		if weapon_durability_bar:
@@ -637,12 +661,19 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		_open_loot_window(inv, loot_title)
 
 
-func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
+func _open_pubg_inventory(target_inv: Inventory = null, title: String = "") -> void:
+	if current_pubg_window != null: return
 	get_tree().paused = true
-	current_loot_window = LootWindowScene.instantiate()
-	$UI.add_child(current_loot_window)
-	current_loot_window.setup(player_inventory, target_inv, title)
-	current_loot_window.window_closed.connect(func(): current_loot_window = null)
+	current_pubg_window = PubgInventoryScene.instantiate()
+	$UI.add_child(current_pubg_window)
+	current_pubg_window.setup(player, player.inventory_grid, player.equipment, target_inv, title)
+	current_pubg_window.window_closed.connect(func():
+		current_pubg_window = null
+		_on_player_stats_changed()
+	)
+
+func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
+	_open_pubg_inventory(target_inv, title)
 
 func _on_chunk_loaded(_chunk_pos: Vector2i, _data: Dictionary) -> void:
 	pass
@@ -663,10 +694,14 @@ func _on_resume_pressed() -> void:
 
 func get_backpack_items() -> Array:
 	var items_arr = []
-	if player_inventory:
+	if player and player.inventory_grid:
+		for item in player.inventory_grid.items:
+			if item and not item.is_empty():
+				items_arr.append(item.duplicate(true))
+	elif player_inventory:
 		for item in player_inventory.items:
-			if item:
-				items_arr.append(item.duplicate())
+			if item and not item.is_empty():
+				items_arr.append(item.duplicate(true))
 	return items_arr
 
 func _on_exit_pressed() -> void:
@@ -674,4 +709,8 @@ func _on_exit_pressed() -> void:
 	get_tree().paused = false
 	if GameManager:
 		GameManager.is_paused = false
+		if player and not player.equipment.is_empty():
+			if not GameManager.current_world_data.has("player"):
+				GameManager.current_world_data["player"] = {}
+			GameManager.current_world_data["player"]["equipment"] = player.equipment.duplicate(true)
 		GameManager.end_raid("survived", get_backpack_items())

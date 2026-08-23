@@ -32,8 +32,13 @@ const VAULT_DURATION: float = 1.0
 
 # 무기, 모딩 및 전투
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
-var equipped_weapon: String = "권총"
+var equipped_weapon: String = "M4A1 소총"
 var equipped_weapon_data: Dictionary = {}
+var active_weapon_slot: String = "primary1"
+const WEAPON_SLOT_ORDER: Array[String] = ["primary1", "primary2", "sidearm", "throwable"]
+var inventory_grid: InventoryGrid = null
+var equipment: Dictionary = {}
+var armor_defense: float = 0.0
 var attack_cooldown_timer: float = 0.0
 var weapon_fire_rate: float = 0.35
 var recoil_offset: float = 0.0
@@ -68,9 +73,34 @@ func _ready() -> void:
 	add_to_group("player")
 	_setup_lighting()
 	
-	# 기본 조립 무기 초기화
-	if equipped_weapon_data.is_empty():
-		equipped_weapon_data = WeaponPartsDatabase.create_default_weapon("M9_리시버")
+	# 기본 2D 인벤토리 그리드 초기화
+	if not inventory_grid:
+		inventory_grid = InventoryGrid.new()
+		inventory_grid.grid_width = 6
+		inventory_grid.grid_height = 4
+		add_child(inventory_grid)
+		
+		# 기본 소지품 Auto-Fit 배치
+		inventory_grid.auto_add_item("생수", 2)
+		inventory_grid.auto_add_item("식량통조림", 2)
+		inventory_grid.auto_add_item("붕대", 2)
+		inventory_grid.auto_add_item("탄약", 30)
+		
+	# 기본 장비 초기화
+	if equipment.is_empty():
+		equipment = {
+			"helmet": {"id": "1레벨_헬멧", "name": "1레벨 오토바이 헬멧"},
+			"vest": {"id": "1레벨_방탄복", "name": "1레벨 경찰 조끼"},
+			"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
+			"bottom": {"id": "운동화", "name": "운동화"},
+			"primary1": {"id": "M4_리시버", "name": "M4A1 소총", "attachments": {}},
+			"primary2": {},
+			"sidearm": {"id": "M9_리시버", "name": "M9 베레타", "attachments": {}},
+			"throwable": {"id": "수류탄", "amount": 2}
+		}
+	
+	# 기본 조립 무기 초기화 및 주무기1 슬롯 활성화
+	switch_weapon_slot(active_weapon_slot)
 	
 	if has_node("Camera2D"):
 		base_camera_pos = get_node("Camera2D").position
@@ -134,17 +164,45 @@ func _physics_process(delta: float) -> void:
 			get_node("Camera2D").position = base_camera_pos
 
 func _unhandled_input(event: InputEvent) -> void:
+	if get_tree().paused: return
+	
 	# F 키 손전등 ON/OFF 토글
 	if event.is_action_pressed("flashlight") or (event is InputEventKey and event.physical_keycode == KEY_F and event.pressed and not event.echo):
 		set_flashlight(not flashlight_enabled)
 		if SoundManager: SoundManager.play("menu_select")
 		get_viewport().set_input_as_handled()
+		return
 		
 	# R 키 재장전
-	if event is InputEventKey and event.physical_keycode == KEY_R and event.pressed and not event.echo:
+	if event is InputEventKey and (event.physical_keycode == KEY_R or event.keycode == KEY_R) and event.pressed and not event.echo:
 		if not is_reloading:
 			_start_reload()
 		get_viewport().set_input_as_handled()
+		return
+		
+	# 1~4 숫자키로 무기 스위칭
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.physical_keycode == KEY_1 or event.keycode == KEY_1:
+			switch_weapon_slot("primary1")
+			get_viewport().set_input_as_handled()
+		elif event.physical_keycode == KEY_2 or event.keycode == KEY_2:
+			switch_weapon_slot("primary2")
+			get_viewport().set_input_as_handled()
+		elif event.physical_keycode == KEY_3 or event.keycode == KEY_3:
+			switch_weapon_slot("sidearm")
+			get_viewport().set_input_as_handled()
+		elif event.physical_keycode == KEY_4 or event.keycode == KEY_4:
+			switch_weapon_slot("throwable")
+			get_viewport().set_input_as_handled()
+			
+	# 마우스 휠 스크롤로 무기 전환
+	if event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cycle_weapon(-1)
+			get_viewport().set_input_as_handled()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cycle_weapon(1)
+			get_viewport().set_input_as_handled()
 
 func _handle_movement(delta: float) -> void:
 	var mouse_pos = get_global_mouse_position()
@@ -279,22 +337,102 @@ func _update_camera_zoom(delta: float) -> void:
 	cam.zoom = cam.zoom.lerp(target_zoom, delta * 6.0)
 	cam.position = cam.position.lerp(base_camera_pos + target_cam_offset, delta * 6.0)
 
-func _get_compatible_ammo_type() -> String:
+# ============================================================
+# 무기 스위칭 및 조작 시스템 (1/2/3/4 & 마우스 휠)
+# ============================================================
+func switch_weapon_slot(slot_name: String) -> void:
+	if is_reloading:
+		is_reloading = false
+		reload_timer = 0.0
+		
+	active_weapon_slot = slot_name
+	var weapon_dict = equipment.get(slot_name, {})
+	
+	if weapon_dict.is_empty():
+		# 빈 슬롯 (맨손 / 주먹)
+		equipped_weapon_data = {}
+		equipped_weapon = "맨손"
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("✋ [%s] 슬롯: 비어있음 (맨손)" % _get_slot_display_name(slot_name))
+	elif slot_name == "throwable":
+		# 투척 무기 (수류탄 등)
+		var t_id = weapon_dict.get("id", "수류탄")
+		equipped_weapon = weapon_dict.get("name", t_id)
+		equipped_weapon_data = {
+			"id": t_id,
+			"name": equipped_weapon,
+			"type": "throwable",
+			"amount": weapon_dict.get("amount", 1),
+			"computed_stats": {"damage": 120.0, "rpm": 60, "noise_radius": 800.0}
+		}
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("💣 투척 무기: %s (x%d)" % [equipped_weapon, weapon_dict.get("amount", 1)])
+	else:
+		# 총기 또는 근접 무기
+		var rec_id = weapon_dict.get("id", "")
+		if not weapon_dict.has("attachments"):
+			weapon_dict["attachments"] = {}
+			
+		# WeaponPartsDatabase를 통해 부착물 포함 스탯 계산
+		equipped_weapon_data = WeaponPartsDatabase.compute_weapon_stats(weapon_dict)
+		var w_name = weapon_dict.get("name", "")
+		if w_name == "":
+			var idata = ItemDatabase.get_item_data(rec_id)
+			w_name = idata.get("name", rec_id)
+		equipped_weapon = w_name
+		
+		# 저장된 탄약수 복원
+		if weapon_dict.has("current_magazine_ammo"):
+			equipped_weapon_data["current_magazine_ammo"] = weapon_dict["current_magazine_ammo"]
+			
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🔫 무기 전환: %s [%s]" % [w_name, _get_slot_display_name(slot_name)])
+			
+	stats_changed.emit()
+
+func _cycle_weapon(direction: int) -> void:
+	var cur_idx = WEAPON_SLOT_ORDER.find(active_weapon_slot)
+	if cur_idx == -1: cur_idx = 0
+	var new_idx = (cur_idx + direction) % WEAPON_SLOT_ORDER.size()
+	if new_idx < 0: new_idx = WEAPON_SLOT_ORDER.size() - 1
+	switch_weapon_slot(WEAPON_SLOT_ORDER[new_idx])
+
+func _get_slot_display_name(slot_name: String) -> String:
+	match slot_name:
+		"primary1": return "주무기 1"
+		"primary2": return "주무기 2"
+		"sidearm": return "권총/보조무기"
+		"throwable": return "투척무기"
+		_: return slot_name
+
+# ============================================================
+# 탄약 검색 및 재장전 시스템
+# ============================================================
+func _get_compatible_ammo_types() -> Array:
 	if not equipped_weapon_data.is_empty():
-		return equipped_weapon_data.get("loaded_ammo", "9mm")
-	return "탄약"
+		var stats = equipped_weapon_data.get("computed_stats", {})
+		if stats.has("ammo_types"):
+			return stats["ammo_types"]
+		var single_ammo = equipped_weapon_data.get("loaded_ammo", "9mm")
+		return [single_ammo, "탄약"]
+	return ["9mm", "탄약"]
 
 func _get_available_ammo_count() -> int:
-	if not inventory: return 0
-	var ammo_id = _get_compatible_ammo_type()
-	var count = 0
-	for it in inventory.items:
-		if it and (it["id"] == ammo_id or (ammo_id == "9mm" and it["id"] == "탄약")):
-			count += it["amount"]
-	return count
+	if not inventory_grid: return 0
+	var ammo_types = _get_compatible_ammo_types()
+	var total_count = 0
+	for it in inventory_grid.items:
+		var it_id = it.get("id", "")
+		for a_type in ammo_types:
+			if it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"):
+				total_count += it.get("amount", 1)
+				break
+	return total_count
 
 func _start_reload() -> void:
-	if equipped_weapon_data.is_empty(): return
+	if is_reloading: return
+	if equipped_weapon_data.is_empty() or active_weapon_slot == "throwable": return
+	
 	var stats = equipped_weapon_data.get("computed_stats", {})
 	var mag_size = stats.get("magazine_size", 15)
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
@@ -303,52 +441,77 @@ func _start_reload() -> void:
 	var avail = _get_available_ammo_count()
 	if avail <= 0:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ [%s] 호환 탄약이 없습니다!" % _get_compatible_ammo_type())
+			EventBus.event_logged.emit("⚠️ 장전할 수 있는 호환 탄약이 없습니다! (%s)" % ", ".join(_get_compatible_ammo_types()))
+		if SoundManager: SoundManager.play("hit_melee")
 		return
 		
 	is_reloading = true
-	reload_timer = stats.get("reload_speed", 1.8)
+	var rel_speed = stats.get("reload_speed", 1.8)
+	reload_timer = rel_speed
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("🔄 재장전 중... (%.1f초)" % reload_timer)
 	if SoundManager: SoundManager.play("menu_select")
 
 func _finish_reload() -> void:
 	is_reloading = false
-	if equipped_weapon_data.is_empty() or not inventory: return
+	if equipped_weapon_data.is_empty() or not inventory_grid: return
 	
 	var stats = equipped_weapon_data.get("computed_stats", {})
 	var mag_size = stats.get("magazine_size", 15)
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	var needed = mag_size - cur_mag
-	var ammo_id = _get_compatible_ammo_type()
+	var ammo_types = _get_compatible_ammo_types()
 	
 	var loaded = 0
-	for i in range(inventory.max_slots):
-		var it = inventory.items[i]
-		if it and (it["id"] == ammo_id or (ammo_id == "9mm" and it["id"] == "탄약")):
-			var take = min(needed - loaded, it["amount"])
-			it["amount"] -= take
+	for it in inventory_grid.items.duplicate():
+		var it_id = it.get("id", "")
+		var is_match = false
+		for a_type in ammo_types:
+			if it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"):
+				is_match = true
+				break
+				
+		if is_match:
+			var amt = it.get("amount", 1)
+			var take = min(amt, needed - loaded)
 			loaded += take
-			if it["amount"] <= 0:
-				inventory.items[i] = null
+			if amt - take <= 0:
+				inventory_grid.remove_item_by_uid(it.get("uid", ""))
+			else:
+				it["amount"] -= take
+				inventory_grid.grid_changed.emit()
+				
 			if loaded >= needed:
 				break
 				
 	equipped_weapon_data["current_magazine_ammo"] = cur_mag + loaded
-	inventory.inventory_changed.emit()
+	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
+		equipment[active_weapon_slot]["current_magazine_ammo"] = cur_mag + loaded
+		
 	stats_changed.emit()
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("✅ 재장전 완료! (%d/%d)" % [equipped_weapon_data["current_magazine_ammo"], mag_size])
 
+# ============================================================
+# 공격 / 발사 / 투척 로직
+# ============================================================
 func _try_attack() -> void:
 	if attack_cooldown_timer > 0 or is_reloading: return
 	
+	# 1. 맨손 근접 주먹
 	if equipped_weapon_data.is_empty():
-		equipped_weapon_data = WeaponPartsDatabase.create_default_weapon("M9_리시버")
+		_melee_punch()
+		return
 		
+	# 2. 투척 무기 (수류탄)
+	if equipped_weapon_data.get("type", "") == "throwable" or active_weapon_slot == "throwable":
+		_throw_grenade()
+		return
+		
+	# 3. 총기 발사
 	var stats = equipped_weapon_data.get("computed_stats", {})
 	var rpm = stats.get("rpm", 150)
-	attack_cooldown_timer = 60.0 / float(rpm)
+	attack_cooldown_timer = 60.0 / float(max(60, rpm))
 	
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	if cur_mag <= 0:
@@ -356,6 +519,8 @@ func _try_attack() -> void:
 		return
 		
 	equipped_weapon_data["current_magazine_ammo"] = cur_mag - 1
+	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
+		equipment[active_weapon_slot]["current_magazine_ammo"] = cur_mag - 1
 	stats_changed.emit()
 	
 	var aim_dir = Vector2.RIGHT.rotated(rotation)
@@ -392,6 +557,46 @@ func _try_attack() -> void:
 		
 	if SoundManager: SoundManager.play("hit_ranged")
 
+func _melee_punch() -> void:
+	attack_cooldown_timer = 0.4
+	recoil_offset = 6.0
+	var aim_dir = Vector2.RIGHT.rotated(rotation)
+	var punch_pos = global_position + aim_dir * 28.0
+	
+	var bullet = BulletScene.instantiate()
+	get_parent().add_child(bullet)
+	bullet.setup(punch_pos, aim_dir, 15.0)
+	
+	if SoundManager: SoundManager.play("hit_melee")
+	EventBus.noise_created.emit(global_position, 80.0, "punch")
+
+func _throw_grenade() -> void:
+	var amt = equipped_weapon_data.get("amount", 1)
+	if amt <= 0:
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 투척 무기가 모두 소진되었습니다.")
+		return
+		
+	attack_cooldown_timer = 0.8
+	var aim_dir = Vector2.RIGHT.rotated(rotation)
+	var spawn_pos = global_position + aim_dir * 16.0
+	
+	var bullet = BulletScene.instantiate()
+	get_parent().add_child(bullet)
+	bullet.setup(spawn_pos, aim_dir, 120.0)
+	
+	amt -= 1
+	equipped_weapon_data["amount"] = amt
+	if equipment.has("throwable") and not equipment["throwable"].is_empty():
+		if amt <= 0:
+			equipment["throwable"] = {}
+		else:
+			equipment["throwable"]["amount"] = amt
+			
+	if SoundManager: SoundManager.play("menu_select")
+	EventBus.noise_created.emit(global_position, 200.0, "grenade_throw")
+	stats_changed.emit()
+
 func _update_interaction() -> void:
 	if interact_cooldown > 0:
 		interact_cooldown -= get_process_delta_time()
@@ -415,6 +620,43 @@ func _update_interaction() -> void:
 	var can_interact = false
 	var prompt_text = ""
 	
+	# 1. 주변 바닥 아이템(GroundItem) 감지 및 [E] 줍기
+	var nearby_ground_items = get_tree().get_nodes_in_group("ground_items")
+	var closest_ground_item: GroundItem = null
+	var min_ground_dist = 45.0
+	
+	for g in nearby_ground_items:
+		if is_instance_valid(g) and g is GroundItem:
+			var dist = global_position.distance_to(g.global_position)
+			if dist < min_ground_dist:
+				min_ground_dist = dist
+				closest_ground_item = g
+				
+	if closest_ground_item:
+		can_interact = true
+		var idata = ItemDatabase.get_item_data(closest_ground_item.item_id)
+		prompt_text = "[E] %s 줍기" % idata.get("name", closest_ground_item.item_id)
+		if Input.is_action_just_pressed("interact") or (Input.is_physical_key_pressed(KEY_E) and interact_cooldown <= 0.0):
+			interact_cooldown = 0.3
+			var rem = 0
+			if inventory_grid:
+				rem = inventory_grid.auto_add_item(closest_ground_item.item_id, closest_ground_item.amount, closest_ground_item.custom_data)
+			elif inventory:
+				rem = inventory.add_item(closest_ground_item.item_id, closest_ground_item.amount)
+				
+			if rem <= 0:
+				closest_ground_item.queue_free()
+				if SoundManager: SoundManager.play("menu_select")
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("📦 %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), closest_ground_item.amount])
+			else:
+				closest_ground_item.amount = rem
+				closest_ground_item.update_visuals()
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+		interact_prompt.emit(true, prompt_text)
+		return
+
 	# 엔티티 상호작용
 	var space_state = get_world_2d().direct_space_state
 	var query = PhysicsPointQueryParameters2D.new()
@@ -601,7 +843,9 @@ func _on_camera_shake_requested(intensity: float, duration: float) -> void:
 
 func _on_player_damaged(amount: float, source: String) -> void:
 	if is_god_mode: return
-	hp -= amount
+	var dmg_reduction = armor_defense / (armor_defense + 100.0) # 최대 ~50% 감소
+	var actual_damage = max(1.0, amount * (1.0 - dmg_reduction))
+	hp -= actual_damage
 	if source == "zombie" and randf() < 0.3:
 		is_infected = true
 	elif source == "gunfire" and randf() < 0.5:

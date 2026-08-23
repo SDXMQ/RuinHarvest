@@ -5,9 +5,19 @@ extends Control
 @onready var money_label: Label = $TopBar/MoneyLabel
 @onready var tab_container: TabContainer = $CenterArea/TabContainer
 
-# 창고 탭
-@onready var player_grid: GridContainer = $CenterArea/TabContainer/StashTab/HBox/PlayerPanel/Grid
-@onready var stash_grid: GridContainer = $CenterArea/TabContainer/StashTab/HBox/StashPanel/Scroll/Grid
+# 창고 탭 (2D 그리드 & 장비 슬롯)
+@onready var player_grid_control: Control = $CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox/Scroll/PlayerGridControl
+@onready var stash_grid_control: Control = $CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox/Scroll/StashGridControl
+
+@onready var helmet_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/HelmetSlot
+@onready var vest_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/VestSlot
+@onready var backpack_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/BackpackSlot
+@onready var bottom_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/BottomSlot
+
+@onready var primary1_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/Primary1Slot
+@onready var primary2_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/Primary2Slot
+@onready var sidearm_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/SidearmSlot
+@onready var throwable_slot: Button = $CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox/ThrowableSlot
 
 # 상인 탭
 @onready var trader_desc_label: Label = $CenterArea/TabContainer/TradersTab/VBox/Header/DescLabel
@@ -29,10 +39,24 @@ extends Control
 @onready var result_close_btn: Button = $ResultDialog/VBox/CloseBtn
 
 const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
+const SplitDialogScene = preload("res://scenes/ui/split_dialog.tscn")
 var tooltip: PanelContainer
 
-var player_inv: Inventory
-var stash_inv: Inventory
+# 2D 인벤토리 그리드 시스템
+var player_grid_mgr: InventoryGrid
+var stash_grid_mgr: InventoryGrid
+var equipment_data: Dictionary = {}
+
+const CELL_SIZE: float = 44.0
+
+# 드래그 앤 드롭 상태
+var is_dragging: bool = false
+var drag_data: Dictionary = {}
+var drag_preview_node: Control = null
+var hovered_player_cell: Vector2i = Vector2i(-1, -1)
+var hovered_stash_cell: Vector2i = Vector2i(-1, -1)
+
+var drop_targets: Array[Dictionary] = []
 var current_trader_id: String = "prapor"
 
 func _ready() -> void:
@@ -59,22 +83,36 @@ func _ready() -> void:
 	therapist_btn.pressed.connect(func(): _select_trader("therapist"))
 	fence_btn.pressed.connect(func(): _select_trader("fence"))
 	
-	# 인벤토리 초기화
-	player_inv = Inventory.new()
-	player_inv.max_slots = 12
-	add_child(player_inv)
+	# 2D 인벤토리 매니저 인스턴스화
+	player_grid_mgr = InventoryGrid.new()
+	player_grid_mgr.grid_width = 6
+	player_grid_mgr.grid_height = 4
+	add_child(player_grid_mgr)
 	
-	stash_inv = Inventory.new()
-	stash_inv.max_slots = 48
-	add_child(stash_inv)
+	stash_grid_mgr = InventoryGrid.new()
+	stash_grid_mgr.grid_width = 10
+	stash_grid_mgr.grid_height = 12
+	add_child(stash_grid_mgr)
 	
-	player_inv.inventory_changed.connect(_on_inventory_changed)
-	stash_inv.inventory_changed.connect(_on_inventory_changed)
+	player_grid_mgr.grid_changed.connect(_on_grid_changed)
+	stash_grid_mgr.grid_changed.connect(_on_grid_changed)
+	
+	# 2D 그리드 드로잉 및 입력 연결
+	player_grid_control.draw.connect(_on_player_grid_draw)
+	player_grid_control.gui_input.connect(_on_player_grid_gui_input)
+	
+	stash_grid_control.draw.connect(_on_stash_grid_draw)
+	stash_grid_control.gui_input.connect(_on_stash_grid_gui_input)
+	
+	# 장비 슬롯 연결
+	_connect_equipment_slots()
 	
 	tab_container.tab_changed.connect(_on_tab_changed)
 	
 	_load_data()
 	_check_last_raid_result()
+	_apply_backpack_grid_size()
+	_update_equipment_ui()
 	_refresh_stash_ui()
 	_refresh_trader_ui()
 	_refresh_market_ui()
@@ -82,6 +120,8 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if tooltip and tooltip.visible:
 		tooltip.update_position(get_global_mouse_position())
+	if is_dragging and drag_preview_node:
+		drag_preview_node.global_position = get_global_mouse_position() - Vector2(22, 22)
 
 func _on_tab_changed(tab: int) -> void:
 	if tooltip: tooltip.hide()
@@ -92,6 +132,12 @@ func _on_tab_changed(tab: int) -> void:
 	elif tab == 2:
 		_refresh_market_ui()
 
+func _on_grid_changed() -> void:
+	if player_grid_control: player_grid_control.queue_redraw()
+	if stash_grid_control: stash_grid_control.queue_redraw()
+	_refresh_trader_sell_ui()
+	_sync_save_data()
+
 func _load_data() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var w_data = GameManager.current_world_data
@@ -99,199 +145,559 @@ func _load_data() -> void:
 		day_label.text = "생존 %d일차 (DAY %d)" % [day, day]
 		_update_money_label()
 		
-		# 배낭 데이터 로드
-		var p_inv_data = w_data.get("player", {}).get("inventory", [])
-		player_inv.load_items(p_inv_data)
+		# 장비 데이터 로드
+		var p_data = w_data.get("player", {})
+		if p_data.has("equipment") and not p_data["equipment"].is_empty():
+			equipment_data = p_data["equipment"].duplicate(true)
+		else:
+			equipment_data = {
+				"helmet": {"id": "1레벨_헬멧", "name": "1레벨 오토바이 헬멧"},
+				"vest": {"id": "1레벨_방탄복", "name": "1레벨 경찰 조끼"},
+				"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
+				"bottom": {"id": "운동화", "name": "운동화"},
+				"primary1": {"id": "M4_리시버", "name": "M4A1 소총", "attachments": {}},
+				"primary2": {},
+				"sidearm": {"id": "M9_리시버", "name": "M9 베레타", "attachments": {}},
+				"throwable": {"id": "수류탄", "amount": 2}
+			}
 		
-		# 창고 데이터 로드
-		var stash_data = w_data.get("hideout", {}).get("stash", [])
-		stash_inv.load_items(stash_data)
+		# 배낭 2D 데이터 로드
+		var p_items = p_data.get("inventory", [])
+		player_grid_mgr.clear()
+		for it in p_items:
+			if it is Dictionary and it.has("id"):
+				player_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
+				
+		# 창고 2D 데이터 로드
+		var stash_items = w_data.get("hideout", {}).get("stash", [])
+		stash_grid_mgr.clear()
+		for it in stash_items:
+			if it is Dictionary and it.has("id"):
+				stash_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
 
 func _update_money_label() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var rubles = GameManager.current_world_data.get("player", {}).get("rubles", 5000)
 		money_label.text = "자금: %d RUB" % rubles
 
-func _on_inventory_changed() -> void:
-	if tooltip: tooltip.hide()
-	_refresh_stash_ui()
-	_refresh_trader_sell_ui()
-	_sync_save_data()
-
 func _sync_save_data() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
-		var saved_player_items = []
-		for item in player_inv.items:
-			if item:
-				saved_player_items.append(item.duplicate())
 		if not GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"] = {}
-		GameManager.current_world_data["player"]["inventory"] = saved_player_items
+		GameManager.current_world_data["player"]["inventory"] = player_grid_mgr.items.duplicate(true)
+		GameManager.current_world_data["player"]["equipment"] = equipment_data.duplicate(true)
 		
-		var saved_stash_items = []
-		for item in stash_inv.items:
-			if item:
-				saved_stash_items.append(item.duplicate())
 		if not GameManager.current_world_data.has("hideout"):
 			GameManager.current_world_data["hideout"] = {}
-		GameManager.current_world_data["hideout"]["stash"] = saved_stash_items
+		GameManager.current_world_data["hideout"]["stash"] = stash_grid_mgr.items.duplicate(true)
 		
 		if GameManager.current_save_slot != "":
 			SaveManager.save_game(GameManager.current_world_data, GameManager.current_save_slot)
 
 # ============================================================
-# 창고 UI 로직
+# 2D 그리드 렌더링 및 UI
 # ============================================================
 func _refresh_stash_ui() -> void:
-	_populate_grid(player_grid, player_inv, true)
-	_populate_grid(stash_grid, stash_inv, false)
+	_apply_backpack_grid_size()
+	_update_equipment_ui()
+	if player_grid_control: player_grid_control.queue_redraw()
+	if stash_grid_control: stash_grid_control.queue_redraw()
 
-func _populate_grid(grid: GridContainer, inv: Inventory, is_player: bool) -> void:
-	for child in grid.get_children():
-		child.queue_free()
+func _apply_backpack_grid_size() -> void:
+	var bp = equipment_data.get("backpack", {})
+	var new_w = 4
+	var new_h = 4
+	
+	if not bp.is_empty():
+		var id = bp.get("id", "")
+		var d = ItemDatabase.get_item_data(id)
+		var b_grid = d.get("backpack_grid", Vector2i(6, 4))
+		new_w = b_grid.x
+		new_h = b_grid.y
 		
-	for i in range(inv.max_slots):
-		var btn = Button.new()
-		btn.custom_minimum_size = Vector2(56, 56)
-		btn.clip_contents = true
-		var item = inv.items[i]
-		
-		if item:
-			var data = ItemDatabase.get_item_data(item["id"])
-			if ItemIconManager:
-				btn.icon = ItemIconManager.get_icon(item["id"])
-				btn.expand_icon = true
-				btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
-				btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_CENTER
-				
-			btn.mouse_entered.connect(func():
-				if tooltip and item:
-					tooltip.display_item(item, data)
-					tooltip.update_position(get_global_mouse_position())
-			)
-			btn.mouse_exited.connect(func():
-				if tooltip: tooltip.hide()
-			)
+	if player_grid_mgr:
+		var dropped = player_grid_mgr.resize_grid(new_w, new_h)
+		for it in dropped:
+			stash_grid_mgr.auto_add_item(it.get("id", ""), it.get("amount", 1), it)
 			
-			if item["amount"] > 1:
-				var amt_lbl = Label.new()
-				amt_lbl.text = "x%d" % item["amount"]
-				amt_lbl.add_theme_font_size_override("font_size", 12)
-				amt_lbl.add_theme_color_override("font_color", Color(1.0, 0.95, 0.4))
-				amt_lbl.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1.0))
-				amt_lbl.add_theme_constant_override("shadow_offset_x", 1)
-				amt_lbl.add_theme_constant_override("shadow_offset_y", 1)
-				amt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				amt_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-				amt_lbl.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-				amt_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
-				amt_lbl.offset_right = -4
-				amt_lbl.offset_bottom = -2
-				btn.add_child(amt_lbl)
-				
-			# 내구도 바 (슬롯 하단 미니 게이지)
-			var max_dur = data.get("max_durability", 0)
-			if max_dur > 0:
-				var cur_dur = item.get("durability", max_dur)
-				var dur_mini_bar = ProgressBar.new()
-				dur_mini_bar.show_percentage = false
-				dur_mini_bar.custom_minimum_size = Vector2(46, 4)
-				dur_mini_bar.max_value = max_dur
-				dur_mini_bar.value = cur_dur
-				dur_mini_bar.position = Vector2(5, 48)
-				dur_mini_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				
-				var fill_style = StyleBoxFlat.new()
-				var ratio = float(cur_dur) / float(max_dur)
-				if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
-				elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
-				else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
-				dur_mini_bar.add_theme_stylebox_override("fill", fill_style)
-				
-				var bg_style = StyleBoxFlat.new()
-				bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.7)
-				dur_mini_bar.add_theme_stylebox_override("background", bg_style)
-				btn.add_child(dur_mini_bar)
+	if player_grid_control:
+		player_grid_control.custom_minimum_size = Vector2(new_w * CELL_SIZE, new_h * CELL_SIZE)
+		player_grid_control.queue_redraw()
+
+func _on_player_grid_draw() -> void:
+	_draw_2d_grid(player_grid_control, player_grid_mgr, hovered_player_cell, true)
+
+func _on_stash_grid_draw() -> void:
+	_draw_2d_grid(stash_grid_control, stash_grid_mgr, hovered_stash_cell, false)
+
+func _draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2i, is_player_grid: bool) -> void:
+	if not grid_mgr: return
+	
+	var w = grid_mgr.grid_width
+	var h = grid_mgr.grid_height
+	
+	# 1. 배경 격자선
+	var line_col = Color(0.24, 0.28, 0.35, 0.7)
+	for x in range(w + 1):
+		ctrl.draw_line(Vector2(x * CELL_SIZE, 0), Vector2(x * CELL_SIZE, h * CELL_SIZE), line_col, 1.0)
+	for y in range(h + 1):
+		ctrl.draw_line(Vector2(0, y * CELL_SIZE), Vector2(w * CELL_SIZE, y * CELL_SIZE), line_col, 1.0)
+		
+	# 2. 배치된 아이템 렌더링
+	for item in grid_mgr.items:
+		if item.is_empty(): continue
+		var cur_w = item.get("h", 1) if item.get("rotated", false) else item.get("w", 1)
+		var cur_h = item.get("w", 1) if item.get("rotated", false) else item.get("h", 1)
+		var item_rect = Rect2(item.get("x", 0) * CELL_SIZE + 2, item.get("y", 0) * CELL_SIZE + 2, cur_w * CELL_SIZE - 4, cur_h * CELL_SIZE - 4)
+		
+		var item_bg = Color(0.18, 0.22, 0.28, 0.95) if is_player_grid else Color(0.16, 0.20, 0.24, 0.95)
+		var item_border = Color(0.35, 0.65, 0.95, 0.9) if is_player_grid else Color(0.9, 0.7, 0.3, 0.9)
+		ctrl.draw_rect(item_rect, item_bg, true)
+		ctrl.draw_rect(item_rect, item_border, false, 1.5)
+		
+		# 아이콘
+		var icon_tex = ItemIconManager.get_icon(item.get("id", "")) if ItemIconManager else null
+		if icon_tex:
+			var icon_size = Vector2(min(item_rect.size.x, item_rect.size.y) * 0.75, min(item_rect.size.x, item_rect.size.y) * 0.75)
+			var icon_pos = item_rect.position + (item_rect.size - icon_size) / 2.0
+			ctrl.draw_texture_rect(icon_tex, Rect2(icon_pos, icon_size), false)
+			
+		# 수량
+		var amt = item.get("amount", 1)
+		if amt > 1:
+			var font = ThemeDB.fallback_font
+			ctrl.draw_string(font, item_rect.position + Vector2(4, item_rect.size.y - 4), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 0.4))
+			
+		# 이름
+		var font = ThemeDB.fallback_font
+		var d = ItemDatabase.get_item_data(item.get("id", ""))
+		ctrl.draw_string(font, item_rect.position + Vector2(4, 12), d.get("name", item.get("id", "")), HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 8, 10, Color(0.9, 0.9, 0.9, 0.8))
+
+	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강)
+	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
+		var item = drag_data.get("item", {})
+		var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+		var base_w = item.get("w", base_size.x)
+		var base_h = item.get("h", base_size.y)
+		var is_rot = drag_data.get("rotated", false)
+		var place_w = base_h if is_rot else base_w
+		var place_h = base_w if is_rot else base_h
+		
+		var src = drag_data.get("source", "")
+		var uid = item.get("uid", "")
+		var ignore_uid = uid if (src == ("player_grid" if is_player_grid else "stash_grid")) else ""
+		var can_place = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid)
+		var ghost_rect = Rect2(hovered_cell.x * CELL_SIZE, hovered_cell.y * CELL_SIZE, place_w * CELL_SIZE, place_h * CELL_SIZE)
+		
+		var col = Color(0.2, 0.8, 0.3, 0.4) if can_place else Color(0.9, 0.2, 0.2, 0.4)
+		var border_col = Color(0.3, 1.0, 0.4, 0.9) if can_place else Color(1.0, 0.3, 0.3, 0.9)
+		
+		ctrl.draw_rect(ghost_rect, col, true)
+		ctrl.draw_rect(ghost_rect, border_col, false, 2.0)
+
+# ============================================================
+# 그리드 마우스 이벤트 처리
+# ============================================================
+func _on_player_grid_gui_input(event: InputEvent) -> void:
+	_handle_grid_input(event, player_grid_control, player_grid_mgr, true)
+
+func _on_stash_grid_gui_input(event: InputEvent) -> void:
+	_handle_grid_input(event, stash_grid_control, stash_grid_mgr, false)
+
+func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGrid, is_player_grid: bool) -> void:
+	var local_pos = ctrl.get_local_mouse_position()
+	var cell_x = int(local_pos.x / CELL_SIZE)
+	var cell_y = int(local_pos.y / CELL_SIZE)
+	
+	if event is InputEventMouseMotion:
+		if cell_x >= 0 and cell_x < grid_mgr.grid_width and cell_y >= 0 and cell_y < grid_mgr.grid_height:
+			if is_player_grid: hovered_player_cell = Vector2i(cell_x, cell_y)
+			else: hovered_stash_cell = Vector2i(cell_x, cell_y)
 		else:
-			btn.text = ""
+			if is_player_grid: hovered_player_cell = Vector2i(-1, -1)
+			else: hovered_stash_cell = Vector2i(-1, -1)
 			
-		# 은신처 드래그 앤 드롭
-		btn.set_drag_forwarding(
-			func(_at_pos): return _get_hideout_drag_data(i, is_player),
-			func(_at_pos, data): return _can_hideout_drop_data(data),
-			func(_at_pos, data): _on_hideout_drop_data(data, i, is_player)
-		)
+		if not is_dragging:
+			var hovered_item = grid_mgr.get_item_at(cell_x, cell_y)
+			if not hovered_item.is_empty():
+				var idata = ItemDatabase.get_item_data(hovered_item.get("id", ""))
+				tooltip.display_item(hovered_item, idata)
+				tooltip.update_position(get_global_mouse_position())
+			else:
+				tooltip.hide()
+		ctrl.queue_redraw()
 		
-		btn.pressed.connect(func(): _on_slot_clicked(i, is_player))
-		grid.add_child(btn)
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			var item = grid_mgr.get_item_at(cell_x, cell_y)
+			if not item.is_empty():
+				if Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
+					_open_split_dialog(item, func(split_amt):
+						var split_item = item.duplicate(true)
+						split_item["amount"] = split_amt
+						item["amount"] -= split_amt
+						grid_mgr.grid_changed.emit()
+						_start_drag("player_grid" if is_player_grid else "stash_grid", split_item, Vector2i(cell_x, cell_y))
+					)
+				else:
+					_start_drag("player_grid" if is_player_grid else "stash_grid", item, Vector2i(cell_x, cell_y))
+		elif event.button_index == MOUSE_BUTTON_RIGHT:
+			# 우클릭 퀵 액션: 배낭 <-> 창고 간 자동 이동 또는 장비 장착
+			var item = grid_mgr.get_item_at(cell_x, cell_y)
+			if not item.is_empty():
+				_handle_hideout_quick_action(item, is_player_grid)
 
-func _get_hideout_drag_data(index: int, is_player: bool) -> Variant:
-	var src = player_inv if is_player else stash_inv
-	if src == null or src.items[index] == null:
-		return null
-		
-	var item = src.items[index]
-	var preview = TextureRect.new()
-	preview.texture = ItemIconManager.get_icon(item["id"]) if ItemIconManager else null
-	preview.custom_minimum_size = Vector2(48, 48)
-	preview.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview.modulate = Color(1, 1, 1, 0.75)
+func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool) -> void:
+	var item_id = item.get("id", "")
+	var target_slot = ItemDatabase.get_item_equip_slot(item_id)
 	
-	var control = Control.new()
-	control.add_child(preview)
-	preview.position = -Vector2(24, 24)
-	set_drag_preview(control)
-	
-	return {
-		"src_index": index,
-		"src_is_player": is_player,
-		"item": item
-	}
-
-func _can_hideout_drop_data(data: Variant) -> bool:
-	return data is Dictionary and data.has("src_index")
-
-func _on_hideout_drop_data(data: Variant, target_index: int, target_is_player: bool) -> void:
-	if not _can_hideout_drop_data(data):
+	# 1. 장비 아이템이면 장비 슬롯으로 퀵 장착 시도
+	if target_slot != "" and equipment_data.has(target_slot) and equipment_data[target_slot].is_empty():
+		if is_from_player: player_grid_mgr.remove_item_by_uid(item.get("uid", ""))
+		else: stash_grid_mgr.remove_item_by_uid(item.get("uid", ""))
+		equipment_data[target_slot] = item
+		_apply_backpack_grid_size()
+		_update_equipment_ui()
+		if SoundManager: SoundManager.play("menu_select")
 		return
 		
-	var src_index = data["src_index"]
-	var src_is_player = data["src_is_player"]
+	# 2. 배낭 <-> 창고 간 상호 자동 이동 (Auto-Fit)
+	var dest_grid = stash_grid_mgr if is_from_player else player_grid_mgr
+	var src_grid = player_grid_mgr if is_from_player else stash_grid_mgr
 	
-	var src = player_inv if src_is_player else stash_inv
-	var dest = player_inv if target_is_player else stash_inv
-	
-	if src == null or dest == null:
-		return
-		
-	src.move_item(src_index, target_index, dest)
-	if SoundManager: SoundManager.play("menu_select")
-	_refresh_stash_ui()
+	var rem = dest_grid.auto_add_item(item.get("id", ""), item.get("amount", 1), item)
+	if rem <= 0:
+		src_grid.remove_item_by_uid(item.get("uid", ""))
+		if SoundManager: SoundManager.play("menu_select")
+	else:
+		item["amount"] = rem
+		src_grid.grid_changed.emit()
 
-func _on_slot_clicked(index: int, is_player: bool) -> void:
-	var src = player_inv if is_player else stash_inv
-	var dest = stash_inv if is_player else player_inv
-	
-	if src.items[index] == null: return
-	
-	var item_id = src.items[index]["id"]
-	var data = ItemDatabase.get_item_data(item_id)
-	var max_stack = data.get("max_stack", 1)
-	
-	var target_index = -1
-	for i in range(dest.max_slots):
-		var slot = dest.items[i]
-		if slot and slot["id"] == item_id and slot["amount"] < max_stack:
-			target_index = i
-			break
-	if target_index == -1:
-		for i in range(dest.max_slots):
-			if dest.items[i] == null:
-				target_index = i
+# ============================================================
+# 드래그 앤 드롭 전역 제어
+# ============================================================
+func _input(event: InputEvent) -> void:
+	# R 키 회전
+	if is_dragging and event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_R or event.physical_keycode == KEY_R:
+			drag_data["rotated"] = not drag_data.get("rotated", false)
+			if player_grid_control: player_grid_control.queue_redraw()
+			if stash_grid_control: stash_grid_control.queue_redraw()
+			get_viewport().set_input_as_handled()
+			return
+			
+	if is_dragging and event is InputEventMouseMotion:
+		var m_pos = get_global_mouse_position()
+		if drag_preview_node:
+			drag_preview_node.global_position = m_pos - Vector2(22, 22)
+			
+		if player_grid_control:
+			var p_m = player_grid_control.get_local_mouse_position()
+			var p_x = int(p_m.x / CELL_SIZE)
+			var p_y = int(p_m.y / CELL_SIZE)
+			hovered_player_cell = Vector2i(p_x, p_y) if (p_x >= 0 and p_x < player_grid_mgr.grid_width and p_y >= 0 and p_y < player_grid_mgr.grid_height) else Vector2i(-1, -1)
+			player_grid_control.queue_redraw()
+		if stash_grid_control:
+			var s_m = stash_grid_control.get_local_mouse_position()
+			var s_x = int(s_m.x / CELL_SIZE)
+			var s_y = int(s_m.y / CELL_SIZE)
+			hovered_stash_cell = Vector2i(s_x, s_y) if (s_x >= 0 and s_x < stash_grid_mgr.grid_width and s_y >= 0 and s_y < stash_grid_mgr.grid_height) else Vector2i(-1, -1)
+			stash_grid_control.queue_redraw()
+			
+		# 마우스 아래의 장비 슬롯 감지 및 하이라이트
+		var hovered_target_ctrl: Control = null
+		for target in drop_targets:
+			var ctrl: Control = target.get("control")
+			if is_instance_valid(ctrl) and ctrl.is_visible_in_tree() and ctrl.get_global_rect().has_point(m_pos):
+				hovered_target_ctrl = ctrl
 				break
+		_highlight_compatible_slots(drag_data.get("item", {}), hovered_target_ctrl)
+			
+	if is_dragging and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_handle_hideout_global_drop()
+		get_viewport().set_input_as_handled()
+
+func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, slot_key: String = "") -> void:
+	is_dragging = true
+	var base_size = ItemDatabase.get_item_grid_size(item_dict.get("id", ""))
+	if not item_dict.has("w"):
+		item_dict["w"] = base_size.x
+	if not item_dict.has("h"):
+		item_dict["h"] = base_size.y
+	drag_data = {
+		"source": src_name,
+		"item": item_dict,
+		"cell": cell_pos,
+		"slot_name": slot_key,
+		"rotated": item_dict.get("rotated", false)
+	}
+	
+	if tooltip: tooltip.hide()
+	
+	if drag_preview_node: drag_preview_node.queue_free()
+	drag_preview_node = Control.new()
+	drag_preview_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	
+	var preview_tex = TextureRect.new()
+	preview_tex.texture = ItemIconManager.get_icon(item_dict.get("id", "")) if ItemIconManager else null
+	preview_tex.custom_minimum_size = Vector2(44, 44)
+	preview_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	preview_tex.modulate = Color(1, 1, 1, 0.8)
+	drag_preview_node.add_child(preview_tex)
+	
+	add_child(drag_preview_node)
+	drag_preview_node.global_position = get_global_mouse_position() - Vector2(22, 22)
+	_highlight_compatible_slots(item_dict, null)
+
+func _end_drag() -> void:
+	is_dragging = false
+	drag_data.clear()
+	hovered_player_cell = Vector2i(-1, -1)
+	hovered_stash_cell = Vector2i(-1, -1)
+	if drag_preview_node:
+		drag_preview_node.queue_free()
+		drag_preview_node = null
+	_clear_slot_highlights()
+	if player_grid_control: player_grid_control.queue_redraw()
+	if stash_grid_control: stash_grid_control.queue_redraw()
+
+func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
+	var item_id = item.get("id", "")
+	for target in drop_targets:
+		var ctrl: Control = target.get("control")
+		if not is_instance_valid(ctrl) or not ctrl.is_visible_in_tree(): continue
+		
+		var slot_name = target.get("slot_name", "")
+		var is_compat = _is_slot_compatible(item_id, slot_name)
+		
+		var sb = StyleBoxFlat.new()
+		sb.corner_radius_top_left = 4
+		sb.corner_radius_top_right = 4
+		sb.corner_radius_bottom_left = 4
+		sb.corner_radius_bottom_right = 4
+		
+		if ctrl == hovered_ctrl:
+			if is_compat:
+				# 마우스 호버 + 장착 가능 -> 선명한 네온 초록 테두리 & 밝은 배경
+				sb.bg_color = Color(0.12, 0.42, 0.18, 0.9)
+				sb.border_color = Color(0.3, 1.0, 0.5, 1.0)
+				sb.set_border_width_all(2)
+			else:
+				# 마우스 호버 + 장착 불가 -> 빨간색 경고 테두리
+				sb.bg_color = Color(0.42, 0.12, 0.12, 0.9)
+				sb.border_color = Color(1.0, 0.3, 0.3, 1.0)
+				sb.set_border_width_all(2)
+		else:
+			if is_compat:
+				# 장착 가능 슬롯 안내 가이드 -> 은은한 초록 테두리
+				sb.bg_color = Color(0.08, 0.24, 0.14, 0.65)
+				sb.border_color = Color(0.2, 0.85, 0.4, 0.85)
+				sb.set_border_width_all(2)
+			else:
+				# 일반 비호환 슬롯 -> 기본
+				sb.bg_color = Color(0.14, 0.15, 0.18, 0.5)
+				sb.border_color = Color(0.25, 0.28, 0.32, 0.4)
+				sb.set_border_width_all(1)
 				
-	if target_index != -1:
-		src.move_item(index, target_index, dest)
+		ctrl.add_theme_stylebox_override("normal", sb)
+		ctrl.add_theme_stylebox_override("hover", sb)
+
+func _clear_slot_highlights() -> void:
+	for target in drop_targets:
+		var ctrl: Control = target.get("control")
+		if is_instance_valid(ctrl):
+			ctrl.remove_theme_stylebox_override("normal")
+			ctrl.remove_theme_stylebox_override("hover")
+
+func _handle_hideout_global_drop() -> void:
+	if not is_dragging: return
+	
+	var m_pos = get_global_mouse_position()
+	
+	# 1. 플레이어 배낭 2D 그리드 위인지 검사
+	if player_grid_control.get_global_rect().has_point(m_pos):
+		var l_pos = player_grid_control.get_local_mouse_position()
+		var cx = int(l_pos.x / CELL_SIZE)
+		var cy = int(l_pos.y / CELL_SIZE)
+		_try_drop_on_hideout_grid(player_grid_mgr, cx, cy, true)
+		return
+		
+	# 2. 은신처 창고 2D 그리드 위인지 검사
+	if stash_grid_control.get_global_rect().has_point(m_pos):
+		var l_pos = stash_grid_control.get_local_mouse_position()
+		var cx = int(l_pos.x / CELL_SIZE)
+		var cy = int(l_pos.y / CELL_SIZE)
+		_try_drop_on_hideout_grid(stash_grid_mgr, cx, cy, false)
+		return
+		
+	# 3. 캐릭터 장비 슬롯 위인지 검사
+	for target in drop_targets:
+		var ctrl: Control = target.get("control")
+		if is_instance_valid(ctrl) and ctrl.is_visible_in_tree() and ctrl.get_global_rect().has_point(m_pos):
+			_try_equip_hideout_item(target.get("slot_name", ""))
+			return
+			
+	_end_drag()
+
+func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: int, is_dest_player: bool) -> void:
+	if not is_dragging: return
+	
+	var item = drag_data.get("item", {})
+	var is_rot = drag_data.get("rotated", false)
+	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+	var base_w = item.get("w", base_size.x)
+	var base_h = item.get("h", base_size.y)
+	var place_w = base_h if is_rot else base_w
+	var place_h = base_w if is_rot else base_h
+	
+	var src = drag_data.get("source", "")
+	var uid = item.get("uid", "")
+	var ignore_uid = uid if (src == ("player_grid" if is_dest_player else "stash_grid")) else ""
+	
+	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid):
+		if dest_grid.place_item(item, cell_x, cell_y, is_rot):
+			# 배치 성공 시 이전 위치에서 안전하게 제거
+			if src == "player_grid":
+				if not is_dest_player or dest_grid != player_grid_mgr:
+					player_grid_mgr.remove_item_by_uid(uid)
+			elif src == "stash_grid":
+				if is_dest_player or dest_grid != stash_grid_mgr:
+					stash_grid_mgr.remove_item_by_uid(uid)
+			elif src == "equipment":
+				equipment_data[drag_data.get("slot_name", "")] = {}
+				_apply_backpack_grid_size()
+				_update_equipment_ui()
+				
+			if SoundManager: SoundManager.play("menu_select")
+		else:
+			if SoundManager: SoundManager.play("hit_melee")
+	else:
+		if SoundManager: SoundManager.play("hit_melee")
+		
+	_end_drag()
+
+# ============================================================
+# 캐릭터 장비 슬롯 연동
+# ============================================================
+func _connect_equipment_slots() -> void:
+	var slots = [
+		[helmet_slot, "helmet"], [vest_slot, "vest"], [backpack_slot, "backpack"], [bottom_slot, "bottom"],
+		[primary1_slot, "primary1"], [primary2_slot, "primary2"], [sidearm_slot, "sidearm"], [throwable_slot, "throwable"]
+	]
+	
+	drop_targets.clear()
+	for s_pair in slots:
+		var btn: Button = s_pair[0]
+		var s_name: String = s_pair[1]
+		drop_targets.append({"control": btn, "slot_name": s_name})
+		
+		btn.gui_input.connect(func(event: InputEvent):
+			if event is InputEventMouseButton and event.pressed:
+				if event.button_index == MOUSE_BUTTON_LEFT:
+					if is_dragging:
+						_try_equip_hideout_item(s_name)
+					else:
+						var equipped = equipment_data.get(s_name, {})
+						if not equipped.is_empty():
+							_start_drag("equipment", equipped, Vector2i.ZERO, s_name)
+				elif event.button_index == MOUSE_BUTTON_RIGHT:
+					# 우클릭 시 창고로 탈착
+					var equipped = equipment_data.get(s_name, {})
+					if not equipped.is_empty():
+						var rem = stash_grid_mgr.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
+						if rem <= 0:
+							equipment_data[s_name] = {}
+							_apply_backpack_grid_size()
+							_update_equipment_ui()
+							if SoundManager: SoundManager.play("menu_select")
+		)
+
+func _try_equip_hideout_item(slot_name: String) -> void:
+	var item = drag_data.get("item", {})
+	var item_id = item.get("id", "")
+	
+	if not _is_slot_compatible(item_id, slot_name):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
+		_end_drag()
+		return
+		
+	var src = drag_data.get("source", "")
+	var orig_slot = drag_data.get("slot_name", "")
+	
+	# 같은 장비 슬롯에 다시 드롭한 경우 -> 복제 방지
+	if src == "equipment" and orig_slot == slot_name:
+		_end_drag()
+		return
+		
+	if src == "player_grid":
+		player_grid_mgr.remove_item_by_uid(item.get("uid", ""))
+	elif src == "stash_grid":
+		stash_grid_mgr.remove_item_by_uid(item.get("uid", ""))
+	elif src == "equipment":
+		equipment_data[orig_slot] = {}
+		
+	var prev_equipped = equipment_data.get(slot_name, {})
+	equipment_data[slot_name] = item
+	
+	if not prev_equipped.is_empty():
+		stash_grid_mgr.auto_add_item(prev_equipped.get("id", ""), prev_equipped.get("amount", 1), prev_equipped)
+		
+	_apply_backpack_grid_size()
+	_update_equipment_ui()
+	if SoundManager: SoundManager.play("menu_select")
+	_end_drag()
+
+func _is_slot_compatible(item_id: String, slot_name: String) -> bool:
+	var idata = ItemDatabase.get_item_data(item_id)
+	var cat = idata.get("category", -1)
+	var e_slot = ItemDatabase.get_item_equip_slot(item_id)
+	
+	if slot_name == "helmet":
+		return e_slot == "helmet" or item_id.contains("헬멧") or item_id.contains("방독면")
+	elif slot_name == "vest":
+		return e_slot == "vest" or item_id.contains("방탄") or item_id.contains("조끼")
+	elif slot_name == "backpack":
+		return e_slot == "backpack" or item_id.contains("가방") or item_id.contains("배낭")
+	elif slot_name == "bottom":
+		return e_slot == "bottom" or item_id.contains("운동화") or item_id.contains("신발")
+	elif slot_name.begins_with("primary"):
+		return cat == ItemDatabase.ItemCategory.WEAPON or idata.get("type", "") == "receiver" or e_slot == "primary"
+	elif slot_name == "sidearm":
+		return idata.get("type", "") == "melee" or item_id.contains("권총") or item_id.begins_with("M9") or e_slot == "sidearm" or e_slot == "melee"
+	elif slot_name == "throwable":
+		return item_id.contains("수류탄") or item_id.contains("연막") or item_id.contains("화염") or e_slot == "throwable"
+	return false
+
+func _update_equipment_ui() -> void:
+	_render_equip_slot_button(helmet_slot, "helmet", "🪖 헬멧")
+	_render_equip_slot_button(vest_slot, "vest", "🦺 방탄복")
+	_render_equip_slot_button(backpack_slot, "backpack", "🎒 배낭 (용량 결정)")
+	_render_equip_slot_button(bottom_slot, "bottom", "👟 하의/신발")
+	
+	_render_equip_slot_button(primary1_slot, "primary1", "🔫 주무기 1")
+	_render_equip_slot_button(primary2_slot, "primary2", "🔫 주무기 2")
+	_render_equip_slot_button(sidearm_slot, "sidearm", "🗡️ 보조 무기")
+	_render_equip_slot_button(throwable_slot, "throwable", "💣 투척 무기")
+
+func _render_equip_slot_button(btn: Button, slot_name: String, default_text: String) -> void:
+	var it = equipment_data.get(slot_name, {})
+	if it.is_empty():
+		btn.text = default_text
+		btn.icon = null
+	else:
+		var d = ItemDatabase.get_item_data(it.get("id", ""))
+		btn.text = d.get("name", it.get("id", ""))
+		if ItemIconManager:
+			btn.icon = ItemIconManager.get_icon(it.get("id", ""))
+			btn.expand_icon = true
+
+func _open_split_dialog(item: Dictionary, on_confirm_callback: Callable) -> void:
+	var dialog = SplitDialogScene.instantiate()
+	add_child(dialog)
+	dialog.setup(item.get("id", ""), item.get("amount", 1))
+	dialog.split_confirmed.connect(on_confirm_callback)
+	_refresh_stash_ui()
 
 # ============================================================
 # 상인 거래소 UI 로직
@@ -358,21 +764,35 @@ func _refresh_trader_sell_ui() -> void:
 		child.queue_free()
 		
 	# 배낭의 아이템들을 판매 가능 목록으로 표시
-	for i in range(player_inv.max_slots):
-		var item = player_inv.items[i]
-		if item:
-			var data = ItemDatabase.get_item_data(item["id"])
+	for item in player_grid_mgr.items:
+		if item and not item.is_empty():
+			var data = ItemDatabase.get_item_data(item.get("id", ""))
 			var sell_price = int(data.get("value", 500) * 0.6) # 기본가의 60%에 매입
+			var uid = item.get("uid", "")
 			
 			var btn = Button.new()
 			btn.custom_minimum_size = Vector2(100, 50)
+			
+			var btn_style = StyleBoxFlat.new()
+			btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
+			btn_style.border_width_left = 1
+			btn_style.border_width_top = 1
+			btn_style.border_width_right = 1
+			btn_style.border_width_bottom = 1
+			btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
+			btn_style.corner_radius_top_left = 4
+			btn_style.corner_radius_top_right = 4
+			btn_style.corner_radius_bottom_right = 4
+			btn_style.corner_radius_bottom_left = 4
+			btn.add_theme_stylebox_override("normal", btn_style)
+			
 			if ItemIconManager:
-				btn.icon = ItemIconManager.get_icon(item["id"])
+				btn.icon = ItemIconManager.get_icon(item.get("id", ""))
 				btn.expand_icon = true
-			btn.text = "%s\n+%d RUB" % [data["name"], sell_price * item["amount"]]
+			btn.text = "%s\n+%d RUB" % [data.get("name", item.get("id", "")), sell_price * item.get("amount", 1)]
 			btn.add_theme_font_size_override("font_size", 10)
 			btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
-			btn.pressed.connect(func(): _sell_item(i, item["id"], item["amount"], sell_price))
+			btn.pressed.connect(func(): _sell_item(uid, item.get("id", ""), item.get("amount", 1), sell_price))
 			trader_sell_grid.add_child(btn)
 
 func _buy_item(item_id: String, amount: int, price: int) -> void:
@@ -383,22 +803,21 @@ func _buy_item(item_id: String, amount: int, price: int) -> void:
 	GameManager.current_world_data["player"]["rubles"] -= price
 	_update_money_label()
 	
-	# 배낭 또는 창고에 아이템 지급
-	var remaining = player_inv.add_item(item_id, amount)
+	# 배낭 또는 창고에 아이템 지급 (Auto-Fit)
+	var remaining = player_grid_mgr.auto_add_item(item_id, amount)
 	if remaining > 0:
-		stash_inv.add_item(item_id, remaining)
+		stash_grid_mgr.auto_add_item(item_id, remaining)
 		
 	if SoundManager: SoundManager.play("menu_select")
 	_refresh_trader_ui()
 	_sync_save_data()
 
-func _sell_item(slot_idx: int, item_id: String, amount: int, unit_price: int) -> void:
+func _sell_item(uid: String, item_id: String, amount: int, unit_price: int) -> void:
 	var total_gain = unit_price * amount
 	GameManager.current_world_data["player"]["rubles"] += total_gain
 	_update_money_label()
 	
-	player_inv.items[slot_idx] = null
-	player_inv.inventory_changed.emit()
+	player_grid_mgr.remove_item_by_uid(uid)
 	
 	if SoundManager: SoundManager.play("menu_select")
 	_refresh_trader_ui()
@@ -459,24 +878,39 @@ func _refresh_market_register_ui() -> void:
 	for child in market_register_grid.get_children():
 		child.queue_free()
 		
-	for i in range(player_inv.max_slots):
-		var item = player_inv.items[i]
-		if item:
-			var data = ItemDatabase.get_item_data(item["id"])
-			if item["id"] == "Scav 식별줄(Dogtag)":
+	for item in player_grid_mgr.items:
+		if item and not item.is_empty():
+			var item_id = item.get("id", "")
+			var uid = item.get("uid", "")
+			var data = ItemDatabase.get_item_data(item_id)
+			if item_id == "Scav 식별줄(Dogtag)":
 				continue
 				
-			var current_price = FleaMarket.get_current_price(item["id"])
+			var current_price = FleaMarket.get_current_price(item_id)
 			
 			var btn = Button.new()
 			btn.custom_minimum_size = Vector2(100, 50)
+			
+			var btn_style = StyleBoxFlat.new()
+			btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
+			btn_style.border_width_left = 1
+			btn_style.border_width_top = 1
+			btn_style.border_width_right = 1
+			btn_style.border_width_bottom = 1
+			btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
+			btn_style.corner_radius_top_left = 4
+			btn_style.corner_radius_top_right = 4
+			btn_style.corner_radius_bottom_right = 4
+			btn_style.corner_radius_bottom_left = 4
+			btn.add_theme_stylebox_override("normal", btn_style)
+			
 			if ItemIconManager:
-				btn.icon = ItemIconManager.get_icon(item["id"])
+				btn.icon = ItemIconManager.get_icon(item_id)
 				btn.expand_icon = true
-			btn.text = "%s\n시장가 %d RUB" % [data["name"], current_price]
+			btn.text = "%s\n시장가 %d RUB" % [data.get("name", item_id), current_price]
 			btn.add_theme_font_size_override("font_size", 10)
 			btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-			btn.pressed.connect(func(): _register_market_item(i, item["id"], item["amount"], current_price))
+			btn.pressed.connect(func(): _register_market_item(uid, item_id, item.get("amount", 1), current_price))
 			market_register_grid.add_child(btn)
 
 func _buy_market_item(listing: Dictionary, total_price: int) -> void:
@@ -486,9 +920,9 @@ func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	GameManager.current_world_data["player"]["rubles"] -= total_price
 	_update_money_label()
 	
-	var remaining = player_inv.add_item(listing["item_name"], listing["count"])
+	var remaining = player_grid_mgr.auto_add_item(listing["item_name"], listing["count"])
 	if remaining > 0:
-		stash_inv.add_item(listing["item_name"], remaining)
+		stash_grid_mgr.auto_add_item(listing["item_name"], remaining)
 		
 	FleaMarket.listings.erase(listing)
 	if SoundManager: SoundManager.play("menu_select")
@@ -496,26 +930,30 @@ func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	_refresh_market_ui()
 	_sync_save_data()
 
-func _register_market_item(slot_idx: int, item_id: String, amount: int, current_price: int) -> void:
+func _register_market_item(uid: String, item_id: String, amount: int, current_price: int) -> void:
 	# 5% 수수료 (선불)
 	var fee = max(1, int(current_price * amount * 0.05))
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
 	
 	if user_rubles < fee:
-		EventBus.popup_message.emit("등록 수수료(%d RUB)가 부족합니다." % fee, Color.RED)
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 등록 수수료(%d RUB)가 부족합니다." % fee)
 		return
 		
 	GameManager.current_world_data["player"]["rubles"] -= fee
 	_update_money_label()
 	
-	FleaMarket.register_item(item_id, amount, current_price)
+	player_grid_mgr.remove_item_by_uid(uid)
 	
-	player_inv.items[slot_idx] = null
-	player_inv.inventory_changed.emit()
+	FleaMarket.add_listing({
+		"item_name": item_id,
+		"count": amount,
+		"price": current_price,
+		"seller": "플레이어",
+		"time_left": 1800
+	})
 	
-	EventBus.popup_message.emit("플리마켓에 매물이 등록되었습니다.", Color.GREEN)
 	if SoundManager: SoundManager.play("menu_select")
-	
 	_refresh_market_ui()
 	_sync_save_data()
 
@@ -563,18 +1001,28 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_weapon_modding_window()
 		elif event.physical_keycode == KEY_F1:
 			_open_item_spawner()
+		elif event.physical_keycode == KEY_TAB or event.physical_keycode == KEY_I:
+			_open_pubg_inventory()
+
+func _open_pubg_inventory() -> void:
+	var pubg_scene = preload("res://scenes/ui/pubg_inventory_window.tscn")
+	if pubg_scene:
+		var win = pubg_scene.instantiate()
+		add_child(win)
+		win.setup(null, player_grid_mgr, equipment_data)
+		win.window_closed.connect(func(): _on_grid_changed())
 
 func _open_item_spawner() -> void:
 	var spawner_scene = preload("res://scenes/ui/item_spawner_window.tscn")
 	if spawner_scene:
 		var win = spawner_scene.instantiate()
 		add_child(win)
-		win.window_closed.connect(func(): _on_inventory_changed())
+		win.window_closed.connect(func(): _on_grid_changed())
 
 func _open_weapon_modding_window() -> void:
 	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")
 	if modding_script:
 		var win = modding_script.new()
 		add_child(win)
-		win.setup(player_inv, stash_inv)
-		win.window_closed.connect(func(): _on_inventory_changed())
+		win.setup(null, null)
+		win.window_closed.connect(func(): _on_grid_changed())

@@ -1,0 +1,261 @@
+[gd_scene load_steps=2 format=3 uid="uid://pubginv001"]
+
+[ext_resource type="Script" path="res://scenes/ui/pubg_inventory_window.gd" id="1_pubg"]
+
+[node name="PubgInventoryWindow" type="Control"]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_pubg")
+
+[node name="Dim" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.05, 0.07, 0.88)
+
+[node name="MainLayout" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = 16.0
+offset_right = -20.0
+offset_bottom = -46.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 16
+
+[node name="VicinityCol" type="VBoxContainer" parent="MainLayout"]
+custom_minimum_size = Vector2(240, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="ContainerSection" type="VBoxContainer" parent="MainLayout/VicinityCol"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="Header" type="PanelContainer" parent="MainLayout/VicinityCol/ContainerSection"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="MainLayout/VicinityCol/ContainerSection/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.8, 0.2, 1)
+theme_override_font_sizes/font_size = 13
+text = "📦 수색 대상"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="MainLayout/VicinityCol/ContainerSection"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="ContainerList" type="VBoxContainer" parent="MainLayout/VicinityCol/ContainerSection/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="EmptyLabel" type="Label" parent="MainLayout/VicinityCol/ContainerSection/Scroll/ContainerList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.55, 0.6, 1)
+theme_override_font_sizes/font_size = 12
+text = "내용물이 비어 있습니다."
+horizontal_alignment = 1
+
+[node name="VicinitySection" type="VBoxContainer" parent="MainLayout/VicinityCol"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 6
+
+[node name="Header" type="PanelContainer" parent="MainLayout/VicinityCol/VicinitySection"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="MainLayout/VicinityCol/VicinitySection/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.75, 0.3, 1)
+theme_override_font_sizes/font_size = 13
+text = "📍 VICINITY (주변 바닥)"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="MainLayout/VicinityCol/VicinitySection"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VicinityList" type="VBoxContainer" parent="MainLayout/VicinityCol/VicinitySection/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 4
+
+[node name="EmptyLabel" type="Label" parent="MainLayout/VicinityCol/VicinitySection/Scroll/VicinityList"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 0.55, 0.6, 1)
+theme_override_font_sizes/font_size = 12
+text = "주변에 아이템이 없습니다."
+horizontal_alignment = 1
+
+[node name="InventoryCol" type="VBoxContainer" parent="MainLayout"]
+custom_minimum_size = Vector2(380, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="PanelContainer" parent="MainLayout/InventoryCol"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+
+[node name="HBox" type="HBoxContainer" parent="MainLayout/InventoryCol/Header"]
+layout_mode = 2
+
+[node name="TitleLabel" type="Label" parent="MainLayout/InventoryCol/Header/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.3, 0.8, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "🎒 가방 인벤토리 (2D Grid)"
+
+[node name="WeightLabel" type="Label" parent="MainLayout/InventoryCol/Header/HBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.85, 0.9, 1)
+theme_override_font_sizes/font_size = 12
+text = "무게: 0.0 / 40.0 kg"
+
+[node name="GridScroll" type="ScrollContainer" parent="MainLayout/InventoryCol"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="GridContainerPanel" type="PanelContainer" parent="MainLayout/InventoryCol/GridScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+
+[node name="GridControl" type="Control" parent="MainLayout/InventoryCol/GridScroll/GridContainerPanel"]
+custom_minimum_size = Vector2(360, 480)
+layout_mode = 2
+
+[node name="CharacterCol" type="VBoxContainer" parent="MainLayout"]
+custom_minimum_size = Vector2(230, 0)
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Header" type="PanelContainer" parent="MainLayout/CharacterCol"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="MainLayout/CharacterCol/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
+theme_override_font_sizes/font_size = 14
+text = "👤 CHARACTER (장비)"
+horizontal_alignment = 1
+
+[node name="SilhouetteArea" type="Control" parent="MainLayout/CharacterCol"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="SlotsContainer" type="VBoxContainer" parent="MainLayout/CharacterCol/SilhouetteArea"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="TopRow" type="HBoxContainer" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="HelmetSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/TopRow"]
+custom_minimum_size = Vector2(80, 80)
+layout_mode = 2
+text = "🪖 헬멧"
+
+[node name="MidRow" type="HBoxContainer" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer"]
+layout_mode = 2
+theme_override_constants/separation = 30
+alignment = 1
+
+[node name="VestSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/MidRow"]
+custom_minimum_size = Vector2(80, 90)
+layout_mode = 2
+text = "🦺 방탄복"
+
+[node name="BackpackSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/MidRow"]
+custom_minimum_size = Vector2(80, 90)
+layout_mode = 2
+text = "🎒 배낭"
+
+[node name="BotRow" type="HBoxContainer" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer"]
+layout_mode = 2
+alignment = 1
+
+[node name="BottomSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/BotRow"]
+custom_minimum_size = Vector2(80, 70)
+layout_mode = 2
+text = "👟 하의/신발"
+
+[node name="WeaponsCol" type="VBoxContainer" parent="MainLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Header" type="PanelContainer" parent="MainLayout/WeaponsCol"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+
+[node name="Label" type="Label" parent="MainLayout/WeaponsCol/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.45, 0.45, 1)
+theme_override_font_sizes/font_size = 14
+text = "🔫 WEAPONS & MODS (무기 및 부착물)"
+horizontal_alignment = 1
+
+[node name="Scroll" type="ScrollContainer" parent="MainLayout/WeaponsCol"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="WeaponsVBox" type="VBoxContainer" parent="MainLayout/WeaponsCol/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 10
+
+[node name="BottomBar" type="HBoxContainer" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_top = -38.0
+offset_right = -20.0
+offset_bottom = -8.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_constants/separation = 16
+
+[node name="GuideLabel" type="Label" parent="BottomBar"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.7, 0.75, 0.8, 1)
+theme_override_font_sizes/font_size = 12
+text = "💡 [R]: 드래그 중 아이템 회전 | [Shift+드래그]: 수량 분할 | [우클릭]: 빠른 장착/해제/사용 | [바깥으로 드래그]: 바닥에 버리기"
+
+[node name="CloseBtn" type="Button" parent="BottomBar"]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+text = "닫기 (Tab / ESC)"
+
+[connection signal="pressed" from="BottomBar/CloseBtn" to="." method="_on_close_pressed"]

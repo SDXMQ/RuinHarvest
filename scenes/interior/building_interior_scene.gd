@@ -23,6 +23,7 @@ extends Node2D
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
+const PubgInventoryScene = preload("res://scenes/ui/pubg_inventory_window.tscn")
 const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 
 var player: CharacterBody2D
@@ -193,8 +194,9 @@ func _on_player_stats_changed() -> void:
 		if player.is_fractured: statuses.append("골절")
 		if player.is_infected: statuses.append("감염")
 		var status_str = ", ".join(statuses) if statuses.size() > 0 else "정상"
-		var ammo_count = player_inventory.get_item_count("탄약") if player_inventory else 0
-		status_label.text = "상태: %s  |  🔫 9mm: %d발" % [status_str, ammo_count]
+		var cur_mag = player.equipped_weapon_data.get("current_magazine_ammo", 0) if "equipped_weapon_data" in player else 0
+		var reserve_ammo = player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0
+		status_label.text = "상태: %s  |  🔫 %s [%d / %d발]" % [status_str, player.equipped_weapon if "equipped_weapon" in player else "무기", cur_mag, reserve_ammo]
 
 func _unhandled_input(event: InputEvent) -> void:
 	if current_loot_window != null or current_crafting_window != null:
@@ -328,12 +330,16 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		furniture_inventories[tile_pos] = {"type": "보관함", "inv": inv}
 		_open_loot_window(inv, "보관함")
 
-func _open_loot_window(target_inv: Inventory, title: String) -> void:
+func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
+	if current_loot_window != null: return
 	get_tree().paused = true
-	current_loot_window = LootWindowScene.instantiate()
+	current_loot_window = PubgInventoryScene.instantiate()
 	$UI.add_child(current_loot_window)
-	current_loot_window.setup(player_inventory, target_inv, title)
-	current_loot_window.window_closed.connect(func(): current_loot_window = null)
+	current_loot_window.setup(player, player.inventory_grid if player and "inventory_grid" in player else null, player.equipment if player and "equipment" in player else {}, target_inv, title)
+	current_loot_window.window_closed.connect(func():
+		current_loot_window = null
+		_on_player_stats_changed()
+	)
 
 func _exit_interior() -> void:
 	# 플레이어 데이터, 배낭, 남은 시간 저장 후 야외로 복귀
