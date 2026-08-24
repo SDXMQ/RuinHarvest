@@ -836,37 +836,48 @@ func _refresh_trader_sell_ui() -> void:
 	for child in trader_sell_grid.get_children():
 		child.queue_free()
 		
-	# 배낭의 아이템들을 판매 가능 목록으로 표시
-	for item in player_grid_mgr.items:
-		if item and not item.is_empty():
-			var data = ItemDatabase.get_item_data(item.get("id", ""))
-			var sell_price = int(data.get("value", 500) * 0.6) # 기본가의 60%에 매입
-			var uid = item.get("uid", "")
-			
-			var btn = Button.new()
-			btn.custom_minimum_size = Vector2(100, 50)
-			
-			var btn_style = StyleBoxFlat.new()
-			btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
-			btn_style.border_width_left = 1
-			btn_style.border_width_top = 1
-			btn_style.border_width_right = 1
-			btn_style.border_width_bottom = 1
-			btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
-			btn_style.corner_radius_top_left = 4
-			btn_style.corner_radius_top_right = 4
-			btn_style.corner_radius_bottom_right = 4
-			btn_style.corner_radius_bottom_left = 4
-			btn.add_theme_stylebox_override("normal", btn_style)
-			
-			if ItemIconManager:
-				btn.icon = ItemIconManager.get_icon(item.get("id", ""))
-				btn.expand_icon = true
-			btn.text = "%s\n+%d RUB" % [data.get("name", item.get("id", "")), sell_price * item.get("amount", 1)]
-			btn.add_theme_font_size_override("font_size", 10)
-			btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
-			btn.pressed.connect(func(): _sell_item(uid, item.get("id", ""), item.get("amount", 1), sell_price))
-			trader_sell_grid.add_child(btn)
+	# 가방과 보관함(창고)의 아이템들을 판매 가능 목록으로 표시
+	var sellable_sources = [
+		{"mgr": player_grid_mgr, "tag": "🎒가방", "is_stash": false},
+		{"mgr": stash_grid_mgr, "tag": "📦창고", "is_stash": true}
+	]
+	
+	for src in sellable_sources:
+		var mgr = src["mgr"]
+		if not mgr: continue
+		var tag = src["tag"]
+		var is_stash = src["is_stash"]
+		
+		for item in mgr.items:
+			if item and not item.is_empty():
+				var data = ItemDatabase.get_item_data(item.get("id", ""))
+				var sell_price = int(data.get("value", 500) * 0.6) # 기본가의 60%에 매입
+				var uid = item.get("uid", "")
+				
+				var btn = Button.new()
+				btn.custom_minimum_size = Vector2(110, 50)
+				
+				var btn_style = StyleBoxFlat.new()
+				btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
+				btn_style.border_width_left = 1
+				btn_style.border_width_top = 1
+				btn_style.border_width_right = 1
+				btn_style.border_width_bottom = 1
+				btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
+				btn_style.corner_radius_top_left = 4
+				btn_style.corner_radius_top_right = 4
+				btn_style.corner_radius_bottom_right = 4
+				btn_style.corner_radius_bottom_left = 4
+				btn.add_theme_stylebox_override("normal", btn_style)
+				
+				if ItemIconManager:
+					btn.icon = ItemIconManager.get_icon(item.get("id", ""))
+					btn.expand_icon = true
+				btn.text = "[%s] %s\n+%d RUB" % [tag, data.get("name", item.get("id", "")), sell_price * item.get("amount", 1)]
+				btn.add_theme_font_size_override("font_size", 9)
+				btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
+				btn.pressed.connect(func(): _sell_item(uid, is_stash, item.get("id", ""), item.get("amount", 1), sell_price))
+				trader_sell_grid.add_child(btn)
 
 func _buy_item(item_id: String, amount: int, price: int) -> void:
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
@@ -885,12 +896,16 @@ func _buy_item(item_id: String, amount: int, price: int) -> void:
 	_refresh_trader_ui()
 	_sync_save_data()
 
-func _sell_item(uid: String, item_id: String, amount: int, unit_price: int) -> void:
+func _sell_item(uid: String, is_stash: bool, item_id: String, amount: int, unit_price: int) -> void:
 	var total_gain = unit_price * amount
 	GameManager.current_world_data["player"]["rubles"] += total_gain
 	_update_money_label()
 	
-	player_grid_mgr.remove_item_by_uid(uid)
+	if is_stash:
+		stash_grid_mgr.remove_item_by_uid(uid)
+		_refresh_stash_ui()
+	else:
+		player_grid_mgr.remove_item_by_uid(uid)
 	
 	if SoundManager: SoundManager.play("menu_select")
 	_refresh_trader_ui()
@@ -951,40 +966,51 @@ func _refresh_market_register_ui() -> void:
 	for child in market_register_grid.get_children():
 		child.queue_free()
 		
-	for item in player_grid_mgr.items:
-		if item and not item.is_empty():
-			var item_id = item.get("id", "")
-			var uid = item.get("uid", "")
-			var data = ItemDatabase.get_item_data(item_id)
-			if item_id == "Scav 식별줄(Dogtag)":
-				continue
+	var registerable_sources = [
+		{"mgr": player_grid_mgr, "tag": "🎒가방", "is_stash": false},
+		{"mgr": stash_grid_mgr, "tag": "📦창고", "is_stash": true}
+	]
+	
+	for src in registerable_sources:
+		var mgr = src["mgr"]
+		if not mgr: continue
+		var tag = src["tag"]
+		var is_stash = src["is_stash"]
+		
+		for item in mgr.items:
+			if item and not item.is_empty():
+				var item_id = item.get("id", "")
+				var uid = item.get("uid", "")
+				var data = ItemDatabase.get_item_data(item_id)
+				if item_id == "Scav 식별줄(Dogtag)":
+					continue
+					
+				var current_price = FleaMarket.get_current_price(item_id)
 				
-			var current_price = FleaMarket.get_current_price(item_id)
-			
-			var btn = Button.new()
-			btn.custom_minimum_size = Vector2(100, 50)
-			
-			var btn_style = StyleBoxFlat.new()
-			btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
-			btn_style.border_width_left = 1
-			btn_style.border_width_top = 1
-			btn_style.border_width_right = 1
-			btn_style.border_width_bottom = 1
-			btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
-			btn_style.corner_radius_top_left = 4
-			btn_style.corner_radius_top_right = 4
-			btn_style.corner_radius_bottom_right = 4
-			btn_style.corner_radius_bottom_left = 4
-			btn.add_theme_stylebox_override("normal", btn_style)
-			
-			if ItemIconManager:
-				btn.icon = ItemIconManager.get_icon(item_id)
-				btn.expand_icon = true
-			btn.text = "%s\n시장가 %d RUB" % [data.get("name", item_id), current_price]
-			btn.add_theme_font_size_override("font_size", 10)
-			btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-			btn.pressed.connect(func(): _register_market_item(uid, item_id, item.get("amount", 1), current_price))
-			market_register_grid.add_child(btn)
+				var btn = Button.new()
+				btn.custom_minimum_size = Vector2(110, 50)
+				
+				var btn_style = StyleBoxFlat.new()
+				btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
+				btn_style.border_width_left = 1
+				btn_style.border_width_top = 1
+				btn_style.border_width_right = 1
+				btn_style.border_width_bottom = 1
+				btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
+				btn_style.corner_radius_top_left = 4
+				btn_style.corner_radius_top_right = 4
+				btn_style.corner_radius_bottom_right = 4
+				btn_style.corner_radius_bottom_left = 4
+				btn.add_theme_stylebox_override("normal", btn_style)
+				
+				if ItemIconManager:
+					btn.icon = ItemIconManager.get_icon(item_id)
+					btn.expand_icon = true
+				btn.text = "[%s] %s\n시장가 %d RUB" % [tag, data.get("name", item_id), current_price]
+				btn.add_theme_font_size_override("font_size", 9)
+				btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
+				btn.pressed.connect(func(): _register_market_item(uid, is_stash, item_id, item.get("amount", 1), current_price))
+				market_register_grid.add_child(btn)
 
 func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
@@ -1003,7 +1029,7 @@ func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	_refresh_market_ui()
 	_sync_save_data()
 
-func _register_market_item(uid: String, item_id: String, amount: int, current_price: int) -> void:
+func _register_market_item(uid: String, is_stash: bool, item_id: String, amount: int, current_price: int) -> void:
 	# 5% 수수료 (선불)
 	var fee = max(1, int(current_price * amount * 0.05))
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
@@ -1016,7 +1042,11 @@ func _register_market_item(uid: String, item_id: String, amount: int, current_pr
 	GameManager.current_world_data["player"]["rubles"] -= fee
 	_update_money_label()
 	
-	player_grid_mgr.remove_item_by_uid(uid)
+	if is_stash:
+		stash_grid_mgr.remove_item_by_uid(uid)
+		_refresh_stash_ui()
+	else:
+		player_grid_mgr.remove_item_by_uid(uid)
 	
 	FleaMarket.add_listing({
 		"item_name": item_id,
