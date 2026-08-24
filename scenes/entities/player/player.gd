@@ -77,7 +77,7 @@ func _ready() -> void:
 	if not inventory_grid:
 		inventory_grid = InventoryGrid.new()
 		inventory_grid.grid_width = 6
-		inventory_grid.grid_height = 4
+		inventory_grid.grid_height = 5
 		add_child(inventory_grid)
 		
 		# 기본 소지품 Auto-Fit 배치

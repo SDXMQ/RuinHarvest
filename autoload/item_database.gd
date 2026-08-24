@@ -169,33 +169,33 @@ var items: Dictionary = {
 	# === 장비 ===
 	"가방": {
 		"category": ItemCategory.EQUIPMENT,
-		"description": "튼튼한 배낭. 인벤토리를 6x4(24칸) 크기로 확장한다.",
+		"description": "튼튼한 배낭. 인벤토리를 6x5(30칸) 크기로 세로 확장한다.",
 		"stackable": false, "weight": 0.5, "equip_slot": "backpack",
-		"grid_w": 2, "grid_h": 3, "backpack_grid": Vector2i(6, 4),
+		"grid_w": 2, "grid_h": 3, "backpack_grid": Vector2i(6, 5),
 		"weight_bonus": 15.0, "rarity": 0.15, "value": 8000
 	},
 	"1레벨_가방": {
 		"category": ItemCategory.EQUIPMENT,
 		"name": "1레벨 소형 배낭",
-		"description": "가벼운 소형 배낭. 인벤토리를 6x4(24칸) 크기로 확장한다.",
+		"description": "가벼운 소형 배낭. 인벤토리를 6x5(30칸) 크기로 세로 확장한다.",
 		"stackable": false, "weight": 0.5, "equip_slot": "backpack",
-		"grid_w": 2, "grid_h": 2, "backpack_grid": Vector2i(6, 4),
+		"grid_w": 2, "grid_h": 2, "backpack_grid": Vector2i(6, 5),
 		"rarity": 0.3, "value": 6000
 	},
 	"2레벨_가방": {
 		"category": ItemCategory.EQUIPMENT,
 		"name": "2레벨 중형 전술 배낭",
-		"description": "표준형 군용 배낭. 인벤토리를 8x5(40칸) 크기로 확장한다.",
+		"description": "표준형 군용 배낭. 인벤토리를 6x7(42칸) 크기로 세로 확장한다.",
 		"stackable": false, "weight": 1.0, "equip_slot": "backpack",
-		"grid_w": 2, "grid_h": 3, "backpack_grid": Vector2i(8, 5),
+		"grid_w": 2, "grid_h": 3, "backpack_grid": Vector2i(6, 7),
 		"rarity": 0.15, "value": 14000
 	},
 	"3레벨_가방": {
 		"category": ItemCategory.EQUIPMENT,
 		"name": "3레벨 대형 배낭",
-		"description": "대용량 군용 배낭. 인벤토리를 10x6(60칸) 크기로 대폭 확장한다.",
+		"description": "대용량 군용 배낭. 인벤토리를 6x10(60칸) 크기로 세로 대폭 확장한다.",
 		"stackable": false, "weight": 1.8, "equip_slot": "backpack",
-		"grid_w": 3, "grid_h": 3, "backpack_grid": Vector2i(10, 6),
+		"grid_w": 3, "grid_h": 3, "backpack_grid": Vector2i(6, 10),
 		"rarity": 0.05, "value": 28000
 	},
 	"1레벨_헬멧": {

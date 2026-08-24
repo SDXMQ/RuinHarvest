@@ -820,13 +820,13 @@ func _is_slot_compatible(item_id: String, slot_name: String) -> bool:
 
 func _apply_backpack_grid_size() -> void:
 	var bp = equipment_data.get("backpack", {})
-	var new_w = 4
-	var new_h = 4
+	var new_w = 6
+	var new_h = 3
 	
 	if not bp.is_empty():
 		var id = bp.get("id", "")
 		var d = ItemDatabase.get_item_data(id)
-		var b_grid = d.get("backpack_grid", Vector2i(6, 4))
+		var b_grid = d.get("backpack_grid", Vector2i(6, 5))
 		new_w = b_grid.x
 		new_h = b_grid.y
 		
