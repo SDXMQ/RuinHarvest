@@ -74,8 +74,8 @@ static func generate_interior(b_type: String, seed_val: int) -> Dictionary:
 		tiles[y * width + (width - 1)] = 0
 		
 	# 2. 방 분할 벽 생성 (다중 방 구성: 좌/우 + 상/하 분할)
-	var split_x = width / 2
-	var split_y = height / 2
+	var split_x = int(width * 0.5)
+	var split_y = int(height * 0.5)
 	
 	# 세로 칸막이
 	for y in range(1, height - 1):
@@ -88,13 +88,13 @@ static func generate_interior(b_type: String, seed_val: int) -> Dictionary:
 		tiles[split_y * width + x] = 0
 		
 	# 3. 방 사이 통로 개방 (문)
-	tiles[(split_y / 2) * width + split_x] = 1 # 좌상 ↔ 우상 통로
-	tiles[(split_y + (height - split_y) / 2) * width + split_x] = 1 # 좌하 ↔ 우하 통로
-	tiles[split_y * width + (split_x / 2)] = 1 # 좌상 ↔ 좌하 통로
-	tiles[split_y * width + (split_x + (width - split_x) / 2)] = 1 # 우상 ↔ 우하 통로
+	tiles[int(split_y * 0.5) * width + split_x] = 1 # 좌상 ↔ 우상 통로
+	tiles[(split_y + int((height - split_y) * 0.5)) * width + split_x] = 1 # 좌하 ↔ 우하 통로
+	tiles[split_y * width + int(split_x * 0.5)] = 1 # 좌상 ↔ 좌하 통로
+	tiles[split_y * width + (split_x + int((width - split_x) * 0.5))] = 1 # 우상 ↔ 우하 통로
 	
 	# 4. 출입구/출구 문 배치 (하단 좌측 방 중앙)
-	var exit_door_pos = Vector2i(split_x / 2, height - 1)
+	var exit_door_pos = Vector2i(int(split_x * 0.5), height - 1)
 	tiles[exit_door_pos.y * width + exit_door_pos.x] = 2
 	
 	# 5. 외벽 창문 배치

@@ -70,32 +70,32 @@ func get_sound(sound_name: String) -> AudioStreamWAV:
 	_cache[sound_name] = stream
 	return stream
 
-func _create_sound(name: String) -> AudioStreamWAV:
-	if name == "hit_melee":
+func _create_sound(s_name: String) -> AudioStreamWAV:
+	if s_name == "hit_melee":
 		return _generate_tone(150.0, 0.15, 0.4, "square")
-	elif name == "hit_ranged":
+	elif s_name == "hit_ranged":
 		return _generate_tone(800.0, 0.08, 0.3, "noise")
-	elif name == "player_hurt":
+	elif s_name == "player_hurt":
 		return _generate_tone(200.0, 0.3, 0.3, "sawtooth")
-	elif name == "enemy_die":
+	elif s_name == "enemy_die":
 		return _generate_tone(100.0, 0.4, 0.3, "sawtooth")
-	elif name == "pickup":
+	elif s_name == "pickup":
 		return _generate_tone(600.0, 0.1, 0.2, "sine")
-	elif name == "craft_complete":
+	elif s_name == "craft_complete":
 		return _generate_tone(800.0, 0.15, 0.2, "sine")
-	elif name == "menu_hover":
+	elif s_name == "menu_hover":
 		return _generate_tone(400.0, 0.05, 0.1, "sine")
-	elif name == "menu_select":
+	elif s_name == "menu_select":
 		return _generate_tone(500.0, 0.1, 0.15, "sine")
-	elif name == "door_open":
+	elif s_name == "door_open":
 		return _generate_tone(250.0, 0.2, 0.2, "square")
-	elif name == "footstep":
+	elif s_name == "footstep":
 		return _generate_tone(80.0, 0.05, 0.1, "noise")
-	elif name == "alert":
+	elif s_name == "alert":
 		return _generate_tone(700.0, 0.3, 0.3, "square")
-	elif name == "game_over":
+	elif s_name == "game_over":
 		return _generate_tone(150.0, 0.8, 0.4, "sawtooth")
-	elif name == "day_start":
+	elif s_name == "day_start":
 		return _generate_tone(440.0, 0.3, 0.2, "sine")
 	else:
 		return _generate_tone(440.0, 0.1, 0.1, "sine")

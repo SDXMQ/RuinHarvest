@@ -110,8 +110,8 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 	
 	var lot_origin_x = lot_x * LOT_SIZE
 	var lot_origin_y = lot_y * LOT_SIZE
-	var center_wx = lot_origin_x + LOT_SIZE / 2
-	var center_wy = lot_origin_y + LOT_SIZE / 2
+	var center_wx = lot_origin_x + int(LOT_SIZE * 0.5)
+	var center_wy = lot_origin_y + int(LOT_SIZE * 0.5)
 	
 	var biome = get_biome(center_wx, center_wy)
 	if biome == "forest" and lot_rng.randf() > 0.3:

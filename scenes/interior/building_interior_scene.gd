@@ -166,7 +166,7 @@ func _setup_player() -> void:
 func _process(delta: float) -> void:
 	if raid_time_remaining > 0:
 		raid_time_remaining -= delta
-		var minutes = int(raid_time_remaining) / 60
+		var minutes = int(raid_time_remaining / 60.0)
 		var seconds = int(raid_time_remaining) % 60
 		if raid_timer_label:
 			raid_timer_label.text = "탈출 시간: %02d:%02d" % [minutes, seconds]

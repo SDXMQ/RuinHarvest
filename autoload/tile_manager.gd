@@ -181,8 +181,8 @@ func _fill_rect_noisy(img: Image, x: int, y: int, w: int, h: int, base_color: Co
 				img.set_pixel(x + ix, y + iy, Color(0.45, 0.3, 0.2))
 
 func _draw_tree(img: Image, x: int, y: int) -> void:
-	var cx = x + TILE_SIZE / 2
-	var cy = y + TILE_SIZE / 2
+	var cx = x + int(TILE_SIZE * 0.5)
+	var cy = y + int(TILE_SIZE * 0.5)
 	for iy in range(TILE_SIZE):
 		for ix in range(TILE_SIZE):
 			var dx = x + ix - cx
@@ -196,8 +196,8 @@ func _draw_tree(img: Image, x: int, y: int) -> void:
 				img.set_pixel(x + ix, y + iy, Color(0.35, 0.25, 0.15)) # 기둥
 
 func _draw_rock(img: Image, x: int, y: int) -> void:
-	var cx = x + TILE_SIZE / 2
-	var cy = y + TILE_SIZE / 2
+	var cx = x + int(TILE_SIZE * 0.5)
+	var cy = y + int(TILE_SIZE * 0.5)
 	for iy in range(TILE_SIZE):
 		for ix in range(TILE_SIZE):
 			var dx = abs(x + ix - cx)
@@ -221,8 +221,8 @@ func _draw_crate(img: Image, x: int, y: int) -> void:
 				img.set_pixel(x + ix, y + iy, c)
 
 func _draw_barrel(img: Image, x: int, y: int) -> void:
-	var cx = x + TILE_SIZE / 2
-	var cy = y + TILE_SIZE / 2
+	var cx = x + int(TILE_SIZE * 0.5)
+	var cy = y + int(TILE_SIZE * 0.5)
 	for iy in range(TILE_SIZE):
 		for ix in range(TILE_SIZE):
 			var dx = x + ix - cx
@@ -263,7 +263,7 @@ func _draw_fridge(img: Image, x: int, y: int) -> void:
 					if ix >= TILE_SIZE - 10 and ix <= TILE_SIZE - 8 and iy >= TILE_SIZE - 18 and iy <= TILE_SIZE - 12:
 						c = Color(0.3, 0.3, 0.3)
 					# 냉장실/냉동실 구분선 (가운데 선)
-					if ix >= 7 and ix <= TILE_SIZE - 7 and iy == TILE_SIZE / 2:
+					if ix >= 7 and ix <= TILE_SIZE - 7 and iy == int(TILE_SIZE * 0.5):
 						c = Color(0.4, 0.4, 0.4)
 				
 				img.set_pixel(px, py, c)
@@ -292,7 +292,7 @@ func _draw_door_closed(img: Image, x: int, y: int) -> void:
 			elif ix % 7 == 0:
 				c = Color(0.35, 0.2, 0.1)
 			# 손잡이 (황동)
-			if ix >= TILE_SIZE - 8 and ix <= TILE_SIZE - 6 and iy >= TILE_SIZE/2 - 2 and iy <= TILE_SIZE/2 + 2:
+			if ix >= TILE_SIZE - 8 and ix <= TILE_SIZE - 6 and iy >= int(TILE_SIZE * 0.5) - 2 and iy <= int(TILE_SIZE * 0.5) + 2:
 				c = Color(0.85, 0.7, 0.2)
 			img.set_pixel(x + ix, y + iy, c)
 
@@ -317,7 +317,7 @@ func _draw_window(img: Image, x: int, y: int) -> void:
 			if ix < 3 or ix > TILE_SIZE - 4 or iy < 3 or iy > TILE_SIZE - 4:
 				c = Color(0.35, 0.25, 0.2)
 			# 십자 창살
-			elif ix == TILE_SIZE/2 or ix == TILE_SIZE/2 - 1 or iy == TILE_SIZE/2 or iy == TILE_SIZE/2 - 1:
+			elif ix == int(TILE_SIZE * 0.5) or ix == int(TILE_SIZE * 0.5) - 1 or iy == int(TILE_SIZE * 0.5) or iy == int(TILE_SIZE * 0.5) - 1:
 				c = Color(0.35, 0.25, 0.2)
 			# 유리 하이라이트
 			elif (ix + iy) % 8 == 0 and ix > 4 and ix < TILE_SIZE - 5:

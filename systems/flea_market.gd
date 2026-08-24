@@ -80,7 +80,7 @@ func refresh_listings(in_game_day: int) -> void:
 		var count = 1
 		if data.get("stackable", false):
 			var max_stack = data.get("max_stack", 5)
-			count = rng.randi_range(1, max(2, max_stack / 2))
+			count = rng.randi_range(1, max(2, int(max_stack * 0.5)))
 			
 		listings.append({
 			"id": next_listing_id,

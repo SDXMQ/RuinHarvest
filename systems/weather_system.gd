@@ -144,7 +144,7 @@ func get_ambient_color() -> Color:
 	elif h < NIGHT_HOUR:
 		var t = (h - DUSK_HOUR) / (NIGHT_HOUR - DUSK_HOUR)
 		var alpha = lerp(0.0, 160.0, t) / 255.0
-		var color = dawn_color.lerp(night_color, t)
+		var color = dusk_color.lerp(night_color, t)
 		color.a = alpha
 		return color
 	else:

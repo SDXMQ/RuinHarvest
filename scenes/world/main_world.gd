@@ -487,7 +487,7 @@ func _process(delta: float) -> void:
 		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신
 		if not get_tree().paused and raid_time_remaining > 0:
 			raid_time_remaining -= delta
-			var minutes = int(raid_time_remaining) / 60
+			var minutes = int(raid_time_remaining / 60.0)
 			var seconds = int(raid_time_remaining) % 60
 			if raid_timer_label:
 				raid_timer_label.text = "탈출 시간: %02d:%02d" % [minutes, seconds]

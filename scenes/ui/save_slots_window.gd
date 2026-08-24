@@ -10,7 +10,6 @@ extends Control
 signal window_closed
 
 func _ready() -> void:
-	close_btn.pressed.connect(_on_close_pressed)
 	_refresh_slots()
 
 func _refresh_slots() -> void:

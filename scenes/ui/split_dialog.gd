@@ -12,7 +12,7 @@ var max_total_amount: int = 1
 func setup(total_amt: int) -> void:
 	max_total_amount = total_amt
 	var max_split = max(1, total_amt - 1)
-	var default_split = int(total_amt / 2)
+	var default_split = int(total_amt * 0.5)
 	if default_split <= 0: default_split = 1
 	
 	slider.min_value = 1

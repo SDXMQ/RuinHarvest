@@ -179,7 +179,7 @@ func _generate_icon(item_id: String) -> Texture2D:
 # ============================================================
 # 1. 방탄복 / 헬멧 / 배낭 티어별 정밀 드로잉
 # ============================================================
-func _draw_armor_tier(img: Image, tier: int, size: int) -> void:
+func _draw_armor_tier(img: Image, tier: int, _size: int) -> void:
 	var base_col = Color(0.2, 0.25, 0.35) # 1티어: 네이비 경찰 조끼
 	var accent_col = Color(0.3, 0.4, 0.55)
 	if tier == 2:
@@ -227,7 +227,7 @@ func _draw_armor_tier(img: Image, tier: int, size: int) -> void:
 		for x in range(12, 19):
 			for y in range(16, 20): img.set_pixel(x, y, Color(0.08, 0.08, 0.1))
 
-func _draw_helmet_tier(img: Image, tier: int, size: int) -> void:
+func _draw_helmet_tier(img: Image, tier: int, _size: int) -> void:
 	var dome_col = Color(0.7, 0.2, 0.2) # 1티어: 붉은색 오토바이 헬멧
 	if tier == 2: dome_col = Color(0.3, 0.4, 0.25) # 2티어: 올리브 군용 방탄모
 	elif tier == 3: dome_col = Color(0.2, 0.22, 0.25) # 3티어: 스페츠나츠 알틴 헬멧
@@ -263,7 +263,7 @@ func _draw_helmet_tier(img: Image, tier: int, size: int) -> void:
 			img.set_pixel(x, 15, Color(0.2, 0.7, 0.9))
 			img.set_pixel(x, 16, Color(0.2, 0.7, 0.9))
 
-func _draw_backpack_tier(img: Image, tier: int, size: int) -> void:
+func _draw_backpack_tier(img: Image, tier: int, _size: int) -> void:
 	var col = Color(0.45, 0.4, 0.3) # 1티어: 소형 카키 럭색
 	var min_x = 9
 	var max_x = 23
@@ -309,7 +309,7 @@ func _draw_backpack_tier(img: Image, tier: int, size: int) -> void:
 # ============================================================
 # 2. 총기 리시버 및 완제품 드로잉
 # ============================================================
-func _draw_receiver(img: Image, rec_type: String, size: int) -> void:
+func _draw_receiver(img: Image, rec_type: String, _size: int) -> void:
 	if rec_type == "m4":
 		# M4A1 리시버 (상부 피카티니 레일, 탄창구, 버퍼튜브)
 		for x in range(5, 27):
@@ -380,7 +380,7 @@ func _draw_receiver(img: Image, rec_type: String, size: int) -> void:
 # ============================================================
 # 3. 구경별 탄약 드로잉
 # ============================================================
-func _draw_ammo_type(img: Image, cal: String, size: int) -> void:
+func _draw_ammo_type(img: Image, cal: String, _size: int) -> void:
 	if cal == "12gauge":
 		# 샷건 쉘 2개 (빨간색 플라스틱 + 황동 바닥 림)
 		for i in range(2):
@@ -411,12 +411,12 @@ func _draw_ammo_type(img: Image, cal: String, size: int) -> void:
 					img.set_pixel(x, y, c)
 	else:
 		# 9mm / .45ACP 권총탄
-		_draw_ammo(img, Color(0.85, 0.75, 0.25), size)
+		_draw_ammo(img, Color(0.85, 0.75, 0.25), _size)
 
 # ============================================================
 # 4. 총기 부착물(파츠) 드로잉
 # ============================================================
-func _draw_attachment(img: Image, part_category: String, full_id: String, size: int) -> void:
+func _draw_attachment(img: Image, part_category: String, full_id: String, _size: int) -> void:
 	match part_category:
 		"optic":
 			# 조준경 / 스코프
@@ -483,7 +483,7 @@ func _draw_attachment(img: Image, part_category: String, full_id: String, size: 
 # ============================================================
 # 5. 기본 무기 및 도구 드로잉
 # ============================================================
-func _draw_gun(img: Image, color: Color, size: int, is_long: bool = false) -> void:
+func _draw_gun(img: Image, color: Color, _size: int, is_long: bool = false) -> void:
 	var length = 20 if is_long else 13
 	# 총열
 	for x in range(6, 6 + length):
@@ -500,7 +500,7 @@ func _draw_gun(img: Image, color: Color, size: int, is_long: bool = false) -> vo
 	img.set_pixel(12, 17, Color(0.1, 0.1, 0.1))
 	img.set_pixel(12, 18, Color(0.1, 0.1, 0.1))
 
-func _draw_ammo(img: Image, color: Color, size: int) -> void:
+func _draw_ammo(img: Image, color: Color, _size: int) -> void:
 	# 탄약 3발 나란히
 	for i in range(3):
 		var ox = 7 + i * 7
@@ -511,7 +511,7 @@ func _draw_ammo(img: Image, color: Color, size: int) -> void:
 				elif y == 22: c = Color(0.2, 0.2, 0.2) # 바닥 림
 				img.set_pixel(x, y, c)
 
-func _draw_grenade(img: Image, size: int) -> void:
+func _draw_grenade(img: Image, _size: int) -> void:
 	for x in range(11, 21):
 		for y in range(12, 24):
 			var c = Color(0.25, 0.4, 0.25)
@@ -522,7 +522,7 @@ func _draw_grenade(img: Image, size: int) -> void:
 		for y in range(7, 12):
 			img.set_pixel(x, y, Color(0.7, 0.7, 0.75))
 
-func _draw_melee(img: Image, color: Color, m_type: String, size: int) -> void:
+func _draw_melee(img: Image, color: Color, m_type: String, _size: int) -> void:
 	# 대각선 방향 근접 무기
 	for i in range(16):
 		var x = 8 + i
@@ -537,7 +537,7 @@ func _draw_melee(img: Image, color: Color, m_type: String, size: int) -> void:
 			img.set_pixel(x + 1, y + 1, color)
 			img.set_pixel(x + 2, y, color)
 
-func _draw_axe(img: Image, size: int) -> void:
+func _draw_axe(img: Image, _size: int) -> void:
 	# 자루 (나무)
 	for i in range(18):
 		var x = 7 + i
@@ -550,14 +550,14 @@ func _draw_axe(img: Image, size: int) -> void:
 			if x >= y + 13:
 				img.set_pixel(x, y, Color(0.8, 0.8, 0.85))
 
-func _draw_bandage(img: Image, size: int) -> void:
+func _draw_bandage(img: Image, _size: int) -> void:
 	for x in range(9, 23):
 		for y in range(11, 21):
 			var c = Color(0.92, 0.92, 0.88)
 			if (x + y) % 4 == 0: c = Color(0.78, 0.78, 0.74)
 			img.set_pixel(x, y, c)
 
-func _draw_pills(img: Image, size: int) -> void:
+func _draw_pills(img: Image, _size: int) -> void:
 	# 약통
 	for x in range(10, 22):
 		for y in range(11, 23):
@@ -568,7 +568,7 @@ func _draw_pills(img: Image, size: int) -> void:
 		for y in range(20, 24):
 			img.set_pixel(x, y, Color(0.9, 0.2, 0.2) if x < 9 else Color(0.9, 0.9, 0.9))
 
-func _draw_medkit(img: Image, size: int) -> void:
+func _draw_medkit(img: Image, _size: int) -> void:
 	for x in range(6, 26):
 		for y in range(10, 23):
 			img.set_pixel(x, y, Color(0.85, 0.2, 0.2))
@@ -580,7 +580,7 @@ func _draw_medkit(img: Image, size: int) -> void:
 		for y in range(14, 18):
 			img.set_pixel(x, y, Color.WHITE)
 
-func _draw_advanced_medkit(img: Image, size: int) -> void:
+func _draw_advanced_medkit(img: Image, _size: int) -> void:
 	# 고급 군용 카키색 메디킷
 	for x in range(5, 27):
 		for y in range(8, 24):
@@ -592,7 +592,7 @@ func _draw_advanced_medkit(img: Image, size: int) -> void:
 		for y in range(14, 18):
 			img.set_pixel(x, y, Color(0.9, 0.8, 0.2))
 
-func _draw_herb(img: Image, size: int) -> void:
+func _draw_herb(img: Image, _size: int) -> void:
 	for x in range(10, 22):
 		for y in range(8, 24):
 			if (x - 16) * (x - 16) + (y - 16) * (y - 16) < 36:
@@ -601,7 +601,7 @@ func _draw_herb(img: Image, size: int) -> void:
 	for y in range(18, 26):
 		img.set_pixel(16, y, Color(0.15, 0.45, 0.2))
 
-func _draw_bottle(img: Image, liquid_color: Color, size: int) -> void:
+func _draw_bottle(img: Image, liquid_color: Color, _size: int) -> void:
 	for x in range(12, 20):
 		for y in range(7, 26):
 			if y < 11:
@@ -610,40 +610,40 @@ func _draw_bottle(img: Image, liquid_color: Color, size: int) -> void:
 				var c = liquid_color if y > 15 else Color(0.9, 0.9, 0.95, 0.7)
 				img.set_pixel(x, y, c)
 
-func _draw_can(img: Image, color: Color, size: int) -> void:
+func _draw_can(img: Image, color: Color, _size: int) -> void:
 	for x in range(10, 22):
 		for y in range(9, 24):
 			var c = color if (y > 11 and y < 22) else Color(0.75, 0.75, 0.8)
 			img.set_pixel(x, y, c)
 
-func _draw_bread(img: Image, size: int) -> void:
+func _draw_bread(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(12, 22):
 			var c = Color(0.8, 0.55, 0.25)
 			if y == 12 or y == 21: c = Color(0.6, 0.4, 0.2)
 			img.set_pixel(x, y, c)
 
-func _draw_energy_bar(img: Image, size: int) -> void:
+func _draw_energy_bar(img: Image, _size: int) -> void:
 	for x in range(6, 26):
 		for y in range(12, 20):
 			var c = Color(0.9, 0.3, 0.1) if (x % 6 < 3) else Color(0.2, 0.2, 0.2)
 			img.set_pixel(x, y, c)
 
-func _draw_meat(img: Image, size: int) -> void:
+func _draw_meat(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(10, 22):
 			var c = Color(0.55, 0.25, 0.15)
 			if (x + y) % 5 == 0: c = Color(0.2, 0.1, 0.05) # 그릴 자국
 			img.set_pixel(x, y, c)
 
-func _draw_mre(img: Image, size: int) -> void:
+func _draw_mre(img: Image, _size: int) -> void:
 	for x in range(7, 25):
 		for y in range(8, 24):
 			var c = Color(0.65, 0.55, 0.35)
 			if y > 12 and y < 16: c = Color(0.45, 0.35, 0.2) # 라벨
 			img.set_pixel(x, y, c)
 
-func _draw_crop(img: Image, size: int) -> void:
+func _draw_crop(img: Image, _size: int) -> void:
 	for x in range(11, 21):
 		for y in range(10, 24):
 			img.set_pixel(x, y, Color(0.9, 0.5, 0.1)) # 당근/작물
@@ -651,7 +651,7 @@ func _draw_crop(img: Image, size: int) -> void:
 		for y in range(6, 10):
 			img.set_pixel(x, y, Color(0.2, 0.7, 0.2)) # 잎사귀
 
-func _draw_flashlight(img: Image, size: int) -> void:
+func _draw_flashlight(img: Image, _size: int) -> void:
 	# 손전등 몸통
 	for x in range(8, 20):
 		for y in range(13, 19):
@@ -661,7 +661,7 @@ func _draw_flashlight(img: Image, size: int) -> void:
 		for y in range(11, 21):
 			img.set_pixel(x, y, Color(0.9, 0.8, 0.2))
 
-func _draw_battery(img: Image, size: int) -> void:
+func _draw_battery(img: Image, _size: int) -> void:
 	for x in range(10, 22):
 		for y in range(10, 24):
 			var c = Color(0.15, 0.5, 0.2) if y > 14 else Color(0.9, 0.8, 0.1)
@@ -671,14 +671,14 @@ func _draw_battery(img: Image, size: int) -> void:
 		for y in range(7, 10):
 			img.set_pixel(x, y, Color(0.7, 0.7, 0.75))
 
-func _draw_backpack(img: Image, size: int) -> void:
+func _draw_backpack(img: Image, _size: int) -> void:
 	for x in range(7, 25):
 		for y in range(8, 25):
 			var c = Color(0.35, 0.45, 0.3)
 			if (y > 14 and y < 17) or (x > 14 and x < 17): c = Color(0.2, 0.25, 0.18) # 스트랩
 			img.set_pixel(x, y, c)
 
-func _draw_gasmask(img: Image, size: int) -> void:
+func _draw_gasmask(img: Image, _size: int) -> void:
 	for x in range(9, 23):
 		for y in range(8, 24):
 			img.set_pixel(x, y, Color(0.25, 0.25, 0.28))
@@ -694,20 +694,20 @@ func _draw_gasmask(img: Image, size: int) -> void:
 		for y in range(18, 23):
 			img.set_pixel(x, y, Color(0.15, 0.15, 0.15))
 
-func _draw_armor(img: Image, size: int) -> void:
+func _draw_armor(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(8, 24):
 			var c = Color(0.2, 0.3, 0.25)
 			if y < 12 and (x < 11 or x > 20): continue # 목둘레 파임
 			img.set_pixel(x, y, c)
 
-func _draw_shoes(img: Image, size: int) -> void:
+func _draw_shoes(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(14, 22):
 			var c = Color(0.2, 0.5, 0.8) if y < 19 else Color(0.85, 0.85, 0.85) # 밑창
 			img.set_pixel(x, y, c)
 
-func _draw_map(img: Image, size: int) -> void:
+func _draw_map(img: Image, _size: int) -> void:
 	for x in range(7, 25):
 		for y in range(8, 24):
 			var c = Color(0.9, 0.85, 0.7)
@@ -718,7 +718,7 @@ func _draw_map(img: Image, size: int) -> void:
 	img.set_pixel(16, 14, Color.RED)
 	img.set_pixel(15, 15, Color.RED)
 
-func _draw_compass(img: Image, size: int) -> void:
+func _draw_compass(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(8, 24):
 			var dist = (x - 16) * (x - 16) + (y - 16) * (y - 16)
@@ -732,7 +732,7 @@ func _draw_compass(img: Image, size: int) -> void:
 	for y in range(16, 22):
 		img.set_pixel(16, y, Color.CYAN)
 
-func _draw_scrap(img: Image, size: int) -> void:
+func _draw_scrap(img: Image, _size: int) -> void:
 	for i in range(18):
 		var px = randi_range(7, 23)
 		var py = randi_range(7, 23)
@@ -740,14 +740,14 @@ func _draw_scrap(img: Image, size: int) -> void:
 		img.set_pixel(px, py, c)
 		img.set_pixel(px + 1, py, c)
 
-func _draw_wood(img: Image, size: int) -> void:
+func _draw_wood(img: Image, _size: int) -> void:
 	for x in range(6, 26):
 		for y in range(10, 22):
 			var c = Color(0.55, 0.35, 0.2)
 			if (y == 13 or y == 18): c = Color(0.4, 0.25, 0.12) # 나뭇결
 			img.set_pixel(x, y, c)
 
-func _draw_nails(img: Image, size: int) -> void:
+func _draw_nails(img: Image, _size: int) -> void:
 	for i in range(3):
 		var ox = 9 + i * 5
 		for y in range(9, 23):
@@ -755,14 +755,14 @@ func _draw_nails(img: Image, size: int) -> void:
 		img.set_pixel(ox - 1, 9, Color(0.4, 0.4, 0.4))
 		img.set_pixel(ox + 1, 9, Color(0.4, 0.4, 0.4))
 
-func _draw_cloth(img: Image, size: int) -> void:
+func _draw_cloth(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(8, 24):
 			var c = Color(0.7, 0.65, 0.6)
 			if (x + y) % 3 == 0: c = Color(0.6, 0.55, 0.5)
 			img.set_pixel(x, y, c)
 
-func _draw_gears(img: Image, size: int) -> void:
+func _draw_gears(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(8, 24):
 			var dist = (x - 16) * (x - 16) + (y - 16) * (y - 16)
@@ -771,21 +771,21 @@ func _draw_gears(img: Image, size: int) -> void:
 			elif dist <= 9:
 				img.set_pixel(x, y, Color(0.2, 0.2, 0.2))
 
-func _draw_wire(img: Image, size: int) -> void:
+func _draw_wire(img: Image, _size: int) -> void:
 	for i in range(20):
 		var x = int(16 + cos(i * 0.4) * 8)
 		var y = int(16 + sin(i * 0.4) * 8)
 		img.set_pixel(x, y, Color(0.85, 0.45, 0.2)) # 구리빛 전선
 		img.set_pixel(x + 1, y, Color(0.2, 0.2, 0.8)) # 피복
 
-func _draw_gunpowder(img: Image, size: int) -> void:
+func _draw_gunpowder(img: Image, _size: int) -> void:
 	for x in range(9, 23):
 		for y in range(12, 24):
 			var c = Color(0.2, 0.2, 0.22)
 			if randf() < 0.3: c = Color(0.35, 0.35, 0.38)
 			img.set_pixel(x, y, c)
 
-func _draw_cpu(img: Image, size: int) -> void:
+func _draw_cpu(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(8, 24):
 			var c = Color(0.2, 0.55, 0.3)
@@ -793,21 +793,21 @@ func _draw_cpu(img: Image, size: int) -> void:
 				c = Color(0.75, 0.75, 0.8) # 금속 히트스프레더
 			img.set_pixel(x, y, c)
 
-func _draw_gpu(img: Image, size: int) -> void:
+func _draw_gpu(img: Image, _size: int) -> void:
 	for x in range(5, 27):
 		for y in range(10, 22):
 			var c = Color(0.2, 0.2, 0.25)
 			if x % 6 == 0 and y > 12 and y < 19: c = Color(0.1, 0.6, 0.7) # 팬
 			img.set_pixel(x, y, c)
 
-func _draw_watch(img: Image, color: Color, size: int) -> void:
+func _draw_watch(img: Image, color: Color, _size: int) -> void:
 	for x in range(10, 22):
 		for y in range(10, 22):
 			var dist = (x - 16) * (x - 16) + (y - 16) * (y - 16)
 			if dist < 30:
 				img.set_pixel(x, y, Color.WHITE if dist < 16 else color)
 
-func _draw_ring(img: Image, color: Color, size: int) -> void:
+func _draw_ring(img: Image, color: Color, _size: int) -> void:
 	for x in range(10, 22):
 		for y in range(10, 22):
 			var dist = (x - 16) * (x - 16) + (y - 16) * (y - 16)
@@ -817,20 +817,20 @@ func _draw_ring(img: Image, color: Color, size: int) -> void:
 	img.set_pixel(16, 10, Color(0.2, 0.8, 1.0))
 	img.set_pixel(16, 11, Color(0.2, 0.8, 1.0))
 
-func _draw_vase(img: Image, size: int) -> void:
+func _draw_vase(img: Image, _size: int) -> void:
 	for x in range(10, 22):
 		for y in range(8, 24):
 			if (x >= 14 and x <= 17 and y < 12) or (y >= 12 and (x - 16) * (x - 16) + (y - 18) * (y - 18) < 25):
 				img.set_pixel(x, y, Color(0.2, 0.5, 0.7)) # 청자
 
-func _draw_radio_parts(img: Image, size: int) -> void:
+func _draw_radio_parts(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(10, 22):
 			var c = Color(0.25, 0.45, 0.3)
 			if (x == 12 or x == 18) and y > 12 and y < 18: c = Color(0.8, 0.8, 0.2)
 			img.set_pixel(x, y, c)
 
-func _draw_radio(img: Image, size: int) -> void:
+func _draw_radio(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(11, 23):
 			img.set_pixel(x, y, Color(0.3, 0.35, 0.3))
@@ -842,14 +842,14 @@ func _draw_radio(img: Image, size: int) -> void:
 		for y in range(14, 20):
 			if (x + y) % 2 == 0: img.set_pixel(x, y, Color(0.1, 0.1, 0.1))
 
-func _draw_ssd(img: Image, size: int) -> void:
+func _draw_ssd(img: Image, _size: int) -> void:
 	for x in range(7, 25):
 		for y in range(9, 23):
 			var c = Color(0.15, 0.15, 0.18)
 			if x > 16 and y > 18: c = Color(0.85, 0.75, 0.2) # 골드 핑거 커넥터
 			img.set_pixel(x, y, c)
 
-func _draw_generic_box(img: Image, size: int) -> void:
+func _draw_generic_box(img: Image, _size: int) -> void:
 	for x in range(8, 24):
 		for y in range(8, 24):
 			var c = Color(0.5, 0.5, 0.55)

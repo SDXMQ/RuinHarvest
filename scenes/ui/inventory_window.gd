@@ -69,8 +69,6 @@ func _ready() -> void:
 	add_child(tooltip)
 	tooltip.hide()
 	
-	close_btn.pressed.connect(_on_close_pressed)
-	
 	# 캐릭터 장비 슬롯 버튼 시그널
 	_connect_equipment_slot(helmet_slot, "helmet")
 	_connect_equipment_slot(vest_slot, "vest")
