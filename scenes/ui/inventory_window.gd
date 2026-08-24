@@ -10,6 +10,18 @@ const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
 const SplitDialogScene = preload("res://scenes/ui/split_dialog.tscn")
 const GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
 
+@onready var main_layout: HBoxContainer = $MainLayout
+@onready var vicinity_col: VBoxContainer = $MainLayout/VicinityCol
+@onready var inventory_col: VBoxContainer = $MainLayout/InventoryCol
+@onready var character_col: VBoxContainer = $MainLayout/CharacterCol
+@onready var weapons_col: VBoxContainer = $MainLayout/WeaponsCol
+
+@onready var compact_tab_bar: HBoxContainer = get_node_or_null("CompactTabBar")
+@onready var tab_vicinity_btn: Button = get_node_or_null("CompactTabBar/TabVicinityBtn")
+@onready var tab_inventory_btn: Button = get_node_or_null("CompactTabBar/TabInventoryBtn")
+@onready var tab_character_btn: Button = get_node_or_null("CompactTabBar/TabCharacterBtn")
+@onready var tab_weapons_btn: Button = get_node_or_null("CompactTabBar/TabWeaponsBtn")
+
 @onready var container_section: VBoxContainer = $MainLayout/VicinityCol/ContainerSection
 @onready var container_title_label: Label = $MainLayout/VicinityCol/ContainerSection/Header/TitleLabel
 @onready var container_list: VBoxContainer = $MainLayout/VicinityCol/ContainerSection/Scroll/ContainerList
@@ -30,6 +42,8 @@ const GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
 
 @onready var weapons_vbox: VBoxContainer = $MainLayout/WeaponsCol/Scroll/WeaponsVBox
 @onready var close_btn: Button = $BottomBar/CloseBtn
+
+var active_compact_tab: int = 1 # 0: Vicinity, 1: Inventory, 2: Character, 3: Weapons
 
 var player: CharacterBody2D = null
 var inventory_grid: InventoryGrid = null
@@ -71,7 +85,66 @@ func _ready() -> void:
 		grid_control.queue_redraw()
 	)
 	
+	# 탭 버튼 연결 (반응형 콤팩트 모드)
+	if tab_vicinity_btn: tab_vicinity_btn.pressed.connect(func(): _set_compact_tab(0))
+	if tab_inventory_btn: tab_inventory_btn.pressed.connect(func(): _set_compact_tab(1))
+	if tab_character_btn: tab_character_btn.pressed.connect(func(): _set_compact_tab(2))
+	if tab_weapons_btn: tab_weapons_btn.pressed.connect(func(): _set_compact_tab(3))
+	
+	if ResponsiveManager:
+		ResponsiveManager.breakpoint_changed.connect(_on_responsive_breakpoint_changed)
+		ResponsiveManager.window_resized.connect(_on_responsive_window_resized)
+		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
+	
 	_disable_focus_recursively(self)
+
+func _on_responsive_breakpoint_changed(new_bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+	_apply_responsive_layout(new_bp, vp_size)
+
+func _on_responsive_window_resized(vp_size: Vector2) -> void:
+	if ResponsiveManager:
+		_apply_responsive_layout(ResponsiveManager.current_breakpoint, vp_size)
+
+func _set_compact_tab(tab_idx: int) -> void:
+	active_compact_tab = tab_idx
+	_update_compact_tab_display()
+
+func _update_compact_tab_display() -> void:
+	if not ResponsiveManager or not ResponsiveManager.is_compact():
+		return
+		
+	# 탭 버튼 활성화 색상 피드백
+	var tabs = [tab_vicinity_btn, tab_inventory_btn, tab_character_btn, tab_weapons_btn]
+	for i in range(tabs.size()):
+		if tabs[i]:
+			if i == active_compact_tab:
+				tabs[i].modulate = Color(1.2, 1.2, 1.2)
+			else:
+				tabs[i].modulate = Color(0.7, 0.7, 0.7)
+				
+	# 해당 컬럼만 표시
+	if vicinity_col: vicinity_col.visible = (active_compact_tab == 0)
+	if inventory_col: inventory_col.visible = (active_compact_tab == 1)
+	if character_col: character_col.visible = (active_compact_tab == 2)
+	if weapons_col: weapons_col.visible = (active_compact_tab == 3)
+
+func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+	if bp == ResponsiveManager.Breakpoint.COMPACT:
+		if compact_tab_bar: compact_tab_bar.show()
+		if main_layout:
+			main_layout.offset_top = 54.0
+			main_layout.theme_override_constants_separation = 8
+		_update_compact_tab_display()
+	else:
+		if compact_tab_bar: compact_tab_bar.hide()
+		if main_layout:
+			main_layout.offset_top = 16.0
+			main_layout.theme_override_constants_separation = 16
+		# 모든 컬럼 표시
+		if vicinity_col: vicinity_col.show()
+		if inventory_col: inventory_col.show()
+		if character_col: character_col.show()
+		if weapons_col: weapons_col.show()
 
 func _disable_focus_recursively(node: Node) -> void:
 	if node is Control:

@@ -30,6 +30,7 @@ WeatherSystem="*res://systems/weather_system.gd"
 EventSystem="*res://systems/event_system.gd"
 FleaMarket="*res://systems/flea_market.gd"
 ItemIconManager="*res://autoload/item_icon_manager.gd"
+ResponsiveManager="*res://systems/responsive_manager.gd"
 
 [debug]
 

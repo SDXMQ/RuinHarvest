@@ -194,6 +194,7 @@ func _ready() -> void:
 		
 	# 화면 우상단 샌드박스/치트 도구 버튼 추가
 	var tool_btn = Button.new()
+	tool_btn.name = "SandboxToolBtn"
 	tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
 	tool_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	tool_btn.offset_left = -160.0
@@ -202,6 +203,28 @@ func _ready() -> void:
 	tool_btn.offset_bottom = 44.0
 	tool_btn.pressed.connect(_open_item_spawner)
 	$UI.add_child(tool_btn)
+	
+	if ResponsiveManager:
+		ResponsiveManager.breakpoint_changed.connect(_on_responsive_breakpoint_changed)
+		ResponsiveManager.window_resized.connect(_on_responsive_window_resized)
+		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
+
+func _on_responsive_breakpoint_changed(new_bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+	_apply_responsive_layout(new_bp, vp_size)
+
+func _on_responsive_window_resized(vp_size: Vector2) -> void:
+	if ResponsiveManager:
+		_apply_responsive_layout(ResponsiveManager.current_breakpoint, vp_size)
+
+func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+	var tool_btn = $UI.get_node_or_null("SandboxToolBtn")
+	if tool_btn:
+		if bp == ResponsiveManager.Breakpoint.COMPACT:
+			tool_btn.text = "🛠️ (F1)"
+			tool_btn.offset_left = -80.0
+		else:
+			tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
+			tool_btn.offset_left = -160.0
 
 func _get_random_spawn_pos() -> Vector2:
 	var angle = randf() * TAU

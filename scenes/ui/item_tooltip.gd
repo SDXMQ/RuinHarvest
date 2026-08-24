@@ -200,7 +200,7 @@ func _display_general_item_details(_item: Dictionary, data: Dictionary) -> void:
 			stats_label.hide()
 
 func update_position(target_global_pos: Vector2) -> void:
-	# 마우스 오른쪽에 뜨도록 배치 (화면 경계 클램핑)
+	# 마우스 주변에 뜨도록 배치 (상하좌우 화면 경계 완벽 클램핑)
 	var viewport_size = get_viewport_rect().size
 	var target_pos = target_global_pos + Vector2(16, 16)
 	
@@ -208,5 +208,9 @@ func update_position(target_global_pos: Vector2) -> void:
 		target_pos.x = target_global_pos.x - size.x - 12
 	if target_pos.y + size.y > viewport_size.y:
 		target_pos.y = viewport_size.y - size.y - 12
+		
+	# 좌측 및 상단 화면 밖 이탈 방지
+	target_pos.x = maxf(target_pos.x, 8.0)
+	target_pos.y = maxf(target_pos.y, 8.0)
 		
 	global_position = target_pos

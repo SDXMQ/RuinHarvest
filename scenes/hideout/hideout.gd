@@ -145,6 +145,31 @@ func _ready() -> void:
 	_refresh_trader_ui()
 	_refresh_market_ui()
 	_refresh_workbench_ui()
+	
+	# 반응형 레이아웃 연결
+	if ResponsiveManager:
+		ResponsiveManager.breakpoint_changed.connect(_on_responsive_breakpoint_changed)
+		ResponsiveManager.window_resized.connect(_on_responsive_window_resized)
+		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
+
+func _on_responsive_breakpoint_changed(new_bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+	_apply_responsive_layout(new_bp, vp_size)
+
+func _on_responsive_window_resized(vp_size: Vector2) -> void:
+	if ResponsiveManager:
+		_apply_responsive_layout(ResponsiveManager.current_breakpoint, vp_size)
+
+func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+	if bp == ResponsiveManager.Breakpoint.COMPACT:
+		if has_node("TopBar/DayLabel"):
+			$TopBar/DayLabel.add_theme_font_size_override("font_size", 14)
+		if has_node("TopBar/MoneyLabel"):
+			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 14)
+	else:
+		if has_node("TopBar/DayLabel"):
+			$TopBar/DayLabel.add_theme_font_size_override("font_size", 20)
+		if has_node("TopBar/MoneyLabel"):
+			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 18)
 
 func _process(_delta: float) -> void:
 	if tooltip and tooltip.visible:
