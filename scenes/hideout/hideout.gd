@@ -1050,12 +1050,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.physical_keycode == KEY_F1:
 			_open_item_spawner()
 		elif event.physical_keycode == KEY_TAB or event.physical_keycode == KEY_I:
-			_open_pubg_inventory()
+			_open_inventory_window()
 
-func _open_pubg_inventory() -> void:
-	var pubg_scene = preload("res://scenes/ui/pubg_inventory_window.tscn")
-	if pubg_scene:
-		var win = pubg_scene.instantiate()
+func _open_inventory_window() -> void:
+	var inv_scene = preload("res://scenes/ui/inventory_window.tscn")
+	if inv_scene:
+		var win = inv_scene.instantiate()
 		add_child(win)
 		win.setup(null, player_grid_mgr, equipment_data)
 		win.window_closed.connect(func(): _on_grid_changed())

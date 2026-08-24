@@ -23,7 +23,7 @@ extends Node2D
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
-const PubgInventoryScene = preload("res://scenes/ui/pubg_inventory_window.tscn")
+const InventoryWindowScene = preload("res://scenes/ui/inventory_window.tscn")
 const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 
 var player: CharacterBody2D
@@ -333,7 +333,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	if current_loot_window != null: return
 	get_tree().paused = true
-	current_loot_window = PubgInventoryScene.instantiate()
+	current_loot_window = InventoryWindowScene.instantiate()
 	$UI.add_child(current_loot_window)
 	current_loot_window.setup(player, player.inventory_grid if player and "inventory_grid" in player else null, player.equipment if player and "equipment" in player else {}, target_inv, title)
 	current_loot_window.window_closed.connect(func():

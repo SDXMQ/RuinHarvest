@@ -1,7 +1,7 @@
-# res://scenes/ui/pubg_inventory_window.gd
+# res://scenes/ui/inventory_window.gd
 extends Control
 
-## 배틀그라운드(PUBG) 4단 레이아웃 + 타르코프(EFT) WxH 2D 그리드 결합 인벤토리
+## 4단 레이아웃 + WxH 2D 그리드 결합 전술 인벤토리 시스템
 
 signal window_closed
 

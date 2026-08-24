@@ -38,8 +38,8 @@ var container_inventories: Dictionary = {} # tile_pos -> Inventory
 const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
 var current_loot_window: Control = null
 
-const PubgInventoryScene = preload("res://scenes/ui/pubg_inventory_window.tscn")
-var current_pubg_window: Control = null
+const InventoryWindowScene = preload("res://scenes/ui/inventory_window.tscn")
+var current_inventory_window: Control = null
 
 const ItemSpawnerScene = preload("res://scenes/ui/item_spawner_window.tscn")
 var current_spawner_window: Control = null
@@ -327,9 +327,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
 		
-	# 인벤토리 열기 (Tab 또는 I 키로 배그 4단 인벤토리 열기)
+	# 인벤토리 열기 (Tab 또는 I 키로 4단 인벤토리 열기)
 	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
-		_open_pubg_inventory()
+		_open_inventory_window()
 		get_viewport().set_input_as_handled()
 		
 	# 제작창 열기 (C 키)
@@ -661,19 +661,19 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		_open_loot_window(inv, loot_title)
 
 
-func _open_pubg_inventory(target_inv: Inventory = null, title: String = "") -> void:
-	if current_pubg_window != null: return
+func _open_inventory_window(target_inv: Inventory = null, title: String = "") -> void:
+	if current_inventory_window != null: return
 	get_tree().paused = true
-	current_pubg_window = PubgInventoryScene.instantiate()
-	$UI.add_child(current_pubg_window)
-	current_pubg_window.setup(player, player.inventory_grid, player.equipment, target_inv, title)
-	current_pubg_window.window_closed.connect(func():
-		current_pubg_window = null
+	current_inventory_window = InventoryWindowScene.instantiate()
+	$UI.add_child(current_inventory_window)
+	current_inventory_window.setup(player, player.inventory_grid, player.equipment, target_inv, title)
+	current_inventory_window.window_closed.connect(func():
+		current_inventory_window = null
 		_on_player_stats_changed()
 	)
 
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
-	_open_pubg_inventory(target_inv, title)
+	_open_inventory_window(target_inv, title)
 
 func _on_chunk_loaded(_chunk_pos: Vector2i, _data: Dictionary) -> void:
 	pass
