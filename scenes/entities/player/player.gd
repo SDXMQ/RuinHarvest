@@ -351,6 +351,19 @@ func refresh_equipped_weapon(prefer_first_available: bool = true) -> void:
 					break
 	switch_weapon_slot(active_weapon_slot)
 
+func apply_backpack_grid_size() -> void:
+	if not inventory_grid: return
+	var bp = equipment.get("backpack", {})
+	var new_w = 6
+	var new_h = 3
+	if not bp.is_empty():
+		var id = bp.get("id", "")
+		var d = ItemDatabase.get_item_data(id)
+		var b_grid = d.get("backpack_grid", Vector2i(6, 5))
+		new_w = b_grid.x
+		new_h = b_grid.y
+	inventory_grid.resize_grid(new_w, new_h)
+
 func switch_weapon_slot(slot_name: String) -> void:
 	if is_reloading:
 		is_reloading = false

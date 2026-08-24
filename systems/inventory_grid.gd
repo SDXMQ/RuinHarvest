@@ -34,6 +34,30 @@ func clear() -> void:
 	_init_grid_map()
 	grid_changed.emit()
 
+func load_items(saved_items: Array) -> void:
+	clear()
+	for it in saved_items:
+		if not (it is Dictionary) or not it.has("id"): continue
+		var item = it.duplicate(true)
+		var ix = item.get("x", -1)
+		var iy = item.get("y", -1)
+		var is_rot = item.get("rotated", false)
+		var base_size = ItemDatabase.get_item_grid_size(item["id"])
+		var cur_w = base_size.y if is_rot else base_size.x
+		var cur_h = base_size.x if is_rot else base_size.y
+		item["w"] = base_size.x
+		item["h"] = base_size.y
+		if not item.has("uid"):
+			item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+		
+		# 원래 좌표에 배치 가능하면 그대로 배치
+		if ix >= 0 and iy >= 0 and can_place_item(cur_w, cur_h, ix, iy):
+			place_item(item, ix, iy, is_rot)
+		else:
+			# 불가하면 Auto-Fit으로 공간 찾아 배치
+			auto_add_item(item["id"], item.get("amount", 1), item.get("custom_data", {}))
+	grid_changed.emit()
+
 func _init_grid_map() -> void:
 	grid_map.clear()
 	for y in range(grid_height):

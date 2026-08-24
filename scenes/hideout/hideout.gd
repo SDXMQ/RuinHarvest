@@ -217,19 +217,28 @@ func _load_data() -> void:
 				"throwable": {"id": "수류탄", "amount": 2}
 			}
 		
+		# 착용 배낭에 맞춰 인벤토리 그리드 크기 먼저 확장
+		_apply_backpack_grid_size()
+		
 		# 배낭 2D 데이터 로드
 		var p_items = p_data.get("inventory", [])
-		player_grid_mgr.clear()
-		for it in p_items:
-			if it is Dictionary and it.has("id"):
-				player_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
+		if player_grid_mgr.has_method("load_items"):
+			player_grid_mgr.load_items(p_items)
+		else:
+			player_grid_mgr.clear()
+			for it in p_items:
+				if it is Dictionary and it.has("id"):
+					player_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
 				
 		# 창고 2D 데이터 로드
 		var stash_items = w_data.get("hideout", {}).get("stash", [])
-		stash_grid_mgr.clear()
-		for it in stash_items:
-			if it is Dictionary and it.has("id"):
-				stash_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
+		if stash_grid_mgr.has_method("load_items"):
+			stash_grid_mgr.load_items(stash_items)
+		else:
+			stash_grid_mgr.clear()
+			for it in stash_items:
+				if it is Dictionary and it.has("id"):
+					stash_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
 
 func _update_money_label() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():

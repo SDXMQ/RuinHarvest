@@ -44,10 +44,23 @@ func _trigger_extraction() -> void:
 	if GameManager:
 		var items_to_keep = []
 		var main_world = get_node_or_null("/root/MainWorld")
-		if main_world and main_world.player_inventory:
-			for item in main_world.player_inventory.items:
-				if item:
-					items_to_keep.append(item)
+		if main_world:
+			if main_world.has_method("get_backpack_items"):
+				items_to_keep = main_world.get_backpack_items()
+			elif main_world.player and main_world.player.inventory_grid:
+				for item in main_world.player.inventory_grid.items:
+					if item and not item.is_empty():
+						items_to_keep.append(item.duplicate(true))
+			
+			if main_world.player and not main_world.player.equipment.is_empty():
+				if not GameManager.current_world_data.has("player"):
+					GameManager.current_world_data["player"] = {}
+				GameManager.current_world_data["player"]["equipment"] = main_world.player.equipment.duplicate(true)
+		elif player_ref and "inventory_grid" in player_ref and player_ref.inventory_grid:
+			for item in player_ref.inventory_grid.items:
+				if item and not item.is_empty():
+					items_to_keep.append(item.duplicate(true))
+					
 		GameManager.end_raid("survived", items_to_keep)
 
 func _draw() -> void:

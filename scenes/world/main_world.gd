@@ -145,12 +145,17 @@ func _ready() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var p_data = GameManager.current_world_data.get("player", {})
 		var saved_items = p_data.get("inventory", [])
-		if player.inventory_grid:
-			for s_item in saved_items:
-				if s_item and not s_item.is_empty():
-					player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
 		if p_data.has("equipment") and not p_data["equipment"].is_empty():
 			player.equipment = p_data["equipment"].duplicate(true)
+		if player.has_method("apply_backpack_grid_size"):
+			player.apply_backpack_grid_size()
+		if player.inventory_grid:
+			if player.inventory_grid.has_method("load_items"):
+				player.inventory_grid.load_items(saved_items)
+			else:
+				for s_item in saved_items:
+					if s_item and not s_item.is_empty():
+						player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
 	
 	if player.has_method("refresh_equipped_weapon"):
 		player.refresh_equipped_weapon(true)
