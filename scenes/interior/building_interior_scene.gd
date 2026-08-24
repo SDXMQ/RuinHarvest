@@ -153,10 +153,19 @@ func _setup_player() -> void:
 	add_child(player_inventory)
 	
 	if GameManager and not GameManager.current_world_data.is_empty():
-		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
+		var p_data = GameManager.current_world_data.get("player", {})
+		var p_items = p_data.get("inventory", [])
 		player_inventory.load_items(p_items)
+		if player.inventory_grid:
+			for s_item in p_items:
+				if s_item and not s_item.is_empty():
+					player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
+		if p_data.has("equipment") and not p_data["equipment"].is_empty():
+			player.equipment = p_data["equipment"].duplicate(true)
 				
 	player.inventory = player_inventory
+	if player.has_method("refresh_equipped_weapon"):
+		player.refresh_equipped_weapon(true)
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)

@@ -1089,6 +1089,7 @@ func _on_result_close_pressed() -> void:
 
 func _on_raid_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
+	_sync_save_data()
 	if GameManager: GameManager.start_raid()
 
 func _on_menu_pressed() -> void:

@@ -32,7 +32,7 @@ const VAULT_DURATION: float = 1.0
 
 # 무기, 모딩 및 전투
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
-var equipped_weapon: String = "M4A1 소총"
+var equipped_weapon: String = "맨손"
 var equipped_weapon_data: Dictionary = {}
 var active_weapon_slot: String = "primary1"
 const WEAPON_SLOT_ORDER: Array[String] = ["primary1", "primary2", "sidearm", "throwable"]
@@ -99,8 +99,8 @@ func _ready() -> void:
 			"throwable": {"id": "수류탄", "amount": 2}
 		}
 	
-	# 기본 조립 무기 초기화 및 주무기1 슬롯 활성화
-	switch_weapon_slot(active_weapon_slot)
+	# 기본 조립 무기 초기화 및 첫 번째 유효 슬롯 활성화
+	refresh_equipped_weapon(true)
 	
 	if has_node("Camera2D"):
 		base_camera_pos = get_node("Camera2D").position
@@ -340,6 +340,17 @@ func _update_camera_zoom(delta: float) -> void:
 # ============================================================
 # 무기 스위칭 및 조작 시스템 (1/2/3/4 & 마우스 휠)
 # ============================================================
+func refresh_equipped_weapon(prefer_first_available: bool = true) -> void:
+	if prefer_first_available:
+		var cur_dict = equipment.get(active_weapon_slot, {})
+		if cur_dict.is_empty():
+			for slot in WEAPON_SLOT_ORDER:
+				var d = equipment.get(slot, {})
+				if not d.is_empty():
+					active_weapon_slot = slot
+					break
+	switch_weapon_slot(active_weapon_slot)
+
 func switch_weapon_slot(slot_name: String) -> void:
 	if is_reloading:
 		is_reloading = false

@@ -1287,7 +1287,9 @@ func _gui_input(event: InputEvent) -> void:
 
 func _on_close_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
-	if player and player.has_method("switch_weapon_slot"):
+	if player and player.has_method("refresh_equipped_weapon"):
+		player.refresh_equipped_weapon(false)
+	elif player and player.has_method("switch_weapon_slot"):
 		player.switch_weapon_slot(player.active_weapon_slot)
 	get_tree().paused = false
 	queue_free()

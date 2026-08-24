@@ -152,6 +152,9 @@ func _ready() -> void:
 		if p_data.has("equipment") and not p_data["equipment"].is_empty():
 			player.equipment = p_data["equipment"].duplicate(true)
 	
+	if player.has_method("refresh_equipped_weapon"):
+		player.refresh_equipped_weapon(true)
+	
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
