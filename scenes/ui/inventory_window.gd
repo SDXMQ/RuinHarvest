@@ -126,18 +126,18 @@ func _update_compact_tab_display() -> void:
 	if character_col: character_col.visible = (active_compact_tab == 2)
 	if weapons_col: weapons_col.visible = (active_compact_tab == 3)
 
-func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector2) -> void:
 	if bp == ResponsiveManager.Breakpoint.COMPACT:
 		if compact_tab_bar: compact_tab_bar.show()
 		if main_layout:
 			main_layout.offset_top = 54.0
-			main_layout.theme_override_constants_separation = 8
+			main_layout.add_theme_constant_override("separation", 8)
 		_update_compact_tab_display()
 	else:
 		if compact_tab_bar: compact_tab_bar.hide()
 		if main_layout:
 			main_layout.offset_top = 16.0
-			main_layout.theme_override_constants_separation = 16
+			main_layout.add_theme_constant_override("separation", 16)
 		# 모든 컬럼 표시
 		if vicinity_col: vicinity_col.show()
 		if inventory_col: inventory_col.show()
