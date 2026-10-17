@@ -10,6 +10,7 @@ var player_listings: Array = []
 
 var next_listing_id: int = 1
 var next_player_listing_id: int = 1
+var current_day: int = 1
 
 func _ready() -> void:
 	_initialize_market()
@@ -19,8 +20,18 @@ func _initialize_market() -> void:
 		trends[item_name] = randf_range(-0.15, 0.20)
 		price_multipliers[item_name] = 1.0
 	
-	update_market_prices(1)
-	refresh_listings(1)
+	update_market_prices(current_day)
+	refresh_listings(current_day)
+
+func advance_day(day_num: int = -1) -> void:
+	if day_num > 0:
+		current_day = day_num
+	elif GameManager and GameManager.current_world_data and GameManager.current_world_data.has("current_day"):
+		current_day = int(GameManager.current_world_data["current_day"]) + 1
+	else:
+		current_day += 1
+	update_market_prices(current_day)
+	refresh_listings(current_day)
 
 func get_current_price(item_name: String) -> int:
 	if not ItemDatabase.items.has(item_name):

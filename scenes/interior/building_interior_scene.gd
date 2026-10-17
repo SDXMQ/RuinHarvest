@@ -262,9 +262,9 @@ func _on_exit_pressed() -> void:
 		GameManager.is_paused = false
 		GameManager.end_raid("survived")
 
-func _on_interact_prompt(show: bool, text: String) -> void:
+func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_loot_window == null:
-		interact_prompt.visible = show
+		interact_prompt.visible = can_interact
 		interact_prompt.text = text
 	elif interact_prompt:
 		interact_prompt.visible = false
