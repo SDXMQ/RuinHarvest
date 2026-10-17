@@ -35,9 +35,6 @@ var player: CharacterBody2D
 var player_inventory: Inventory
 var container_inventories: Dictionary = {} # tile_pos -> Inventory
 
-const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
-var current_loot_window: Control = null
-
 const InventoryWindowScene = preload("res://scenes/ui/inventory_window.tscn")
 var current_inventory_window: Control = null
 
@@ -367,7 +364,7 @@ const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 var current_crafting_window: Control = null
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current_loot_window != null or current_crafting_window != null or current_map_window != null:
+	if current_inventory_window != null or current_crafting_window != null or current_map_window != null:
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -778,14 +775,14 @@ func _on_player_stats_changed() -> void:
 			weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
 		
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
-	if interact_prompt and current_loot_window == null:
+	if interact_prompt and current_inventory_window == null:
 		interact_prompt.visible = can_interact
 		interact_prompt.text = text
 	elif interact_prompt:
 		interact_prompt.visible = false
 		
 func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
-	if current_loot_window != null: return
+	if current_inventory_window != null: return
 	
 	var table_name = ""
 	var loot_title = ""

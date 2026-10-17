@@ -22,12 +22,11 @@ extends Node2D
 @onready var exit_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ExitBtn
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
-const LootWindowScene = preload("res://scenes/ui/loot_window.tscn")
 const InventoryWindowScene = preload("res://scenes/ui/inventory_window.tscn")
 const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 
 var player: CharacterBody2D
-var player_inventory: Inventory
+var player_inventory: InventoryGrid
 var interior_data: Dictionary = {}
 var furniture_inventories: Dictionary = {} # Vector2i -> Inventory
 var current_loot_window: Control = null
@@ -148,35 +147,29 @@ func _setup_player() -> void:
 		player.is_infected = s.get("is_infected", false)
 		player.set_flashlight(s.get("flashlight_enabled", true))
 		
-	player_inventory = Inventory.new()
-	player_inventory.max_slots = 12
-	add_child(player_inventory)
-	
+	player_inventory = player.inventory_grid
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var p_data = GameManager.current_world_data.get("player", {})
 		var p_items = p_data.get("inventory", [])
-		player_inventory.load_items(p_items)
 		if p_data.has("equipment") and not p_data["equipment"].is_empty():
 			player.equipment = p_data["equipment"].duplicate(true)
 		if player.has_method("apply_backpack_grid_size"):
 			player.apply_backpack_grid_size()
-		if player.inventory_grid:
-			if player.inventory_grid.has_method("load_items"):
-				player.inventory_grid.load_items(p_items)
+		if player_inventory:
+			if player_inventory.has_method("load_items"):
+				player_inventory.load_items(p_items)
 			else:
 				for s_item in p_items:
 					if s_item and not s_item.is_empty():
-						player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
+						player_inventory.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
 				
-	player.inventory = player_inventory
 	if player.has_method("refresh_equipped_weapon"):
 		player.refresh_equipped_weapon(true)
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
-	player_inventory.inventory_changed.connect(_on_player_stats_changed)
-	if player.inventory_grid:
-		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
+	if player_inventory:
+		player_inventory.grid_changed.connect(_on_player_stats_changed)
 	_on_player_stats_changed()
 
 func _process(delta: float) -> void:
@@ -367,14 +360,10 @@ func _exit_interior() -> void:
 	# 플레이어 데이터, 배낭, 남은 시간 저장 후 야외로 복귀
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var saved_items = []
-		if player and "inventory_grid" in player and player.inventory_grid:
-			for item in player.inventory_grid.items:
+		if player_inventory:
+			for item in player_inventory.items:
 				if item and typeof(item) == TYPE_DICTIONARY:
 					saved_items.append(item.duplicate(true))
-		else:
-			for item in player_inventory.items:
-				if item:
-					saved_items.append(item.duplicate())
 		GameManager.current_world_data["player"]["inventory"] = saved_items
 		GameManager.current_world_data["raid_time_remaining"] = raid_time_remaining
 		GameManager.current_world_data["player_stats"] = {
