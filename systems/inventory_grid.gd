@@ -169,6 +169,33 @@ func remove_item_by_uid(uid: String, emit_signal: bool = true) -> Dictionary:
 			
 	return target_item
 
+func get_item_count(id: String) -> int:
+	var total = 0
+	for item in items:
+		if item.get("id", "") == id:
+			total += item.get("amount", 1)
+	return total
+
+func has_item(id: String, amount: int = 1) -> bool:
+	return get_item_count(id) >= amount
+
+func remove_item(id: String, amount: int = 1) -> int:
+	var remaining = amount
+	var i = items.size() - 1
+	while i >= 0 and remaining > 0:
+		var item = items[i]
+		if item.get("id", "") == id:
+			var cur_amt = item.get("amount", 1)
+			if cur_amt <= remaining:
+				remaining -= cur_amt
+				remove_item_by_uid(item.get("uid", ""), false)
+			else:
+				item["amount"] = cur_amt - remaining
+				remaining = 0
+		i -= 1
+	grid_changed.emit()
+	return remaining
+
 func get_item_by_uid(uid: String) -> Dictionary:
 	for item in items:
 		if item.get("uid", "") == uid:
