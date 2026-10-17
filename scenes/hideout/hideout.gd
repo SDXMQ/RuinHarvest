@@ -383,72 +383,8 @@ func _on_stash_grid_draw() -> void:
 	_draw_2d_grid(stash_grid_control, stash_grid_mgr, hovered_stash_cell, false)
 
 func _draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2i, is_player_grid: bool) -> void:
-	if not grid_mgr: return
-	
-	var w = grid_mgr.grid_width
-	var h = grid_mgr.grid_height
-	
-	# 1. 배경 격자선 및 플레이어 배낭 좌상단 2x2 안전 컨테이너(Secure Pouch) 구역 표시
-	if is_player_grid and w >= 2 and h >= 2:
-		var pouch_rect = Rect2(0, 0, 2 * CELL_SIZE, 2 * CELL_SIZE)
-		ctrl.draw_rect(pouch_rect, Color(0.95, 0.78, 0.2, 0.08), true)
-		ctrl.draw_rect(pouch_rect, Color(0.95, 0.78, 0.2, 0.65), false, 1.5)
-	var line_col = Color(0.24, 0.28, 0.35, 0.7)
-	for x in range(w + 1):
-		ctrl.draw_line(Vector2(x * CELL_SIZE, 0), Vector2(x * CELL_SIZE, h * CELL_SIZE), line_col, 1.0)
-	for y in range(h + 1):
-		ctrl.draw_line(Vector2(0, y * CELL_SIZE), Vector2(w * CELL_SIZE, y * CELL_SIZE), line_col, 1.0)
-		
-	# 2. 배치된 아이템 렌더링
-	for item in grid_mgr.items:
-		if item.is_empty(): continue
-		var cur_w = item.get("h", 1) if item.get("rotated", false) else item.get("w", 1)
-		var cur_h = item.get("w", 1) if item.get("rotated", false) else item.get("h", 1)
-		var item_rect = Rect2(item.get("x", 0) * CELL_SIZE + 2, item.get("y", 0) * CELL_SIZE + 2, cur_w * CELL_SIZE - 4, cur_h * CELL_SIZE - 4)
-		
-		var item_bg = Color(0.18, 0.22, 0.28, 0.95) if is_player_grid else Color(0.16, 0.20, 0.24, 0.95)
-		var item_border = Color(0.35, 0.65, 0.95, 0.9) if is_player_grid else Color(0.9, 0.7, 0.3, 0.9)
-		ctrl.draw_rect(item_rect, item_bg, true)
-		ctrl.draw_rect(item_rect, item_border, false, 1.5)
-		
-		# 아이콘
-		var icon_tex = ItemIconManager.get_icon(item.get("id", "")) if ItemIconManager else null
-		if icon_tex:
-			var icon_size = Vector2(min(item_rect.size.x, item_rect.size.y) * 0.75, min(item_rect.size.x, item_rect.size.y) * 0.75)
-			var icon_pos = item_rect.position + (item_rect.size - icon_size) / 2.0
-			ctrl.draw_texture_rect(icon_tex, Rect2(icon_pos, icon_size), false)
-			
-		var font = ThemeDB.fallback_font
-		# 수량
-		var amt = item.get("amount", 1)
-		if amt > 1:
-			ctrl.draw_string(font, item_rect.position + Vector2(4, item_rect.size.y - 4), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 0.4))
-			
-		# 이름
-		var d = ItemDatabase.get_item_data(item.get("id", ""))
-		ctrl.draw_string(font, item_rect.position + Vector2(4, 12), d.get("name", item.get("id", "")), HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 8, 10, Color(0.9, 0.9, 0.9, 0.8))
+	InventoryUIHelper.draw_2d_grid(ctrl, grid_mgr, hovered_cell, is_player_grid, is_dragging, drag_data)
 
-	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강)
-	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
-		var item = drag_data.get("item", {})
-		var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
-		var base_w = item.get("w", base_size.x)
-		var base_h = item.get("h", base_size.y)
-		var is_rot = drag_data.get("rotated", false)
-		var place_w = base_h if is_rot else base_w
-		var place_h = base_w if is_rot else base_h
-		
-		var src = drag_data.get("source", "")
-		var uid = item.get("uid", "")
-		var ignore_uid = uid if (src == ("player_grid" if is_player_grid else "stash_grid")) else ""
-		var can_place = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid)
-		var ghost_rect = Rect2(hovered_cell.x * CELL_SIZE, hovered_cell.y * CELL_SIZE, place_w * CELL_SIZE, place_h * CELL_SIZE)
-		
-		var col = Color(0.2, 0.8, 0.3, 0.4) if can_place else Color(0.9, 0.2, 0.2, 0.4)
-		var border_col = Color(0.3, 1.0, 0.4, 0.9) if can_place else Color(1.0, 0.3, 0.3, 0.9)
-		
-		ctrl.draw_rect(ghost_rect, col, true)
-		ctrl.draw_rect(ghost_rect, border_col, false, 2.0)
 
 # ============================================================
 # 그리드 마우스 이벤트 처리
@@ -623,52 +559,10 @@ func _end_drag() -> void:
 	if stash_grid_control: stash_grid_control.queue_redraw()
 
 func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
-	var item_id = item.get("id", "")
-	for target in drop_targets:
-		var ctrl: Control = target.get("control")
-		if not is_instance_valid(ctrl) or not ctrl.is_visible_in_tree(): continue
-		
-		var slot_name = target.get("slot_name", "")
-		var is_compat = _is_slot_compatible(item_id, slot_name)
-		
-		var sb = StyleBoxFlat.new()
-		sb.corner_radius_top_left = 4
-		sb.corner_radius_top_right = 4
-		sb.corner_radius_bottom_left = 4
-		sb.corner_radius_bottom_right = 4
-		
-		if ctrl == hovered_ctrl:
-			if is_compat:
-				# 마우스 호버 + 장착 가능 -> 선명한 네온 초록 테두리 & 밝은 배경
-				sb.bg_color = Color(0.12, 0.42, 0.18, 0.9)
-				sb.border_color = Color(0.3, 1.0, 0.5, 1.0)
-				sb.set_border_width_all(2)
-			else:
-				# 마우스 호버 + 장착 불가 -> 빨간색 경고 테두리
-				sb.bg_color = Color(0.42, 0.12, 0.12, 0.9)
-				sb.border_color = Color(1.0, 0.3, 0.3, 1.0)
-				sb.set_border_width_all(2)
-		else:
-			if is_compat:
-				# 장착 가능 슬롯 안내 가이드 -> 은은한 초록 테두리
-				sb.bg_color = Color(0.08, 0.24, 0.14, 0.65)
-				sb.border_color = Color(0.2, 0.85, 0.4, 0.85)
-				sb.set_border_width_all(2)
-			else:
-				# 일반 비호환 슬롯 -> 기본
-				sb.bg_color = Color(0.14, 0.15, 0.18, 0.5)
-				sb.border_color = Color(0.25, 0.28, 0.32, 0.4)
-				sb.set_border_width_all(1)
-				
-		ctrl.add_theme_stylebox_override("normal", sb)
-		ctrl.add_theme_stylebox_override("hover", sb)
+	InventoryUIHelper.highlight_compatible_slots(drop_targets, item, hovered_ctrl)
 
 func _clear_slot_highlights() -> void:
-	for target in drop_targets:
-		var ctrl: Control = target.get("control")
-		if is_instance_valid(ctrl):
-			ctrl.remove_theme_stylebox_override("normal")
-			ctrl.remove_theme_stylebox_override("hover")
+	InventoryUIHelper.clear_slot_highlights(drop_targets)
 
 func _handle_hideout_global_drop() -> void:
 	if not is_dragging: return
@@ -826,25 +720,7 @@ func _try_equip_hideout_item(slot_name: String) -> void:
 	_end_drag()
 
 func _is_slot_compatible(item_id: String, slot_name: String) -> bool:
-	var idata = ItemDatabase.get_item_data(item_id)
-	var cat = idata.get("category", -1)
-	var e_slot = ItemDatabase.get_item_equip_slot(item_id)
-	
-	if slot_name == "helmet":
-		return e_slot == "helmet" or item_id.contains("헬멧") or item_id.contains("방독면")
-	elif slot_name == "vest":
-		return e_slot == "vest" or item_id.contains("방탄") or item_id.contains("조끼")
-	elif slot_name == "backpack":
-		return e_slot == "backpack" or item_id.contains("가방") or item_id.contains("배낭")
-	elif slot_name == "bottom":
-		return e_slot == "bottom" or item_id.contains("운동화") or item_id.contains("신발")
-	elif slot_name.begins_with("primary"):
-		return cat == ItemDatabase.ItemCategory.WEAPON or idata.get("type", "") == "receiver" or e_slot == "primary"
-	elif slot_name == "sidearm":
-		return idata.get("type", "") == "melee" or item_id.contains("권총") or item_id.begins_with("M9") or e_slot == "sidearm" or e_slot == "melee"
-	elif slot_name == "throwable":
-		return item_id.contains("수류탄") or item_id.contains("연막") or item_id.contains("화염") or e_slot == "throwable"
-	return false
+	return InventoryUIHelper.is_slot_compatible(item_id, slot_name)
 
 func _update_equipment_ui() -> void:
 	_render_equip_slot_button(helmet_slot, "helmet", "🪖 헬멧")
@@ -858,16 +734,7 @@ func _update_equipment_ui() -> void:
 	_render_equip_slot_button(throwable_slot, "throwable", "💣 투척 무기")
 
 func _render_equip_slot_button(btn: Button, slot_name: String, default_text: String) -> void:
-	var it = equipment_data.get(slot_name, {})
-	if it.is_empty():
-		btn.text = default_text
-		btn.icon = null
-	else:
-		var d = ItemDatabase.get_item_data(it.get("id", ""))
-		btn.text = d.get("name", it.get("id", ""))
-		if ItemIconManager:
-			btn.icon = ItemIconManager.get_icon(it.get("id", ""))
-			btn.expand_icon = true
+	InventoryUIHelper.render_equip_slot_button(btn, slot_name, default_text, equipment_data)
 
 func _open_split_dialog(item: Dictionary, on_confirm_callback: Callable) -> void:
 	var dialog = SplitDialogScene.instantiate()
