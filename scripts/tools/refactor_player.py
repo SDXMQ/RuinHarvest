@@ -201,7 +201,7 @@ func _ready() -> void:
 	EventBus.player_damaged.connect(_on_player_damaged)
 	EventBus.player_died.connect(_on_death)
 
-func _process(delta: float) -> void:
+func _process(_delta: float) -> void:
 	look_at(get_global_mouse_position())
 
 func _physics_process(delta: float) -> void:
@@ -296,13 +296,13 @@ func _play_surface_footstep() -> void:
 	if chunk_mgr and chunk_mgr.ground_layer:
 		var t_pos = chunk_mgr.ground_layer.local_to_map(global_position)
 		var atlas = chunk_mgr.ground_layer.get_cell_atlas_coords(t_pos)
-		if atlas == TileManager.TILE_ROAD or atlas == TileManager.TILE_ROAD_LINE or atlas == TileManager.TILE_CONCRETE or atlas == TileManager.TILE_SIDEWALK:
+		if atlas == TileManager.TILE_ROAD or atlas == TileManager.TILE_ROAD_LINE or atlas == TileManager.TILE_CONCRETE:
 			sfx = "footstep_concrete"
 		elif atlas == TileManager.TILE_FLOOR_WOOD:
 			sfx = "footstep_wood"
 		elif atlas == TileManager.TILE_FLOOR_TILE:
 			sfx = "footstep_concrete"
-		elif atlas == TileManager.TILE_WATER:
+		elif atlas == Vector2i(7, 2):
 			sfx = "footstep_water"
 	SoundManager.play(sfx)
 	if is_sprinting and EventBus.has_signal("noise_created"):

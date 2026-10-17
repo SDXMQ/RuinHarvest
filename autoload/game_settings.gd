@@ -387,7 +387,8 @@ func apply_display_settings() -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 		# 화면 중앙 정렬
 		var screen_size: Vector2i = DisplayServer.screen_get_size()
-		DisplayServer.window_set_position((screen_size - res) / 2)
+		var diff: Vector2i = screen_size - res
+		DisplayServer.window_set_position(Vector2i(int(float(diff.x) / 2.0), int(float(diff.y) / 2.0)))
 
 func save_settings() -> void:
 	var data: Dictionary = {

@@ -313,14 +313,13 @@ func _on_grid_draw() -> void:
 			var icon_pos = item_rect.position + (item_rect.size - icon_size) / 2.0
 			grid_control.draw_texture_rect(icon_tex, Rect2(icon_pos, icon_size), false)
 			
+		var font = ThemeDB.fallback_font
 		# 수량 텍스트
 		var amt = item.get("amount", 1)
 		if amt > 1:
-			var font = ThemeDB.fallback_font
 			grid_control.draw_string(font, item_rect.position + Vector2(4, item_rect.size.y - 4), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 0.4))
 			
 		# 이름 텍스트
-		var font = ThemeDB.fallback_font
 		var d = ItemDatabase.get_item_data(item.get("id", ""))
 		grid_control.draw_string(font, item_rect.position + Vector2(4, 12), d.get("name", item.get("id", "")), HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 8, 10, Color(0.9, 0.9, 0.9, 0.8))
 

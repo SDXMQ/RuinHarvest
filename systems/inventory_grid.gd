@@ -149,7 +149,7 @@ func move_item(uid: String, target_x: int, target_y: int, rotated: bool) -> bool
 	grid_changed.emit()
 	return true
 
-func remove_item_by_uid(uid: String, emit_signal: bool = true) -> Dictionary:
+func remove_item_by_uid(uid: String, should_emit: bool = true) -> Dictionary:
 	var target_item: Dictionary = {}
 	var target_idx = -1
 	
@@ -164,7 +164,7 @@ func remove_item_by_uid(uid: String, emit_signal: bool = true) -> Dictionary:
 		var cur_w = target_item.get("h", 1) if target_item.get("rotated", false) else target_item.get("w", 1)
 		var cur_h = target_item.get("w", 1) if target_item.get("rotated", false) else target_item.get("h", 1)
 		_mark_grid(target_item.get("x", 0), target_item.get("y", 0), cur_w, cur_h, "")
-		if emit_signal:
+		if should_emit:
 			grid_changed.emit()
 			
 	return target_item

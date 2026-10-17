@@ -393,7 +393,7 @@ func _draw_roof(img: Image, x: int, y: int) -> void:
 			if iy % 8 == 0:
 				img.set_pixel(x + ix, y + iy, Color(0.12, 0.13, 0.16))
 			# 세로 기와 틈새 (지그재그)
-			var row = iy / 8
+			var row = int(float(iy) / 8.0)
 			var offset = (row % 2) * 8
 			if (ix + offset) % 16 == 0:
 				img.set_pixel(x + ix, y + iy, Color(0.1, 0.11, 0.14))

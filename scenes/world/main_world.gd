@@ -244,7 +244,7 @@ func _on_responsive_window_resized(vp_size: Vector2) -> void:
 	if ResponsiveManager:
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, vp_size)
 
-func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector2) -> void:
 	var tool_btn = $UI.get_node_or_null("SandboxToolBtn")
 	if tool_btn:
 		if bp == ResponsiveManager.Breakpoint.COMPACT:
@@ -777,9 +777,9 @@ func _on_player_stats_changed() -> void:
 			else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
 			weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
 		
-func _on_interact_prompt(show: bool, text: String) -> void:
+func _on_interact_prompt(is_visible: bool, text: String) -> void:
 	if interact_prompt and current_loot_window == null:
-		interact_prompt.visible = show
+		interact_prompt.visible = is_visible
 		interact_prompt.text = text
 	elif interact_prompt:
 		interact_prompt.visible = false

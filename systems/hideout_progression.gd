@@ -162,7 +162,7 @@ static func consume_total_item(item_id: String, amount: int, player_grid: Invent
 	if rem > 0 and player_grid:
 		player_grid.remove_item(item_id, rem)
 
-static func setup_progression_tab(hideout: Control, tab_container: TabContainer) -> Control:
+static func setup_progression_tab(_hideout: Control, tab_container: TabContainer) -> Control:
 	var tab_root = HBoxContainer.new()
 	tab_root.name = " 🏗️ 시설 & 의뢰 "
 	tab_root.add_theme_constant_override("separation", 18)

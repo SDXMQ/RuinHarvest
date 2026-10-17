@@ -64,11 +64,11 @@ func is_road(wx: int, wy: int) -> bool:
 	
 	if biome == "forest":
 		# 숲에서는 주요 간선 도로만 통과 (60 간격, 두께 3)
-		var rx = fposmod(warped.x, 60.0)
-		if rx > 30.0: rx = 60.0 - rx
-		var ry = fposmod(warped.y, 60.0)
-		if ry > 30.0: ry = 60.0 - ry
-		return rx <= 1.5 or ry <= 1.5
+		var frx = fposmod(warped.x, 60.0)
+		if frx > 30.0: frx = 60.0 - frx
+		var fry = fposmod(warped.y, 60.0)
+		if fry > 30.0: fry = 60.0 - fry
+		return frx <= 1.5 or fry <= 1.5
 		
 	# 주간선도로 (40간격, 두께 4)
 	var rx = fposmod(warped.x, 40.0)

@@ -226,7 +226,7 @@ func _on_responsive_window_resized(vp_size: Vector2) -> void:
 	if ResponsiveManager:
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, vp_size)
 
-func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
+func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector2) -> void:
 	if bp == ResponsiveManager.Breakpoint.COMPACT:
 		if has_node("TopBar/DayLabel"):
 			$TopBar/DayLabel.add_theme_font_size_override("font_size", 14)
@@ -430,14 +430,13 @@ func _draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2
 			var icon_pos = item_rect.position + (item_rect.size - icon_size) / 2.0
 			ctrl.draw_texture_rect(icon_tex, Rect2(icon_pos, icon_size), false)
 			
+		var font = ThemeDB.fallback_font
 		# 수량
 		var amt = item.get("amount", 1)
 		if amt > 1:
-			var font = ThemeDB.fallback_font
 			ctrl.draw_string(font, item_rect.position + Vector2(4, item_rect.size.y - 4), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 1, 0.4))
 			
 		# 이름
-		var font = ThemeDB.fallback_font
 		var d = ItemDatabase.get_item_data(item.get("id", ""))
 		ctrl.draw_string(font, item_rect.position + Vector2(4, 12), d.get("name", item.get("id", "")), HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 8, 10, Color(0.9, 0.9, 0.9, 0.8))
 
@@ -765,7 +764,6 @@ func _connect_equipment_slots() -> void:
 		var s_name: String = s_pair[1]
 		drop_targets.append({"control": btn, "slot_name": s_name})
 		
-		var captured_btn = btn
 		var captured_slot = s_name
 		
 		btn.mouse_entered.connect(func():
@@ -1016,7 +1014,7 @@ func _buy_item(item_id: String, amount: int, price: int) -> void:
 	_refresh_trader_ui()
 	_sync_save_data()
 
-func _sell_item(uid: String, is_stash: bool, item_id: String, amount: int, unit_price: int) -> void:
+func _sell_item(uid: String, is_stash: bool, _item_id: String, amount: int, unit_price: int) -> void:
 	var total_gain = unit_price * amount
 	GameManager.current_world_data["player"]["rubles"] += total_gain
 	_update_money_label()
@@ -1202,7 +1200,7 @@ func _check_last_raid_result() -> void:
 			
 		var kills_cnt = int(res.get("kills", 0))
 		var t_spent = int(res.get("time_spent", 0.0))
-		result_desc.text += "\n\n⚔️ 이번 레이드 처치: %d명  |  ⏱️ 작전 시간: %d분 %d초" % [kills_cnt, t_spent / 60, t_spent % 60]
+		result_desc.text += "\n\n⚔️ 이번 레이드 처치: %d명  |  ⏱️ 작전 시간: %d분 %d초" % [kills_cnt, int(float(t_spent) / 60.0), t_spent % 60]
 		
 		if res.get("insurance_claimed", false):
 			result_desc.text += "\n🛡️ 장비 보험 적용 완료: 장착 중이던 무기 및 방어구가 안전하게 회수되었습니다."
@@ -2090,10 +2088,8 @@ func _on_workbench_preview_draw() -> void:
 	var parts = wb_selected_weapon.get("parts", {})
 	
 	# 2. 총기 리시버 및 부품 실루엣 드로잉
-	var body_col = Color(0.25, 0.28, 0.32, 0.95)
 	var metal_dark = Color(0.14, 0.16, 0.18, 0.95)
 	var wood_col = Color(0.45, 0.25, 0.15, 0.95)
-	var accent_col = Color(0.3, 0.7, 0.9, 0.8)
 	
 	# 리시버 본체 (Base Upper/Lower Receiver)
 	var rec_w = 90.0
