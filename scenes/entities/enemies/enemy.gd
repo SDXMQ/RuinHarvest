@@ -263,8 +263,6 @@ func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> 
 		target_alpha = 0.45
 		
 	visuals.modulate.a = lerp(visuals.modulate.a, target_alpha, clamp(delta * 10.0, 0.0, 1.0))
-	if hp_bar:
-		hp_bar.modulate.a = visuals.modulate.a
 
 func _get_steered_direction(target_pos: Vector2) -> Vector2:
 	var desired_dir = global_position.direction_to(target_pos)

@@ -131,10 +131,6 @@ reload={
 ]
 }
 
-[internationalization]
-
-locale/translations=PackedStringArray("res://resources/i18n/translations.csv")
-
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
