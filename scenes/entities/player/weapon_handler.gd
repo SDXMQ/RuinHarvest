@@ -27,6 +27,12 @@ func _process(delta: float) -> void:
 		reload_timer -= delta
 		if reload_timer <= 0:
 			_finish_reload()
+	elif not get_tree().paused and player and player.hp > 0:
+		# 연사 총기(RPM >= 300)는 좌클릭 유지 시 자동 사격 지원
+		if Input.is_action_pressed("attack") and not equipped_weapon_data.is_empty() and active_weapon_slot != "throwable":
+			var rpm = equipped_weapon_data.get("computed_stats", {}).get("rpm", 150)
+			if rpm >= 300 and attack_cooldown_timer <= 0:
+				try_attack(Vector2.RIGHT.rotated(player.rotation), player.global_position)
 
 func switch_weapon_slot(slot_name: String) -> void:
 	if is_reloading:
@@ -39,14 +45,14 @@ func switch_weapon_slot(slot_name: String) -> void:
 	if weapon_dict.is_empty():
 		equipped_weapon_data = {}
 		equipped_weapon = "맨손"
-		EventBus.event_logged.emit("✋ [%s] 슬롯: 비어있음 (맨손)" % _get_slot_display_name(slot_name))
+		EventBus.event_logged.emit("✋ [%s] 슬롯: 비어있음 (맨손)" % get_slot_display_name(slot_name))
 	elif slot_name == "throwable":
 		var t_id = weapon_dict.get("id", "수류탄")
 		equipped_weapon = weapon_dict.get("name", t_id)
 		equipped_weapon_data = {
 			"id": t_id, "name": equipped_weapon, "type": "throwable",
 			"amount": weapon_dict.get("amount", 1),
-			"computed_stats": {"damage": 120.0, "rpm": 60, "noise_radius": 800.0}
+			"computed_stats": {"damage": 145.0, "rpm": 60, "noise_radius": 800.0}
 		}
 		EventBus.event_logged.emit("💣 투척 무기: %s (x%d)" % [equipped_weapon, weapon_dict.get("amount", 1)])
 	else:
@@ -60,9 +66,11 @@ func switch_weapon_slot(slot_name: String) -> void:
 		equipped_weapon = w_name
 		if weapon_dict.has("current_magazine_ammo"):
 			equipped_weapon_data["current_magazine_ammo"] = weapon_dict["current_magazine_ammo"]
-		EventBus.event_logged.emit("🔫 무기 전환: %s [%s]" % [w_name, _get_slot_display_name(slot_name)])
+		EventBus.event_logged.emit("🔫 무기 전환: %s [%s]" % [w_name, get_slot_display_name(slot_name)])
 			
 	weapon_changed.emit()
+	if player and player.has_signal("stats_changed"):
+		player.stats_changed.emit()
 
 func cycle_weapon(direction: int) -> void:
 	var cur_idx = WEAPON_SLOT_ORDER.find(active_weapon_slot)
@@ -82,9 +90,16 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		_throw_grenade(aim_dir, spawn_pos)
 		return
 		
+	# 근접 무기(나이프, 파이프, 도끼, 야구방망이) 장착 여부 확인
+	var w_id = equipped_weapon_data.get("id", "")
+	var item_info = ItemDatabase.get_item_data(w_id)
+	if item_info.get("weapon_type", "") == "melee" or w_id in ["나이프", "파이프", "도끼", "야구방망이"]:
+		_melee_punch(aim_dir, spawn_pos, float(item_info.get("damage", 24.0)))
+		return
+		
 	var stats = equipped_weapon_data.get("computed_stats", {})
 	var rpm = stats.get("rpm", 150)
-	attack_cooldown_timer = 60.0 / float(max(60, rpm))
+	attack_cooldown_timer = 60.0 / float(max(45, rpm))
 	
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	if cur_mag <= 0:
@@ -95,17 +110,22 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
 		equipment[active_weapon_slot]["current_magazine_ammo"] = cur_mag - 1
 	ammo_changed.emit()
+	if player and player.has_signal("stats_changed"):
+		player.stats_changed.emit()
 	
 	var recoil_val = stats.get("recoil", 20.0)
 	recoil_offset = recoil_val * 0.2
+	if EventBus.has_signal("camera_shake_requested"):
+		EventBus.camera_shake_requested.emit(clamp(recoil_val * 0.08, 1.2, 5.0), 0.12)
 	
 	if stats.get("muzzle_flash", true):
 		if player.has_node("PlayerLighting"):
 			player.get_node("PlayerLighting").trigger_muzzle_flash()
 			
+	var muzzle_pos = spawn_pos + aim_dir.normalized() * 18.0
 	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
 	if ps:
-		ps.emit("muzzle", spawn_pos.x, spawn_pos.y, 4, aim_dir.angle())
+		ps.emit("muzzle", muzzle_pos.x, muzzle_pos.y, 4, aim_dir.angle())
 		ps.emit("bullet_shell", spawn_pos.x, spawn_pos.y, 1, aim_dir.angle())
 		
 	EventBus.noise_created.emit(spawn_pos, stats.get("noise_radius", 600.0), "gunshot")
@@ -113,43 +133,137 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	var pellets = stats.get("pellets", 1)
 	var dmg_per_pellet = stats.get("damage", 20.0)
 	var accuracy = stats.get("accuracy", 75.0)
-	var spread_max = deg_to_rad(max(1.0, (100.0 - accuracy) * 0.35))
+	var spread_max = deg_to_rad(max(0.8, (100.0 - accuracy) * 0.32))
+	if player and player.player_camera and player.player_camera.is_aiming_ads:
+		spread_max *= 0.45 # 정조준 시 집탄율 대폭 상승
+	
+	var eff_range = max(260.0, float(stats.get("range", 50.0)) * 12.0)
+	var pen = int(stats.get("penetration", 1))
 	
 	for p in range(pellets):
 		var spread = randf_range(-spread_max, spread_max)
 		var pellet_dir = aim_dir.rotated(spread)
 		var bullet = BulletScene.instantiate()
 		get_tree().current_scene.add_child(bullet)
-		bullet.setup(spawn_pos, pellet_dir, dmg_per_pellet)
+		bullet.setup(muzzle_pos, pellet_dir, dmg_per_pellet, eff_range, pen, "player", 760.0)
 		
 	if SoundManager: SoundManager.play("hit_ranged")
 
-func _melee_punch(aim_dir: Vector2, spawn_pos: Vector2) -> void:
-	attack_cooldown_timer = 0.4
-	recoil_offset = 6.0
-	var bullet = BulletScene.instantiate()
-	get_tree().current_scene.add_child(bullet)
-	bullet.setup(spawn_pos, aim_dir, 15.0)
+func _melee_punch(aim_dir: Vector2, spawn_pos: Vector2, melee_dmg: float = 18.0) -> void:
+	attack_cooldown_timer = 0.38
+	recoil_offset = 7.0
+	var dir_norm = aim_dir.normalized()
+	var reach = 54.0
+	var hit_any = false
+	
+	for enemy in get_tree().get_nodes_in_group("enemies"):
+		if is_instance_valid(enemy) and enemy.has_method("take_damage"):
+			var to_enemy = enemy.global_position - spawn_pos
+			var dist = to_enemy.length()
+			if dist <= reach and (dist < 18.0 or to_enemy.normalized().dot(dir_norm) >= 0.42):
+				enemy.take_damage(melee_dmg, dir_norm * 1.4)
+				hit_any = true
+				
+	# 전방 창문 타일 타격 시 창문 파괴
+	var chunk_mgr = get_node_or_null("/root/MainWorld/ChunkManager")
+	var obj_layer: TileMapLayer = chunk_mgr.object_layer if chunk_mgr and chunk_mgr.object_layer else get_tree().current_scene.get_node_or_null("ObjectsLayer")
+	if obj_layer:
+		var check_tile = obj_layer.local_to_map(spawn_pos + dir_norm * 28.0)
+		if obj_layer.get_cell_atlas_coords(check_tile) == TileManager.OBJ_WINDOW:
+			obj_layer.set_cell(check_tile, 0, TileManager.OBJ_WINDOW_BROKEN)
+			EventBus.noise_created.emit(spawn_pos, 350.0, "break")
+			EventBus.window_broken.emit(check_tile)
+			EventBus.event_logged.emit("💥 근접 타격으로 창문을 깼습니다!")
+			hit_any = true
+			
+	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+	if ps:
+		var swing_pos = spawn_pos + dir_norm * 26.0
+		ps.emit("hit" if hit_any else "dust", swing_pos.x, swing_pos.y, 4)
+		
 	if SoundManager: SoundManager.play("hit_melee")
-	EventBus.noise_created.emit(spawn_pos, 80.0, "punch")
+	EventBus.noise_created.emit(spawn_pos, 90.0, "punch")
 
 func _throw_grenade(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	var amt = equipped_weapon_data.get("amount", 1)
 	if amt <= 0: return
-	attack_cooldown_timer = 0.8
-	var bullet = BulletScene.instantiate()
-	get_tree().current_scene.add_child(bullet)
-	bullet.setup(spawn_pos, aim_dir, 120.0)
+	attack_cooldown_timer = 0.85
+	
+	var target_pos = player.get_global_mouse_position() if player else (spawn_pos + aim_dir * 200.0)
+	var to_target = target_pos - spawn_pos
+	var throw_dist = clamp(to_target.length(), 60.0, 280.0)
+	var final_pos = spawn_pos + aim_dir.normalized() * throw_dist
+	
+	_spawn_grenade_entity(spawn_pos, final_pos, 145.0, 125.0)
 	
 	amt -= 1
 	equipped_weapon_data["amount"] = amt
 	if equipment.has("throwable") and not equipment["throwable"].is_empty():
-		if amt <= 0: equipment["throwable"] = {}
-		else: equipment["throwable"]["amount"] = amt
+		if amt <= 0:
+			equipment["throwable"] = {}
+			equipped_weapon_data = {}
+			equipped_weapon = "맨손"
+		else:
+			equipment["throwable"]["amount"] = amt
 			
 	if SoundManager: SoundManager.play("menu_select")
-	EventBus.noise_created.emit(spawn_pos, 200.0, "grenade_throw")
+	EventBus.noise_created.emit(spawn_pos, 180.0, "grenade_throw")
 	ammo_changed.emit()
+	if player and player.has_signal("stats_changed"):
+		player.stats_changed.emit()
+
+func _spawn_grenade_entity(start_pos: Vector2, target_pos: Vector2, blast_dmg: float, blast_radius: float) -> void:
+	var scene_root = get_tree().current_scene
+	if not scene_root: return
+	
+	var gren = Node2D.new()
+	gren.name = "ThrownGrenade"
+	gren.global_position = start_pos
+	scene_root.add_child(gren)
+	
+	gren.draw.connect(func():
+		gren.draw_circle(Vector2.ZERO, 5.5, Color(0.2, 0.35, 0.2))
+		gren.draw_arc(Vector2.ZERO, 5.5, 0, TAU, 12, Color(0.1, 0.1, 0.1), 1.5)
+		var blink = sin(Time.get_ticks_msec() * 0.035) > 0.0
+		if blink:
+			gren.draw_circle(Vector2(0, -2), 2.2, Color(1.0, 0.2, 0.2))
+			gren.draw_arc(Vector2.ZERO, blast_radius, 0, TAU, 32, Color(1.0, 0.25, 0.15, 0.22), 1.5)
+	)
+	
+	var tw = gren.create_tween()
+	tw.tween_property(gren, "global_position", target_pos, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	
+	var fuse_timer = get_tree().create_timer(1.35)
+	fuse_timer.timeout.connect(func():
+		if not is_instance_valid(gren): return
+		var g_pos = gren.global_position
+		if SoundManager: SoundManager.play("explosion")
+		EventBus.noise_created.emit(g_pos, 850.0, "explosion")
+		if EventBus.has_signal("camera_shake_requested"):
+			EventBus.camera_shake_requested.emit(10.0, 0.35)
+			
+		var ps = scene_root.get_node_or_null("ParticleSystem")
+		if ps:
+			ps.emit("muzzle", g_pos.x, g_pos.y, 18)
+			ps.emit("spark", g_pos.x, g_pos.y, 20)
+			ps.emit("smoke", g_pos.x, g_pos.y, 14)
+			
+		for enemy in get_tree().get_nodes_in_group("enemies"):
+			if is_instance_valid(enemy) and enemy.has_method("take_damage"):
+				var d = g_pos.distance_to(enemy.global_position)
+				if d <= blast_radius:
+					var falloff = clamp(1.0 - (d / blast_radius) * 0.65, 0.35, 1.0)
+					var dir = g_pos.direction_to(enemy.global_position)
+					enemy.take_damage(blast_dmg * falloff, dir * 2.2)
+					
+		if is_instance_valid(player):
+			var p_dist = g_pos.distance_to(player.global_position)
+			if p_dist <= blast_radius * 0.85:
+				var p_falloff = clamp(1.0 - (p_dist / (blast_radius * 0.85)), 0.2, 1.0)
+				EventBus.player_damaged.emit(blast_dmg * 0.45 * p_falloff, "explosion")
+				
+		gren.queue_free()
+	)
 
 func start_reload() -> void:
 	if is_reloading or equipped_weapon_data.is_empty() or active_weapon_slot == "throwable": return
@@ -174,7 +288,7 @@ func _finish_reload() -> void:
 	var mag_size = stats.get("magazine_size", 15)
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	var needed = mag_size - cur_mag
-	var ammo_types = _get_compatible_ammo_types()
+	var ammo_types = get_compatible_ammo_types()
 	
 	var loaded = 0
 	var inv_grid = player.get_node("InventoryGrid")
@@ -201,18 +315,23 @@ func _finish_reload() -> void:
 		equipment[active_weapon_slot]["current_magazine_ammo"] = cur_mag + loaded
 		
 	ammo_changed.emit()
+	if player and player.has_signal("stats_changed"):
+		player.stats_changed.emit()
 	EventBus.event_logged.emit("✅ 재장전 완료! (%d/%d)" % [equipped_weapon_data["current_magazine_ammo"], mag_size])
 
-func _get_compatible_ammo_types() -> Array:
+func get_compatible_ammo_types() -> Array:
 	if not equipped_weapon_data.is_empty():
 		var stats = equipped_weapon_data.get("computed_stats", {})
 		if stats.has("ammo_types"): return stats["ammo_types"]
 		return [equipped_weapon_data.get("loaded_ammo", "9mm"), "탄약"]
 	return ["9mm", "탄약"]
 
+func _get_compatible_ammo_types() -> Array:
+	return get_compatible_ammo_types()
+
 func get_available_ammo_count() -> int:
 	if not player.has_node("InventoryGrid"): return 0
-	var ammo_types = _get_compatible_ammo_types()
+	var ammo_types = get_compatible_ammo_types()
 	var total = 0
 	for it in player.get_node("InventoryGrid").items:
 		var it_id = it.get("id", "")
@@ -222,10 +341,13 @@ func get_available_ammo_count() -> int:
 				break
 	return total
 
-func _get_slot_display_name(slot_name: String) -> String:
+func get_slot_display_name(slot_name: String) -> String:
 	match slot_name:
 		"primary1": return "주무기 1"
 		"primary2": return "주무기 2"
 		"sidearm": return "권총/보조무기"
 		"throwable": return "투척무기"
 		_: return slot_name
+
+func _get_slot_display_name(slot_name: String) -> String:
+	return get_slot_display_name(slot_name)

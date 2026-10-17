@@ -1,35 +1,76 @@
 # res://scenes/entities/projectiles/bullet.gd
 extends Area2D
 
-@export var speed: float = 650.0
+@export var speed: float = 720.0
 @export var damage: float = 25.0
-@export var max_lifetime: float = 2.0
+@export var max_lifetime: float = 2.5
 
 var direction: Vector2 = Vector2.RIGHT
 var traveled_time: float = 0.0
+var traveled_dist: float = 0.0
+var max_range: float = 650.0
+var penetration: int = 1
+var pierce_count: int = 0
+var shooter_group: String = "player"
+var hit_targets: Array = []
 
-func setup(pos: Vector2, dir: Vector2, dmg: float) -> void:
+func setup(pos: Vector2, dir: Vector2, dmg: float, p_range: float = 650.0, p_penetration: int = 1, p_shooter_group: String = "player", p_speed: float = 720.0) -> void:
 	global_position = pos
 	direction = dir.normalized()
 	rotation = direction.angle()
 	damage = dmg
+	max_range = max(180.0, p_range)
+	penetration = p_penetration
+	shooter_group = p_shooter_group
+	speed = p_speed
+	queue_redraw()
 
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 
 func _physics_process(delta: float) -> void:
-	global_position += direction * speed * delta
+	var step = speed * delta
+	global_position += direction * step
+	traveled_dist += step
 	traveled_time += delta
-	if traveled_time >= max_lifetime:
+	if traveled_dist >= max_range or traveled_time >= max_lifetime:
 		queue_free()
 
+func _get_effective_damage() -> float:
+	var falloff_start = max_range * 0.7
+	if traveled_dist <= falloff_start:
+		return damage
+	var t = clamp((traveled_dist - falloff_start) / max(1.0, max_range - falloff_start), 0.0, 1.0)
+	return damage * lerp(1.0, 0.55, t)
+
 func _on_body_entered(body: Node2D) -> void:
-	if body.is_in_group("player"):
-		return # 플레이어가 쏜 총알이 플레이어에게 닿는 것 무시
+	if body in hit_targets:
+		return
+	if shooter_group == "player" and body.is_in_group("player"):
+		return
+	if shooter_group == "enemies" and body.is_in_group("enemies"):
+		return
+		
+	if shooter_group == "enemies" and body.is_in_group("player"):
+		hit_targets.append(body)
+		var eff_dmg = _get_effective_damage()
+		EventBus.player_damaged.emit(eff_dmg, "gunshot")
+		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+		if ps:
+			ps.emit("blood", global_position.x, global_position.y, 5)
+		queue_free()
+		return
 		
 	if body.has_method("take_damage"):
-		body.take_damage(damage, direction)
-		queue_free()
+		hit_targets.append(body)
+		var eff_dmg = _get_effective_damage()
+		body.take_damage(eff_dmg, direction)
+		# 고관통 탄환(관통력 4 이상)은 첫 번째 적을 관통하여 후방 적에게 60% 피해를 입힘
+		if penetration >= 4 and pierce_count < 1:
+			pierce_count += 1
+			damage *= 0.6
+		else:
+			queue_free()
 	elif body is TileMapLayer:
 		var layer = body as TileMapLayer
 		var hit_tile_pos = layer.local_to_map(global_position + direction * 4.0)
@@ -40,11 +81,26 @@ func _on_body_entered(body: Node2D) -> void:
 			EventBus.window_broken.emit(hit_tile_pos)
 			EventBus.event_logged.emit("💥 총격으로 창문이 깨졌습니다!")
 			if SoundManager: SoundManager.play("hit_melee")
-		queue_free()
+			var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+			if ps: ps.emit("spark", global_position.x, global_position.y, 6)
+			if penetration < 2:
+				queue_free()
+		else:
+			var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+			if ps: ps.emit("spark", global_position.x, global_position.y, 3)
+			queue_free()
 	elif body is StaticBody2D:
+		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+		if ps: ps.emit("spark", global_position.x, global_position.y, 4)
 		queue_free()
 
 func _draw() -> void:
-	# 노란색 발광 예광탄
-	draw_line(Vector2(-6, 0), Vector2(6, 0), Color(1.0, 0.9, 0.3), 2.5)
-	draw_circle(Vector2(6, 0), 2.0, Color.WHITE)
+	if shooter_group == "enemies":
+		# 적군 사격 예광탄 (주황/붉은색)
+		draw_line(Vector2(-10, 0), Vector2(6, 0), Color(1.0, 0.35, 0.15, 0.9), 2.5)
+		draw_circle(Vector2(6, 0), 2.0, Color(1.0, 0.8, 0.6))
+	else:
+		# 아군 예광탄 (노란색/청백색 고관통 구분)
+		var trail_col = Color(0.6, 0.9, 1.0, 0.95) if penetration >= 4 else Color(1.0, 0.9, 0.3, 0.95)
+		draw_line(Vector2(-12, 0), Vector2(6, 0), trail_col, 2.5)
+		draw_circle(Vector2(6, 0), 2.0, Color.WHITE)

@@ -335,10 +335,12 @@ func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	
 	var enemy = EnemyScene.instantiate()
 	enemy.position = spawn_pos
-	# 무작위 적 타입 결정 (일반, 러너, 탱커)
+	# 무작위 적 타입 결정 (일반 좀비, 러너, 탱커, 무장 스캐브, 정예 레이더)
 	var r = randf()
-	if r < 0.2: enemy.enemy_type = 1 # RUNNER
-	elif r < 0.35: enemy.enemy_type = 2 # TANK
+	if r < 0.08: enemy.enemy_type = 4 # RAIDER (정예 무장 용병)
+	elif r < 0.25: enemy.enemy_type = 3 # SCAV (무장 약탈자)
+	elif r < 0.43: enemy.enemy_type = 1 # RUNNER
+	elif r < 0.55: enemy.enemy_type = 2 # TANK
 	else: enemy.enemy_type = 0 # ZOMBIE
 	
 	entities_layer.add_child(enemy)
