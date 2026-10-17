@@ -83,6 +83,7 @@ class GameEvent:
 	var data: Dictionary
 	var title: String
 	var description: String
+	var effects: Dictionary = {}
 	var display_timer: float = 5.0
 	
 	func _init(event_id: String, event_data: Dictionary) -> void:
@@ -90,6 +91,7 @@ class GameEvent:
 		data = event_data
 		title = data.get("title", "이벤트")
 		description = data.get("description", "")
+		effects = data.get("effects", {})
 		
 	func apply_effects(player_data: Dictionary) -> void:
 		var effects = data.get("effects", {})
