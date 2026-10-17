@@ -16,12 +16,17 @@ enum ItemCategory {
 }
 
 var items: Dictionary = {}
-
+var _cached_item_data: Dictionary = {}
+var _cached_grid_sizes: Dictionary = {}
+var _cached_equip_slots: Dictionary = {}
 
 func _ready():
 	_load_all_items()
 
 func _load_all_items():
+	_cached_item_data.clear()
+	_cached_grid_sizes.clear()
+	_cached_equip_slots.clear()
 	var dir = DirAccess.open("res://data/items/")
 	if dir:
 		dir.list_dir_begin()
@@ -150,32 +155,35 @@ var traders: Dictionary = {
 }
 
 func get_item_data(id: String) -> Dictionary:
-	if items.has(id):
-		var d = items[id].duplicate()
-		d["name"] = id
-		return d
+	if _cached_item_data.has(id):
+		return _cached_item_data[id]
 		
-	# 무기 부품 데이터베이스 조회
-	if WeaponPartsDatabase.PARTS.has(id):
+	var d: Dictionary = {}
+	if items.has(id):
+		d = items[id]
+		if not d.has("name") or d["name"] == "":
+			d["name"] = id
+	elif WeaponPartsDatabase.PARTS.has(id):
 		var p = WeaponPartsDatabase.PARTS[id].duplicate()
 		p["category"] = ItemCategory.TOOL
 		p["stackable"] = false
 		p["max_stack"] = 1
 		p["weight"] = p.get("weight", 0.3)
 		p["description"] = "[총기 부품: %s] %s" % [p.get("slot", ""), p.get("name", id)]
-		return p
-		
-	# 리시버 데이터베이스 조회
-	if WeaponPartsDatabase.RECEIVERS.has(id):
+		d = p
+	elif WeaponPartsDatabase.RECEIVERS.has(id):
 		var r = WeaponPartsDatabase.RECEIVERS[id].duplicate()
 		r["category"] = ItemCategory.WEAPON
 		r["stackable"] = false
 		r["max_stack"] = 1
 		r["type"] = "receiver"
 		r["description"] = "[총기 리시버] %s" % r.get("name", id)
-		return r
+		d = r
+	else:
+		d = {"name": id, "weight": 0.1, "max_stack": 1, "value": 500}
 		
-	return {"name": id, "weight": 0.1, "max_stack": 1, "value": 500}
+	_cached_item_data[id] = d
+	return d
 
 func generate_loot(table_name: String, rolls: int = 3) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
@@ -201,75 +209,78 @@ func _add_to_loot(results: Array, id: String, amount: int) -> void:
 	results.append({"id": id, "amount": amount})
 
 func get_item_grid_size(id: String) -> Vector2i:
+	if _cached_grid_sizes.has(id):
+		return _cached_grid_sizes[id]
+		
 	var data = get_item_data(id)
+	var size = Vector2i(1, 1)
 	if data.has("grid_w") and data.has("grid_h"):
-		return Vector2i(data["grid_w"], data["grid_h"])
+		size = Vector2i(data["grid_w"], data["grid_h"])
+	else:
+		var cat = data.get("category", -1)
+		var type = data.get("type", "")
 		
-	var cat = data.get("category", -1)
-	var type = data.get("type", "")
-	
-	# 무기 부착물/파츠
-	if WeaponPartsDatabase and WeaponPartsDatabase.PARTS.has(id):
-		var pslot = WeaponPartsDatabase.PARTS[id].get("slot", "")
-		if pslot == "barrel" or pslot == "stock":
-			return Vector2i(1, 2)
-		return Vector2i(1, 1)
-	
-	# 무기 및 리시버
-	if cat == ItemCategory.WEAPON or type == "receiver":
-		if type == "melee":
-			return Vector2i(1, 3)
-		elif id == "권총" or id.begins_with("M9") or id.begins_with("MP5"):
-			return Vector2i(1, 2)
-		elif id == "수류탄":
-			return Vector2i(1, 1)
-		elif id == "탄약" or id.contains("9mm") or id.contains("5.56") or id.contains("7.62") or id.contains("12게이지") or id.contains(".45"):
-			return Vector2i(1, 1)
-		else:
-			return Vector2i(2, 4) # 소총, 샷건, 저격총 등
-			
-	# 장비 (헬멧, 조끼, 가방 등)
-	if cat == ItemCategory.EQUIPMENT:
-		var slot = data.get("equip_slot", "")
-		if slot == "helmet": return Vector2i(2, 2)
-		elif slot == "vest": return Vector2i(2, 2)
-		elif slot == "backpack": return Vector2i(2, 3)
-		elif slot == "bottom": return Vector2i(2, 1)
-		return Vector2i(2, 2)
-		
-	# 의료/치료
-	if cat == ItemCategory.MEDICAL:
-		if id.contains("상자") or id.contains("키트"):
-			return Vector2i(2, 2)
-		return Vector2i(1, 1)
-		
-	# 도구
-	if cat == ItemCategory.TOOL:
-		if id.contains("망원경"):
-			return Vector2i(1, 2)
-		return Vector2i(1, 1)
-		
-	return Vector2i(1, 1)
+		# 무기 부착물/파츠
+		if WeaponPartsDatabase and WeaponPartsDatabase.PARTS.has(id):
+			var pslot = WeaponPartsDatabase.PARTS[id].get("slot", "")
+			if pslot == "barrel" or pslot == "stock":
+				size = Vector2i(1, 2)
+			else:
+				size = Vector2i(1, 1)
+		elif cat == ItemCategory.WEAPON or type == "receiver":
+			if type == "melee":
+				size = Vector2i(1, 3)
+			elif id == "권총" or id.begins_with("M9") or id.begins_with("MP5"):
+				size = Vector2i(1, 2)
+			elif id == "수류탄":
+				size = Vector2i(1, 1)
+			elif id == "탄약" or id.contains("9mm") or id.contains("5.56") or id.contains("7.62") or id.contains("12게이지") or id.contains(".45"):
+				size = Vector2i(1, 1)
+			else:
+				size = Vector2i(2, 4) # 소총, 샷건, 저격총 등
+		elif cat == ItemCategory.EQUIPMENT:
+			var slot = data.get("equip_slot", "")
+			if slot == "helmet": size = Vector2i(2, 2)
+			elif slot == "vest": size = Vector2i(2, 2)
+			elif slot == "backpack": size = Vector2i(2, 3)
+			elif slot == "bottom": size = Vector2i(2, 1)
+			else: size = Vector2i(2, 2)
+		elif cat == ItemCategory.MEDICAL:
+			if id.contains("상자") or id.contains("키트"):
+				size = Vector2i(2, 2)
+			else:
+				size = Vector2i(1, 1)
+		elif cat == ItemCategory.TOOL:
+			if id.contains("망원경"):
+				size = Vector2i(1, 2)
+			else:
+				size = Vector2i(1, 1)
+				
+	_cached_grid_sizes[id] = size
+	return size
 
 func get_item_equip_slot(id: String) -> String:
+	if _cached_equip_slots.has(id):
+		return _cached_equip_slots[id]
+		
 	var data = get_item_data(id)
+	var slot = ""
 	if data.has("equip_slot"):
-		return data["equip_slot"]
-		
-	var cat = data.get("category", -1)
-	var type = data.get("type", "")
-	
-	if cat == ItemCategory.WEAPON or type == "receiver":
-		if id == "수류탄":
-			return "throwable"
-		elif type == "melee":
-			return "melee"
-		elif id == "권총" or id.begins_with("M9"):
-			return "sidearm"
-		else:
-			return "primary" # primary1 / primary2 호환
+		slot = data["equip_slot"]
+	else:
+		var cat = data.get("category", -1)
+		var type = data.get("type", "")
+		if cat == ItemCategory.WEAPON or type == "receiver":
+			if id == "수류탄":
+				slot = "throwable"
+			elif type == "melee":
+				slot = "melee"
+			elif id == "권총" or id.begins_with("M9"):
+				slot = "sidearm"
+			else:
+				slot = "primary" # primary1 / primary2 호환
+		elif WeaponPartsDatabase.PARTS.has(id):
+			slot = "attachment"
 			
-	if WeaponPartsDatabase.PARTS.has(id):
-		return "attachment"
-		
-	return ""
+	_cached_equip_slots[id] = slot
+	return slot
