@@ -38,11 +38,11 @@ static func is_slot_compatible(item_id: String, slot_name: String) -> bool:
 	var e_slot = ItemDatabase.get_item_equip_slot(item_id)
 	
 	if slot_name == "helmet":
-		return e_slot == "helmet" or cat == ItemDatabase.ItemCategory.HELMET or item_id.contains("헬멧") or item_id.contains("방독면")
+		return e_slot == "helmet" or item_id.contains("헬멧") or item_id.contains("방독면")
 	elif slot_name == "vest":
-		return e_slot == "vest" or cat == ItemDatabase.ItemCategory.VEST or item_id.contains("방탄") or item_id.contains("조끼")
+		return e_slot == "vest" or item_id.contains("방탄") or item_id.contains("조끼")
 	elif slot_name == "backpack":
-		return e_slot == "backpack" or cat == ItemDatabase.ItemCategory.BACKPACK or item_id.contains("가방") or item_id.contains("배낭")
+		return e_slot == "backpack" or item_id.contains("가방") or item_id.contains("배낭")
 	elif slot_name == "bottom":
 		return e_slot == "bottom" or item_id.contains("운동화") or item_id.contains("신발")
 	elif slot_name.begins_with("primary"):
@@ -50,7 +50,7 @@ static func is_slot_compatible(item_id: String, slot_name: String) -> bool:
 	elif slot_name == "sidearm":
 		return idata.get("type", "") == "melee" or item_id.contains("권총") or item_id.begins_with("M9") or item_id.contains("리볼버") or e_slot == "sidearm" or e_slot == "melee"
 	elif slot_name == "throwable":
-		return cat == ItemDatabase.ItemCategory.THROWABLE or item_id.contains("수류탄") or item_id.contains("연막") or item_id.contains("화염") or e_slot == "throwable"
+		return item_id.contains("수류탄") or item_id.contains("연막") or item_id.contains("화염") or e_slot == "throwable"
 	elif slot_name == "pouch":
 		return false
 	return false
