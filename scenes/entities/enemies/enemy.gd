@@ -1,7 +1,7 @@
 # res://scenes/entities/enemies/enemy.gd
 extends CharacterBody2D
 
-enum EnemyType { ZOMBIE, RUNNER, TANK, SCAV, RAIDER }
+enum EnemyType { ZOMBIE, RUNNER, TANK, SCAV, RAIDER, BOSS }
 enum State { IDLE, WANDER, CHASE, ATTACK, INVESTIGATE, HURT, DEAD }
 
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
@@ -15,9 +15,13 @@ var speed: float = 75.0
 var damage: float = 12.0
 var attack_cooldown: float = 1.0
 var attack_timer: float = 0.0
+var armor_tier: int = 0
+var has_used_medkit: bool = false
 
 var current_state: State = State.IDLE
 var target_player: CharacterBody2D = null
+var target_entity: Node2D = null
+var faction_scan_timer: float = 0.0
 var detection_radius: float = 240.0
 var attack_radius: float = 28.0
 
@@ -54,6 +58,8 @@ func _exit_tree() -> void:
 
 func _setup_stats_by_type() -> void:
 	is_ranged_human = false
+	armor_tier = 0
+	has_used_medkit = false
 	match enemy_type:
 		EnemyType.ZOMBIE:
 			max_hp = 40.0
@@ -71,10 +77,12 @@ func _setup_stats_by_type() -> void:
 			max_hp = 120.0
 			speed = 45.0
 			damage = 25.0
+			armor_tier = 1
 			detection_radius = 220.0
 			attack_radius = 34.0
 		EnemyType.SCAV:
 			is_ranged_human = true
+			armor_tier = 1
 			max_hp = 55.0
 			speed = 82.0
 			damage = 10.0
@@ -85,6 +93,7 @@ func _setup_stats_by_type() -> void:
 			mag_ammo = 8
 		EnemyType.RAIDER:
 			is_ranged_human = true
+			armor_tier = 2
 			max_hp = 95.0
 			speed = 94.0
 			damage = 14.0
@@ -93,8 +102,20 @@ func _setup_stats_by_type() -> void:
 			attack_radius = 290.0
 			max_mag_ammo = 15
 			mag_ammo = 15
+		EnemyType.BOSS:
+			is_ranged_human = true
+			armor_tier = 3
+			max_hp = 260.0
+			speed = 90.0
+			damage = 18.0
+			attack_cooldown = 0.28
+			detection_radius = 420.0
+			attack_radius = 330.0
+			max_mag_ammo = 30
+			mag_ammo = 30
 	hp = max_hp
 	strafe_sign = 1.0 if randf() > 0.5 else -1.0
+	faction_scan_timer = randf_range(0.1, 0.5)
 
 func _on_noise_created(pos: Vector2, radius: float, source_type: String) -> void:
 	if hp <= 0:
@@ -119,12 +140,35 @@ func _has_line_of_sight(target_pos: Vector2) -> bool:
 	var ray_query = PhysicsRayQueryParameters2D.new()
 	ray_query.from = global_position
 	ray_query.to = target_pos
-	ray_query.exclude = [self]
+	var excl: Array = [self]
 	if is_instance_valid(target_player):
-		ray_query.exclude.append(target_player)
+		excl.append(target_player)
+	if is_instance_valid(target_entity):
+		excl.append(target_entity)
+	ray_query.exclude = excl
 	ray_query.collision_mask = 1
 	var res = space_state.intersect_ray(ray_query)
 	return res.is_empty()
+
+func _scan_hostile_target() -> Node2D:
+	var best_target: Node2D = null
+	var best_dist: float = detection_radius
+	if is_instance_valid(target_player):
+		var p_dist = global_position.distance_to(target_player.global_position)
+		if p_dist <= detection_radius:
+			best_target = target_player
+			best_dist = p_dist
+	# AI vs AI 팩션 교전: 인간형 무장 세력(Scav/Raider/Boss) vs 감염체(Zombie/Runner/Tank)
+	for node in get_tree().get_nodes_in_group("enemies"):
+		if node == self or not is_instance_valid(node) or node.get("hp") == null or node.hp <= 0:
+			continue
+		var other_human = bool(node.get("is_ranged_human"))
+		if other_human != is_ranged_human:
+			var d = global_position.distance_to(node.global_position)
+			if d < best_dist:
+				best_dist = d
+				best_target = node
+	return best_target
 
 func _physics_process(delta: float) -> void:
 	if hp <= 0:
@@ -155,6 +199,15 @@ func _physics_process(delta: float) -> void:
 		strafe_change_timer = randf_range(1.2, 2.6)
 		strafe_sign = -strafe_sign
 	
+	# 인간형 무장 적 응급 치료 (체력 35% 이하 시 1회 자가 회복)
+	if is_ranged_human and not has_used_medkit and (hp / max_hp) <= 0.35:
+		has_used_medkit = true
+		hp = min(max_hp, hp + 35.0)
+		alert_timer = 1.5
+		alert_icon_type = "?"
+		if has_node("Visuals"):
+			get_node("Visuals").queue_redraw()
+	
 	# 넉백 감쇠
 	if knockback_velocity.length() > 5.0:
 		knockback_velocity = knockback_velocity.move_toward(Vector2.ZERO, 500.0 * delta)
@@ -162,8 +215,24 @@ func _physics_process(delta: float) -> void:
 		move_and_slide()
 		return
 		
+	var player_dist: float = 9999.0
 	if is_instance_valid(target_player):
-		var dist = global_position.distance_to(target_player.global_position)
+		player_dist = global_position.distance_to(target_player.global_position)
+		
+	# AI LOD: 화면 밖 원거리(850px 초과) 엔티티는 무거운 레이캐스트 및 물리 연산 생략
+	if player_dist > 850.0:
+		if has_node("Visuals"):
+			get_node("Visuals").modulate.a = 0.0
+		return
+		
+	faction_scan_timer -= delta
+	if faction_scan_timer <= 0.0 or not is_instance_valid(target_entity):
+		faction_scan_timer = 0.35
+		target_entity = _scan_hostile_target()
+		
+	var active_target: Node2D = target_entity if is_instance_valid(target_entity) else target_player
+	if is_instance_valid(active_target):
+		var dist = global_position.distance_to(active_target.global_position)
 		
 		# 감지 범위 내 진입 시 추적
 		if dist <= detection_radius:
@@ -201,22 +270,22 @@ func _physics_process(delta: float) -> void:
 					current_state = State.IDLE
 					wander_timer = 2.0
 			State.CHASE:
-				if is_ranged_human and dist <= attack_radius and _has_line_of_sight(target_player.global_position):
-					var dir_to_p = global_position.direction_to(target_player.global_position)
-					rotation = lerp_angle(rotation, dir_to_p.angle(), delta * 12.0)
+				if is_ranged_human and dist <= attack_radius and _has_line_of_sight(active_target.global_position):
+					var dir_to_t = global_position.direction_to(active_target.global_position)
+					rotation = lerp_angle(rotation, dir_to_t.angle(), delta * 12.0)
 					# 전술 무빙: 너무 가까우면 뒷걸음질, 적정 거리면 좌우 스트레이핑
 					if dist < 95.0:
-						velocity = (-dir_to_p + dir_to_p.orthogonal() * strafe_sign * 0.5).normalized() * (speed * 0.75)
+						velocity = (-dir_to_t + dir_to_t.orthogonal() * strafe_sign * 0.5).normalized() * (speed * 0.75)
 					else:
-						velocity = (dir_to_p.orthogonal() * strafe_sign) * (speed * 0.55)
-					_try_attack()
+						velocity = (dir_to_t.orthogonal() * strafe_sign) * (speed * 0.55)
+					_try_attack(active_target)
 					if has_node("Visuals"):
 						get_node("Visuals").queue_redraw()
 				elif not is_ranged_human and dist <= attack_radius:
 					velocity = Vector2.ZERO
-					var dir_to_p = global_position.direction_to(target_player.global_position)
-					rotation = dir_to_p.angle()
-					_try_attack()
+					var dir_to_t = global_position.direction_to(active_target.global_position)
+					rotation = dir_to_t.angle()
+					_try_attack(active_target)
 				else:
 					# 앞쪽 창문 타일 감지 및 파괴 침입
 					var forward_pos = global_position + Vector2.RIGHT.rotated(rotation) * 20.0
@@ -232,19 +301,19 @@ func _physics_process(delta: float) -> void:
 								if SoundManager: SoundManager.play("hit_melee")
 								attack_timer = 1.0
 					
-					var steer_dir = _get_steered_direction(target_player.global_position)
+					var steer_dir = _get_steered_direction(active_target.global_position)
 					rotation = lerp_angle(rotation, steer_dir.angle(), delta * 10.0)
 					velocity = steer_dir * speed
 					
 		move_and_slide()
 		
-		# 걷기 애니메이션 (몸 흔들림) 및 전술 시야(LoS/FoV) 가시성 페이드
+		# 걷기 애니메이션 (몸 흔들림) 및 전술 시야(LoS/FoV) 가시성 마스킹
 		if has_node("Visuals"):
 			var visuals = get_node("Visuals")
 			if velocity.length() > 5.0:
 				var bob = sin(Time.get_ticks_msec() * 0.01 * (speed / 70.0)) * 2.0
 				visuals.position.y = bob
-			_update_tactical_visibility(delta, dist, visuals)
+			_update_tactical_visibility(delta, player_dist, visuals)
 
 func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> void:
 	if not is_instance_valid(target_player):
@@ -252,17 +321,15 @@ func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> 
 	var has_los = _has_line_of_sight(target_player.global_position)
 	var p_forward = Vector2.RIGHT.rotated(target_player.rotation)
 	var dir_from_p = target_player.global_position.direction_to(global_position)
-	var in_fov = p_forward.dot(dir_from_p) >= -0.15 # 약 195도 전방 시야
+	var in_fov = p_forward.dot(dir_from_p) >= 0.34 # 전방 약 140도 시야각
+	var in_close = dist <= 85.0 # 주변 360도 근접 인지 반경
 	
-	var target_alpha = 1.0
-	if dist <= 90.0:
-		target_alpha = 1.0 if has_los else 0.35
-	elif not has_los:
-		target_alpha = 0.25 if velocity.length() > 15.0 else 0.12
-	elif not in_fov and dist > 160.0:
-		target_alpha = 0.45
+	# 벽 뒤(LoS 차단)이거나 시야각/근접 반경 밖이면 완전히 마스킹(alpha 0.0)
+	var target_alpha = 0.0
+	if has_los and (in_close or in_fov):
+		target_alpha = 1.0
 		
-	visuals.modulate.a = lerp(visuals.modulate.a, target_alpha, clamp(delta * 10.0, 0.0, 1.0))
+	visuals.modulate.a = lerp(visuals.modulate.a, target_alpha, clamp(delta * 14.0, 0.0, 1.0))
 
 func _get_steered_direction(target_pos: Vector2) -> Vector2:
 	var desired_dir = global_position.direction_to(target_pos)
@@ -277,7 +344,7 @@ func _get_steered_direction(target_pos: Vector2) -> Vector2:
 		var angle = (float(i) / float(num_rays)) * TAU
 		var dir = Vector2.RIGHT.rotated(angle)
 		
-		# 플레이어 방향과의 일치도 (Dot product)
+		# 목표 방향과의 일치도 (Dot product)
 		var interest = dir.dot(desired_dir)
 		
 		# 전방 장애물 레이캐스트
@@ -299,44 +366,51 @@ func _get_steered_direction(target_pos: Vector2) -> Vector2:
 			
 	return best_dir
 
-func _try_attack() -> void:
+func _try_attack(victim: Node2D = null) -> void:
 	if attack_timer > 0 or reload_timer > 0:
 		return
-	if not is_instance_valid(target_player):
+	var target_node: Node2D = victim if is_instance_valid(victim) else target_player
+	if not is_instance_valid(target_node):
 		return
 		
 	if is_ranged_human:
 		if mag_ammo <= 0:
-			reload_timer = 1.9 if enemy_type == EnemyType.SCAV else 1.5
+			reload_timer = 1.9 if enemy_type == EnemyType.SCAV else 1.4
 			return
 		mag_ammo -= 1
 		attack_timer = attack_cooldown * randf_range(0.85, 1.2)
 		
-		var aim_dir = global_position.direction_to(target_player.global_position)
-		var spread_deg = 7.5 if enemy_type == EnemyType.SCAV else 4.0
+		var aim_dir = global_position.direction_to(target_node.global_position)
+		var spread_deg = 7.5 if enemy_type == EnemyType.SCAV else (2.8 if enemy_type == EnemyType.BOSS else 4.0)
 		var shot_dir = aim_dir.rotated(deg_to_rad(randf_range(-spread_deg, spread_deg)))
 		var muzzle_pos = global_position + aim_dir * 18.0
 		
 		var bullet = BulletScene.instantiate()
 		get_tree().current_scene.add_child(bullet)
-		bullet.setup(muzzle_pos, shot_dir, damage, attack_radius * 1.35, 1, "enemies", 540.0 if enemy_type == EnemyType.SCAV else 640.0)
+		var pen = 3 if enemy_type == EnemyType.BOSS else (2 if enemy_type == EnemyType.RAIDER else 1)
+		var b_speed = 700.0 if enemy_type == EnemyType.BOSS else (540.0 if enemy_type == EnemyType.SCAV else 640.0)
+		bullet.setup(muzzle_pos, shot_dir, damage, attack_radius * 1.35, pen, "enemies", b_speed)
 		
 		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
 		if ps:
 			ps.emit("muzzle", muzzle_pos.x, muzzle_pos.y, 3, shot_dir.angle())
+			ps.emit("bullet_shell", global_position.x, global_position.y, 1, rotation - PI * 0.5)
 		if SoundManager:
 			SoundManager.play("hit_ranged")
 		EventBus.noise_created.emit(global_position, 450.0, "gunshot")
 	else:
 		attack_timer = attack_cooldown
-		EventBus.player_damaged.emit(damage, "zombie")
+		if target_node == target_player:
+			EventBus.player_damaged.emit(damage, "zombie")
+		elif target_node.has_method("take_damage"):
+			target_node.take_damage(damage, global_position.direction_to(target_node.global_position))
 		if SoundManager:
 			SoundManager.play("hit_melee")
 
 func take_damage(amount: float, hit_dir: Vector2) -> void:
 	hp -= amount
 	current_state = State.CHASE # 피격 시 즉시 추적 모드
-	knockback_velocity = hit_dir.normalized() * (110.0 if is_ranged_human else 180.0)
+	knockback_velocity = hit_dir.normalized() * (65.0 if enemy_type == EnemyType.BOSS else (110.0 if is_ranged_human else 180.0))
 	
 	if has_node("Visuals"):
 		get_node("Visuals").queue_redraw()
@@ -381,6 +455,11 @@ func _die() -> void:
 		EnemyType.RAIDER:
 			type_str = "raider"
 			faction_str = "raider"
+		EnemyType.BOSS:
+			type_str = "boss"
+			faction_str = "raider"
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("★ 💀 [보스 처치] 구역 지휘관 '강철의 보스'를 사살했습니다! 최고급 전리품을 확인하십시오!")
 	EventBus.enemy_killed.emit(type_str, faction_str, global_position)
 	_spawn_loot_drop()
 	queue_free()
@@ -440,6 +519,12 @@ func _spawn_loot_drop() -> void:
 				{"id": "2레벨_헬멧", "amount": 1}
 			]
 			drops.append(high_pool.pick_random())
+		EnemyType.BOSS:
+			drops.append({"id": "6B43 6A급 중방탄복", "amount": 1})
+			drops.append({"id": "알틴 방탄 헬멧", "amount": 1})
+			drops.append({"id": "M4A1 카빈" if randf() > 0.5 else "AWM 저격소총", "amount": 1})
+			drops.append({"id": "군용 수술 키트", "amount": 1})
+			drops.append({"id": "기밀 문서", "amount": 1})
 			
 	for i in range(drops.size()):
 		var d = drops[i]
@@ -457,6 +542,7 @@ func _on_visuals_draw() -> void:
 	if enemy_type == EnemyType.TANK: scale_f = 1.4
 	elif enemy_type == EnemyType.RUNNER: scale_f = 0.85
 	elif enemy_type == EnemyType.RAIDER: scale_f = 1.08
+	elif enemy_type == EnemyType.BOSS: scale_f = 1.28
 	
 	# 색상 정의
 	var body_color = Color(0.3, 0.45, 0.3)
@@ -473,13 +559,15 @@ func _on_visuals_draw() -> void:
 	elif enemy_type == EnemyType.RAIDER:
 		body_color = Color(0.78, 0.65, 0.52)
 		cloth_color = Color(0.22, 0.28, 0.22)
+	elif enemy_type == EnemyType.BOSS:
+		body_color = Color(0.78, 0.65, 0.52)
+		cloth_color = Color(0.16, 0.14, 0.18)
 		
-	# --- 1. 좀비 몸통 (구부정한 어깨와 불규칙한 체형을 다각형으로 표현) ---
+	# --- 1. 몸통 다각형 ---
 	var shoulder_width = 14.0 * scale_f
 	var body_length = 10.0 * scale_f
 	var chest_width = 12.0 * scale_f
 	
-	# 불규칙한 옷/몸통 다각형 (외곽선용)
 	var body_points = PackedVector2Array([
 		Vector2(-body_length, -chest_width),  # 등 좌측
 		Vector2(-body_length, chest_width),   # 등 우측
@@ -492,10 +580,9 @@ func _on_visuals_draw() -> void:
 	var colors_outline = PackedColorArray()
 	var colors_cloth = PackedColorArray()
 	for i in range(body_points.size()):
-		colors_outline.append(Color(0.1, 0.1, 0.1))
+		colors_outline.append(Color(0.95, 0.75, 0.15) if enemy_type == EnemyType.BOSS else Color(0.1, 0.1, 0.1))
 		colors_cloth.append(cloth_color)
 		
-	# 약간 더 크게 외곽선 폴리곤 그리기
 	var outline_points = PackedVector2Array()
 	for p in body_points:
 		outline_points.append(p * 1.15)
@@ -503,13 +590,16 @@ func _on_visuals_draw() -> void:
 	visuals.draw_polygon(outline_points, colors_outline)
 	visuals.draw_polygon(body_points, colors_cloth)
 	
-	# --- 2. 찢어진 옷 (다각형 틈새로 피부가 드러남) ---
-	var torn_points1 = PackedVector2Array([
-		Vector2(body_length*0.5, -shoulder_width*0.6),
-		Vector2(0, -shoulder_width*0.8),
-		Vector2(body_length*0.2, -shoulder_width*0.4)
-	])
-	visuals.draw_polygon(torn_points1, PackedColorArray([body_color, body_color, body_color]))
+	# --- 2. 찢어진 옷 또는 중장갑 패드 ---
+	if enemy_type == EnemyType.BOSS:
+		visuals.draw_rect(Rect2(Vector2(-8, -14), Vector2(16, 28)), Color(0.55, 0.12, 0.12))
+	else:
+		var torn_points1 = PackedVector2Array([
+			Vector2(body_length*0.5, -shoulder_width*0.6),
+			Vector2(0, -shoulder_width*0.8),
+			Vector2(body_length*0.2, -shoulder_width*0.4)
+		])
+		visuals.draw_polygon(torn_points1, PackedColorArray([body_color, body_color, body_color]))
 	
 	if enemy_type == EnemyType.TANK:
 		var torn_points2 = PackedVector2Array([
@@ -519,7 +609,7 @@ func _on_visuals_draw() -> void:
 		])
 		visuals.draw_polygon(torn_points2, PackedColorArray([body_color, body_color, body_color]))
 		
-	# --- 3. 혈흔 (불규칙 다각형 점) ---
+	# --- 3. 혈흔 ---
 	var hp_ratio = hp / max_hp
 	if hp_ratio < 0.7:
 		var blood1 = PackedVector2Array([Vector2(-4, -4), Vector2(-8, -2), Vector2(-5, 3), Vector2(-2, 0)])
@@ -528,7 +618,7 @@ func _on_visuals_draw() -> void:
 		visuals.draw_polygon(PackedVector2Array([Vector2(4, 5), Vector2(8, 7), Vector2(6, 10), Vector2(2, 8)]), 
 			PackedColorArray([Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9)]))
 
-	# --- 4. 머리 (약간 타원형 혹은 다각형) ---
+	# --- 4. 머리 ---
 	var head_radius_x = 7.0 * scale_f
 	var head_radius_y = 8.0 * scale_f
 	var head_offset = Vector2(body_length * 0.4, 0)
@@ -539,7 +629,6 @@ func _on_visuals_draw() -> void:
 	var sides = 12
 	for i in range(sides):
 		var angle = (i / float(sides)) * TAU
-		# 앞쪽 주둥이를 살짝 뾰족하게
 		var rx = head_radius_x
 		if cos(angle) > 0: rx += 2.0 * scale_f * cos(angle)
 		var p = head_offset + Vector2(cos(angle) * rx, sin(angle) * head_radius_y)
@@ -556,26 +645,29 @@ func _on_visuals_draw() -> void:
 	
 	var eye_offset = head_offset + Vector2(head_radius_x * 0.5, 0)
 	if is_ranged_human:
-		# 인간형 적 모자/전술 헬멧 및 방탄 조끼
-		if enemy_type == EnemyType.RAIDER:
+		if enemy_type == EnemyType.BOSS:
+			visuals.draw_circle(head_offset, 8.6 * scale_f, Color(0.18, 0.18, 0.22))
+			visuals.draw_arc(head_offset, 8.6 * scale_f, 0, TAU, 16, Color(0.95, 0.78, 0.2), 1.8)
+			visuals.draw_rect(Rect2(head_offset + Vector2(2, -6.5), Vector2(5.0, 13.0)), Color(0.95, 0.2, 0.15, 0.95))
+		elif enemy_type == EnemyType.RAIDER:
 			visuals.draw_rect(Rect2(Vector2(-6, -10), Vector2(12, 20)), Color(0.15, 0.2, 0.15))
 			visuals.draw_circle(head_offset, 7.8 * scale_f, Color(0.22, 0.26, 0.22))
-			visuals.draw_rect(Rect2(head_offset + Vector2(2, -5.5), Vector2(4.5, 11.0)), Color(0.1, 0.75, 0.35, 0.9)) # 야간투시경/바이저
+			visuals.draw_rect(Rect2(head_offset + Vector2(2, -5.5), Vector2(4.5, 11.0)), Color(0.1, 0.75, 0.35, 0.9))
 		else:
-			visuals.draw_arc(head_offset, 6.5 * scale_f, PI * 0.4, PI * 1.6, 10, Color(0.55, 0.18, 0.15), 3.0) # 스캐브 두건/비니
+			visuals.draw_arc(head_offset, 6.5 * scale_f, PI * 0.4, PI * 1.6, 10, Color(0.55, 0.18, 0.15), 3.0)
 			visuals.draw_circle(eye_offset + Vector2(0, -3.0*scale_f), 1.3*scale_f, Color(0.15, 0.15, 0.15))
 			visuals.draw_circle(eye_offset + Vector2(0, 3.0*scale_f), 1.3*scale_f, Color(0.15, 0.15, 0.15))
 			
 		# 총기 파지 자세 및 총기 렌더링
-		var gun_len = 22.0 if enemy_type == EnemyType.RAIDER else 15.0
+		var gun_len = 26.0 if enemy_type == EnemyType.BOSS else (22.0 if enemy_type == EnemyType.RAIDER else 15.0)
 		visuals.draw_line(Vector2(2, 8), Vector2(12, 4), cloth_color, 4.0)
 		visuals.draw_line(Vector2(2, -8), Vector2(14, 1), cloth_color, 4.0)
 		visuals.draw_circle(Vector2(12, 4), 2.5, body_color)
 		visuals.draw_circle(Vector2(14, 1), 2.5, body_color)
-		visuals.draw_line(Vector2(6, 2), Vector2(6 + gun_len, 2), Color(0.14, 0.15, 0.18), 3.2)
-		if enemy_type == EnemyType.RAIDER and current_state == State.CHASE and reload_timer <= 0:
-			# 정예 레이더 전술 레이저 포인터
-			visuals.draw_line(Vector2(6 + gun_len, 2), Vector2(115, 2), Color(1.0, 0.15, 0.15, 0.42), 1.2)
+		visuals.draw_line(Vector2(6, 2), Vector2(6 + gun_len, 2), Color(0.14, 0.15, 0.18), 3.6 if enemy_type == EnemyType.BOSS else 3.2)
+		if (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) and current_state == State.CHASE and reload_timer <= 0:
+			var laser_col = Color(1.0, 0.8, 0.15, 0.55) if enemy_type == EnemyType.BOSS else Color(1.0, 0.15, 0.15, 0.42)
+			visuals.draw_line(Vector2(6 + gun_len, 2), Vector2(135, 2), laser_col, 1.4)
 	else:
 		# 붉은 눈 (좀비 시선 방향)
 		visuals.draw_circle(eye_offset + Vector2(0, -3.5*scale_f), 1.5*scale_f, Color.RED)
@@ -625,32 +717,28 @@ func _on_visuals_draw() -> void:
 		var r_ratio = clamp(1.0 - (reload_timer / 1.9), 0.0, 1.0)
 		visuals.draw_rect(Rect2(r_pos, Vector2(r_w * r_ratio, 3.0)), Color(1.0, 0.85, 0.25))
 	
-	# HP 바 (피격 시 표시)
-	if hp < max_hp and hp > 0:
-		var bar_w = 26.0
-		var bar_h = 4.0
+	# HP 바 (보스는 상시 표시, 일반 적은 피격 시 표시)
+	if (hp < max_hp or enemy_type == EnemyType.BOSS) and hp > 0:
+		var bar_w = 38.0 if enemy_type == EnemyType.BOSS else 26.0
+		var bar_h = 5.0 if enemy_type == EnemyType.BOSS else 4.0
 		var bar_pos = Vector2(-bar_w/2.0, -18.0 * scale_f - 10.0)
-		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.2, 0.2, 0.2))
+		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.15, 0.15, 0.18))
 		var fill_w = (hp / max_hp) * bar_w
-		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), Color(0.9, 0.2, 0.2))
+		var bar_col = Color(1.0, 0.75, 0.15) if enemy_type == EnemyType.BOSS else Color(0.9, 0.2, 0.2)
+		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), bar_col)
 
 	# 느낌표/물음표 경고 아이콘 (소음 감지 또는 플레이어 발견 시)
 	if alert_timer > 0:
 		var icon_pos = Vector2(0, -22.0 * scale_f - 12.0)
 		var icon_col = Color(1.0, 0.2, 0.2) if alert_icon_type == "!" else Color(1.0, 0.8, 0.2)
-		# 배경 원 (깜빡임 효과)
 		var bg_alpha = clamp(alert_timer, 0.0, 1.0)
 		visuals.draw_circle(icon_pos, 8.0, Color(0.1, 0.1, 0.1, 0.8 * bg_alpha))
 		visuals.draw_arc(icon_pos, 8.0, 0, TAU, 16, icon_col * Color(1, 1, 1, bg_alpha), 1.5)
 		
 		if alert_icon_type == "!":
-			# 느낌표 막대
 			visuals.draw_line(icon_pos + Vector2(0, -4), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.5)
-			# 느낌표 점
 			visuals.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
 		else:
-			# 물음표 점
 			visuals.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
-			# 물음표 곡선
 			visuals.draw_arc(icon_pos + Vector2(0, -2), 3.0, -PI, 0, 8, icon_col * Color(1, 1, 1, bg_alpha), 2.0)
 			visuals.draw_line(icon_pos + Vector2(3, -2), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.0)

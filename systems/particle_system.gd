@@ -52,17 +52,52 @@ class P:
 			return max(0.5, size * (life / max_life))
 		return size
 
+const MAX_DECALS: int = 180
+var decals: Array = [] # { "x": float, "y": float, "size": float, "color": Color, "life": float, "is_shell": bool, "rot": float }
+
+func add_decal(x: float, y: float, sz: float, col: Color, is_shell: bool = false, rot: float = 0.0) -> void:
+	if decals.size() >= MAX_DECALS:
+		decals.pop_front()
+	decals.append({
+		"x": x,
+		"y": y,
+		"size": sz,
+		"color": col,
+		"life": 45.0,
+		"is_shell": is_shell,
+		"rot": rot
+	})
+
 func _process(delta: float) -> void:
 	var i = particles.size() - 1
 	while i >= 0:
 		if not particles[i].update(delta):
 			particles.remove_at(i)
 		i -= 1
+		
+	var di = decals.size() - 1
+	while di >= 0:
+		decals[di]["life"] -= delta
+		if decals[di]["life"] <= 0.0:
+			decals.remove_at(di)
+		di -= 1
 	
-	if particles.size() > 0:
+	if particles.size() > 0 or decals.size() > 0:
 		queue_redraw()
 
 func _draw() -> void:
+	# 1. 바닥 지속성 데칼 (혈흔 / 탄피)
+	for d in decals:
+		var d_alpha = clamp(float(d["life"]) / 8.0, 0.0, 1.0) * d["color"].a
+		var d_col = Color(d["color"].r, d["color"].g, d["color"].b, d_alpha)
+		var d_pos = Vector2(d["x"], d["y"])
+		if d.get("is_shell", false):
+			var dir = Vector2.RIGHT.rotated(d.get("rot", 0.0)) * 2.2
+			draw_line(d_pos - dir, d_pos + dir, d_col, 1.8)
+		else:
+			draw_circle(d_pos, d["size"], d_col)
+
+	# 2. 활성 파티클
 	for p in particles:
 		var alpha = p.get_alpha()
 		var sz = p.get_size()
@@ -80,6 +115,13 @@ func emit(preset: String, x: float, y: float, count: int = 1, angle: float = 0.0
 	if quality <= 0.0: return
 	var actual_count = int(count * quality)
 	if actual_count <= 0: actual_count = 1
+	
+	if preset == "blood":
+		add_decal(x + randf_range(-8.0, 8.0), y + randf_range(-8.0, 8.0), randf_range(3.0, 6.5), Color(0.48, 0.05, 0.05, 0.65), false)
+	elif preset == "bullet_shell":
+		var eject_a = angle + PI * 0.5 + randf_range(-0.35, 0.35)
+		var drop_dist = randf_range(10.0, 22.0)
+		add_decal(x + cos(eject_a) * drop_dist, y + sin(eject_a) * drop_dist, 2.0, Color(0.88, 0.72, 0.22, 0.85), true, randf() * TAU)
 	
 	for _i in range(actual_count):
 		if particles.size() >= MAX_PARTICLES: break

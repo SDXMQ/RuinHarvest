@@ -53,6 +53,9 @@ var airdrop_count: int = 0
 var max_airdrops: int = 3
 var airdrop_points_data: Array = []
 var weather_particle_timer: float = 0.0
+var crosshair_overlay: Control = null
+var crosshair_spread: float = 12.0
+var boss_entity: Node2D = null
 
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분
@@ -190,9 +193,18 @@ func _ready() -> void:
 	var init_zombies = int(2 * (GameManager.current_world_data.get("world_settings", {}).get("zombie_multiplier", 1.0) if GameManager else 1.0))
 	for i in range(init_zombies):
 		_spawn_enemy_near_player(350.0 + i * 80.0)
+	_spawn_landmark_boss()
 		
 	# 탈출 지점 3개 스폰 (1800~2500px 원거리 배치)
 	_spawn_extraction_zones()
+	
+	# 동적 조준원(Dynamic Crosshair) 오버레이 생성
+	crosshair_overlay = Control.new()
+	crosshair_overlay.name = "DynamicCrosshair"
+	crosshair_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	crosshair_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	crosshair_overlay.draw.connect(_on_crosshair_draw)
+	$UI/HUD.add_child(crosshair_overlay)
 	
 	if EventBus.has_signal("event_logged"):
 		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
@@ -512,11 +524,59 @@ func _on_compass_draw() -> void:
 			compass_bar.draw_colored_polygon(box_mark, Color(1.0, 0.45, 0.15))
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 14, 22), "📦%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
 			
+	# 랜드마크 보스 마커 (붉은 왕관/해골 표식)
+	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
+		var dir_to_boss = player.global_position.direction_to(boss_entity.global_position)
+		var boss_deg = rad_to_deg(dir_to_boss.angle())
+		if boss_deg < 0: boss_deg += 360.0
+		var b_diff = boss_deg - player_deg
+		while b_diff < -180.0: b_diff += 360.0
+		while b_diff > 180.0: b_diff -= 360.0
+		if abs(b_diff) <= fov / 2.0:
+			var bx = center_x + b_diff * pixels_per_deg
+			var b_dist = player.global_position.distance_to(boss_entity.global_position)
+			compass_bar.draw_circle(Vector2(bx, 9), 4.5, Color(0.95, 0.15, 0.2))
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
+			
 	# 정중앙 조준 눈금 (노란 역삼각형)
 	var pointer = PackedVector2Array([
 		Vector2(center_x - 4, 0), Vector2(center_x + 4, 0), Vector2(center_x, 6)
 	])
 	compass_bar.draw_colored_polygon(pointer, Color(1.0, 0.85, 0.2))
+
+func _spawn_landmark_boss() -> void:
+	if not player: return
+	var angle = randf() * TAU
+	var dist = randf_range(580.0, 820.0)
+	var boss_pos = player.global_position + Vector2.RIGHT.rotated(angle) * dist
+	var boss = EnemyScene.instantiate()
+	boss.position = boss_pos
+	boss.enemy_type = 5 # EnemyType.BOSS
+	entities_layer.add_child(boss)
+	boss_entity = boss
+	# 보스 호위 레이더 1기 배치
+	var escort = EnemyScene.instantiate()
+	escort.position = boss_pos + Vector2(36, -24)
+	escort.enemy_type = 4 # EnemyType.RAIDER
+	entities_layer.add_child(escort)
+
+func _on_crosshair_draw() -> void:
+	if not crosshair_overlay or not player or get_tree().paused:
+		return
+	var m_pos = crosshair_overlay.get_local_mouse_position()
+	var gap = clamp(crosshair_spread, 4.0, 48.0)
+	var line_len = 7.0
+	var is_ads = player.player_camera.is_aiming_ads if player.player_camera else false
+	var col = Color(0.25, 1.0, 0.45, 0.88) if is_ads else Color(1.0, 0.96, 0.82, 0.82)
+	var shadow_col = Color(0.0, 0.0, 0.0, 0.65)
+	
+	var dirs = [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
+	for d in dirs:
+		var p1 = m_pos + d * gap
+		var p2 = m_pos + d * (gap + line_len)
+		crosshair_overlay.draw_line(p1, p2, shadow_col, 3.0)
+		crosshair_overlay.draw_line(p1, p2, col, 1.6)
+	crosshair_overlay.draw_circle(m_pos, 1.8, col)
 
 func _spawn_airdrop_crate() -> void:
 	if not player: return
@@ -572,6 +632,19 @@ func _process(delta: float) -> void:
 		chunk_manager.update_chunks(player.global_position)
 		if compass_bar:
 			compass_bar.queue_redraw()
+		if crosshair_overlay:
+			var w_stats = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
+			var acc = float(w_stats.get("accuracy", 78.0))
+			var base_spread = max(5.0, (100.0 - acc) * 0.45)
+			var move_penalty = player.velocity.length() * 0.075
+			var recoil_pen = (player.weapon_handler.recoil_offset * 1.8) if player.weapon_handler else 0.0
+			var target_spread = base_spread + move_penalty + recoil_pen
+			if player.player_camera and player.player_camera.is_aiming_ads:
+				target_spread *= 0.48
+			elif player.is_crouching:
+				target_spread *= 0.72
+			crosshair_spread = lerp(crosshair_spread, target_spread, clamp(delta * 14.0, 0.0, 1.0))
+			crosshair_overlay.queue_redraw()
 		
 		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신
 		if not get_tree().paused and raid_time_remaining > 0:

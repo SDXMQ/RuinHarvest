@@ -49,7 +49,9 @@ func _on_body_entered(body: Node2D) -> void:
 	if shooter_group == "player" and body.is_in_group("player"):
 		return
 	if shooter_group == "enemies" and body.is_in_group("enemies"):
-		return
+		# 인간형 적(Scav/Raider/Boss)이 쏜 총알은 감염체(좀비)를 타격 가능 (AI vs AI 교전)
+		if body.get("is_ranged_human") == true:
+			return
 		
 	if shooter_group == "enemies" and body.is_in_group("player"):
 		hit_targets.append(body)
@@ -64,6 +66,12 @@ func _on_body_entered(body: Node2D) -> void:
 	if body.has_method("take_damage"):
 		hit_targets.append(body)
 		var eff_dmg = _get_effective_damage()
+		# 방어구 등급(armor_tier 1~3) 대비 탄환 관통력(penetration) 비교 공식
+		var target_armor = int(body.get("armor_tier")) if body.get("armor_tier") != null else 0
+		if target_armor > 0 and penetration < target_armor * 2:
+			eff_dmg *= 0.62
+			var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+			if ps: ps.emit("spark", global_position.x, global_position.y, 4)
 		body.take_damage(eff_dmg, direction)
 		# 고관통 탄환(관통력 4 이상)은 첫 번째 적을 관통하여 후방 적에게 60% 피해를 입힘
 		if penetration >= 4 and pierce_count < 1:
