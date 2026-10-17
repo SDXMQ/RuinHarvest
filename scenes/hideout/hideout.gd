@@ -124,6 +124,54 @@ func _ready() -> void:
 	stash_grid_control.draw.connect(_on_stash_grid_draw)
 	stash_grid_control.gui_input.connect(_on_stash_grid_gui_input)
 	
+	# 배낭 & 창고 정렬/빠른 보관 버튼 바 추가
+	var player_vbox = get_node_or_null("CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox")
+	if player_vbox:
+		var p_btn_row = HBoxContainer.new()
+		p_btn_row.add_theme_constant_override("separation", 6)
+		var p_sort_btn = Button.new()
+		p_sort_btn.text = "🔄 배낭 정렬"
+		p_sort_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		p_sort_btn.add_theme_font_size_override("font_size", 11)
+		p_sort_btn.pressed.connect(func():
+			player_grid_mgr.sort_items()
+			if SoundManager: SoundManager.play("menu_select")
+		)
+		p_btn_row.add_child(p_sort_btn)
+		
+		var deposit_all_btn = Button.new()
+		deposit_all_btn.text = "⏩ 창고로 모두 보관"
+		deposit_all_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		deposit_all_btn.add_theme_font_size_override("font_size", 11)
+		deposit_all_btn.pressed.connect(func():
+			var copy_items = player_grid_mgr.items.duplicate(true)
+			for it in copy_items:
+				var rem = stash_grid_mgr.auto_add_item(it.get("id", ""), it.get("amount", 1), it)
+				if rem <= 0:
+					player_grid_mgr.remove_item_by_uid(it.get("uid", ""), false)
+				else:
+					var orig = player_grid_mgr.get_item_by_uid(it.get("uid", ""))
+					if not orig.is_empty(): orig["amount"] = rem
+			player_grid_mgr.grid_changed.emit()
+			stash_grid_mgr.grid_changed.emit()
+			if SoundManager: SoundManager.play("item_pickup")
+		)
+		p_btn_row.add_child(deposit_all_btn)
+		player_vbox.add_child(p_btn_row)
+		player_vbox.move_child(p_btn_row, 1)
+
+	var stash_vbox = get_node_or_null("CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox")
+	if stash_vbox:
+		var s_sort_btn = Button.new()
+		s_sort_btn.text = "🔄 창고 자동 정렬 & 스택 병합  (Ctrl+클릭 / 우클릭: 빠른 이동)"
+		s_sort_btn.add_theme_font_size_override("font_size", 11)
+		s_sort_btn.pressed.connect(func():
+			stash_grid_mgr.sort_items()
+			if SoundManager: SoundManager.play("menu_select")
+		)
+		stash_vbox.add_child(s_sort_btn)
+		stash_vbox.move_child(s_sort_btn, 1)
+	
 	# 장비 슬롯 연결
 	_connect_equipment_slots()
 	
@@ -413,7 +461,10 @@ func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGri
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = grid_mgr.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
-				if Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
+				if Input.is_key_pressed(KEY_CTRL):
+					if tooltip: tooltip.hide()
+					_handle_hideout_quick_action(item, is_player_grid)
+				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
 						var split_item = item.duplicate(true)
 						split_item["amount"] = split_amt
@@ -463,6 +514,9 @@ func _input(event: InputEvent) -> void:
 	if is_dragging and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R or event.physical_keycode == KEY_R:
 			drag_data["rotated"] = not drag_data.get("rotated", false)
+			if drag_preview_node:
+				drag_preview_node.rotation = PI * 0.5 if drag_data["rotated"] else 0.0
+			if SoundManager: SoundManager.play("menu_move")
 			if player_grid_control: player_grid_control.queue_redraw()
 			if stash_grid_control: stash_grid_control.queue_redraw()
 			get_viewport().set_input_as_handled()

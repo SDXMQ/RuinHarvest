@@ -290,3 +290,73 @@ func _mark_grid(target_x: int, target_y: int, w: int, h: int, uid: String) -> vo
 			var gy = target_y + dy
 			if gy >= 0 and gy < grid_map.size() and gx >= 0 and gx < grid_map[gy].size():
 				grid_map[gy][gx] = uid
+
+func sort_items() -> void:
+	if items.is_empty():
+		return
+	var backup_items = items.duplicate(true)
+	
+	# 1. 동일 아이템 스택 병합
+	var merged: Array[Dictionary] = []
+	for raw_item in backup_items:
+		var item = raw_item.duplicate(true)
+		var id = item.get("id", "")
+		var d = ItemDatabase.get_item_data(id)
+		var max_stack = int(d.get("max_stack", 1))
+		var base_size = ItemDatabase.get_item_grid_size(id)
+		item["w"] = base_size.x
+		item["h"] = base_size.y
+		
+		if max_stack > 1:
+			var rem = int(item.get("amount", 1))
+			for ex in merged:
+				if ex.get("id", "") == id and int(ex.get("amount", 1)) < max_stack:
+					var space = max_stack - int(ex.get("amount", 1))
+					var add = min(space, rem)
+					ex["amount"] = int(ex.get("amount", 1)) + add
+					rem -= add
+					if rem <= 0:
+						break
+			while rem > 0:
+				var chunk = min(max_stack, rem)
+				var new_entry = item.duplicate(true)
+				new_entry["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 100000]
+				new_entry["amount"] = chunk
+				merged.append(new_entry)
+				rem -= chunk
+		else:
+			merged.append(item)
+			
+	# 2. 큰 면적 -> 긴 변 -> 이름 순 정렬
+	merged.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var area_a = int(a.get("w", 1)) * int(a.get("h", 1))
+		var area_b = int(b.get("w", 1)) * int(b.get("h", 1))
+		if area_a != area_b:
+			return area_a > area_b
+		var max_a = max(int(a.get("w", 1)), int(a.get("h", 1)))
+		var max_b = max(int(b.get("w", 1)), int(b.get("h", 1)))
+		if max_a != max_b:
+			return max_a > max_b
+		return String(a.get("id", "")) < String(b.get("id", ""))
+	)
+	
+	# 3. 좌상단부터 재배치
+	items.clear()
+	_init_grid_map()
+	var all_placed = true
+	for it in merged:
+		var bw = int(it.get("w", 1))
+		var bh = int(it.get("h", 1))
+		var fit = find_first_fit(bw, bh)
+		if fit["found"]:
+			place_item(it, fit["x"], fit["y"], fit["rotated"])
+		else:
+			all_placed = false
+			break
+			
+	if not all_placed:
+		# 만약 특수한 격자 형태로 인해 모두 들어가지 못했다면 백업 복원
+		items = backup_items
+		_init_grid_map()
+	grid_changed.emit()
+

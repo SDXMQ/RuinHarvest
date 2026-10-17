@@ -238,11 +238,33 @@ func _physics_process(delta: float) -> void:
 					
 		move_and_slide()
 		
-		# 걷기 애니메이션 (몸 흔들림)
-		if velocity.length() > 5.0 and has_node("Visuals"):
+		# 걷기 애니메이션 (몸 흔들림) 및 전술 시야(LoS/FoV) 가시성 페이드
+		if has_node("Visuals"):
 			var visuals = get_node("Visuals")
-			var bob = sin(Time.get_ticks_msec() * 0.01 * (speed / 70.0)) * 2.0
-			visuals.position.y = bob
+			if velocity.length() > 5.0:
+				var bob = sin(Time.get_ticks_msec() * 0.01 * (speed / 70.0)) * 2.0
+				visuals.position.y = bob
+			_update_tactical_visibility(delta, dist, visuals)
+
+func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> void:
+	if not is_instance_valid(target_player):
+		return
+	var has_los = _has_line_of_sight(target_player.global_position)
+	var p_forward = Vector2.RIGHT.rotated(target_player.rotation)
+	var dir_from_p = target_player.global_position.direction_to(global_position)
+	var in_fov = p_forward.dot(dir_from_p) >= -0.15 # 약 195도 전방 시야
+	
+	var target_alpha = 1.0
+	if dist <= 90.0:
+		target_alpha = 1.0 if has_los else 0.35
+	elif not has_los:
+		target_alpha = 0.25 if velocity.length() > 15.0 else 0.12
+	elif not in_fov and dist > 160.0:
+		target_alpha = 0.45
+		
+	visuals.modulate.a = lerp(visuals.modulate.a, target_alpha, clamp(delta * 10.0, 0.0, 1.0))
+	if hp_bar:
+		hp_bar.modulate.a = visuals.modulate.a
 
 func _get_steered_direction(target_pos: Vector2) -> Vector2:
 	var desired_dir = global_position.direction_to(target_pos)

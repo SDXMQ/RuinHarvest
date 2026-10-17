@@ -59,7 +59,10 @@ func play(sound_name: String, volume_mult: float = 1.0, pitch_scale: float = 1.0
 				
 	player_to_use.stream = stream
 	player_to_use.volume_db = linear_to_db(volume_mult)
-	player_to_use.pitch_scale = pitch_scale
+	var final_pitch = pitch_scale
+	if is_equal_approx(pitch_scale, 1.0) and sound_name in ["hit_ranged", "hit_melee", "footstep", "enemy_die", "player_hurt", "explosion_distant"]:
+		final_pitch = randf_range(0.92, 1.08)
+	player_to_use.pitch_scale = final_pitch
 	player_to_use.play()
 
 func get_sound(sound_name: String) -> AudioStreamWAV:
@@ -79,12 +82,12 @@ func _create_sound(s_name: String) -> AudioStreamWAV:
 		return _generate_tone(200.0, 0.3, 0.3, "sawtooth")
 	elif s_name == "enemy_die":
 		return _generate_tone(100.0, 0.4, 0.3, "sawtooth")
-	elif s_name == "pickup":
-		return _generate_tone(600.0, 0.1, 0.2, "sine")
+	elif s_name == "pickup" or s_name == "item_pickup":
+		return _generate_tone(640.0, 0.1, 0.22, "sine")
 	elif s_name == "craft_complete":
 		return _generate_tone(800.0, 0.15, 0.2, "sine")
-	elif s_name == "menu_hover":
-		return _generate_tone(400.0, 0.05, 0.1, "sine")
+	elif s_name == "menu_hover" or s_name == "menu_move":
+		return _generate_tone(380.0, 0.04, 0.12, "sine")
 	elif s_name == "menu_select":
 		return _generate_tone(500.0, 0.1, 0.15, "sine")
 	elif s_name == "door_open":
@@ -93,6 +96,10 @@ func _create_sound(s_name: String) -> AudioStreamWAV:
 		return _generate_tone(80.0, 0.05, 0.1, "noise")
 	elif s_name == "alert":
 		return _generate_tone(700.0, 0.3, 0.3, "square")
+	elif s_name == "explosion_distant" or s_name == "explosion":
+		return _generate_tone(65.0, 0.45, 0.45, "noise")
+	elif s_name == "reload":
+		return _generate_tone(320.0, 0.12, 0.25, "square")
 	elif s_name == "game_over":
 		return _generate_tone(150.0, 0.8, 0.4, "sawtooth")
 	elif s_name == "day_start":

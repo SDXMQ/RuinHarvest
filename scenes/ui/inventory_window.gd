@@ -94,6 +94,33 @@ func _ready() -> void:
 		ResponsiveManager.window_resized.connect(_on_responsive_window_resized)
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
 	
+	# 가방 자동 정렬 버튼 동적 추가
+	var inv_header_hbox = get_node_or_null("MainLayout/InventoryCol/Header/HBox")
+	if inv_header_hbox:
+		var sort_btn = Button.new()
+		sort_btn.name = "AutoSortBtn"
+		sort_btn.text = "🔄 정렬"
+		sort_btn.tooltip_text = "동일 아이템 병합 및 빈 공간 자동 정렬"
+		sort_btn.custom_minimum_size = Vector2(64, 24)
+		sort_btn.add_theme_font_size_override("font_size", 11)
+		sort_btn.pressed.connect(func():
+			if inventory_grid and inventory_grid.has_method("sort_items"):
+				inventory_grid.sort_items()
+				if SoundManager: SoundManager.play("menu_select")
+		)
+		inv_header_hbox.add_child(sort_btn)
+
+	# 수색 대상 모두 획득 버튼 동적 추가
+	if container_section:
+		var loot_all_btn = Button.new()
+		loot_all_btn.name = "LootAllBtn"
+		loot_all_btn.text = "⏬ 모두 획득 [F]  (Ctrl+클릭: 빠른 이동)"
+		loot_all_btn.custom_minimum_size = Vector2(0, 28)
+		loot_all_btn.add_theme_font_size_override("font_size", 11)
+		loot_all_btn.pressed.connect(_loot_all_from_container)
+		container_section.add_child(loot_all_btn)
+		container_section.move_child(loot_all_btn, 1)
+	
 	_disable_focus_recursively(self)
 
 func _on_responsive_breakpoint_changed(new_bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
@@ -303,11 +330,18 @@ func _input(event: InputEvent) -> void:
 			_on_close_pressed()
 			get_viewport().set_input_as_handled()
 			return
+		elif not is_dragging and (event.keycode == KEY_F or event.physical_keycode == KEY_F) and target_inventory != null:
+			_loot_all_from_container()
+			get_viewport().set_input_as_handled()
+			return
 	
 	# 드래그 중 R 키 누르면 W <-> H 회전
 	if is_dragging and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R or event.physical_keycode == KEY_R:
 			drag_data["rotated"] = not drag_data.get("rotated", false)
+			if drag_preview:
+				drag_preview.rotation = PI * 0.5 if drag_data["rotated"] else 0.0
+			if SoundManager: SoundManager.play("menu_move")
 			grid_control.queue_redraw()
 			get_viewport().set_input_as_handled()
 			return
@@ -426,7 +460,13 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = inventory_grid.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
-				if Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
+				if Input.is_key_pressed(KEY_CTRL):
+					if tooltip: tooltip.hide()
+					if target_inventory != null:
+						_quick_transfer_grid_to_container(item)
+					else:
+						_handle_item_quick_action(item)
+				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
 						var split_item = item.duplicate()
 						split_item["amount"] = split_amt
@@ -551,10 +591,19 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(lbl)
 	
-	# 드래그 및 우클릭 픽업
+	# 드래그 및 우클릭/Ctrl+좌클릭 픽업
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
-			if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.button_index == MOUSE_BUTTON_RIGHT or (event.button_index == MOUSE_BUTTON_LEFT and Input.is_key_pressed(KEY_CTRL)):
+				var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item.get("custom_data", {}))
+				var added = amt - rem
+				if added > 0:
+					target_inventory.remove_item_at(index, added)
+					if SoundManager: SoundManager.play("menu_select")
+					_update_container_list()
+				if rem > 0 and EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+			elif event.button_index == MOUSE_BUTTON_LEFT:
 				var base_size = ItemDatabase.get_item_grid_size(slot_item.get("id", ""))
 				var item_dict = {
 					"id": slot_item.get("id", ""),
@@ -565,20 +614,51 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 				}
 				_start_drag("container", item_dict, Vector2i(index, 0))
 				drag_data["origin_index"] = index
-			elif event.button_index == MOUSE_BUTTON_RIGHT:
-				# 우클릭 시 가방으로 즉시 픽업 (Auto-Fit)
-				var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item.get("custom_data", {}))
-				var added = amt - rem
-				if added > 0:
-					target_inventory.remove_item_at(index, added)
-					if SoundManager: SoundManager.play("menu_select")
-					_update_container_list()
-				if rem > 0:
-					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
 	)
 	
 	container_list.add_child(btn)
+
+func _loot_all_from_container() -> void:
+	if not target_inventory or not inventory_grid:
+		return
+	var moved_any = false
+	var full_warn = false
+	for i in range(target_inventory.items.size() - 1, -1, -1):
+		var slot_item = target_inventory.items[i]
+		if slot_item != null and not slot_item.is_empty() and slot_item.get("id", "") != "":
+			var amt = int(slot_item.get("amount", 1))
+			var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item.get("custom_data", {}))
+			var added = amt - rem
+			if added > 0:
+				target_inventory.remove_item_at(i, added)
+				moved_any = true
+			if rem > 0:
+				full_warn = true
+	if moved_any:
+		if SoundManager: SoundManager.play("item_pickup")
+		_update_container_list()
+	if full_warn and EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("⚠️ 가방 공간이 부족하여 일부 아이템만 획득했습니다.")
+
+func _quick_transfer_grid_to_container(item: Dictionary) -> void:
+	if not target_inventory or not inventory_grid:
+		return
+	var item_id = item.get("id", "")
+	var amt = int(item.get("amount", 1))
+	var rem = target_inventory.add_item(item_id, amt)
+	var added = amt - rem
+	if added > 0:
+		if rem <= 0:
+			inventory_grid.remove_item_by_uid(item.get("uid", ""))
+		else:
+			item["amount"] = rem
+			inventory_grid.grid_changed.emit()
+		if SoundManager: SoundManager.play("menu_select")
+		_update_container_list()
+	else:
+		if SoundManager: SoundManager.play("hit_melee")
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 보관함 공간이 부족합니다.")
 
 func _try_drop_on_container() -> void:
 	if not target_inventory:
@@ -681,21 +761,10 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(lbl)
 	
-	# 드래그 및 우클릭 픽업
+	# 드래그 및 우클릭/Ctrl+좌클릭 픽업
 	btn.gui_input.connect(func(event: InputEvent):
-		if event is InputEventMouseButton:
-			if event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-				var base_size = ItemDatabase.get_item_grid_size(g_item.item_id)
-				var item_dict = {
-					"id": g_item.item_id,
-					"amount": g_item.amount,
-					"w": base_size.x,
-					"h": base_size.y,
-					"custom_data": g_item.custom_data
-				}
-				_start_drag("vicinity", item_dict, Vector2i.ZERO, "", g_item)
-			elif event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
-				# 우클릭 시 가방으로 즉시 픽업 (Auto-Fit)
+		if event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_RIGHT or (event.button_index == MOUSE_BUTTON_LEFT and Input.is_key_pressed(KEY_CTRL)):
 				var rem = inventory_grid.auto_add_item(g_item.item_id, g_item.amount, g_item.custom_data)
 				if rem <= 0:
 					g_item.queue_free()
@@ -706,6 +775,16 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 					g_item.update_visuals()
 					if EventBus.has_signal("event_logged"):
 						EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+			elif event.button_index == MOUSE_BUTTON_LEFT:
+				var base_size = ItemDatabase.get_item_grid_size(g_item.item_id)
+				var item_dict = {
+					"id": g_item.item_id,
+					"amount": g_item.amount,
+					"w": base_size.x,
+					"h": base_size.y,
+					"custom_data": g_item.custom_data
+				}
+				_start_drag("vicinity", item_dict, Vector2i.ZERO, "", g_item)
 	)
 	
 	vicinity_list.add_child(btn)
