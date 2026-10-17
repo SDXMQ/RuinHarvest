@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "그래픽카드"
+name = "그래픽카드"
+category = 5
+description = "컴퓨터 본체에서 극히 희박하게 입수되는 최고가 정밀 전자 전리품."
+stackable = true
+max_stack = 2
+weight = 1.0
+rarity = 0.04
+value = 25000

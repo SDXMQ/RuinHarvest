@@ -250,7 +250,10 @@ func _play_hit_flash() -> void:
 
 func _die() -> void:
 	current_state = State.DEAD
-	EventBus.enemy_killed.emit("zombie", "scav")
+	var type_str = "zombie"
+	if enemy_type == EnemyType.RUNNER: type_str = "runner"
+	elif enemy_type == EnemyType.TANK: type_str = "tank"
+	EventBus.enemy_killed.emit(type_str, "infected", global_position)
 	
 	# 드롭 아이템 (확률적 탄약, 붕대, 고철)
 	# 향후 바닥 아이템 엔티티로 스폰 가능

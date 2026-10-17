@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "붕대"
+name = "붕대"
+category = 2
+description = "깨끗한 붕대. 출혈을 멈출 수 있다."
+stackable = true
+max_stack = 5
+weight = 0.1
+rarity = 0.5
+value = 800
+effects = {
+"hp": 15, "cures_bleeding": true
+}

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "운동화"
+name = "운동화"
+category = 6
+description = "가볍고 튼튼한 운동화. 이동 속도가 빨라진다."
+stackable = false
+weight = 0.5
+rarity = 0.3
+value = 5000
+grid_w = 2
+grid_h = 1
+equip_slot = "bottom"
+speed_bonus = 0.3

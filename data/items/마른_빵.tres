@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "마른 빵"
+name = "마른 빵"
+category = 0
+description = "딱딱하게 굳은 빵. 배는 채울 수 있다."
+stackable = true
+max_stack = 10
+weight = 0.2
+rarity = 0.7
+value = 400
+effects = {
+"hunger": 15
+}

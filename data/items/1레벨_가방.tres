@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "1레벨_가방"
+name = "1레벨 소형 배낭"
+category = 6
+description = "가벼운 소형 배낭. 인벤토리를 6x5(30칸) 크기로 세로 확장한다."
+stackable = false
+weight = 0.5
+rarity = 0.3
+value = 6000
+grid_w = 2
+grid_h = 2
+equip_slot = "backpack"
+backpack_grid = Vector2i(6, 5)

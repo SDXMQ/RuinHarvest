@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "12게이지_슬러그"
+name = "12게이지_슬러그"
+category = 3
+description = "12게이지 중량 슬러그탄. 단발 관통력 극대화."
+stackable = true
+max_stack = 20
+weight = 0.06
+rarity = 0.08
+value = 500

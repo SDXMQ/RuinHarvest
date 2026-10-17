@@ -108,8 +108,8 @@ var check_timer: float = 10.0 # 10초 후 첫 이벤트 체크
 var check_interval: float = 20.0 # 20초 주기
 
 func _process(delta: float) -> void:
-	# 메인 게임 진행 중일 때만 동작
-	if GameManager.current_state != GameManager.GameState.IN_GAME and GameManager.current_state != GameManager.GameState.MAIN_MENU:
+	# 인게임 레이드 진행 중일 때만 동작
+	if GameManager.current_state != GameManager.GameState.IN_GAME or get_tree().paused:
 		return
 		
 	check_timer += delta
@@ -129,6 +129,21 @@ func _process(delta: float) -> void:
 		var current_day = GameManager.current_world_data.get("current_day", 1)
 		_check_random_events(current_day)
 
+func _apply_event_to_live_player(event: GameEvent) -> void:
+	if GameManager.current_world_data.has("player"):
+		event.apply_effects(GameManager.current_world_data["player"])
+	var p = get_tree().get_first_node_in_group("player")
+	if is_instance_valid(p):
+		var eff = event.effects
+		if eff.has("hp"):
+			p.hp = clamp(p.hp + eff["hp"], 1.0, p.max_hp)
+		if eff.has("hunger"):
+			p.hunger = clamp(p.hunger + eff["hunger"], 0.0, p.max_hunger)
+		if eff.has("thirst"):
+			p.thirst = clamp(p.thirst + eff["thirst"], 0.0, p.max_thirst)
+		if p.has_signal("stats_changed"):
+			p.stats_changed.emit()
+
 func _check_random_events(current_day: int) -> void:
 	var event_keys = RANDOM_EVENTS.keys()
 	event_keys.shuffle()
@@ -138,17 +153,14 @@ func _check_random_events(current_day: int) -> void:
 		if current_day < event_data.get("day_min", 1):
 			continue
 			
-		var chance = event_data.get("chance", 0.0) * 2.0 # 발생 확률 2배 보정
-		if randf() < chance or randf() < 0.25: # 최소 25% 확률로 돌발 이벤트 발생
+		var chance = event_data.get("chance", 0.0)
+		if randf() < chance:
 			var event = GameEvent.new(event_id, event_data)
 			
 			if event_data.has("defense_check"):
-				# 은신처 방어 체크 - 나중에 시스템 확장 시 사용
 				add_log("✓ " + event.title + ": " + event_data.get("defense_success_msg", ""))
 			else:
-				if GameManager.current_world_data.has("player"):
-					event.apply_effects(GameManager.current_world_data["player"])
-				
+				_apply_event_to_live_player(event)
 				add_log("★ " + event.title + ": " + event.description)
 				
 			active_events.append(event)
@@ -166,7 +178,6 @@ func trigger_event(event_id: String) -> void:
 	if RANDOM_EVENTS.has(event_id):
 		var event_data = RANDOM_EVENTS[event_id]
 		var event = GameEvent.new(event_id, event_data)
-		if GameManager.current_world_data.has("player"):
-			event.apply_effects(GameManager.current_world_data["player"])
+		_apply_event_to_live_player(event)
 		active_events.append(event)
 		add_log("★ " + event.title + ": " + event.description)

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "3레벨_가방"
+name = "3레벨 대형 배낭"
+category = 6
+description = "대용량 군용 배낭. 인벤토리를 6x10(60칸) 크기로 세로 대폭 확장한다."
+stackable = false
+weight = 1.8
+rarity = 0.05
+value = 28000
+grid_w = 3
+grid_h = 3
+equip_slot = "backpack"
+backpack_grid = Vector2i(6, 10)

@@ -777,7 +777,7 @@ func _render_equip_slot_button(btn: Button, slot_name: String, default_text: Str
 func _open_split_dialog(item: Dictionary, on_confirm_callback: Callable) -> void:
 	var dialog = SplitDialogScene.instantiate()
 	add_child(dialog)
-	dialog.setup(item.get("id", ""), item.get("amount", 1))
+	dialog.setup(int(item.get("amount", 1)))
 	dialog.split_confirmed.connect(on_confirm_callback)
 	_refresh_stash_ui()
 
@@ -1079,7 +1079,7 @@ func _check_last_raid_result() -> void:
 		if res["result"] == "survived":
 			result_title.text = "🎉 탈출 성공! (SURVIVED)"
 			result_title.add_theme_color_override("font_color", Color.GREEN)
-			result_desc.text = "안전하게 은신처로 복귀했습니다.\n획득한 전리품이 창고로 안전하게 이관되었습니다."
+			result_desc.text = "안전하게 은신처로 복귀했습니다.\n획득한 전리품이 배낭에 보존되었습니다."
 		elif res["result"] == "kia":
 			result_title.text = "💀 작전 중 사망 (KIA)"
 			result_title.add_theme_color_override("font_color", Color.RED)
@@ -1088,6 +1088,15 @@ func _check_last_raid_result() -> void:
 			result_title.text = "⏳ 작전 시간 초과 (MIA)"
 			result_title.add_theme_color_override("font_color", Color.ORANGE)
 			result_desc.text = "제한 시간 내에 탈출하지 못해 실종되었습니다."
+			
+		var sales_report = res.get("sales_report", {})
+		var completed_sales = sales_report.get("completed", [])
+		if not completed_sales.is_empty():
+			var total_earned = 0
+			for s in completed_sales:
+				total_earned += int(s.get("earned", 0))
+			result_desc.text += "\n\n📈 플리마켓 정산: 등록 물품 %d건 판매 완료 (+%d RUB)" % [completed_sales.size(), total_earned]
+			_update_money_label()
 			
 		GameManager.last_raid_result.clear()
 	else:

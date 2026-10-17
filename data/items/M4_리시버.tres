@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "M4_리시버"
+name = "M4_리시버"
+category = 3
+description = "M4A1 카빈 리시버. 3개 레일과 높은 확장성."
+stackable = false
+weight = 1.6
+rarity = 0.05
+value = 32000
+item_type = "receiver"

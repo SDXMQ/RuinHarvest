@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "1레벨_방탄복"
+name = "1레벨 경찰 조끼"
+category = 6
+description = "가벼운 방탄조끼. 방어력 +15."
+stackable = false
+weight = 2.0
+rarity = 0.3
+value = 8000
+grid_w = 2
+grid_h = 2
+equip_slot = "vest"
+armor_defense = 15
+max_durability = 100

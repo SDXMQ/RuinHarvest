@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "금시계"
+name = "금시계"
+category = 8
+description = "고풍스러운 장식용 귀금속 시계."
+stackable = true
+max_stack = 5
+weight = 0.1
+rarity = 0.1
+value = 12000

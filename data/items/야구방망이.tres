@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "야구방망이"
+name = "야구방망이"
+category = 3
+description = "알루미늄 야구방망이. 넓은 타격 범위."
+stackable = false
+weight = 1.8
+rarity = 0.25
+value = 4500
+max_durability = 100
+item_type = "melee"
+damage = 18
+attack_range = 1.3
+attack_speed = 0.7

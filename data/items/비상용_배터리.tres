@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "비상용 배터리"
+name = "비상용 배터리"
+category = 4
+description = "충전식 비상 배터리. 여러 장비에 사용 가능."
+stackable = true
+max_stack = 5
+weight = 0.5
+rarity = 0.25
+value = 1500

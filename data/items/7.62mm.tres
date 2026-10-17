@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "7.62mm"
+name = "7.62mm"
+category = 3
+description = "7.62x39mm 고위력 관통 소총탄."
+stackable = true
+max_stack = 40
+weight = 0.04
+rarity = 0.1
+value = 450

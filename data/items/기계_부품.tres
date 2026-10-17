@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "기계 부품"
+name = "기계 부품"
+category = 5
+description = "복잡한 기계의 부품. 정밀 장비 개조에 필수적이다."
+stackable = true
+max_stack = 20
+weight = 0.5
+rarity = 0.1
+value = 2500

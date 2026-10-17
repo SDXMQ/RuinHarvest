@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "9mm"
+name = "9mm"
+category = 3
+description = "9x19mm 권총/SMG 표준 탄약."
+stackable = true
+max_stack = 60
+weight = 0.02
+rarity = 0.3
+value = 150

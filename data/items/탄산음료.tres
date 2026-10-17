@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "탄산음료"
+name = "탄산음료"
+category = 1
+description = "따끈한 탄산음료. 갈증 해소와 기분 전환에 좋다."
+stackable = true
+max_stack = 5
+weight = 0.4
+rarity = 0.4
+value = 1000
+effects = {
+"thirst": 25, "stress": -10
+}

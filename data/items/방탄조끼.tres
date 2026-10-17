@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "방탄조끼"
+name = "방탄조끼"
+category = 6
+description = "방탄 재질의 조끼. 대미지를 줄여준다."
+stackable = false
+weight = 3.0
+rarity = 0.1
+value = 15000
+grid_w = 2
+grid_h = 2
+equip_slot = "vest"
+armor_defense = 20
+max_durability = 100

@@ -40,7 +40,7 @@ func _on_body_exited(body: Node2D) -> void:
 		extract_cancelled.emit()
 
 func _trigger_extraction() -> void:
-	EventBus.extraction_started.emit()
+	EventBus.extraction_started.emit(zone_name, extract_time)
 	if GameManager:
 		var items_to_keep = []
 		var main_world = get_node_or_null("/root/MainWorld")

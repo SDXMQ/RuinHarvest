@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "수류탄"
+name = "수류탄"
+category = 3
+description = "신관 안전핀을 뽑아 투척하는 강력한 대량 살상용 대인 수류탄."
+stackable = true
+max_stack = 3
+weight = 0.5
+rarity = 0.05
+value = 4000

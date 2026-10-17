@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "구급상자"
+name = "구급상자"
+category = 2
+description = "기본적인 응급 처치 키트."
+stackable = true
+max_stack = 3
+weight = 1.0
+rarity = 0.3
+value = 4000
+effects = {
+"hp": 40, "cures_bleeding": true
+}

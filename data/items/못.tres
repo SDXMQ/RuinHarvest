@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "못"
+name = "못"
+category = 5
+description = "건축용 못. 바리케이드 제작에 필요."
+stackable = true
+max_stack = 30
+weight = 0.1
+rarity = 0.6
+value = 100

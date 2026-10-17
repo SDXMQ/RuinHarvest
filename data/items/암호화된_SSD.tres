@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "암호화된 SSD"
+name = "암호화된 SSD"
+category = 7
+description = "기밀 데이터가 담긴 군용 SSD."
+stackable = true
+max_stack = 5
+weight = 0.1
+rarity = 0.03
+value = 16000

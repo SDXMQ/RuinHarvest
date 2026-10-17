@@ -175,6 +175,8 @@ func _setup_player() -> void:
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
 	player_inventory.inventory_changed.connect(_on_player_stats_changed)
+	if player.inventory_grid:
+		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
 	_on_player_stats_changed()
 
 func _process(delta: float) -> void:
@@ -238,8 +240,12 @@ func _open_crafting_window() -> void:
 	get_tree().paused = true
 	current_crafting_window = CraftingWindowScene.instantiate()
 	$UI.add_child(current_crafting_window)
-	current_crafting_window.setup(player_inventory)
-	current_crafting_window.window_closed.connect(func(): current_crafting_window = null)
+	var inv_target = player.inventory_grid if player and player.inventory_grid else player_inventory
+	current_crafting_window.setup(inv_target)
+	current_crafting_window.window_closed.connect(func():
+		current_crafting_window = null
+		_on_player_stats_changed()
+	)
 
 func _toggle_pause() -> void:
 	var is_paused = not get_tree().paused
@@ -359,9 +365,14 @@ func _exit_interior() -> void:
 	# 플레이어 데이터, 배낭, 남은 시간 저장 후 야외로 복귀
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var saved_items = []
-		for item in player_inventory.items:
-			if item:
-				saved_items.append(item.duplicate())
+		if player and "inventory_grid" in player and player.inventory_grid:
+			for item in player.inventory_grid.items:
+				if item and typeof(item) == TYPE_DICTIONARY:
+					saved_items.append(item.duplicate(true))
+		else:
+			for item in player_inventory.items:
+				if item:
+					saved_items.append(item.duplicate())
 		GameManager.current_world_data["player"]["inventory"] = saved_items
 		GameManager.current_world_data["raid_time_remaining"] = raid_time_remaining
 		GameManager.current_world_data["player_stats"] = {

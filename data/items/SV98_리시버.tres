@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "SV98_리시버"
+name = "SV98_리시버"
+category = 3
+description = "SV-98 정밀 볼트액션 저격 리시버."
+stackable = false
+weight = 3.0
+rarity = 0.03
+value = 45000
+item_type = "receiver"

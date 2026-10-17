@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "천"
+name = "천"
+category = 5
+description = "찢어진 천 조각. 다양한 용도."
+stackable = true
+max_stack = 15
+weight = 0.2
+rarity = 0.6
+value = 200

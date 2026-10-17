@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "도끼"
+name = "도끼"
+category = 3
+description = "목재 벌목용 도끼. 강력하지만 느리다."
+stackable = false
+weight = 2.5
+rarity = 0.2
+value = 7000
+max_durability = 100
+item_type = "melee"
+damage = 25
+attack_range = 1.1
+attack_speed = 0.9

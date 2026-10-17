@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "M9_리시버"
+name = "M9_리시버"
+category = 3
+description = "M9 베레타 권총 리시버. 모딩 가능."
+stackable = false
+weight = 0.5
+rarity = 0.15
+value = 8000
+item_type = "receiver"

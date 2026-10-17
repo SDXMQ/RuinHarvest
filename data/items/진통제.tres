@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "진통제"
+name = "진통제"
+category = 2
+description = "강력한 진통제. 통증을 잠시 잊게 해준다."
+stackable = true
+max_stack = 5
+weight = 0.1
+rarity = 0.35
+value = 2500
+effects = {
+"hp": 25, "stress": -15
+}

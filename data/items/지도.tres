@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "지도"
+name = "지도"
+category = 4
+description = "이 지역의 약도. 미니맵 범위가 넓어진다."
+stackable = false
+weight = 0.1
+rarity = 0.2
+value = 1000
+effects = {
+"map_range": 2
+}

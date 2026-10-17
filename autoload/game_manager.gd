@@ -71,6 +71,8 @@ func toggle_pause() -> void:
 # ============================================================
 func start_new_game(world_settings: Dictionary = {}) -> void:
 	current_save_slot = "save_" + str(Time.get_unix_time_from_system())
+	if world_settings.has("raid_duration_minutes"):
+		raid_duration_minutes = float(world_settings["raid_duration_minutes"])
 	
 	# 기본 초기 데이터 세팅
 	current_world_data = {
@@ -84,7 +86,7 @@ func start_new_game(world_settings: Dictionary = {}) -> void:
 			"thirst": 100.0,
 			"stress": 0.0,
 			"stamina": 100.0,
-			"rubles": 5000,
+			"rubles": int(world_settings.get("starting_money", 5000)),
 			"inventory": [
 				{"id": "권총", "amount": 1},
 				{"id": "탄약", "amount": 30},
@@ -138,6 +140,12 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 	elif not current_world_data["hideout"].has("stash"):
 		current_world_data["hideout"]["stash"] = []
 	
+	# 플리마켓 등록 물품 판매 정산 및 일별 시세 갱신
+	if FleaMarket:
+		var sales_report = FleaMarket.process_player_sales(current_world_data["player"])
+		last_raid_result["sales_report"] = sales_report
+		FleaMarket.advance_day()
+	
 	if result == "survived":
 		if current_world_data.has("current_day"):
 			current_world_data["current_day"] += 1
@@ -148,7 +156,7 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		var saved_items = []
 		for item in looted_items:
 			if item:
-				saved_items.append(item.duplicate())
+				saved_items.append(item.duplicate(true))
 		current_world_data["player"]["inventory"] = saved_items
 		
 		if current_save_slot != "":
@@ -158,7 +166,9 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		current_world_data["player"]["inventory"] = []
 		
 		var diff = current_world_data.get("difficulty", "normal")
-		if GameSettings.DIFFICULTY_PRESETS.has(diff) and GameSettings.DIFFICULTY_PRESETS[diff].get("permadeath", false):
+		var ws = current_world_data.get("world_settings", {})
+		var is_permadeath = ws.get("permadeath", false) or (GameSettings.DIFFICULTY_PRESETS.has(diff) and GameSettings.DIFFICULTY_PRESETS[diff].get("permadeath", false))
+		if is_permadeath:
 			if current_save_slot != "":
 				SaveManager.delete_save(current_save_slot)
 				current_save_slot = ""
@@ -167,5 +177,5 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 			if current_save_slot != "":
 				SaveManager.save_game(current_world_data, current_save_slot)
 	
-	EventBus.raid_ended.emit(result)
+	EventBus.raid_ended.emit(result, last_raid_result)
 	change_state(GameState.HIDEOUT)

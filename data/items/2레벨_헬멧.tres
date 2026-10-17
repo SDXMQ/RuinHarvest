@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "2레벨_헬멧"
+name = "2레벨 군용 방탄모"
+category = 6
+description = "군용 케블라 헬멧. 방어력 +25."
+stackable = false
+weight = 1.5
+rarity = 0.15
+value = 12000
+grid_w = 2
+grid_h = 2
+equip_slot = "helmet"
+armor_defense = 25
+max_durability = 120

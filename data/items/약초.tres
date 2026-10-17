@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "약초"
+name = "약초"
+category = 2
+description = "야생에서 채집한 약초. 크래프팅 재료."
+stackable = true
+max_stack = 10
+weight = 0.1
+rarity = 0.5
+value = 500
+effects = {
+"hp": 10
+}

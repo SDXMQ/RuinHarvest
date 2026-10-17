@@ -5,8 +5,8 @@ extends Control
 
 signal window_closed
 
-var player_inv: Inventory
-var stash_inv: Inventory
+var player_inv: Variant
+var stash_inv: Variant
 var current_weapon: Dictionary = {} # 모딩 중인 무기 데이터
 
 # UI 노드
@@ -18,7 +18,7 @@ var assemble_btn: Button
 var disassemble_btn: Button
 var close_btn: Button
 
-func setup(p_inv: Inventory, s_inv: Inventory = null, initial_weapon: Dictionary = {}) -> void:
+func setup(p_inv: Variant, s_inv: Variant = null, initial_weapon: Dictionary = {}) -> void:
 	player_inv = p_inv
 	stash_inv = s_inv
 	
@@ -319,19 +319,30 @@ func _on_rail_selected(rail_idx: int, sel_index: int, rail_parts: Array) -> void
 func _on_assemble_pressed() -> void:
 	var rec_id = current_weapon.get("receiver", "M9_리시버")
 	var stats = current_weapon.get("computed_stats", {})
+	current_weapon["id"] = rec_id
 	current_weapon["name"] = WeaponPartsDatabase.RECEIVERS[rec_id]["name"] + " (모딩)"
 	current_weapon["current_magazine_ammo"] = stats.get("magazine_size", 15)
 	
 	var cur_scene = get_tree().current_scene
 	if cur_scene and "player" in cur_scene and cur_scene.player:
-		cur_scene.player.equipped_weapon_data = current_weapon.duplicate(true)
-		cur_scene.player.equipped_weapon = rec_id
-		cur_scene.player.stats_changed.emit()
+		var p = cur_scene.player
+		var slot = p.active_weapon_slot if p.active_weapon_slot in ["primary1", "primary2", "sidearm"] else "primary1"
+		p.equipment[slot] = current_weapon.duplicate(true)
+		p.equipped_weapon_data = p.equipment[slot]
+		p.equipped_weapon = current_weapon["name"]
+		p.stats_changed.emit()
 		
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("🔫 [%s] 조립 및 장착 완료!" % current_weapon["name"])
 	if SoundManager: SoundManager.play("menu_select")
 	_on_close_pressed()
+
+func _give_part_to_inv(item_id: String, count: int = 1) -> void:
+	if not player_inv or item_id == "": return
+	if player_inv.has_method("auto_add_item"):
+		player_inv.auto_add_item(item_id, count)
+	elif player_inv.has_method("add_item"):
+		player_inv.add_item(item_id, count)
 
 func _on_disassemble_pressed() -> void:
 	var parts = current_weapon.get("parts", {})
@@ -339,15 +350,15 @@ func _on_disassemble_pressed() -> void:
 	
 	if player_inv:
 		# 리시버 지급
-		player_inv.add_item(rec_id, 1)
+		_give_part_to_inv(rec_id, 1)
 		# 부품 지급
 		for s in parts.keys():
 			var v = parts[s]
 			if v is Array:
 				for p in v:
-					if p != "": player_inv.add_item(p, 1)
+					if p != "": _give_part_to_inv(p, 1)
 			elif v is String and v != "":
-				player_inv.add_item(v, 1)
+				_give_part_to_inv(v, 1)
 				
 	current_weapon = WeaponPartsDatabase.create_default_weapon(rec_id)
 	_refresh_all()

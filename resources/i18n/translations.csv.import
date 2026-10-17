@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://c2smslxwmtxss"
+
+[deps]
+
+files=["res://resources/i18n/translations.ko.translation", "res://resources/i18n/translations.en.translation"]
+
+source_file="res://resources/i18n/translations.csv"
+dest_files=["res://resources/i18n/translations.ko.translation", "res://resources/i18n/translations.en.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

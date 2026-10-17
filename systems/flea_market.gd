@@ -137,12 +137,23 @@ func register_item(item_name: String, count: int, price: int) -> bool:
 	if item_name == "Scav 식별줄(Dogtag)":
 		return false
 		
-	player_listings.append({
+	var entry = {
 		"id": next_player_listing_id,
 		"item_name": item_name,
 		"count": count,
 		"price": price,
+		"seller": "플레이어",
 		"timer": 2.0
-	})
+	}
+	player_listings.append(entry)
+	listings.append(entry.duplicate())
+	listings.sort_custom(func(a, b): return a["price"] < b["price"])
 	next_player_listing_id += 1
 	return true
+
+func add_listing(listing_data: Dictionary) -> bool:
+	return register_item(
+		listing_data.get("item_name", ""),
+		int(listing_data.get("count", 1)),
+		int(listing_data.get("price", 100))
+	)

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "에너지 드링크"
+name = "에너지 드링크"
+category = 1
+description = "고농축 카페인 음료. 갈증을 해소하고 스태미나를 대폭 회복한다."
+stackable = true
+max_stack = 5
+weight = 0.3
+rarity = 0.12
+value = 1800
+effects = {
+"thirst": 20, "stamina": 80, "stress": -10
+}

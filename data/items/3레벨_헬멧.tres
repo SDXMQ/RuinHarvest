@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "3레벨_헬멧"
+name = "3레벨 스페츠나츠 헬멧"
+category = 6
+description = "중장갑 안면 바이저 헬멧. 방어력 +45."
+stackable = false
+weight = 2.2
+rarity = 0.05
+value = 26000
+grid_w = 2
+grid_h = 2
+equip_slot = "helmet"
+armor_defense = 45
+max_durability = 180

@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "농작물"
+name = "농작물"
+category = 0
+description = "밭에서 자란 싱싱한 농작물. 배를 든든하게 채운다."
+stackable = true
+max_stack = 5
+weight = 1.0
+rarity = 0.2
+value = 800
+effects = {
+"hunger": 40, "hp": 5
+}

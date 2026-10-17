@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "전투 식량"
+name = "전투 식량"
+category = 0
+description = "군용 전투 식량. 포만감을 크게 채워주고 에너지를 제공한다."
+stackable = true
+max_stack = 5
+weight = 0.8
+rarity = 0.08
+value = 3000
+effects = {
+"hunger": 70, "stamina": 20, "hp": 10
+}

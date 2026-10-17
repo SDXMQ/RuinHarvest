@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "고배율_망원경"
+name = "고배율_망원경"
+category = 4
+description = "10배율 초고성능 군용 관측 망원경. 극도로 먼 거리의 적과 지형을 정찰한다."
+stackable = false
+weight = 1.0
+rarity = 0.03
+value = 38000
+effects = {
+"telescope_zoom": 10.0
+}

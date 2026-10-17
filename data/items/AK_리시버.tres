@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "AK_리시버"
+name = "AK_리시버"
+category = 3
+description = "AK-47 소총 리시버. 강력한 7.62mm 화력 지원."
+stackable = false
+weight = 1.8
+rarity = 0.08
+value = 24000
+item_type = "receiver"

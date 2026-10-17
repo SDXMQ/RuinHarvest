@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "5.56mm"
+name = "5.56mm"
+category = 3
+description = "5.56x45mm NATO 고속 소총탄."
+stackable = true
+max_stack = 60
+weight = 0.03
+rarity = 0.15
+value = 350

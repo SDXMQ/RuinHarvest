@@ -4,7 +4,7 @@ extends Control
 @onready var recipe_list_container: VBoxContainer = $Center/Panel/Scroll/VBox
 @onready var close_btn: Button = $Center/Panel/CloseBtn
 
-var player_inv: Inventory
+var player_inv: Variant
 signal window_closed
 
 # 조합 레시피 DB: [결과 아이템] -> { "requirements": { "재료": 개수 }, "amount": 수량 }
@@ -36,10 +36,13 @@ var recipes: Dictionary = {
 	}
 }
 
-func setup(inv: Inventory) -> void:
+func setup(inv: Variant) -> void:
 	player_inv = inv
 	if player_inv:
-		player_inv.inventory_changed.connect(_refresh_ui)
+		if player_inv.has_signal("grid_changed"):
+			player_inv.grid_changed.connect(_refresh_ui)
+		elif player_inv.has_signal("inventory_changed"):
+			player_inv.inventory_changed.connect(_refresh_ui)
 	_refresh_ui()
 
 func _ready() -> void:
@@ -111,8 +114,8 @@ func _count_material(mat_id: String) -> int:
 	if not player_inv: return 0
 	var total = 0
 	for item in player_inv.items:
-		if item and item["id"] == mat_id:
-			total += item["amount"]
+		if item and item.get("id", "") == mat_id:
+			total += item.get("amount", 1)
 	return total
 
 func _craft_item(result_id: String, recipe: Dictionary) -> void:
@@ -121,22 +124,22 @@ func _craft_item(result_id: String, recipe: Dictionary) -> void:
 	# 재료 차감
 	for mat_id in recipe["requirements"].keys():
 		var req_cnt = recipe["requirements"][mat_id]
-		var remaining_to_remove = req_cnt
-		for i in range(player_inv.max_slots):
-			var item = player_inv.items[i]
-			if item and item["id"] == mat_id:
-				if item["amount"] <= remaining_to_remove:
-					remaining_to_remove -= item["amount"]
-					player_inv.items[i] = null
-				else:
-					item["amount"] -= remaining_to_remove
-					remaining_to_remove = 0
-				if remaining_to_remove <= 0:
-					break
+		if player_inv.has_method("remove_item"):
+			player_inv.remove_item(mat_id, req_cnt)
 					
 	# 완성품 지급
-	player_inv.add_item(result_id, recipe["amount"])
-	player_inv.inventory_changed.emit()
+	if player_inv.has_method("auto_add_item"):
+		var rem = player_inv.auto_add_item(result_id, recipe["amount"])
+		if rem > 0 and EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 가방 공간이 부족하여 일부 아이템을 수령하지 못했습니다.")
+	elif player_inv.has_method("add_item"):
+		player_inv.add_item(result_id, recipe["amount"])
+		if player_inv.has_signal("inventory_changed"):
+			player_inv.inventory_changed.emit()
+	
+	if EventBus.has_signal("event_logged"):
+		var d = ItemDatabase.get_item_data(result_id)
+		EventBus.event_logged.emit("🔨 [%s] x%d 제작 완료!" % [d.get("name", result_id), recipe["amount"]])
 	
 	if SoundManager:
 		SoundManager.play("menu_select")

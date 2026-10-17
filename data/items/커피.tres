@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "커피"
+name = "커피"
+category = 1
+description = "인스턴트 커피. 졸음을 쫓아준다."
+stackable = true
+max_stack = 5
+weight = 0.1
+rarity = 0.3
+value = 1200
+effects = {
+"thirst": 15, "stamina": 40, "stress": -5
+}

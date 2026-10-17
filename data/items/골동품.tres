@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "골동품"
+name = "골동품"
+category = 8
+description = "묵직하고 가치 높은 골동품 도자기."
+stackable = true
+max_stack = 2
+weight = 2.0
+rarity = 0.08
+value = 18000

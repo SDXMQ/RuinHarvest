@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "손전등"
+name = "손전등"
+category = 4
+description = "LED 손전등. 밤에 시야를 밝혀준다."
+stackable = false
+weight = 0.3
+rarity = 0.35
+value = 2000
+effects = {
+"night_vision": true
+}

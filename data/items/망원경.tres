@@ -1,0 +1,17 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "망원경"
+name = "망원경"
+category = 4
+description = "군용 5배율 관측용 망원경. 우클릭 시 넓은 시야로 원거리를 정찰할 수 있다."
+stackable = false
+weight = 0.6
+rarity = 0.08
+value = 14000
+effects = {
+"telescope_zoom": 5.0
+}

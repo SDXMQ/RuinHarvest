@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "3레벨_방탄복"
+name = "3레벨 중갑 방탄복"
+category = 6
+description = "최고 등급의 풀아머 중장갑 방탄복. 방어력 +60."
+stackable = false
+weight = 5.0
+rarity = 0.05
+value = 35000
+grid_w = 3
+grid_h = 3
+equip_slot = "vest"
+armor_defense = 60
+max_durability = 220

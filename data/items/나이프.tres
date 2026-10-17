@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "나이프"
+name = "나이프"
+category = 3
+description = "날카로운 사냥용 나이프."
+stackable = false
+weight = 0.5
+rarity = 0.35
+value = 3000
+max_durability = 100
+item_type = "melee"
+damage = 12
+attack_range = 0.8
+attack_speed = 0.3

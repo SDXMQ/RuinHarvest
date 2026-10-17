@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "권총"
+name = "권총"
+category = 3
+description = "9mm 권총. 탄약 필요."
+stackable = false
+weight = 1.0
+rarity = 0.1
+value = 18000
+max_durability = 100
+item_type = "ranged"
+damage = 14
+attack_range = 8.0
+attack_speed = 0.4
+ammo = "탄약"

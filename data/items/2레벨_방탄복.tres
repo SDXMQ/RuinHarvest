@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "2레벨_방탄복"
+name = "2레벨 군용 방탄복"
+category = 6
+description = "강화 세라믹 플레이트 방탄복. 방어력 +35."
+stackable = false
+weight = 3.5
+rarity = 0.15
+value = 18000
+grid_w = 2
+grid_h = 3
+equip_slot = "vest"
+armor_defense = 35
+max_durability = 150

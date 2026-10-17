@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "에너지바"
+name = "에너지바"
+category = 0
+description = "고칼로리 에너지바. 빠르게 에너지를 보충할 수 있다."
+stackable = true
+max_stack = 10
+weight = 0.1
+rarity = 0.4
+value = 800
+effects = {
+"hunger": 20, "stamina": 30
+}

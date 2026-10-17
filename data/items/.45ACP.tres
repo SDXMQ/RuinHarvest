@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = ".45ACP"
+name = ".45ACP"
+category = 3
+description = ".45 ACP 대구경 권총탄. 높은 저지력."
+stackable = true
+max_stack = 50
+weight = 0.03
+rarity = 0.2
+value = 250

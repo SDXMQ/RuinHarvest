@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "식량통조림"
+name = "식량통조림"
+category = 0
+description = "밀봉된 고기 통조림. 유통기한은 이미 지났지만 아직 먹을 수 있다."
+stackable = true
+max_stack = 10
+weight = 0.5
+rarity = 0.6
+value = 1200
+effects = {
+"hunger": 30, "hp": 5
+}

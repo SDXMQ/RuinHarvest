@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "고기 구이"
+name = "고기 구이"
+category = 0
+description = "불에 구운 고기. 영양가가 높다."
+stackable = true
+max_stack = 5
+weight = 0.4
+rarity = 0.2
+value = 1500
+effects = {
+"hunger": 45, "hp": 10
+}

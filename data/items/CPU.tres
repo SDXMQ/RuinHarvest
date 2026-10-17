@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "CPU"
+name = "CPU"
+category = 5
+description = "컴퓨터 파밍에서 발견되는 정밀 가공 프로세서."
+stackable = true
+max_stack = 5
+weight = 0.2
+rarity = 0.15
+value = 8000

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "레밍턴_리시버"
+name = "레밍턴_리시버"
+category = 3
+description = "레밍턴 870 펌프액션 샷건 리시버."
+stackable = false
+weight = 2.1
+rarity = 0.1
+value = 18000
+item_type = "receiver"

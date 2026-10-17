@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "고급 치료킷"
+name = "고급 치료킷"
+category = 2
+description = "전문 의료 키트. 중상도 치료 가능."
+stackable = true
+max_stack = 2
+weight = 1.5
+rarity = 0.1
+value = 8000
+effects = {
+"hp": 70, "stress": -10, "cures_bleeding": true, "cures_fracture": true
+}

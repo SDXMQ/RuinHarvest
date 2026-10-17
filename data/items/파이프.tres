@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "파이프"
+name = "파이프"
+category = 3
+description = "녹슨 쇠파이프."
+stackable = false
+weight = 1.5
+rarity = 0.5
+value = 1500
+max_durability = 100
+item_type = "melee"
+damage = 10
+attack_range = 1.0
+attack_speed = 0.5

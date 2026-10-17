@@ -130,7 +130,7 @@ func _ready() -> void:
 			raid_total_time = raid_time_remaining
 		if ws.has("zombie_multiplier"):
 			max_enemies_count = int(22 * ws["zombie_multiplier"])
-		if ws.has("day_night_cycle_duration") and ws["day_night_cycle_duration"] > 0:
+		if ws.has("day_night_cycle_duration"):
 			day_night_cycle_duration = ws["day_night_cycle_duration"]
 
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
@@ -164,6 +164,8 @@ func _ready() -> void:
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
 	player_inventory.inventory_changed.connect(_on_player_stats_changed)
+	if player.inventory_grid:
+		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
 	
 	# 일시정지 메뉴 버튼 시그널 연결
 	resume_btn.pressed.connect(_on_resume_pressed)
@@ -400,15 +402,20 @@ func _open_weapon_modding_window() -> void:
 		var win = modding_script.new()
 		$UI.add_child(win)
 		var cur_w = player.equipped_weapon_data if player else {}
-		win.setup(player_inventory, null, cur_w)
+		var inv_target = player.inventory_grid if player and player.inventory_grid else player_inventory
+		win.setup(inv_target, null, cur_w)
 		win.window_closed.connect(func(): _on_player_stats_changed())
 
 func _open_crafting_window() -> void:
 	get_tree().paused = true
 	current_crafting_window = CraftingWindowScene.instantiate()
 	$UI.add_child(current_crafting_window)
-	current_crafting_window.setup(player_inventory)
-	current_crafting_window.window_closed.connect(func(): current_crafting_window = null)
+	var inv_target = player.inventory_grid if player and player.inventory_grid else player_inventory
+	current_crafting_window.setup(inv_target)
+	current_crafting_window.window_closed.connect(func():
+		current_crafting_window = null
+		_on_player_stats_changed()
+	)
 
 func _open_map_window() -> void:
 	get_tree().paused = true
@@ -604,17 +611,12 @@ func _on_player_stats_changed() -> void:
 		# 무기 내구도 바
 		if weapon_durability_bar:
 			var max_dur = wep_data.get("max_durability", 100.0)
-			var cur_dur = max_dur
-			if player_inventory:
-				for item in player_inventory.items:
-					if item and item["id"] == eq_wep:
-						cur_dur = item.get("durability", max_dur)
-						break
+			var cur_dur = player.equipped_weapon_data.get("durability", max_dur)
 			weapon_durability_bar.max_value = max_dur
 			weapon_durability_bar.value = cur_dur
 			
 			var fill_style = StyleBoxFlat.new()
-			var ratio = float(cur_dur) / float(max_dur)
+			var ratio = float(cur_dur) / max(1.0, float(max_dur))
 			if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
 			elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
 			else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
@@ -646,6 +648,16 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		table_name = "car"
 		loot_title = "폐차 트렁크"
 		slots = 8
+	elif type == Vector2i(0, 2): # OBJ_FRIDGE
+		table_name = "residential"
+		loot_title = "냉장고"
+		slots = 6
+	elif type == Vector2i(5, 2): # OBJ_LIGHT_SWITCH
+		if player and player.has_method("set_flashlight"):
+			player.set_flashlight(not player.flashlight_enabled)
+		if SoundManager: SoundManager.play("menu_select")
+		EventBus.event_logged.emit("💡 조명 스위치를 작동했습니다.")
+		return
 	elif type == Vector2i(6, 1): # OBJ_DOOR_CLOSED
 		# 닫힌 문 열기 -> 열린 문으로 타일 교체 및 소음 발생
 		if chunk_manager and chunk_manager.object_layer:
@@ -712,10 +724,26 @@ func _on_chunk_loaded(_chunk_pos: Vector2i, _data: Dictionary) -> void:
 func _on_chunk_unloaded(_chunk_pos: Vector2i) -> void:
 	pass
 
+func _can_instant_extract() -> bool:
+	if player and player.is_god_mode:
+		return true
+	if GameManager and GameManager.current_world_data.get("difficulty", "") == "casual":
+		return true
+	if player:
+		for pt in extraction_points_data:
+			if player.global_position.distance_to(pt["pos"]) <= 90.0:
+				return true
+	return false
+
 func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused
 	get_tree().paused = next_pause_state
 	pause_menu.visible = next_pause_state
+	if next_pause_state and exit_btn:
+		if _can_instant_extract():
+			exit_btn.text = "은신처로 안전 복귀 (전리품 보존)"
+		else:
+			exit_btn.text = "작전 포기 및 복귀 (MIA - 배낭 분실)"
 	if GameManager:
 		GameManager.is_paused = next_pause_state
 
@@ -744,4 +772,7 @@ func _on_exit_pressed() -> void:
 			if not GameManager.current_world_data.has("player"):
 				GameManager.current_world_data["player"] = {}
 			GameManager.current_world_data["player"]["equipment"] = player.equipment.duplicate(true)
-		GameManager.end_raid("survived", get_backpack_items())
+		if _can_instant_extract():
+			GameManager.end_raid("survived", get_backpack_items())
+		else:
+			GameManager.end_raid("mia")

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "가방"
+name = "가방"
+category = 6
+description = "튼튼한 배낭. 인벤토리를 6x5(30칸) 크기로 세로 확장한다."
+stackable = false
+weight = 0.5
+rarity = 0.15
+value = 8000
+grid_w = 2
+grid_h = 3
+equip_slot = "backpack"
+weight_bonus = 15.0
+backpack_grid = Vector2i(6, 5)

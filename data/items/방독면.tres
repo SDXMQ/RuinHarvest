@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "방독면"
+name = "방독면"
+category = 6
+description = "오염된 공기를 차단하는 방독면."
+stackable = false
+weight = 0.8
+rarity = 0.2
+value = 6000
+grid_w = 2
+grid_h = 2
+equip_slot = "helmet"
+max_durability = 100
+effects = {
+"poison_resist": true
+}

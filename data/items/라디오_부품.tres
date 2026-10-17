@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "라디오 부품"
+name = "라디오 부품"
+category = 7
+description = "장거리 무전기 조립에 필요한 핵심 부품."
+stackable = true
+max_stack = 5
+weight = 0.5
+rarity = 0.08
+value = 5000

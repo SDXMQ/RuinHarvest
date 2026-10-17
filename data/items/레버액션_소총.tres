@@ -1,0 +1,20 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "레버액션 소총"
+name = "레버액션 소총"
+category = 3
+description = "클래식한 레버액션 소총. 강력하지만 재장전이 느리다."
+stackable = false
+weight = 3.5
+rarity = 0.05
+value = 35000
+max_durability = 100
+item_type = "ranged"
+damage = 22
+attack_range = 12.0
+attack_speed = 1.2
+ammo = "탄약"

@@ -242,7 +242,11 @@ func _spawn_item_to_player(item_id: String, item_data: Dictionary, amount: int) 
 	# 2. 인게임 씬 (MainWorld / Player 2D Grid) 에서 스폰
 	elif cur_scene and "player" in cur_scene and cur_scene.player:
 		var p = cur_scene.player
-		if "grid_inventory" in p and p.grid_inventory:
+		if "inventory_grid" in p and p.inventory_grid:
+			var rem = p.inventory_grid.auto_add_item(item_id, amount, custom_dict)
+			if rem < amount:
+				spawned_successfully = true
+		elif "grid_inventory" in p and p.grid_inventory:
 			var rem = p.grid_inventory.auto_add_item(item_id, amount, custom_dict)
 			if rem < amount:
 				spawned_successfully = true
@@ -252,7 +256,7 @@ func _spawn_item_to_player(item_id: String, item_data: Dictionary, amount: int) 
 				if rem < amount: spawned_successfully = true
 			elif p.inventory.has_method("add_item"):
 				var added = p.inventory.add_item(item_id, amount)
-				if added: spawned_successfully = true
+				if added <= 0: spawned_successfully = true
 				
 	# 3. 폴백 (구버전 1D 인벤토리)
 	if not spawned_successfully:
@@ -340,7 +344,10 @@ func _clear_inventory() -> void:
 		if cur_scene.has_method("_on_grid_changed"): cur_scene._on_grid_changed()
 	elif cur_scene and "player" in cur_scene and cur_scene.player:
 		var p = cur_scene.player
-		if "grid_inventory" in p and p.grid_inventory:
+		if "inventory_grid" in p and p.inventory_grid:
+			p.inventory_grid.clear()
+			cleared = true
+		elif "grid_inventory" in p and p.grid_inventory:
 			p.grid_inventory.clear()
 			cleared = true
 			

@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "1레벨_헬멧"
+name = "1레벨 오토바이 헬멧"
+category = 6
+description = "기본적인 머리 보호 헬멧. 방어력 +10."
+stackable = false
+weight = 1.0
+rarity = 0.3
+value = 4000
+grid_w = 2
+grid_h = 2
+equip_slot = "helmet"
+armor_defense = 10
+max_durability = 80

@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "화약"
+name = "화약"
+category = 5
+description = "화력 병기를 조립하기 위한 군용 등급 화약."
+stackable = true
+max_stack = 10
+weight = 0.2
+rarity = 0.15
+value = 2000
