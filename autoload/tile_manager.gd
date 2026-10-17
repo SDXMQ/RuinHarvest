@@ -13,10 +13,12 @@ const TILE_GRASS = Vector2i(0, 0)
 const TILE_DIRT = Vector2i(1, 0)
 const TILE_ROAD = Vector2i(2, 0)
 const TILE_CONCRETE = Vector2i(3, 0)
+const TILE_SIDEWALK = TILE_CONCRETE # 보도블록/인도
 const TILE_FLOOR_WOOD = Vector2i(4, 0)
 const TILE_FLOOR_TILE = Vector2i(5, 0)
 const TILE_ROAD_LINE = Vector2i(6, 0)
 const TILE_GRAVEL = Vector2i(7, 0) # 자갈길
+const TILE_WATER = Vector2i(7, 2) # 물/물웅덩이 타일
 
 # 오브젝트 타일 (y=1)
 const OBJ_TREE = Vector2i(0, 1)
