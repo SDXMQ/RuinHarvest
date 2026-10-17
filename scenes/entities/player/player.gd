@@ -226,14 +226,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			weapon_handler.cycle_weapon(1)
 			
 	if event is InputEventKey and event.is_pressed() and not event.is_echo():
-		if event.keycode == KEY_1: weapon_handler.switch_weapon_slot("primary1")
-		elif event.keycode == KEY_2: weapon_handler.switch_weapon_slot("primary2")
-		elif event.keycode == KEY_3: weapon_handler.switch_weapon_slot("sidearm")
-		elif event.keycode == KEY_4: weapon_handler.switch_weapon_slot("throwable")
-		elif event.keycode == KEY_5: _use_quickslot_item("bleed")
-		elif event.keycode == KEY_6: _use_quickslot_item("heal")
-		elif event.keycode == KEY_7: _use_quickslot_item("ration")
-		elif event.keycode == KEY_N or event.physical_keycode == KEY_N:
+		var code = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		if code == KEY_1 or code == KEY_KP_1: weapon_handler.switch_weapon_slot("primary1")
+		elif code == KEY_2 or code == KEY_KP_2: weapon_handler.switch_weapon_slot("primary2")
+		elif code == KEY_3 or code == KEY_KP_3: weapon_handler.switch_weapon_slot("sidearm")
+		elif code == KEY_4 or code == KEY_KP_4: weapon_handler.switch_weapon_slot("throwable")
+		elif code == KEY_5 or code == KEY_KP_5: _use_quickslot_item("bleed")
+		elif code == KEY_6 or code == KEY_KP_6: _use_quickslot_item("heal")
+		elif code == KEY_7 or code == KEY_KP_7: _use_quickslot_item("ration")
+		elif code == KEY_N or event.keycode == KEY_N or event.physical_keycode == KEY_N:
 			var l = _lighting()
 			if l and l.has_method("toggle_nvg"):
 				l.toggle_nvg()
@@ -251,15 +252,15 @@ func _use_quickslot_item(slot_kind: String) -> void:
 		var d = ItemDatabase.get_item_data(id)
 		var cat = d.get("category", -1)
 		var eff = d.get("effects", {})
-		if slot_kind == "bleed" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("cures_bleeding", false) or id == "붕대"):
+		if slot_kind == "bleed" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("cures_bleeding", false) or id.contains("붕대") or id.contains("지혈")):
 			target_item = item
 			target_data = d
 			break
-		elif slot_kind == "heal" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("hp", 0) > 0 or eff.get("cures_fracture", false)):
+		elif slot_kind == "heal" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("hp", 0) > 0 or eff.get("cures_fracture", false) or eff.get("cures_infection", false) or id.contains("구급") or id.contains("키트") or id.contains("부목")):
 			target_item = item
 			target_data = d
 			break
-		elif slot_kind == "ration" and (cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER):
+		elif slot_kind == "ration" and (cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or eff.has("hunger") or eff.has("thirst")):
 			target_item = item
 			target_data = d
 			break
@@ -275,6 +276,7 @@ func _use_quickslot_item(slot_kind: String) -> void:
 	if effects.has("stamina"): stamina = min(max_stamina, stamina + effects["stamina"])
 	if effects.get("cures_bleeding", false): is_bleeding = false
 	if effects.get("cures_fracture", false): is_fractured = false
+	if effects.get("cures_infection", false) or effects.get("infection", 0) < 0: is_infected = false
 	var amt = int(target_item.get("amount", 1))
 	if amt > 1:
 		target_item["amount"] = amt - 1

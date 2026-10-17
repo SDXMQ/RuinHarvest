@@ -1144,37 +1144,119 @@ func _open_split_dialog(item: Dictionary, on_confirm: Callable) -> void:
 	diag.split_confirmed.connect(on_confirm)
 
 func _handle_item_quick_action(item: Dictionary) -> void:
+	# 0. 파밍 상자나 보관함이 열려있다면 가방에서 보관함으로 빠른 전송
+	if target_inventory != null:
+		_quick_transfer_grid_to_container(item)
+		return
+
 	var id = item.get("id", "")
 	var idata = ItemDatabase.get_item_data(id)
 	var cat = idata.get("category", -1)
+	var equip_slot = ItemDatabase.get_item_equip_slot(id)
 	
-	# 1. 장비 아이템이면 빈 장비 슬롯에 퀵 장착
-	if cat == ItemDatabase.ItemCategory.EQUIPMENT:
-		var slot = ItemDatabase.get_item_equip_slot(id)
-		if slot != "" and equipment_data.get(slot, {}).is_empty():
-			inventory_grid.remove_item_by_uid(item.get("uid", ""))
-			equipment_data[slot] = item
-			_apply_backpack_grid_size()
-			_update_equipment_ui()
-			if SoundManager: SoundManager.play("menu_select")
-			return
-			
-	# 2. 음식/의약품이면 즉시 사용
+	# 1. 음식/물/의약품이면 즉시 사용
 	if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or cat == ItemDatabase.ItemCategory.MEDICAL:
 		_use_consumable_item(item, idata)
 		return
 		
-	# 3. 무기면 빈 무기 슬롯에 퀵 장착
-	if cat == ItemDatabase.ItemCategory.WEAPON or idata.get("type", "") == "receiver":
-		if equipment_data.get("primary1", {}).is_empty():
+	# 2. 방어구 및 장비 (헬멧, 방탄복, 배낭, 하의/신발)
+	if cat == ItemDatabase.ItemCategory.EQUIPMENT or (equip_slot in ["helmet", "vest", "backpack", "bottom"]):
+		var slot = equip_slot
+		if slot != "":
+			var prev_equipped = equipment_data.get(slot, {})
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
-			equipment_data["primary1"] = item
-			_update_weapons_ui()
+			equipment_data[slot] = item
+			if not prev_equipped.is_empty():
+				inventory_grid.auto_add_item(prev_equipped.get("id", ""), prev_equipped.get("amount", 1), prev_equipped)
+			_apply_backpack_grid_size()
+			_update_equipment_ui()
+			if SoundManager: SoundManager.play("menu_select")
+			if EventBus.has_signal("event_logged"):
+				if not prev_equipped.is_empty():
+					EventBus.event_logged.emit("🔄 [%s] 장비 교체 완료!" % idata.get("name", id))
+				else:
+					EventBus.event_logged.emit("🪖 [%s] 장착 완료!" % idata.get("name", id))
 			return
-		elif equipment_data.get("primary2", {}).is_empty():
+
+	# 3. 무기류 (주무기, 권총/보조무기, 투척무기)
+	if cat == ItemDatabase.ItemCategory.WEAPON or idata.get("type", "") == "receiver" or equip_slot in ["primary", "sidearm", "throwable", "melee"]:
+		var target_slot = "primary1"
+		if equip_slot == "throwable":
+			target_slot = "throwable"
+		elif equip_slot == "sidearm" or equip_slot == "melee":
+			target_slot = "sidearm"
+		else:
+			if equipment_data.get("primary1", {}).is_empty():
+				target_slot = "primary1"
+			elif equipment_data.get("primary2", {}).is_empty():
+				target_slot = "primary2"
+			else:
+				var active_slot = "primary1"
+				if player and "weapon_handler" in player and player.weapon_handler:
+					active_slot = player.weapon_handler.active_weapon_slot
+				target_slot = active_slot if active_slot in ["primary1", "primary2"] else "primary1"
+
+		var prev_weapon = equipment_data.get(target_slot, {})
+		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+		if not item.has("attachments"):
+			item["attachments"] = {}
+		equipment_data[target_slot] = item
+		if not prev_weapon.is_empty():
+			inventory_grid.auto_add_item(prev_weapon.get("id", ""), prev_weapon.get("amount", 1), prev_weapon)
+		_update_weapons_ui()
+		if player and "weapon_handler" in player and player.weapon_handler:
+			player.weapon_handler.switch_weapon_slot(target_slot)
+		if SoundManager: SoundManager.play("menu_select")
+		if EventBus.has_signal("event_logged"):
+			if not prev_weapon.is_empty():
+				EventBus.event_logged.emit("🔄 [%s] 무기 교체 완료!" % idata.get("name", id))
+			else:
+				EventBus.event_logged.emit("🔫 [%s] 무기 장착 완료!" % idata.get("name", id))
+		return
+
+	# 4. 총기 부착물 (조준경, 소음기, 손잡이, 탄창, 개머리판 등)
+	if WeaponPartsDatabase.PARTS.has(id):
+		var part_data = WeaponPartsDatabase.PARTS[id]
+		var attach_type = part_data.get("slot", "")
+		var candidate_slots = ["primary1", "primary2", "sidearm"]
+		var best_slot = ""
+		for s in candidate_slots:
+			var w = equipment_data.get(s, {})
+			if not w.is_empty():
+				var w_id = w.get("id", "")
+				var receiver_data = WeaponPartsDatabase.PARTS.get(w_id, {})
+				var allowed_slots = receiver_data.get("slots", {})
+				if allowed_slots.has(attach_type) or allowed_slots.is_empty():
+					var w_att = w.get("attachments", {})
+					if not w_att.has(attach_type) or str(w_att[attach_type]).is_empty():
+						best_slot = s
+						break
+		if best_slot == "":
+			for s in candidate_slots:
+				var w = equipment_data.get(s, {})
+				if not w.is_empty():
+					var w_id = w.get("id", "")
+					var receiver_data = WeaponPartsDatabase.PARTS.get(w_id, {})
+					var allowed_slots = receiver_data.get("slots", {})
+					if allowed_slots.has(attach_type) or allowed_slots.is_empty():
+						best_slot = s
+						break
+		if best_slot != "":
+			if not equipment_data[best_slot].has("attachments"):
+				equipment_data[best_slot]["attachments"] = {}
+			var prev_part = equipment_data[best_slot]["attachments"].get(attach_type, "")
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
-			equipment_data["primary2"] = item
+			equipment_data[best_slot]["attachments"][attach_type] = id
+			if prev_part != "":
+				inventory_grid.auto_add_item(prev_part, 1)
 			_update_weapons_ui()
+			if SoundManager: SoundManager.play("menu_select")
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("🔧 [%s] 부착 완료!" % idata.get("name", id))
+			return
+		else:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 장착 가능한 무기가 없습니다.")
 			return
 
 func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
@@ -1187,6 +1269,7 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 	if effects.has("stamina"): player.stamina = min(player.max_stamina, player.stamina + effects["stamina"])
 	if effects.get("cures_bleeding", false): player.is_bleeding = false
 	if effects.get("cures_fracture", false): player.is_fractured = false
+	if effects.get("cures_infection", false) or effects.get("infection", 0) < 0: player.is_infected = false
 	
 	player.stats_changed.emit()
 	if SoundManager: SoundManager.play("menu_select")

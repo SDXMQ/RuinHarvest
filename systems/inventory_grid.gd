@@ -386,4 +386,3 @@ func sort_items() -> void:
 		items = backup_items
 		_init_grid_map()
 	grid_changed.emit()
-
