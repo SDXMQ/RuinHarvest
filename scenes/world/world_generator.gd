@@ -224,9 +224,6 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 				var warped = _get_warped_coords(wx, wy)
 				
 				# 중앙선 처리 (도로 중심에서 0.5 타일 이내일 때)
-				var is_center_x = false
-				var is_center_y = false
-				
 				if biome == "forest":
 					var rx = fposmod(warped.x, 60.0)
 					if rx > 30.0: rx = 60.0 - rx

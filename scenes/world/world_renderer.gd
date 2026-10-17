@@ -39,7 +39,7 @@ func _draw() -> void:
 		# 1. 타일 렌더링
 		for i in range(tiles.size()):
 			var lx = i % CHUNK_SIZE
-			var ly = i / CHUNK_SIZE
+			var ly = int(float(i) / float(CHUNK_SIZE))
 			var tile_type = tiles[i]
 			
 			var rect = Rect2(
@@ -54,12 +54,12 @@ func _draw() -> void:
 			var lx = obj["x"]
 			var ly = obj["y"]
 			var center = Vector2(
-				offset_x + lx * TILE_SIZE + TILE_SIZE/2.0,
-				offset_y + ly * TILE_SIZE + TILE_SIZE/2.0
+				offset_x + lx * TILE_SIZE + TILE_SIZE / 2.0,
+				offset_y + ly * TILE_SIZE + TILE_SIZE / 2.0
 			)
 			
 			if obj["type"] == "tree":
 				draw_circle(center, TILE_SIZE * 0.8, Color(0.15, 0.35, 0.15, 0.9))
 				draw_circle(center, TILE_SIZE * 0.3, Color(0.35, 0.25, 0.15))
 			elif obj["type"] == "rock":
-				draw_rect(Rect2(center.x - TILE_SIZE/2, center.y - TILE_SIZE/2, TILE_SIZE, TILE_SIZE*0.8), Color(0.4, 0.4, 0.45))
+				draw_rect(Rect2(center.x - TILE_SIZE / 2.0, center.y - TILE_SIZE / 2.0, TILE_SIZE, TILE_SIZE * 0.8), Color(0.4, 0.4, 0.45))

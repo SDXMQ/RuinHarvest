@@ -94,15 +94,15 @@ class GameEvent:
 		effects = data.get("effects", {})
 		
 	func apply_effects(player_data: Dictionary) -> void:
-		var effects = data.get("effects", {})
-		if effects.has("hp"):
-			player_data["hp"] += effects["hp"]
-		if effects.has("stress"):
-			player_data["stress"] += effects["stress"]
-		if effects.has("hunger"):
-			player_data["hunger"] += effects["hunger"]
-		if effects.has("thirst"):
-			player_data["thirst"] += effects["thirst"]
+		var eff = data.get("effects", {})
+		if eff.has("hp"):
+			player_data["hp"] += eff["hp"]
+		if eff.has("stress"):
+			player_data["stress"] += eff["stress"]
+		if eff.has("hunger"):
+			player_data["hunger"] += eff["hunger"]
+		if eff.has("thirst"):
+			player_data["thirst"] += eff["thirst"]
 
 var active_events: Array = []
 var event_log: Array = []
@@ -136,7 +136,7 @@ func _apply_event_to_live_player(event: GameEvent) -> void:
 		event.apply_effects(GameManager.current_world_data["player"])
 	var p = get_tree().get_first_node_in_group("player")
 	if is_instance_valid(p):
-		var eff = event.effects
+		var eff: Dictionary = event.data.get("effects", {}) if event and event.data else {}
 		if eff.has("hp"):
 			p.hp = clamp(p.hp + eff["hp"], 1.0, p.max_hp)
 		if eff.has("hunger"):
