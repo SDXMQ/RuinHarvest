@@ -194,9 +194,11 @@ func _process(delta: float) -> void:
 func _on_player_stats_changed() -> void:
 	if not player: return
 	if hp_bar:
+		hp_bar.max_value = player.max_hp
 		hp_bar.value = player.hp
 		hp_bar.get_node("Label").text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
 	if stamina_bar:
+		stamina_bar.max_value = player.max_stamina
 		stamina_bar.value = player.stamina
 		stamina_bar.get_node("Label").text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
 	if hunger_bar:

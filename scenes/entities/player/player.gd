@@ -24,64 +24,153 @@ var inventory_grid: InventoryGrid
 @onready var player_camera = $PlayerCamera
 @onready var player_visuals = $Visuals
 
+func _stats() -> Node:
+	return survival_stats if survival_stats else get_node_or_null("SurvivalStats")
+
+func _weapons() -> Node:
+	return weapon_handler if weapon_handler else get_node_or_null("WeaponHandler")
+
+func _lighting() -> Node:
+	return player_lighting if player_lighting else get_node_or_null("PlayerLighting")
+
 # 외부 호환성을 위한 프록시 프로퍼티들
 var hp: float:
-	get: return survival_stats.hp if survival_stats else 100.0
-	set(v): if survival_stats: survival_stats.hp = v
+	get:
+		var s = _stats()
+		return s.hp if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.hp = v
 var stamina: float:
-	get: return survival_stats.stamina if survival_stats else 100.0
-	set(v): if survival_stats: survival_stats.stamina = v
+	get:
+		var s = _stats()
+		return s.stamina if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.stamina = v
 var hunger: float:
-	get: return survival_stats.hunger if survival_stats else 100.0
-	set(v): if survival_stats: survival_stats.hunger = v
+	get:
+		var s = _stats()
+		return s.hunger if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.hunger = v
 var thirst: float:
-	get: return survival_stats.thirst if survival_stats else 100.0
-	set(v): if survival_stats: survival_stats.thirst = v
+	get:
+		var s = _stats()
+		return s.thirst if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.thirst = v
 var is_god_mode: bool:
-	get: return survival_stats.is_god_mode if survival_stats else false
-	set(v): if survival_stats: survival_stats.is_god_mode = v
+	get:
+		var s = _stats()
+		return s.is_god_mode if s else false
+	set(v):
+		var s = _stats()
+		if s: s.is_god_mode = v
 
 var is_bleeding: bool:
-	get: return survival_stats.is_bleeding if survival_stats else false
-	set(v): if survival_stats: survival_stats.is_bleeding = v
+	get:
+		var s = _stats()
+		return s.is_bleeding if s else false
+	set(v):
+		var s = _stats()
+		if s: s.is_bleeding = v
 var is_infected: bool:
-	get: return survival_stats.is_infected if survival_stats else false
-	set(v): if survival_stats: survival_stats.is_infected = v
+	get:
+		var s = _stats()
+		return s.is_infected if s else false
+	set(v):
+		var s = _stats()
+		if s: s.is_infected = v
 var is_fractured: bool:
-	get: return survival_stats.is_fractured if survival_stats else false
-	set(v): if survival_stats: survival_stats.is_fractured = v
+	get:
+		var s = _stats()
+		return s.is_fractured if s else false
+	set(v):
+		var s = _stats()
+		if s: s.is_fractured = v
 var is_exhausted: bool:
-	get: return survival_stats.is_exhausted if survival_stats else false
-	set(v): if survival_stats: survival_stats.is_exhausted = v
+	get:
+		var s = _stats()
+		return s.is_exhausted if s else false
+	set(v):
+		var s = _stats()
+		if s: s.is_exhausted = v
 
 var max_hp: float:
-	get: return survival_stats.max_hp if survival_stats else 100.0
+	get:
+		var s = _stats()
+		return s.max_hp if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.max_hp = v
 var max_stamina: float:
-	get: return survival_stats.max_stamina if survival_stats else 100.0
+	get:
+		var s = _stats()
+		return s.max_stamina if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.max_stamina = v
 var max_hunger: float:
-	get: return survival_stats.max_hunger if survival_stats else 100.0
+	get:
+		var s = _stats()
+		return s.max_hunger if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.max_hunger = v
 var max_thirst: float:
-	get: return survival_stats.max_thirst if survival_stats else 100.0
+	get:
+		var s = _stats()
+		return s.max_thirst if s else 100.0
+	set(v):
+		var s = _stats()
+		if s: s.max_thirst = v
 var armor_defense: float:
-	get: return survival_stats.armor_defense if survival_stats else 0.0
-	set(v): if survival_stats: survival_stats.armor_defense = v
+	get:
+		var s = _stats()
+		return s.armor_defense if s else 0.0
+	set(v):
+		var s = _stats()
+		if s: s.armor_defense = v
 
 var equipment: Dictionary:
-	get: return weapon_handler.equipment if weapon_handler else {}
-	set(v): if weapon_handler: weapon_handler.equipment = v
+	get:
+		var w = _weapons()
+		return w.equipment if w else {}
+	set(v):
+		var w = _weapons()
+		if w: w.equipment = v
 var equipped_weapon: String:
-	get: return weapon_handler.equipped_weapon if weapon_handler else "맨손"
-	set(v): if weapon_handler: weapon_handler.equipped_weapon = v
+	get:
+		var w = _weapons()
+		return w.equipped_weapon if w else "맨손"
+	set(v):
+		var w = _weapons()
+		if w: w.equipped_weapon = v
 var equipped_weapon_data: Dictionary:
-	get: return weapon_handler.equipped_weapon_data if weapon_handler else {}
-	set(v): if weapon_handler: weapon_handler.equipped_weapon_data = v
+	get:
+		var w = _weapons()
+		return w.equipped_weapon_data if w else {}
+	set(v):
+		var w = _weapons()
+		if w: w.equipped_weapon_data = v
 var active_weapon_slot: String:
-	get: return weapon_handler.active_weapon_slot if weapon_handler else "primary1"
-	set(v): if weapon_handler: weapon_handler.active_weapon_slot = v
+	get:
+		var w = _weapons()
+		return w.active_weapon_slot if w else "primary1"
+	set(v):
+		var w = _weapons()
+		if w: w.active_weapon_slot = v
 
 var flashlight_enabled: bool:
-	get: return player_lighting.flashlight_enabled if player_lighting else true
-	set(v): if player_lighting: player_lighting.set_flashlight(v)
+	get:
+		var l = _lighting()
+		return l.flashlight_enabled if l else true
+	set(v):
+		var l = _lighting()
+		if l: l.set_flashlight(v)
 
 func _ready() -> void:
 	add_to_group("player")
@@ -192,11 +281,13 @@ func _handle_movement(delta: float) -> void:
 	move_and_slide()
 
 func set_flashlight(enabled: bool) -> void:
-	if player_lighting:
-		player_lighting.set_flashlight(enabled)
+	var l = _lighting()
+	if l:
+		l.set_flashlight(enabled)
 
 func refresh_equipped_weapon(prefer_first_available: bool = true) -> void:
-	if weapon_handler:
+	var w = _weapons()
+	if w:
 		if prefer_first_available:
 			var cur_dict = equipment.get(active_weapon_slot, {})
 			if cur_dict.is_empty():
@@ -205,24 +296,29 @@ func refresh_equipped_weapon(prefer_first_available: bool = true) -> void:
 					if not d.is_empty():
 						active_weapon_slot = slot
 						break
-		weapon_handler.switch_weapon_slot(active_weapon_slot)
+		w.switch_weapon_slot(active_weapon_slot)
 
 func switch_weapon_slot(slot_name: String) -> void:
-	if weapon_handler:
-		weapon_handler.switch_weapon_slot(slot_name)
+	var w = _weapons()
+	if w:
+		w.switch_weapon_slot(slot_name)
 
 func cycle_weapon(direction: int) -> void:
-	if weapon_handler:
-		weapon_handler.cycle_weapon(direction)
+	var w = _weapons()
+	if w:
+		w.cycle_weapon(direction)
 
 func _get_available_ammo_count() -> int:
-	return weapon_handler.get_available_ammo_count() if weapon_handler else 0
+	var w = _weapons()
+	return w.get_available_ammo_count() if w else 0
 
 func _get_compatible_ammo_types() -> Array:
-	return weapon_handler.get_compatible_ammo_types() if weapon_handler else ["9mm"]
+	var w = _weapons()
+	return w.get_compatible_ammo_types() if w else ["9mm"]
 
 func _get_slot_display_name(slot_name: String) -> String:
-	return weapon_handler.get_slot_display_name(slot_name) if weapon_handler else slot_name
+	var w = _weapons()
+	return w.get_slot_display_name(slot_name) if w else slot_name
 
 func apply_backpack_grid_size() -> void:
 	if not inventory_grid: return

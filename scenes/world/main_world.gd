@@ -102,7 +102,7 @@ func _ready() -> void:
 		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
 		player_inventory.load_items(p_items)
 	
-	# 플레이어 인스턴스화
+	# 플레이어 인스턴스화 및 씬 트리 등록 (@onready 컴포넌트 초기화 선행)
 	player = PlayerScene.instantiate()
 	var spawn_pos = Vector2.ZERO
 	if GameManager and GameManager.current_world_data.has("current_interior"):
@@ -114,13 +114,17 @@ func _ready() -> void:
 		# 첫 레이드 출격 시 맵 중심 안전지대 주변 (300~600px) 랜덤 스폰
 		spawn_pos = _get_random_spawn_pos()
 		
-	# 복귀 시 스탯 및 타이머 복원
+	player.position = spawn_pos
+	player.inventory = player_inventory
+	entities_layer.add_child(player)
+		
+	# 복귀 시 스탯 및 타이머 복원 (add_child 이후에 적용해야 SurvivalStats._ready()에 덮어써지지 않음)
 	if GameManager and GameManager.current_world_data.has("player_stats"):
 		var s = GameManager.current_world_data["player_stats"]
-		player.hp = s.get("hp", 100.0)
-		player.stamina = s.get("stamina", 100.0)
-		player.hunger = s.get("hunger", 100.0)
-		player.thirst = s.get("thirst", 100.0)
+		player.hp = s.get("hp", player.max_hp)
+		player.stamina = s.get("stamina", player.max_stamina)
+		player.hunger = s.get("hunger", player.max_hunger)
+		player.thirst = s.get("thirst", player.max_thirst)
 		player.is_bleeding = s.get("is_bleeding", false)
 		player.is_fractured = s.get("is_fractured", false)
 		player.is_infected = s.get("is_infected", false)
@@ -142,10 +146,6 @@ func _ready() -> void:
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
 		raid_time_remaining = GameManager.current_world_data["raid_time_remaining"]
 		GameManager.current_world_data.erase("raid_time_remaining")
-		
-	player.position = spawn_pos
-	player.inventory = player_inventory
-	entities_layer.add_child(player)
 	
 	# 세이브 데이터의 인벤토리 및 장비 복원
 	if GameManager and not GameManager.current_world_data.is_empty():
@@ -640,9 +640,11 @@ func _update_day_night_cycle() -> void:
 func _on_player_stats_changed() -> void:
 	if not player: return
 	if hp_bar:
+		hp_bar.max_value = player.max_hp
 		hp_bar.value = player.hp
 		hp_bar.get_node("Label").text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
 	if stamina_bar:
+		stamina_bar.max_value = player.max_stamina
 		stamina_bar.value = player.stamina
 		stamina_bar.get_node("Label").text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
 	if hunger_bar:
