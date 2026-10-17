@@ -232,6 +232,79 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.keycode == KEY_2: weapon_handler.switch_weapon_slot("primary2")
 		elif event.keycode == KEY_3: weapon_handler.switch_weapon_slot("sidearm")
 		elif event.keycode == KEY_4: weapon_handler.switch_weapon_slot("throwable")
+		elif event.keycode == KEY_5: _use_quickslot_item("bleed")
+		elif event.keycode == KEY_6: _use_quickslot_item("heal")
+		elif event.keycode == KEY_7: _use_quickslot_item("ration")
+		elif event.keycode == KEY_N or event.physical_keycode == KEY_N:
+			var l = _lighting()
+			if l and l.has_method("toggle_nvg"):
+				l.toggle_nvg()
+				if SoundManager: SoundManager.play("menu_select")
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("🥽 야간투시경(NVG): %s" % ("ON" if l.nvg_enabled else "OFF"))
+
+func _use_quickslot_item(slot_kind: String) -> void:
+	if not inventory_grid:
+		return
+	var target_item: Dictionary = {}
+	var target_data: Dictionary = {}
+	for item in inventory_grid.items:
+		var id = item.get("id", "")
+		var d = ItemDatabase.get_item_data(id)
+		var cat = d.get("category", -1)
+		var eff = d.get("effects", {})
+		if slot_kind == "bleed" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("cures_bleeding", false) or id == "붕대"):
+			target_item = item
+			target_data = d
+			break
+		elif slot_kind == "heal" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("hp", 0) > 0 or eff.get("cures_fracture", false)):
+			target_item = item
+			target_data = d
+			break
+		elif slot_kind == "ration" and (cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER):
+			target_item = item
+			target_data = d
+			break
+	if target_item.is_empty():
+		if EventBus.has_signal("event_logged"):
+			var label_map = {"bleed": "지혈제/붕대 [5]", "heal": "구급상자/부목 [6]", "ration": "식량/생수 [7]"}
+			EventBus.event_logged.emit("⚠️ 가방에 사용할 수 있는 %s 아이템이 없습니다." % label_map.get(slot_kind, "소비"))
+		return
+	var effects = target_data.get("effects", {})
+	if effects.has("hp"): hp = min(max_hp, hp + effects["hp"])
+	if effects.has("hunger"): hunger = min(max_hunger, hunger + effects["hunger"])
+	if effects.has("thirst"): thirst = min(max_thirst, thirst + effects["thirst"])
+	if effects.has("stamina"): stamina = min(max_stamina, stamina + effects["stamina"])
+	if effects.get("cures_bleeding", false): is_bleeding = false
+	if effects.get("cures_fracture", false): is_fractured = false
+	var amt = int(target_item.get("amount", 1))
+	if amt > 1:
+		target_item["amount"] = amt - 1
+		inventory_grid.grid_changed.emit()
+	else:
+		inventory_grid.remove_item_by_uid(target_item.get("uid", ""))
+	stats_changed.emit()
+	if SoundManager: SoundManager.play("menu_select")
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("💊 [퀵슬롯] %s 사용 완료!" % target_data.get("name", target_item.get("id", "")))
+
+func _play_surface_footstep() -> void:
+	if not SoundManager:
+		return
+	var sfx = "footstep_grass"
+	var chunk_mgr = get_node_or_null("/root/MainWorld/ChunkManager")
+	if chunk_mgr and chunk_mgr.ground_layer:
+		var t_pos = chunk_mgr.ground_layer.local_to_map(global_position)
+		var atlas = chunk_mgr.ground_layer.get_cell_atlas_coords(t_pos)
+		if atlas == TileManager.TILE_ROAD or atlas == TileManager.TILE_SIDEWALK:
+			sfx = "footstep_concrete"
+		elif atlas == TileManager.TILE_FLOOR_WOOD:
+			sfx = "footstep_wood"
+		elif atlas == TileManager.TILE_WATER:
+			sfx = "footstep_water"
+	SoundManager.play(sfx)
+	if is_sprinting and EventBus.has_signal("noise_created"):
+		EventBus.noise_created.emit(global_position, 140.0, "footstep")
 
 func _handle_movement(delta: float) -> void:
 	var input_vector = Vector2.ZERO
@@ -271,7 +344,8 @@ func _handle_movement(delta: float) -> void:
 			
 	if input_vector != Vector2.ZERO:
 		velocity = velocity.move_toward(input_vector * target_speed, acceleration * delta)
-		if randf() < 0.05 and SoundManager: SoundManager.play("footstep")
+		if randf() < (0.08 if is_sprinting else 0.045):
+			_play_surface_footstep()
 	else:
 		velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
 		
@@ -367,12 +441,13 @@ func _on_death() -> void:
 	velocity = Vector2.ZERO
 	if SoundManager: SoundManager.play("player_death")
 	EventBus.event_logged.emit("☠️ 플레이어가 사망했습니다. (작전 실패)")
+	var cur_items: Array = inventory_grid.items.duplicate(true) if inventory_grid else []
 	var timer = get_tree().create_timer(1.2, true, false, true)
 	timer.timeout.connect(func():
 		get_tree().paused = false
 		if GameManager:
 			GameManager.is_paused = false
-			GameManager.end_raid("kia")
+			GameManager.end_raid("kia", cur_items)
 	)
 """
 

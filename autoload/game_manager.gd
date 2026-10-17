@@ -181,8 +181,23 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		if current_save_slot != "":
 			SaveManager.save_game(current_world_data, current_save_slot)
 	else:
-		# 사망/실종: 배낭에 있던 모든 아이템 분실 (창고 스태쉬는 안전하게 보존)
-		current_world_data["player"]["inventory"] = []
+		# 사망/실종: 좌상단 2x2 안전 컨테이너(Secure Pouch) 구역 내 아이템만 보존
+		var pouch_items: Array = []
+		for item in looted_items:
+			if item and int(item.get("x", 99)) < 2 and int(item.get("y", 99)) < 2:
+				var w = int(item.get("h", 1)) if item.get("rotated", false) else int(item.get("w", 1))
+				var h = int(item.get("w", 1)) if item.get("rotated", false) else int(item.get("h", 1))
+				if int(item.get("x", 0)) + w <= 2 and int(item.get("y", 0)) + h <= 2:
+					pouch_items.append(item.duplicate(true))
+		current_world_data["player"]["inventory"] = pouch_items
+		last_raid_result["pouch_saved_count"] = pouch_items.size()
+		
+		# 장비 보험(Insurance) 적용 여부 확인
+		if current_world_data["player"].get("insured", false):
+			current_world_data["player"]["insured"] = false
+			last_raid_result["insurance_claimed"] = true
+		else:
+			last_raid_result["insurance_claimed"] = false
 		
 		var diff = current_world_data.get("difficulty", "normal")
 		var ws = current_world_data.get("world_settings", {})

@@ -63,8 +63,35 @@ var drag_preview: Control = null
 # 마우스 위치 및 2D 그리드 셀 좌표
 var hovered_grid_cell: Vector2i = Vector2i(-1, -1)
 var vicinity_update_timer: float = 0.0
+var _last_vicinity_signature: String = ""
+
+# 슬롯 하이라이트용 사전 캐싱 StyleBoxFlat (마우스 이동 시 반복 할당 방지)
+var _sb_hover_compat: StyleBoxFlat = null
+var _sb_hover_incompat: StyleBoxFlat = null
+var _sb_guide_compat: StyleBoxFlat = null
+var _sb_guide_default: StyleBoxFlat = null
+
+func _init_cached_styleboxes() -> void:
+	if _sb_hover_compat != null:
+		return
+	_sb_hover_compat = _make_slot_stylebox(Color(0.12, 0.42, 0.18, 0.9), Color(0.3, 1.0, 0.5, 1.0), 2)
+	_sb_hover_incompat = _make_slot_stylebox(Color(0.42, 0.12, 0.12, 0.9), Color(1.0, 0.3, 0.3, 1.0), 2)
+	_sb_guide_compat = _make_slot_stylebox(Color(0.08, 0.24, 0.14, 0.65), Color(0.2, 0.85, 0.4, 0.85), 2)
+	_sb_guide_default = _make_slot_stylebox(Color(0.14, 0.15, 0.18, 0.5), Color(0.25, 0.28, 0.32, 0.4), 1)
+
+func _make_slot_stylebox(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(bw)
+	sb.corner_radius_top_left = 4
+	sb.corner_radius_top_right = 4
+	sb.corner_radius_bottom_left = 4
+	sb.corner_radius_bottom_right = 4
+	return sb
 
 func _ready() -> void:
+	_init_cached_styleboxes()
 	tooltip = TooltipScene.instantiate()
 	add_child(tooltip)
 	tooltip.hide()
@@ -711,20 +738,27 @@ func _try_drop_on_container() -> void:
 			
 	_end_drag()
 
-func _update_vicinity_list() -> void:
-	for c in vicinity_list.get_children():
-		if c != vicinity_empty_label:
-			c.queue_free()
-			
+func _update_vicinity_list(force_rebuild: bool = false) -> void:
 	var p_pos = player.global_position if player else Vector2.ZERO
 	var ground_items = get_tree().get_nodes_in_group("ground_items")
 	var nearby_items: Array = []
+	var sig_parts: PackedStringArray = PackedStringArray()
 	
 	for g_item in ground_items:
 		if is_instance_valid(g_item) and g_item is GroundItem:
 			var dist = p_pos.distance_to(g_item.global_position)
 			if dist <= 140.0: # 반경 약 140px 내 아이템
 				nearby_items.append(g_item)
+				sig_parts.append("%d:%s:%d" % [g_item.get_instance_id(), g_item.item_id, g_item.amount])
+				
+	var new_sig = "|".join(sig_parts)
+	if not force_rebuild and new_sig == _last_vicinity_signature:
+		return
+	_last_vicinity_signature = new_sig
+	
+	for c in vicinity_list.get_children():
+		if c != vicinity_empty_label:
+			c.queue_free()
 				
 	if nearby_items.is_empty():
 		vicinity_empty_label.visible = true
@@ -769,10 +803,11 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 				if rem <= 0:
 					g_item.queue_free()
 					if SoundManager: SoundManager.play("menu_select")
-					_update_vicinity_list()
+					_update_vicinity_list(true)
 				else:
 					g_item.amount = rem
 					g_item.update_visuals()
+					_update_vicinity_list(true)
 					if EventBus.has_signal("event_logged"):
 						EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
 			elif event.button_index == MOUSE_BUTTON_LEFT:
@@ -807,7 +842,7 @@ func _drop_item_to_world(item: Dictionary) -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("📦 %s을(를) 바닥에 버렸습니다." % ItemDatabase.get_item_data(item.get("id", "")).get("name", item.get("id", "")))
-	_update_vicinity_list()
+	_update_vicinity_list(true)
 
 # ============================================================
 # 3. 캐릭터 장비 슬롯 & 가방 용량 연동
@@ -1214,6 +1249,7 @@ func _end_drag() -> void:
 	grid_control.queue_redraw()
 
 func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
+	_init_cached_styleboxes()
 	var item_id = item.get("id", "")
 	for target in drop_targets:
 		var ctrl: Control = target.get("control")
@@ -1240,34 +1276,11 @@ func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null)
 			var p_data = WeaponPartsDatabase.PARTS.get(item_id, {})
 			is_compat = (p_data.get("slot", "") == attach_type)
 			
-		var sb = StyleBoxFlat.new()
-		sb.corner_radius_top_left = 4
-		sb.corner_radius_top_right = 4
-		sb.corner_radius_bottom_left = 4
-		sb.corner_radius_bottom_right = 4
-		
+		var sb: StyleBoxFlat
 		if ctrl == hovered_ctrl:
-			if is_compat:
-				# 마우스 호버 + 장착 가능 -> 선명한 네온 초록 테두리 & 밝은 배경
-				sb.bg_color = Color(0.12, 0.42, 0.18, 0.9)
-				sb.border_color = Color(0.3, 1.0, 0.5, 1.0)
-				sb.set_border_width_all(2)
-			else:
-				# 마우스 호버 + 장착 불가 -> 빨간색 경고 테두리
-				sb.bg_color = Color(0.42, 0.12, 0.12, 0.9)
-				sb.border_color = Color(1.0, 0.3, 0.3, 1.0)
-				sb.set_border_width_all(2)
+			sb = _sb_hover_compat if is_compat else _sb_hover_incompat
 		else:
-			if is_compat:
-				# 장착 가능 슬롯 안내 가이드 -> 은은한 초록 테두리
-				sb.bg_color = Color(0.08, 0.24, 0.14, 0.65)
-				sb.border_color = Color(0.2, 0.85, 0.4, 0.85)
-				sb.set_border_width_all(2)
-			else:
-				# 일반 비호환 슬롯 -> 기본
-				sb.bg_color = Color(0.14, 0.15, 0.18, 0.5)
-				sb.border_color = Color(0.25, 0.28, 0.32, 0.4)
-				sb.set_border_width_all(1)
+			sb = _sb_guide_compat if is_compat else _sb_guide_default
 				
 		ctrl.add_theme_stylebox_override("normal", sb)
 		ctrl.add_theme_stylebox_override("hover", sb)

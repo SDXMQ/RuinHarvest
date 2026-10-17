@@ -60,7 +60,7 @@ func play(sound_name: String, volume_mult: float = 1.0, pitch_scale: float = 1.0
 	player_to_use.stream = stream
 	player_to_use.volume_db = linear_to_db(volume_mult)
 	var final_pitch = pitch_scale
-	if is_equal_approx(pitch_scale, 1.0) and sound_name in ["hit_ranged", "hit_melee", "footstep", "enemy_die", "player_hurt", "explosion_distant"]:
+	if is_equal_approx(pitch_scale, 1.0) and (sound_name.begins_with("footstep") or sound_name in ["hit_ranged", "hit_melee", "enemy_die", "player_hurt", "explosion_distant"]):
 		final_pitch = randf_range(0.92, 1.08)
 	player_to_use.pitch_scale = final_pitch
 	player_to_use.play()
@@ -92,8 +92,14 @@ func _create_sound(s_name: String) -> AudioStreamWAV:
 		return _generate_tone(500.0, 0.1, 0.15, "sine")
 	elif s_name == "door_open":
 		return _generate_tone(250.0, 0.2, 0.2, "square")
-	elif s_name == "footstep":
+	elif s_name == "footstep" or s_name == "footstep_grass":
 		return _generate_tone(80.0, 0.05, 0.1, "noise")
+	elif s_name == "footstep_concrete":
+		return _generate_tone(220.0, 0.04, 0.14, "square")
+	elif s_name == "footstep_wood":
+		return _generate_tone(145.0, 0.05, 0.15, "sawtooth")
+	elif s_name == "footstep_water":
+		return _generate_tone(420.0, 0.08, 0.16, "noise")
 	elif s_name == "alert":
 		return _generate_tone(700.0, 0.3, 0.3, "square")
 	elif s_name == "explosion_distant" or s_name == "explosion":

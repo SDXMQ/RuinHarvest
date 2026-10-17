@@ -79,6 +79,8 @@ var wb_current_preset_parts: Dictionary = {}
 var wb_missing_preset_cost: int = 0
 var wb_missing_preset_parts: Array = []
 
+var insurance_btn: Button = null
+
 func _ready() -> void:
 	tooltip = TooltipScene.instantiate()
 	add_child(tooltip)
@@ -87,8 +89,13 @@ func _ready() -> void:
 	menu_button.pressed.connect(_on_menu_pressed)
 	result_close_btn.pressed.connect(_on_result_close_pressed)
 	
-	# 상단 바에 샌드박스 도구 버튼 추가
+	# 상단 바에 장비 보험 버튼 및 샌드박스 도구 버튼 추가
 	if has_node("TopBar"):
+		insurance_btn = Button.new()
+		insurance_btn.name = "InsuranceBtn"
+		insurance_btn.pressed.connect(_on_insurance_pressed)
+		$TopBar.add_child(insurance_btn)
+		
 		var tool_btn = Button.new()
 		tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
 		tool_btn.pressed.connect(_open_item_spawner)
@@ -309,6 +316,33 @@ func _update_money_label() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var rubles = GameManager.current_world_data.get("player", {}).get("rubles", 5000)
 		money_label.text = "자금: %d RUB" % rubles
+		_update_insurance_ui()
+
+func _update_insurance_ui() -> void:
+	if not insurance_btn or not GameManager or GameManager.current_world_data.is_empty():
+		return
+	var is_insured = GameManager.current_world_data.get("player", {}).get("insured", false)
+	if is_insured:
+		insurance_btn.text = "🛡️ 장비 보험 적용됨 (사망 시 장착 장비 보존)"
+		insurance_btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.55))
+		insurance_btn.disabled = true
+	else:
+		insurance_btn.text = "🛡️ 장비 보험 가입 (1,500 RUB)"
+		insurance_btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+		var rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0))
+		insurance_btn.disabled = (rubles < 1500)
+
+func _on_insurance_pressed() -> void:
+	if not GameManager or GameManager.current_world_data.is_empty():
+		return
+	var p = GameManager.current_world_data.get("player", {})
+	if p.get("insured", false) or int(p.get("rubles", 0)) < 1500:
+		return
+	p["rubles"] = int(p.get("rubles", 0)) - 1500
+	p["insured"] = true
+	if SoundManager: SoundManager.play("craft_complete")
+	_update_money_label()
+	_sync_save_data()
 
 func _sync_save_data() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
@@ -366,7 +400,11 @@ func _draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2
 	var w = grid_mgr.grid_width
 	var h = grid_mgr.grid_height
 	
-	# 1. 배경 격자선
+	# 1. 배경 격자선 및 플레이어 배낭 좌상단 2x2 안전 컨테이너(Secure Pouch) 구역 표시
+	if is_player_grid and w >= 2 and h >= 2:
+		var pouch_rect = Rect2(0, 0, 2 * CELL_SIZE, 2 * CELL_SIZE)
+		ctrl.draw_rect(pouch_rect, Color(0.95, 0.78, 0.2, 0.08), true)
+		ctrl.draw_rect(pouch_rect, Color(0.95, 0.78, 0.2, 0.65), false, 1.5)
 	var line_col = Color(0.24, 0.28, 0.35, 0.7)
 	for x in range(w + 1):
 		ctrl.draw_line(Vector2(x * CELL_SIZE, 0), Vector2(x * CELL_SIZE, h * CELL_SIZE), line_col, 1.0)
@@ -1156,7 +1194,7 @@ func _check_last_raid_result() -> void:
 		elif res["result"] == "kia":
 			result_title.text = "💀 작전 중 사망 (KIA)"
 			result_title.add_theme_color_override("font_color", Color.RED)
-			result_desc.text = "레이드 도중 사망했습니다.\n소지하고 있던 모든 배낭 아이템을 잃었습니다."
+			result_desc.text = "레이드 도중 사망했습니다.\n2x2 안전 파우치 외의 일반 배낭 아이템을 잃었습니다."
 		elif res["result"] == "mia":
 			result_title.text = "⏳ 작전 시간 초과 (MIA)"
 			result_title.add_theme_color_override("font_color", Color.ORANGE)
@@ -1165,6 +1203,12 @@ func _check_last_raid_result() -> void:
 		var kills_cnt = int(res.get("kills", 0))
 		var t_spent = int(res.get("time_spent", 0.0))
 		result_desc.text += "\n\n⚔️ 이번 레이드 처치: %d명  |  ⏱️ 작전 시간: %d분 %d초" % [kills_cnt, t_spent / 60, t_spent % 60]
+		
+		if res.get("insurance_claimed", false):
+			result_desc.text += "\n🛡️ 장비 보험 적용 완료: 장착 중이던 무기 및 방어구가 안전하게 회수되었습니다."
+		var pouch_cnt = int(res.get("pouch_saved_count", 0))
+		if pouch_cnt > 0:
+			result_desc.text += "\n🔒 2x2 안전 파우치 보호: 귀중품 %d종이 분실되지 않고 보존되었습니다." % pouch_cnt
 		
 		var passive_inc = int(res.get("passive_income", 0))
 		if passive_inc > 0:
@@ -1181,6 +1225,7 @@ func _check_last_raid_result() -> void:
 			_update_money_label()
 			
 		GameManager.last_raid_result.clear()
+		_update_insurance_ui()
 	else:
 		result_dialog.visible = false
 

@@ -65,6 +65,7 @@ func save_game(game_state: Dictionary, slot_name: String = "autosave") -> bool:
 		current_datetime.hour, current_datetime.minute, current_datetime.second
 	]
 	
+	game_state["save_version"] = 2
 	game_state["save_time"] = save_time
 	
 	# created_at 처리
@@ -108,9 +109,27 @@ func load_game(slot_name: String = "autosave") -> Dictionary:
 			file.close()
 			var json = JSON.new()
 			if json.parse(content) == OK and json.data is Dictionary:
-				return json.data
+				return _migrate_save_data(json.data)
 				
 	return {}
+
+func _migrate_save_data(data: Dictionary) -> Dictionary:
+	var ver = int(data.get("save_version", 1))
+	if not data.has("player") or typeof(data["player"]) != TYPE_DICTIONARY:
+		data["player"] = {}
+	if not data["player"].has("equipment"):
+		data["player"]["equipment"] = {}
+	if not data["player"].has("insured"):
+		data["player"]["insured"] = false
+	if not data.has("hideout") or typeof(data["hideout"]) != TYPE_DICTIONARY:
+		data["hideout"] = {"stash": [], "upgrades": {}, "completed_quests": []}
+	else:
+		if not data["hideout"].has("stash"): data["hideout"]["stash"] = []
+		if not data["hideout"].has("upgrades"): data["hideout"]["upgrades"] = {}
+		if not data["hideout"].has("completed_quests"): data["hideout"]["completed_quests"] = []
+	if ver < 2:
+		data["save_version"] = 2
+	return data
 
 func delete_save(slot_name: String) -> bool:
 	ensure_save_dir()

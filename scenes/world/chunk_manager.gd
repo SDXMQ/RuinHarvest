@@ -1,12 +1,14 @@
 # res://scenes/world/chunk_manager.gd
 extends Node
 
-## 플레이어 위치 기반 청크 동적 로딩 및 TileMapLayer 렌더링 (바닥, 오브젝트, 지붕)
+## 플레이어 위치 기반 청크 동적 로딩 및 TileMapLayer 렌더링 (바닥, 오브젝트, 지붕) + 월드 델타 보존
 const CHUNK_SIZE: int = 16
 const TILE_SIZE: int = 32
 
 var loaded_chunks: Dictionary = {}
 var active_chunks: Array[Vector2i] = []
+var pending_chunk_queue: Array[Vector2i] = []
+var chunk_deltas: Dictionary = {} # tile_pos (Vector2i) -> atlas_coords (Vector2i)
 var render_distance: int = 4
 
 var generator: WorldGenerator
@@ -28,6 +30,8 @@ signal chunk_unloaded(chunk_pos: Vector2i)
 func _ready() -> void:
 	# WorldGenerator 초기화
 	generator = WorldGenerator.new(randi())
+	if GameManager and GameManager.current_world_data.has("chunk_deltas"):
+		chunk_deltas = GameManager.current_world_data["chunk_deltas"].duplicate()
 	
 	# 동적으로 TileMapLayer 생성
 	ground_layer = TileMapLayer.new()
@@ -51,6 +55,41 @@ func _ready() -> void:
 		ground_layer.tile_set = TileManager.tileset
 		object_layer.tile_set = TileManager.tileset
 		roof_layer.tile_set = TileManager.tileset
+		
+	if EventBus.has_signal("door_toggled"):
+		EventBus.door_toggled.connect(_on_door_toggled)
+	if EventBus.has_signal("window_broken"):
+		EventBus.window_broken.connect(_on_window_broken)
+
+func _exit_tree() -> void:
+	if EventBus:
+		if EventBus.door_toggled.is_connected(_on_door_toggled):
+			EventBus.door_toggled.disconnect(_on_door_toggled)
+		if EventBus.window_broken.is_connected(_on_window_broken):
+			EventBus.window_broken.disconnect(_on_window_broken)
+
+func _on_door_toggled(tile_pos: Vector2i, is_open: bool) -> void:
+	var cur_atlas = object_layer.get_cell_atlas_coords(tile_pos) if object_layer else Vector2i(-1, -1)
+	if cur_atlas == TileManager.OBJ_WINDOW_BROKEN:
+		chunk_deltas[tile_pos] = TileManager.OBJ_WINDOW_BROKEN
+	else:
+		chunk_deltas[tile_pos] = TileManager.OBJ_DOOR_OPEN if is_open else TileManager.OBJ_DOOR_CLOSED
+	if GameManager:
+		GameManager.current_world_data["chunk_deltas"] = chunk_deltas
+
+func _on_window_broken(tile_pos: Vector2i) -> void:
+	chunk_deltas[tile_pos] = TileManager.OBJ_WINDOW_BROKEN
+	if GameManager:
+		GameManager.current_world_data["chunk_deltas"] = chunk_deltas
+
+func _process(_delta: float) -> void:
+	# 프레임당 최대 2개 청크만 분할 생성/렌더링하여 이동 시 프레임 스터터링 방지
+	var processed = 0
+	while not pending_chunk_queue.is_empty() and processed < 2:
+		var next_pos = pending_chunk_queue.pop_front()
+		if active_chunks.has(next_pos) and not loaded_chunks.has(next_pos):
+			load_chunk(next_pos)
+			processed += 1
 
 func update_chunks(player_pos: Vector2) -> void:
 	var player_tile_x = int(floor(player_pos.x / TILE_SIZE))
@@ -60,8 +99,10 @@ func update_chunks(player_pos: Vector2) -> void:
 	
 	var center_chunk_x: int = floor(player_pos.x / (CHUNK_SIZE * TILE_SIZE))
 	var center_chunk_y: int = floor(player_pos.y / (CHUNK_SIZE * TILE_SIZE))
+	var center_chunk = Vector2i(center_chunk_x, center_chunk_y)
 	
 	var new_active_chunks: Array[Vector2i] = []
+	var is_initial_load = loaded_chunks.is_empty()
 	
 	for y in range(center_chunk_y - render_distance, center_chunk_y + render_distance + 1):
 		for x in range(center_chunk_x - render_distance, center_chunk_x + render_distance + 1):
@@ -69,7 +110,10 @@ func update_chunks(player_pos: Vector2) -> void:
 			new_active_chunks.append(chunk_pos)
 			
 			if not loaded_chunks.has(chunk_pos):
-				load_chunk(chunk_pos)
+				if is_initial_load or chunk_pos.distance_squared_to(center_chunk) <= 2:
+					load_chunk(chunk_pos)
+				elif not pending_chunk_queue.has(chunk_pos):
+					pending_chunk_queue.append(chunk_pos)
 				
 	var to_unload: Array[Vector2i] = []
 	for chunk_pos in active_chunks:
@@ -133,8 +177,10 @@ func load_chunk(chunk_pos: Vector2i) -> void:
 			# 바닥 타일
 			ground_layer.set_cell(tile_pos, 0, chunk_data["tiles"][idx])
 			
-			# 오브젝트 타일 (벽, 문, 창문, 가구 등)
-			if chunk_data["objects"][idx] != Vector2i(-1, -1):
+			# 오브젝트 타일 (벽, 문, 창문, 가구 등) + 월드 델타(문 개폐/창문 파괴) 우선 적용
+			if chunk_deltas.has(tile_pos):
+				object_layer.set_cell(tile_pos, 0, chunk_deltas[tile_pos])
+			elif chunk_data["objects"][idx] != Vector2i(-1, -1):
 				object_layer.set_cell(tile_pos, 0, chunk_data["objects"][idx])
 				
 			# 지붕 타일
