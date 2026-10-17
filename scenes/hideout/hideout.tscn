@@ -1,6 +1,7 @@
-[gd_scene load_steps=2 format=3 uid="uid://hideout00000"]
+[gd_scene load_steps=3 format=3 uid="uid://hideout00000"]
 
 [ext_resource type="Script" path="res://scenes/hideout/hideout.gd" id="1_hout"]
+[ext_resource type="Script" path="res://scenes/hideout/components/hideout_workbench.gd" id="2_wb"]
 
 [node name="Hideout" type="Control"]
 layout_mode = 3
@@ -384,6 +385,7 @@ theme_override_constants/separation = 8
 visible = false
 layout_mode = 2
 text = "🛠️ 총기 작업대 (Workbench)"
+script = ExtResource("2_wb")
 
 [node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab"]
 layout_mode = 1
