@@ -19,6 +19,25 @@ var is_exhausted: bool = false
 var is_god_mode: bool = false
 
 var armor_defense: float = 0.0
+var _ui_sync_timer: float = 0.0
+
+@onready var player = get_parent()
+
+func _ready() -> void:
+	if GameManager and not GameManager.current_world_data.is_empty():
+		var bonus_hp = HideoutProgression.get_bonus_max_hp(GameManager.current_world_data)
+		max_hp = 100.0 + bonus_hp
+		hp = max_hp
+
+func get_total_armor_defense() -> float:
+	var total = armor_defense
+	if player and "equipment" in player:
+		for slot in ["helmet", "vest"]:
+			var eq = player.equipment.get(slot, {})
+			if not eq.is_empty():
+				var d = ItemDatabase.get_item_data(eq.get("id", ""))
+				total += float(d.get("armor_defense", 0))
+	return total
 
 func _process(delta: float) -> void:
 	if is_god_mode:
@@ -26,7 +45,6 @@ func _process(delta: float) -> void:
 		thirst = max_thirst
 		hp = max_hp
 		stamina = max_stamina
-		stats_changed.emit()
 		return
 		
 	hunger -= 0.15 * delta
@@ -42,9 +60,14 @@ func _process(delta: float) -> void:
 	hp = clamp(hp, 0.0, max_hp)
 	
 	if hp <= 0:
+		stats_changed.emit()
 		EventBus.player_died.emit()
+		return
 		
-	stats_changed.emit()
+	_ui_sync_timer += delta
+	if _ui_sync_timer >= 0.2:
+		_ui_sync_timer = 0.0
+		stats_changed.emit()
 
 func regen_stamina(delta: float, multiplier: float) -> void:
 	if hunger > 20.0 and thirst > 20.0:
@@ -60,11 +83,14 @@ func consume_stamina(amount: float) -> void:
 
 func take_damage(amount: float, source: String) -> void:
 	if is_god_mode: return
-	var dmg_reduction = armor_defense / (armor_defense + 100.0)
+	var def = get_total_armor_defense()
+	var dmg_reduction = def / (def + 80.0)
 	var actual_damage = max(1.0, amount * (1.0 - dmg_reduction))
-	hp -= actual_damage
-	if source == "zombie" and randf() < 0.3:
+	hp = max(0.0, hp - actual_damage)
+	if source == "zombie" and randf() < 0.28:
 		is_infected = true
-	elif source == "gunfire" and randf() < 0.5:
+	elif source in ["gunfire", "gunshot", "explosion"] and randf() < 0.38:
 		is_bleeding = true
+	if hp <= 0:
+		EventBus.player_died.emit()
 	stats_changed.emit()

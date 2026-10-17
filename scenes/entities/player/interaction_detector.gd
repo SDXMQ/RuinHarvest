@@ -87,9 +87,9 @@ func _update_interaction(delta: float) -> void:
 		var collider = res["collider"]
 		if collider and collider.get("interactable_type") != null:
 			var i_type = collider.get("interactable_type")
-			if typeof(i_type) == TYPE_VECTOR2I and i_type == Vector2i(5, 1):
+			if typeof(i_type) == TYPE_VECTOR2I and (i_type == Vector2i(5, 1) or i_type == Vector2i(7, 2)):
 				can_interact = true
-				prompt_text = "[E] 폐차 트렁크 열기"
+				prompt_text = "[E] 폐차 트렁크 열기" if i_type == Vector2i(5, 1) else "[E] 🪂 항공 보급품 상자 열기"
 				interactable_type = i_type
 				if object_layer:
 					interactable_tile_pos = object_layer.local_to_map(collider.global_position)

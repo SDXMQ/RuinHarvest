@@ -141,17 +141,21 @@ func _create_particle(preset: String, x: float, y: float, angle: float, extra: D
 		
 		"rain":
 			var wind = extra.get("wind", 0.0)
-			var screen_w = extra.get("screen_w", 1280.0)
-			p.x = randf_range(-50, screen_w + 50); p.y = -10.0
-			p.vx = wind * 0.5 + randf_range(-0.5, 0.5); p.vy = randf_range(8.0, 14.0)
-			p.life = randf_range(0.5, 1.5); p.max_life = p.life
-			p.size = randf_range(1.0, 2.0)
+			var span_w = extra.get("screen_w", 960.0)
+			var span_h = extra.get("screen_h", 540.0)
+			p.x = x + randf_range(-span_w * 0.65, span_w * 0.65)
+			p.y = y + randf_range(-span_h * 0.65, span_h * 0.25)
+			p.vx = wind * 0.5 + randf_range(-0.8, 0.2); p.vy = randf_range(8.0, 14.0)
+			p.life = randf_range(0.4, 0.9); p.max_life = p.life
+			p.size = randf_range(1.2, 2.2)
 			p.color = C_RAIN; p.gravity = 0.1; p.friction = 1.0
 			p.shrink = false
 		
 		"snow":
-			var screen_w = extra.get("screen_w", 1280.0)
-			p.x = randf_range(-20, screen_w + 20); p.y = -10.0
+			var span_w = extra.get("screen_w", 960.0)
+			var span_h = extra.get("screen_h", 540.0)
+			p.x = x + randf_range(-span_w * 0.6, span_w * 0.6)
+			p.y = y - span_h * 0.55
 			p.vx = randf_range(-1.0, 1.0); p.vy = randf_range(1.0, 3.0)
 			p.life = randf_range(4.0, 8.0); p.max_life = p.life
 			p.size = randf_range(1.0, 3.0)
@@ -159,12 +163,13 @@ func _create_particle(preset: String, x: float, y: float, angle: float, extra: D
 			p.shrink = false
 		
 		"fog":
-			var screen_w = extra.get("screen_w", 1280.0)
-			var screen_h = extra.get("screen_h", 720.0)
-			p.x = randf() * screen_w; p.y = randf() * screen_h
+			var span_w = extra.get("screen_w", 960.0)
+			var span_h = extra.get("screen_h", 540.0)
+			p.x = x + randf_range(-span_w * 0.6, span_w * 0.6)
+			p.y = y + randf_range(-span_h * 0.6, span_h * 0.6)
 			p.vx = randf_range(-0.2, 0.2); p.vy = randf_range(-0.1, 0.1)
-			p.life = randf_range(3.0, 6.0); p.max_life = p.life
-			p.size = randf_range(20.0, 50.0)
+			p.life = randf_range(2.5, 5.0); p.max_life = p.life
+			p.size = randf_range(18.0, 42.0)
 			p.color = C_FOG; p.gravity = 0.0; p.friction = 0.999
 			p.shrink = false
 		

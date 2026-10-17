@@ -136,6 +136,7 @@ func _ready() -> void:
 		wb_save_btn.pressed.connect(_save_workbench_weapon)
 		
 	tab_container.tab_changed.connect(_on_tab_changed)
+	progression_tab = HideoutProgression.setup_progression_tab(self, tab_container)
 	
 	_load_data()
 	_check_last_raid_result()
@@ -145,12 +146,23 @@ func _ready() -> void:
 	_refresh_trader_ui()
 	_refresh_market_ui()
 	_refresh_workbench_ui()
+	HideoutProgression.refresh_progression_tab(self, progression_tab)
 	
 	# 반응형 레이아웃 연결
 	if ResponsiveManager:
 		ResponsiveManager.breakpoint_changed.connect(_on_responsive_breakpoint_changed)
 		ResponsiveManager.window_resized.connect(_on_responsive_window_resized)
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
+
+var progression_tab: Control = null
+
+func _apply_stash_upgrade_size() -> void:
+	if not stash_grid_mgr or not GameManager: return
+	var new_h = HideoutProgression.get_stash_grid_height(GameManager.current_world_data)
+	stash_grid_mgr.resize_grid(10, new_h)
+	if stash_grid_control:
+		stash_grid_control.custom_minimum_size = Vector2(10 * CELL_SIZE, new_h * CELL_SIZE)
+		stash_grid_control.queue_redraw()
 
 func _on_responsive_breakpoint_changed(new_bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
 	_apply_responsive_layout(new_bp, vp_size)
@@ -187,11 +199,15 @@ func _on_tab_changed(tab: int) -> void:
 		_refresh_market_ui()
 	elif tab == 3:
 		_refresh_workbench_ui()
+	elif tab == 4 and progression_tab:
+		HideoutProgression.refresh_progression_tab(self, progression_tab)
 
 func _on_grid_changed() -> void:
 	if player_grid_control: player_grid_control.queue_redraw()
 	if stash_grid_control: stash_grid_control.queue_redraw()
 	_refresh_trader_sell_ui()
+	if progression_tab and tab_container and tab_container.current_tab == 4:
+		HideoutProgression.refresh_progression_tab(self, progression_tab)
 	_sync_save_data()
 
 func _load_data() -> void:
@@ -217,8 +233,9 @@ func _load_data() -> void:
 				"throwable": {"id": "수류탄", "amount": 2}
 			}
 		
-		# 착용 배낭에 맞춰 인벤토리 그리드 크기 먼저 확장
+		# 착용 배낭 및 시설 업그레이드에 맞춰 그리드 크기 먼저 확장
 		_apply_backpack_grid_size()
+		_apply_stash_upgrade_size()
 		
 		# 배낭 2D 데이터 로드
 		var p_items = p_data.get("inventory", [])
@@ -799,10 +816,11 @@ func _refresh_trader_ui() -> void:
 		child.queue_free()
 		
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	var discount = HideoutProgression.get_trader_discount(GameManager.current_world_data) if GameManager else 0.0
 	
 	for stock_item in t_data.get("stock", []):
 		var item_id = stock_item["id"]
-		var price = stock_item["price"]
+		var price = max(1, int(stock_item["price"] * (1.0 - discount)))
 		var amount = stock_item.get("amount", 1)
 		var item_meta = ItemDatabase.get_item_data(item_id)
 		
@@ -850,6 +868,7 @@ func _refresh_trader_sell_ui() -> void:
 		{"mgr": player_grid_mgr, "tag": "🎒가방", "is_stash": false},
 		{"mgr": stash_grid_mgr, "tag": "📦창고", "is_stash": true}
 	]
+	var sell_ratio = HideoutProgression.get_trader_sell_ratio(GameManager.current_world_data) if GameManager else 0.60
 	
 	for src in sellable_sources:
 		var mgr = src["mgr"]
@@ -860,7 +879,7 @@ func _refresh_trader_sell_ui() -> void:
 		for item in mgr.items:
 			if item and not item.is_empty():
 				var data = ItemDatabase.get_item_data(item.get("id", ""))
-				var sell_price = int(data.get("value", 500) * 0.6) # 기본가의 60%에 매입
+				var sell_price = max(1, int(data.get("value", 500) * sell_ratio))
 				var uid = item.get("uid", "")
 				
 				var btn = Button.new()
@@ -1088,6 +1107,15 @@ func _check_last_raid_result() -> void:
 			result_title.text = "⏳ 작전 시간 초과 (MIA)"
 			result_title.add_theme_color_override("font_color", Color.ORANGE)
 			result_desc.text = "제한 시간 내에 탈출하지 못해 실종되었습니다."
+			
+		var kills_cnt = int(res.get("kills", 0))
+		var t_spent = int(res.get("time_spent", 0.0))
+		result_desc.text += "\n\n⚔️ 이번 레이드 처치: %d명  |  ⏱️ 작전 시간: %d분 %d초" % [kills_cnt, t_spent / 60, t_spent % 60]
+		
+		var passive_inc = int(res.get("passive_income", 0))
+		if passive_inc > 0:
+			result_desc.text += "\n⚡ 발전기/채굴 서버 패시브 수익: +%d RUB" % passive_inc
+			_update_money_label()
 			
 		var sales_report = res.get("sales_report", {})
 		var completed_sales = sales_report.get("completed", [])

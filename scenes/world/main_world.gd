@@ -45,8 +45,14 @@ const ItemSpawnerScene = preload("res://scenes/ui/item_spawner_window.tscn")
 var current_spawner_window: Control = null
 
 const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
+const AirdropCrateScript = preload("res://scenes/world/objects/airdrop_crate.gd")
 var enemy_spawn_timer: float = 10.0
 var max_enemies_count: int = 22
+var airdrop_timer: float = 65.0
+var airdrop_count: int = 0
+var max_airdrops: int = 3
+var airdrop_points_data: Array = []
+var weather_particle_timer: float = 0.0
 
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분
@@ -488,12 +494,78 @@ func _on_compass_draw() -> void:
 			])
 			compass_bar.draw_colored_polygon(diamond, Color(0.2, 1.0, 0.3))
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.3, 1.0, 0.4))
+
+	# 항공 보급품 마커 (주황/붉은 다이아몬드)
+	for ad in airdrop_points_data:
+		var dir_to_ad = player.global_position.direction_to(ad["pos"])
+		var ad_deg = rad_to_deg(dir_to_ad.angle())
+		if ad_deg < 0: ad_deg += 360.0
+		var diff = ad_deg - player_deg
+		while diff < -180.0: diff += 360.0
+		while diff > 180.0: diff -= 360.0
+		if abs(diff) <= fov / 2.0:
+			var x = center_x + diff * pixels_per_deg
+			var dist = player.global_position.distance_to(ad["pos"])
+			var box_mark = PackedVector2Array([
+				Vector2(x - 4, 5), Vector2(x + 4, 5), Vector2(x + 4, 13), Vector2(x - 4, 13)
+			])
+			compass_bar.draw_colored_polygon(box_mark, Color(1.0, 0.45, 0.15))
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 14, 22), "📦%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
 			
 	# 정중앙 조준 눈금 (노란 역삼각형)
 	var pointer = PackedVector2Array([
 		Vector2(center_x - 4, 0), Vector2(center_x + 4, 0), Vector2(center_x, 6)
 	])
 	compass_bar.draw_colored_polygon(pointer, Color(1.0, 0.85, 0.2))
+
+func _spawn_airdrop_crate() -> void:
+	if not player: return
+	var angle = randf() * TAU
+	var dist = randf_range(420.0, 780.0)
+	var drop_pos = player.global_position + Vector2.RIGHT.rotated(angle) * dist
+	
+	var crate = StaticBody2D.new()
+	crate.set_script(AirdropCrateScript)
+	crate.position = drop_pos
+	entities_layer.add_child(crate)
+	
+	airdrop_points_data.append({
+		"name": "항공 보급품 #%d" % (airdrop_count + 1),
+		"pos": drop_pos
+	})
+	airdrop_count += 1
+	
+	# 보급품 주변에 정예 호위 병력(RAIDER 1명, SCAV 1명) 스폰
+	for i in range(2):
+		var guard = EnemyScene.instantiate()
+		guard.position = drop_pos + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(45.0, 90.0)
+		guard.enemy_type = 4 if i == 0 else 3
+		entities_layer.add_child(guard)
+		
+	if SoundManager:
+		SoundManager.play("explosion_distant")
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("★ 🪂 [긴급 공수] 군용 항공 보급품이 투하되었습니다! (나침반 📦 마커 확인)")
+
+func _update_weather_particles(delta: float) -> void:
+	if not particle_system or not WeatherSystem or not player:
+		return
+	weather_particle_timer -= delta
+	if weather_particle_timer > 0.0:
+		return
+	weather_particle_timer = 0.08
+	var w = WeatherSystem.current_weather
+	var px = player.global_position.x
+	var py = player.global_position.y
+	if w == WeatherSystem.WeatherType.RAIN:
+		particle_system.emit("rain", px, py, 6, 0.0, {"wind": -1.5})
+	elif w == WeatherSystem.WeatherType.HEAVY_RAIN:
+		particle_system.emit("rain", px, py, 14, 0.0, {"wind": -3.5})
+	elif w == WeatherSystem.WeatherType.STORM:
+		particle_system.emit("rain", px, py, 20, 0.0, {"wind": -6.0})
+	elif w == WeatherSystem.WeatherType.FOG:
+		if randf() < 0.35:
+			particle_system.emit("fog", px, py, 2)
 
 func _process(delta: float) -> void:
 	if player:
@@ -514,9 +586,15 @@ func _process(delta: float) -> void:
 				EventBus.event_logged.emit("탈출 시간 초과. 작전 실패.")
 				if GameManager: GameManager.end_raid("mia")
 				
-		# 환경 조명 변화
+		# 환경 조명 및 날씨 파티클 변화
 		if not get_tree().paused:
 			_update_day_night_cycle()
+			_update_weather_particles(delta)
+			if airdrop_count < max_airdrops:
+				airdrop_timer -= delta
+				if airdrop_timer <= 0.0:
+					airdrop_timer = randf_range(95.0, 140.0)
+					_spawn_airdrop_crate()
 		
 		# 적 주기적 스폰
 		enemy_spawn_timer -= delta
@@ -654,6 +732,10 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		table_name = "residential"
 		loot_title = "냉장고"
 		slots = 6
+	elif type == Vector2i(7, 2): # Airdrop Crate
+		table_name = "military"
+		loot_title = "🪂 군용 항공 보급품"
+		slots = 12
 	elif type == Vector2i(5, 2): # OBJ_LIGHT_SWITCH
 		if player and player.has_method("set_flashlight"):
 			player.set_flashlight(not player.flashlight_enabled)
@@ -683,6 +765,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		if chunk_manager and chunk_manager.object_layer:
 			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
 		EventBus.noise_created.emit(world_pos, 400.0, "break")
+		EventBus.door_toggled.emit(tile_pos, true)
 		EventBus.window_broken.emit(tile_pos)
 		EventBus.event_logged.emit("💥 창문이 깨졌습니다! (큰 소음 발생)")
 		if SoundManager: SoundManager.play("hit_melee")
@@ -701,6 +784,12 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			var loot_items = ItemDatabase.generate_loot(table_name)
 			for item in loot_items:
 				inv.add_item(item["id"], item["amount"])
+			if type == Vector2i(7, 2):
+				var bonus_weapons = ["M4A1 카빈", "AK-74M 돌격소총", "AWM 저격소총", "SV-98 저격소총"]
+				var bonus_gear = ["6B43 6A급 중방탄복", "알틴 방탄 헬멧", "군용 대형 배낭", "군용 수술 키트", "군용 무전기", "골드 시계"]
+				inv.add_item(bonus_weapons[randi() % bonus_weapons.size()], 1)
+				inv.add_item(bonus_gear[randi() % bonus_gear.size()], 1)
+				inv.add_item("수류탄", 2)
 			container_inventories[tile_pos] = inv
 			
 		_open_loot_window(inv, loot_title)

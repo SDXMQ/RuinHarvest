@@ -26,8 +26,20 @@ var raid_start_time: float = 0.0
 var raid_duration_minutes: float = 30.0 # 레이드 기본 제한 시간(분)
 var time_elapsed_in_raid: float = 0.0
 
+var raid_kills_count: int = 0
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 동작
+	if EventBus.has_signal("enemy_killed"):
+		EventBus.enemy_killed.connect(_on_enemy_killed)
+
+func _on_enemy_killed(_enemy_type: String, faction: String, _pos: Vector2) -> void:
+	raid_kills_count += 1
+	if not current_world_data.has("player"):
+		current_world_data["player"] = {}
+	current_world_data["player"]["kills_total"] = int(current_world_data["player"].get("kills_total", 0)) + 1
+	if faction in ["scav", "raider"]:
+		current_world_data["player"]["human_kills"] = int(current_world_data["player"].get("human_kills", 0)) + 1
 
 func _process(delta: float) -> void:
 	if current_state == GameState.IN_GAME and not is_paused:
@@ -117,6 +129,7 @@ func load_game(slot_name: String) -> void:
 # ============================================================
 func start_raid() -> void:
 	time_elapsed_in_raid = 0.0
+	raid_kills_count = 0
 	change_state(GameState.RAID_LOADING)
 	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 1.0)
 	current_state = GameState.IN_GAME
@@ -130,13 +143,14 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		"result": result,
 		"day": current_world_data.get("current_day", 1),
 		"time_spent": time_elapsed_in_raid,
+		"kills": raid_kills_count,
 		"items": looted_items
 	}
 	
 	if not current_world_data.has("player"):
 		current_world_data["player"] = {}
 	if not current_world_data.has("hideout"):
-		current_world_data["hideout"] = {"stash": []}
+		current_world_data["hideout"] = {"stash": [], "upgrades": {}, "completed_quests": []}
 	elif not current_world_data["hideout"].has("stash"):
 		current_world_data["hideout"]["stash"] = []
 	
@@ -151,6 +165,11 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 			current_world_data["current_day"] += 1
 		else:
 			current_world_data["current_day"] = 2
+			
+		var passive_income = HideoutProgression.get_passive_raid_income(current_world_data)
+		if passive_income > 0:
+			current_world_data["player"]["rubles"] = int(current_world_data["player"].get("rubles", 0)) + passive_income
+			last_raid_result["passive_income"] = passive_income
 			
 		# 탈출 성공: 레이드에서 가져온 배낭 아이템들을 플레이어 소지품으로 정확히 보존
 		var saved_items = []
