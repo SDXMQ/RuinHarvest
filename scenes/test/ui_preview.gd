@@ -67,10 +67,30 @@ func _setup_sample_equip_icons() -> void:
 		return
 	equip_helmet_btn.icon = ItemIconManager.get_icon("2레벨_헬멧")
 	equip_helmet_btn.expand_icon = true
+	_connect_preview_equip_tooltip(equip_helmet_btn, "2레벨_헬멧")
+	
 	equip_vest_btn.icon = ItemIconManager.get_icon("2레벨_방탄복")
 	equip_vest_btn.expand_icon = true
+	_connect_preview_equip_tooltip(equip_vest_btn, "2레벨_방탄복")
+	
 	equip_pack_btn.icon = ItemIconManager.get_icon("2레벨_가방")
 	equip_pack_btn.expand_icon = true
+	_connect_preview_equip_tooltip(equip_pack_btn, "2레벨_가방")
+
+func _connect_preview_equip_tooltip(btn: Button, item_id: String) -> void:
+	btn.mouse_entered.connect(func():
+		if tooltip:
+			var idata = ItemDatabase.get_item_data(item_id)
+			tooltip.display_item({"id": item_id}, idata)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	btn.mouse_exited.connect(func():
+		if tooltip: tooltip.hide()
+	)
+
+func _process(_delta: float) -> void:
+	if tooltip and tooltip.visible:
+		tooltip.update_position(get_global_mouse_position())
 
 func _populate_sample_items() -> void:
 	sample_grid.clear()

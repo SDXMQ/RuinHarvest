@@ -82,6 +82,7 @@ func _ready() -> void:
 	grid_control.gui_input.connect(_on_grid_gui_input)
 	grid_control.mouse_exited.connect(func():
 		hovered_grid_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
 		grid_control.queue_redraw()
 	)
 	
@@ -230,6 +231,8 @@ func _process(delta: float) -> void:
 	if is_dragging and drag_preview:
 		_update_drag_preview_pos()
 		grid_control.queue_redraw()
+	elif tooltip and tooltip.visible:
+		tooltip.update_position(get_global_mouse_position())
 
 func _refresh_all() -> void:
 	_update_grid_ui_size()
@@ -614,6 +617,16 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(lbl)
 	
+	# 툴팁 표시
+	btn.mouse_entered.connect(func():
+		if not is_dragging and tooltip:
+			tooltip.display_item(slot_item, d)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	btn.mouse_exited.connect(func():
+		if tooltip: tooltip.hide()
+	)
+	
 	# 드래그 및 우클릭/Ctrl+좌클릭 픽업
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
@@ -793,6 +806,21 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hbox.add_child(lbl)
 	
+	# 툴팁 표시
+	btn.mouse_entered.connect(func():
+		if not is_dragging and tooltip:
+			var item_dict = {
+				"id": g_item.item_id,
+				"amount": g_item.amount,
+				"custom_data": g_item.custom_data
+			}
+			tooltip.display_item(item_dict, d)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	btn.mouse_exited.connect(func():
+		if tooltip: tooltip.hide()
+	)
+	
 	# 드래그 및 우클릭/Ctrl+좌클릭 픽업
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
@@ -846,6 +874,17 @@ func _drop_item_to_world(item: Dictionary) -> void:
 # 3. 캐릭터 장비 슬롯 & 가방 용량 연동
 # ============================================================
 func _connect_equipment_slot(btn: Button, slot_name: String) -> void:
+	btn.mouse_entered.connect(func():
+		if not is_dragging and tooltip:
+			var equipped = equipment_data.get(slot_name, {})
+			if not equipped.is_empty():
+				var idata = ItemDatabase.get_item_data(equipped.get("id", ""))
+				tooltip.display_item(equipped, idata)
+				tooltip.update_position(get_global_mouse_position())
+	)
+	btn.mouse_exited.connect(func():
+		if tooltip: tooltip.hide()
+	)
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
 			if event.button_index == MOUSE_BUTTON_LEFT:
@@ -1075,6 +1114,17 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 		
 	drop_targets.append({"control": btn, "type": "attachment", "weapon_slot_key": weapon_slot_key, "attach_type": attach_type})
 		
+	btn.mouse_entered.connect(func():
+		if not is_dragging and tooltip and current_part_id != "":
+			var p_data = WeaponPartsDatabase.PARTS.get(current_part_id, {})
+			var fake_item = {"id": current_part_id, "name": p_data.get("name", current_part_id)}
+			tooltip.display_item(fake_item, p_data)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	btn.mouse_exited.connect(func():
+		if tooltip: tooltip.hide()
+	)
+		
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
 			if event.button_index == MOUSE_BUTTON_LEFT:
@@ -1177,6 +1227,8 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String) -> void
 # 5. UX & 인터랙션 (드래그, 회전, 분할, 우클릭 액션)
 # ============================================================
 func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = Vector2i.ZERO, slot_name: String = "", ground_ref: Node = null) -> void:
+	if tooltip:
+		tooltip.hide()
 	is_dragging = true
 	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
 	if not item.has("w"):
