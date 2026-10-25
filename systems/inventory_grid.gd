@@ -229,18 +229,19 @@ func find_first_fit(base_w: int, base_h: int) -> Dictionary:
 
 func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
 	var item_data = ItemDatabase.get_item_data(id)
-	var max_stack = item_data.get("max_stack", 1)
+	var max_stack = int(item_data.get("max_stack", 1))
 	var remaining = amount
 	
 	# 1. 스택 가능한 아이템이면 기존 스택에 먼저 채우기
 	if max_stack > 1:
 		for item in items:
-			if item.get("id", "") == id and item.get("amount", 1) < max_stack:
-				var space = max_stack - item.get("amount", 1)
+			if item.get("id", "") == id and int(item.get("amount", 1)) < max_stack:
+				var space = max_stack - int(item.get("amount", 1))
 				var to_add = min(space, remaining)
-				item["amount"] += to_add
+				item["amount"] = int(item.get("amount", 1)) + to_add
 				remaining -= to_add
 				if remaining <= 0:
+					consolidate_stacks()
 					grid_changed.emit()
 					return 0
 					
@@ -249,6 +250,7 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 	while remaining > 0:
 		var fit = find_first_fit(base_size.x, base_size.y)
 		if not fit["found"]:
+			consolidate_stacks()
 			grid_changed.emit()
 			return remaining # 더 이상 넣을 공간 없음
 			
@@ -268,8 +270,39 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 		place_item(new_item, fit["x"], fit["y"], fit["rotated"])
 		remaining -= to_add
 		
+	consolidate_stacks()
 	grid_changed.emit()
 	return 0
+
+## 동일 아이템 스택 자동 통합 (최대 스택 한도 준수)
+func consolidate_stacks() -> void:
+	if items.is_empty(): return
+	var changed = false
+	var i = 0
+	while i < items.size():
+		var item = items[i]
+		var id = item.get("id", "")
+		var item_data = ItemDatabase.get_item_data(id)
+		var max_stack = int(item_data.get("max_stack", 1))
+		if max_stack > 1 and int(item.get("amount", 1)) < max_stack:
+			var cur_amt = int(item.get("amount", 1))
+			for j in range(items.size() - 1, i, -1):
+				var other = items[j]
+				if other.get("id", "") == id and other.get("uid", "") != item.get("uid", ""):
+					var space = max_stack - cur_amt
+					var other_amt = int(other.get("amount", 1))
+					var to_take = min(space, other_amt)
+					cur_amt += to_take
+					item["amount"] = cur_amt
+					other["amount"] = other_amt - to_take
+					changed = true
+					if other["amount"] <= 0:
+						remove_item_by_uid(other.get("uid", ""), false)
+					if cur_amt >= max_stack:
+						break
+		i += 1
+	if changed:
+		grid_changed.emit()
 
 func resize_grid(new_w: int, new_h: int) -> Array[Dictionary]:
 	var dropped_items: Array[Dictionary] = []

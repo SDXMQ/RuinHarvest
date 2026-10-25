@@ -247,13 +247,34 @@ func _toggle_pause() -> void:
 	get_tree().paused = is_paused
 	if pause_menu:
 		pause_menu.visible = is_paused
+		if is_paused and exit_btn:
+			var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
+			if is_sandbox:
+				exit_btn.text = "은신처로 안전 복귀 (전리품 보존)"
+				exit_btn.theme_type_variation = &"PrimaryButton"
+			else:
+				exit_btn.text = "작전 포기 및 탈주 (MIA - 전리품 유실)"
+				exit_btn.theme_type_variation = &"DangerButton"
 
 func _on_exit_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	get_tree().paused = false
 	if GameManager:
 		GameManager.is_paused = false
-		GameManager.end_raid("survived")
+		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
+		if is_sandbox:
+			var items_arr = []
+			if player and player.inventory_grid:
+				for item in player.inventory_grid.items:
+					if item and not item.is_empty():
+						items_arr.append(item.duplicate(true))
+			elif player_inventory:
+				for item in player_inventory.items:
+					if item and not item.is_empty():
+						items_arr.append(item.duplicate(true))
+			GameManager.end_raid("survived", items_arr)
+		else:
+			GameManager.end_raid("mia")
 
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_loot_window == null:

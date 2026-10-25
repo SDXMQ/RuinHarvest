@@ -888,15 +888,9 @@ func _on_chunk_unloaded(_chunk_pos: Vector2i) -> void:
 	pass
 
 func _can_instant_extract() -> bool:
-	if player and player.is_god_mode:
-		return true
-	if GameManager and GameManager.current_world_data.get("difficulty", "") == "casual":
-		return true
-	if player:
-		for pt in extraction_points_data:
-			if player.global_position.distance_to(pt["pos"]) <= 90.0:
-				return true
-	return false
+	# 샌드박스 모드에서만 ESC 메뉴를 통한 즉시 안전 탈출 허용 (일반 모드는 인게임 탈출구에서만 가능)
+	var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
+	return is_sandbox
 
 func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused
@@ -905,8 +899,10 @@ func _toggle_pause() -> void:
 	if next_pause_state and exit_btn:
 		if _can_instant_extract():
 			exit_btn.text = "은신처로 안전 복귀 (전리품 보존)"
+			exit_btn.theme_type_variation = &"PrimaryButton"
 		else:
-			exit_btn.text = "작전 포기 및 복귀 (MIA - 배낭 분실)"
+			exit_btn.text = "작전 포기 및 탈주 (MIA - 전리품 유실)"
+			exit_btn.theme_type_variation = &"DangerButton"
 	if GameManager:
 		GameManager.is_paused = next_pause_state
 

@@ -56,6 +56,7 @@ func _update_interaction(delta: float) -> void:
 		if Input.is_action_just_pressed("interact") or (Input.is_physical_key_pressed(KEY_E) and interact_cooldown <= 0.0):
 			interact_cooldown = 0.3
 			var rem = 0
+			var orig_amt = closest_ground_item.amount
 			if player and player.inventory_grid:
 				rem = player.inventory_grid.auto_add_item(closest_ground_item.item_id, closest_ground_item.amount, closest_ground_item.custom_data)
 			elif player and player.inventory:
@@ -64,11 +65,16 @@ func _update_interaction(delta: float) -> void:
 			if rem <= 0:
 				closest_ground_item.queue_free()
 				if SoundManager: SoundManager.play("menu_select")
-				EventBus.event_logged.emit("📦 %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), closest_ground_item.amount])
+				EventBus.event_logged.emit("📦 %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), orig_amt])
 			else:
+				var picked = orig_amt - rem
 				closest_ground_item.amount = rem
 				closest_ground_item.update_visuals()
-				EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+				if picked > 0:
+					if SoundManager: SoundManager.play("menu_select")
+					EventBus.event_logged.emit("📦 %s x%d 획득! (바닥에 %d개 남음)" % [idata.get("name", closest_ground_item.item_id), picked, rem])
+				else:
+					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
 		interact_prompt.emit(true, prompt_text)
 		return
 

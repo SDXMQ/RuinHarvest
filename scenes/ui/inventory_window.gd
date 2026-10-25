@@ -228,7 +228,7 @@ func _process(delta: float) -> void:
 		_update_vicinity_list()
 		
 	if is_dragging and drag_preview:
-		drag_preview.global_position = get_global_mouse_position() - Vector2(20, 20)
+		_update_drag_preview_pos()
 		grid_control.queue_redraw()
 
 func _refresh_all() -> void:
@@ -257,6 +257,28 @@ func _update_grid_ui_size() -> void:
 func _on_grid_draw() -> void:
 	InventoryUIHelper.draw_2d_grid(grid_control, inventory_grid, hovered_grid_cell, true, is_dragging, drag_data, CELL_SIZE)
 
+func _calc_grid_hover_cell(m_global_pos: Vector2) -> Vector2i:
+	if not is_dragging or not inventory_grid:
+		return Vector2i(-1, -1)
+		
+	var item = drag_data.get("item", {})
+	var is_rot = drag_data.get("rotated", false)
+	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+	var cur_w = item.get("h", base_size.y) if is_rot else item.get("w", base_size.x)
+	var cur_h = item.get("w", base_size.x) if is_rot else item.get("h", base_size.y)
+	
+	var grid_rect = grid_control.get_global_rect()
+	if grid_rect.has_point(m_global_pos):
+		var local_pos = grid_control.get_local_mouse_position()
+		var center_cell_x = int(local_pos.x / CELL_SIZE)
+		var center_cell_y = int(local_pos.y / CELL_SIZE)
+		
+		# 1x1 이상의 아이템을 획득/드래그할 때 포커스를 좌상단이 아니라 중앙에 두기
+		var offset_x = int(cur_w / 2)
+		var offset_y = int(cur_h / 2)
+		return Vector2i(center_cell_x - offset_x, center_cell_y - offset_y)
+	return Vector2i(-1, -1)
+
 func _input(event: InputEvent) -> void:
 	if not visible: return
 	
@@ -277,8 +299,8 @@ func _input(event: InputEvent) -> void:
 	if is_dragging and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R or event.physical_keycode == KEY_R:
 			drag_data["rotated"] = not drag_data.get("rotated", false)
-			if drag_preview:
-				drag_preview.rotation = PI * 0.5 if drag_data["rotated"] else 0.0
+			_rebuild_drag_preview()
+			hovered_grid_cell = _calc_grid_hover_cell(get_global_mouse_position())
 			if SoundManager: SoundManager.play("menu_move")
 			grid_control.queue_redraw()
 			get_viewport().set_input_as_handled()
@@ -287,16 +309,8 @@ func _input(event: InputEvent) -> void:
 	# 드래그 중 마우스 이동 시 실시간 그리드 좌표 갱신, 드래그 프리뷰 위치 및 슬롯 하이라이트 갱신
 	if is_dragging and event is InputEventMouseMotion:
 		var m_pos = get_global_mouse_position()
-		if drag_preview:
-			drag_preview.global_position = m_pos - Vector2(20, 20)
-			
-		var g_mouse = grid_control.get_local_mouse_position()
-		var cell_x = int(g_mouse.x / CELL_SIZE)
-		var cell_y = int(g_mouse.y / CELL_SIZE)
-		if cell_x >= 0 and cell_x < inventory_grid.grid_width and cell_y >= 0 and cell_y < inventory_grid.grid_height:
-			hovered_grid_cell = Vector2i(cell_x, cell_y)
-		else:
-			hovered_grid_cell = Vector2i(-1, -1)
+		_update_drag_preview_pos()
+		hovered_grid_cell = _calc_grid_hover_cell(m_pos)
 		grid_control.queue_redraw()
 		
 		# 마우스 아래의 장비/무기 슬롯 감지 및 하이라이트
@@ -320,13 +334,17 @@ func _handle_global_drop() -> void:
 	
 	var m_pos = get_global_mouse_position()
 	
-	# 1. 2D 그리드 영역 위인지 검사
+	# 1. 2D 그리드 영역 위인지 검사 (중앙 포커스 좌표 반영)
 	var grid_global_rect = grid_control.get_global_rect()
 	if grid_global_rect.has_point(m_pos):
-		var local_pos = grid_control.get_local_mouse_position()
-		var cell_x = int(local_pos.x / CELL_SIZE)
-		var cell_y = int(local_pos.y / CELL_SIZE)
-		_try_drop_on_grid(cell_x, cell_y)
+		var target_cell = _calc_grid_hover_cell(m_pos)
+		if target_cell.x != -1 and target_cell.y != -1:
+			_try_drop_on_grid(target_cell.x, target_cell.y)
+		else:
+			var local_pos = grid_control.get_local_mouse_position()
+			var cell_x = int(local_pos.x / CELL_SIZE)
+			var cell_y = int(local_pos.y / CELL_SIZE)
+			_try_drop_on_grid(cell_x, cell_y)
 		return
 		
 	# 2. 등록된 모든 장비/무기/부착물 슬롯 위인지 검사
@@ -379,18 +397,20 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 	var cell_y = int(local_pos.y / CELL_SIZE)
 	
 	if event is InputEventMouseMotion:
-		if cell_x >= 0 and cell_x < inventory_grid.grid_width and cell_y >= 0 and cell_y < inventory_grid.grid_height:
-			hovered_grid_cell = Vector2i(cell_x, cell_y)
+		if is_dragging:
+			hovered_grid_cell = _calc_grid_hover_cell(get_global_mouse_position())
 		else:
-			hovered_grid_cell = Vector2i(-1, -1)
-			
-		if not is_dragging:
-			var hovered_item = inventory_grid.get_item_at(cell_x, cell_y)
-			if not hovered_item.is_empty():
-				var idata = ItemDatabase.get_item_data(hovered_item.get("id", ""))
-				tooltip.display_item(hovered_item, idata)
-				tooltip.update_position(get_global_mouse_position())
+			if cell_x >= 0 and cell_x < inventory_grid.grid_width and cell_y >= 0 and cell_y < inventory_grid.grid_height:
+				hovered_grid_cell = Vector2i(cell_x, cell_y)
+				var hovered_item = inventory_grid.get_item_at(cell_x, cell_y)
+				if not hovered_item.is_empty():
+					var idata = ItemDatabase.get_item_data(hovered_item.get("id", ""))
+					tooltip.display_item(hovered_item, idata)
+					tooltip.update_position(get_global_mouse_position())
+				else:
+					tooltip.hide()
 			else:
+				hovered_grid_cell = Vector2i(-1, -1)
 				tooltip.hide()
 		grid_control.queue_redraw()
 		
@@ -434,6 +454,71 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 	var uid = item.get("uid", "")
 	var ignore_uid = uid if src == "grid" else ""
 	
+	# 1. 같은 아이템 위로 드롭했을 때 중첩 (스택 병합) 처리
+	var m_local = grid_control.get_local_mouse_position()
+	var mouse_cx = int(m_local.x / CELL_SIZE)
+	var mouse_cy = int(m_local.y / CELL_SIZE)
+	var target_item = inventory_grid.get_item_at(mouse_cx, mouse_cy)
+	if target_item.is_empty():
+		target_item = inventory_grid.get_item_at(cell_x, cell_y)
+		
+	if not target_item.is_empty() and target_item.get("id", "") == item.get("id", "") and target_item.get("uid", "") != uid:
+		var item_data = ItemDatabase.get_item_data(item.get("id", ""))
+		var max_stack = int(item_data.get("max_stack", 1))
+		if max_stack > 1:
+			var cur_amt = int(target_item.get("amount", 1))
+			var space = max_stack - cur_amt
+			if space > 0:
+				var drag_amt = int(item.get("amount", 1))
+				var to_add = min(space, drag_amt)
+				target_item["amount"] = cur_amt + to_add
+				var rem_amt = drag_amt - to_add
+				
+				if rem_amt <= 0:
+					if src == "grid":
+						inventory_grid.remove_item_by_uid(uid)
+					elif src == "container":
+						var orig_idx = drag_data.get("origin_index", -1)
+						if orig_idx != -1 and target_inventory:
+							target_inventory.remove_item_at(orig_idx, drag_amt)
+							_update_container_list()
+					elif src == "vicinity":
+						var ground_node = drag_data.get("ground_ref")
+						if is_instance_valid(ground_node): ground_node.queue_free()
+						_update_vicinity_list(true)
+					elif src == "equipment":
+						var s_name = drag_data.get("slot_name", "")
+						equipment_data[s_name] = {}
+						_apply_backpack_grid_size()
+						_update_equipment_ui()
+					elif src == "weapon_slot":
+						var s_name = drag_data.get("slot_name", "")
+						equipment_data[s_name] = {}
+						_update_weapons_ui()
+				else:
+					item["amount"] = rem_amt
+					if src == "grid":
+						var orig_it = inventory_grid.get_item_by_uid(uid)
+						if not orig_it.is_empty(): orig_it["amount"] = rem_amt
+					elif src == "container":
+						var orig_idx = drag_data.get("origin_index", -1)
+						if orig_idx != -1 and target_inventory:
+							target_inventory.remove_item_at(orig_idx, to_add)
+							_update_container_list()
+					elif src == "vicinity":
+						var ground_node = drag_data.get("ground_ref")
+						if is_instance_valid(ground_node):
+							ground_node.amount = rem_amt
+							ground_node.update_visuals()
+						_update_vicinity_list(true)
+						
+				inventory_grid.consolidate_stacks()
+				inventory_grid.grid_changed.emit()
+				if SoundManager: SoundManager.play("menu_select")
+				_end_drag()
+				return
+	
+	# 2. 빈 공간 배치 시도
 	if inventory_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid):
 		if src == "grid":
 			inventory_grid.move_item(uid, cell_x, cell_y, is_rot)
@@ -573,6 +658,8 @@ func _loot_all_from_container() -> void:
 			if rem > 0:
 				full_warn = true
 	if moved_any:
+		if inventory_grid.has_method("consolidate_stacks"):
+			inventory_grid.consolidate_stacks()
 		if SoundManager: SoundManager.play("item_pickup")
 		_update_container_list()
 	if full_warn and EventBus.has_signal("event_logged"):
@@ -1105,23 +1192,82 @@ func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = V
 		"ground_ref": ground_ref
 	}
 	
-	# 드래그 고스트 프리뷰 위젯 생성
-	if drag_preview: drag_preview.queue_free()
+	_rebuild_drag_preview()
+	hovered_grid_cell = _calc_grid_hover_cell(get_global_mouse_position())
+	grid_control.queue_redraw()
+	_highlight_compatible_slots(item, null)
+
+func _rebuild_drag_preview() -> void:
+	if drag_preview:
+		drag_preview.queue_free()
+		drag_preview = null
+		
+	var item = drag_data.get("item", {})
+	if item.is_empty(): return
+	
+	var is_rot = drag_data.get("rotated", false)
+	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+	var base_w = item.get("w", base_size.x)
+	var base_h = item.get("h", base_size.y)
+	var cur_w = base_h if is_rot else base_w
+	var cur_h = base_w if is_rot else base_h
+	
 	drag_preview = Control.new()
 	drag_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	drag_preview.z_index = 200
 	add_child(drag_preview)
 	
+	var total_w = cur_w * CELL_SIZE
+	var total_h = cur_h * CELL_SIZE
+	drag_preview.custom_minimum_size = Vector2(total_w, total_h)
+	
+	var bg_panel = Panel.new()
+	bg_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bg_panel.position = Vector2(2, 2)
+	bg_panel.size = Vector2(total_w - 4, total_h - 4)
+	
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.12, 0.15, 0.20, 0.85)
+	sb.border_color = Color(0.92, 0.68, 0.24, 0.95)
+	sb.set_border_width_all(2)
+	sb.corner_radius_top_left = 3
+	sb.corner_radius_top_right = 3
+	sb.corner_radius_bottom_right = 3
+	sb.corner_radius_bottom_left = 3
+	bg_panel.add_theme_stylebox_override("panel", sb)
+	drag_preview.add_child(bg_panel)
+	
 	var icon = TextureRect.new()
-	icon.custom_minimum_size = Vector2(40, 40)
+	var min_dim = min(total_w, total_h) * 0.72
+	icon.custom_minimum_size = Vector2(min_dim, min_dim)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if ItemIconManager: icon.texture = ItemIconManager.get_icon(item.get("id", ""))
-	icon.modulate = Color(1, 1, 1, 0.8)
+	icon.position = (Vector2(total_w, total_h) - Vector2(min_dim, min_dim)) / 2.0
 	drag_preview.add_child(icon)
 	
-	drag_preview.global_position = get_global_mouse_position() - Vector2(20, 20)
-	grid_control.queue_redraw()
-	_highlight_compatible_slots(item, null)
+	var amt = int(item.get("amount", 1))
+	if amt > 1:
+		var amt_lbl = Label.new()
+		amt_lbl.text = "x%d" % amt
+		amt_lbl.add_theme_font_size_override("font_size", 10)
+		amt_lbl.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
+		amt_lbl.position = Vector2(6, total_h - 18)
+		amt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		drag_preview.add_child(amt_lbl)
+		
+	_update_drag_preview_pos()
+
+func _update_drag_preview_pos() -> void:
+	if not drag_preview or not is_dragging: return
+	var item = drag_data.get("item", {})
+	var is_rot = drag_data.get("rotated", false)
+	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+	var cur_w = item.get("h", base_size.y) if is_rot else item.get("w", base_size.x)
+	var cur_h = item.get("w", base_size.x) if is_rot else item.get("h", base_size.y)
+	var center_offset = Vector2(cur_w * CELL_SIZE * 0.5, cur_h * CELL_SIZE * 0.5)
+	drag_preview.global_position = get_global_mouse_position() - center_offset
 
 func _end_drag() -> void:
 	is_dragging = false
