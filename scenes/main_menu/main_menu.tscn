@@ -1,6 +1,7 @@
-[gd_scene format=3 uid="uid://oa1t7v4cfeqp"]
+[gd_scene load_steps=3 format=3 uid="uid://oa1t7v4cfeqp"]
 
 [ext_resource type="Script" path="res://scenes/main_menu/main_menu.gd" id="1_mmenu"]
+[ext_resource type="Theme" uid="uid://tactical_theme_v1" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -9,6 +10,7 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+theme = ExtResource("2_theme")
 script = ExtResource("1_mmenu")
 
 [node name="ColorRect" type="ColorRect" parent="."]
@@ -18,7 +20,47 @@ anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-color = Color(0.0392157, 0.0392157, 0.0588235, 1)
+color = Color(0.04, 0.05, 0.065, 1)
+
+[node name="TopAccentBar" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 3.0
+grow_horizontal = 2
+color = Color(0.88, 0.62, 0.2, 0.85)
+
+[node name="MenuFrame" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -220.0
+offset_top = -195.0
+offset_right = 220.0
+offset_bottom = 225.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="TaglineLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -175.0
+offset_right = 200.0
+offset_bottom = -152.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(0.9, 0.65, 0.22, 0.9)
+theme_override_font_sizes/font_size = 11
+text = "// TACTICAL SURVIVAL & EXTRACTION //"
+horizontal_alignment = 1
 
 [node name="Title" type="Label" parent="."]
 layout_mode = 1
@@ -30,10 +72,11 @@ anchor_bottom = 0.5
 offset_left = -200.0
 offset_top = -150.0
 offset_right = 200.0
-offset_bottom = -80.0
+offset_bottom = -82.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_font_sizes/font_size = 64
+theme_override_colors/font_color = Color(0.95, 0.96, 0.98, 1)
+theme_override_font_sizes/font_size = 54
 text = "RuinHarvest"
 horizontal_alignment = 1
 
@@ -45,14 +88,29 @@ anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
 offset_left = -200.0
-offset_top = -70.0
+offset_top = -76.0
 offset_right = 200.0
-offset_bottom = -40.0
+offset_bottom = -48.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_colors/font_color = Color(0.54902, 0.568627, 0.627451, 1)
+theme_override_colors/font_color = Color(0.56, 0.62, 0.7, 1)
+theme_override_font_sizes/font_size = 13
 text = "Hardcore Singleplayer Extraction Shooter"
 horizontal_alignment = 1
+
+[node name="Divider" type="HSeparator" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -160.0
+offset_top = -34.0
+offset_right = 160.0
+offset_bottom = -26.0
+grow_horizontal = 2
+grow_vertical = 2
 
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
@@ -61,30 +119,47 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = 20.0
-offset_right = 100.0
-offset_bottom = 180.0
+offset_left = -150.0
+offset_top = -10.0
+offset_right = 150.0
+offset_bottom = 196.0
 grow_horizontal = 2
 grow_vertical = 2
-theme_override_constants/separation = 15
+theme_override_constants/separation = 12
 
 [node name="StartButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 40)
+custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
-text = "새 게임 (New Game)"
-
-[node name="SandboxButton" type="Button" parent="VBoxContainer"]
-custom_minimum_size = Vector2(0, 40)
-layout_mode = 2
-text = "🛠️ 샌드박스 모드 (Sandbox)"
+theme_type_variation = &"PrimaryButton"
+text = "새 레이드 시작 (New Raid)"
 
 [node name="LoadButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "이어하기 (Load Game)"
+text = "은신처 이어하기 (Continue)"
+
+[node name="SandboxButton" type="Button" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 40)
+layout_mode = 2
+text = "전술 샌드박스 (Sandbox)"
 
 [node name="QuitButton" type="Button" parent="VBoxContainer"]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "종료 (Quit)"
+theme_type_variation = &"DangerButton"
+text = "작전 종료 (Quit)"
+
+[node name="FooterLabel" type="Label" parent="."]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -32.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 0
+theme_override_colors/font_color = Color(0.42, 0.47, 0.54, 1)
+theme_override_font_sizes/font_size = 11
+text = "BUILD v1.1  //  GODOT 4.7 FORWARD+  //  TACTICAL UI SYSTEM"
+horizontal_alignment = 1

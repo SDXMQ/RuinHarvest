@@ -111,7 +111,7 @@ func _display_gun_details(item: Dictionary, rec_id: String, _data: Dictionary) -
 	}
 	
 	var attach_lines: Array[String] = []
-	attach_lines.append("[color=#f1fa8c][b]🔧 장착된 부착물:[/b][/color]")
+	attach_lines.append("[color=#e09f3e][b]ATTACHMENTS // 장착 부착물[/b][/color]")
 	
 	var has_parts = false
 	for slot_key in ["barrel", "muzzle", "optic", "grip", "magazine", "stock", "rail"]:
@@ -130,7 +130,7 @@ func _display_gun_details(item: Dictionary, rec_id: String, _data: Dictionary) -
 				has_parts = true
 				
 	if not has_parts:
-		attach_lines.append(" [color=#6272a4]• (순정 상태 - 장착된 부품 없음)[/color]")
+		attach_lines.append(" [color=#6272a4]• 순정 상태 (장착된 부품 없음)[/color]")
 		
 	if attachments_label:
 		attachments_label.text = "\n".join(attach_lines)
@@ -138,21 +138,21 @@ func _display_gun_details(item: Dictionary, rec_id: String, _data: Dictionary) -
 		
 	# === 2. 스탯 및 버프 수치만 표시 ===
 	var stat_lines: Array[String] = []
-	stat_lines.append("[color=#50fa7b][b]📊 무기 스탯 (모딩 버프 효과):[/b][/color]")
+	stat_lines.append("[color=#50fa7b][b]SPECIFICATIONS // 무기 제원[/b][/color]")
 	
-	_append_gun_stat_line(stat_lines, "💥 대미지", base_stats.get("damage", 20.0), cur_stats.get("damage", 20.0), "%.1f", true)
-	_append_gun_stat_line(stat_lines, "🎯 정확도", base_stats.get("accuracy", 70.0), cur_stats.get("accuracy", 70.0), "%d%%", true)
-	_append_gun_stat_line(stat_lines, "⚡ 연사속도 (RPM)", base_stats.get("rpm", 150), cur_stats.get("rpm", 150), "%d", true)
-	_append_gun_stat_line(stat_lines, "🔄 반동 제어", base_stats.get("recoil", 30.0), cur_stats.get("recoil", 30.0), "%.1f", false) # 반동 감소가 좋음
-	_append_gun_stat_line(stat_lines, "🔭 유효 사거리", base_stats.get("range", 10.0), cur_stats.get("range", 10.0), "%.1fm", true)
+	_append_gun_stat_line(stat_lines, "대미지", base_stats.get("damage", 20.0), cur_stats.get("damage", 20.0), "%.1f", true)
+	_append_gun_stat_line(stat_lines, "명중률", base_stats.get("accuracy", 70.0), cur_stats.get("accuracy", 70.0), "%d%%", true)
+	_append_gun_stat_line(stat_lines, "연사속도 (RPM)", base_stats.get("rpm", 150), cur_stats.get("rpm", 150), "%d", true)
+	_append_gun_stat_line(stat_lines, "반동 제어", base_stats.get("recoil", 30.0), cur_stats.get("recoil", 30.0), "%.1f", false) # 반동 감소가 좋음
+	_append_gun_stat_line(stat_lines, "유효 사거리", base_stats.get("range", 10.0), cur_stats.get("range", 10.0), "%.1fm", true)
 	
 	var cur_zoom = cur_stats.get("zoom", 1.0)
 	if cur_zoom > 1.05:
-		stat_lines.append(" • 🔍 조준경 줌: [color=#bd93f9]%.1fx 스코프[/color]" % cur_zoom)
+		stat_lines.append(" • 조준경 배율: [color=#bd93f9]%.1fx[/color]" % cur_zoom)
 		
-	_append_gun_stat_line(stat_lines, "📦 탄창 용량", base_stats.get("magazine_size", 15), cur_stats.get("magazine_size", 15), "%d발", true)
-	_append_gun_stat_line(stat_lines, "🔊 사격 소음", base_stats.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false) # 소음 감소가 좋음
-	_append_gun_stat_line(stat_lines, "⚖️ 총기 무게", base_stats.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false) # 무게 감소가 좋음
+	_append_gun_stat_line(stat_lines, "탄창 용량", base_stats.get("magazine_size", 15), cur_stats.get("magazine_size", 15), "%d발", true)
+	_append_gun_stat_line(stat_lines, "사격 소음", base_stats.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false) # 소음 감소가 좋음
+	_append_gun_stat_line(stat_lines, "총기 중량", base_stats.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false) # 무게 감소가 좋음
 	
 	if stats_label:
 		stats_label.text = "\n".join(stat_lines)
@@ -178,19 +178,19 @@ func _display_general_item_details(_item: Dictionary, data: Dictionary) -> void:
 	if attachments_label: attachments_label.hide()
 	
 	var stats: Array[String] = []
-	if data.has("damage"): stats.append("⚔️ 공격력: %d" % data["damage"])
-	if data.has("defense"): stats.append("🛡️ 방어력: +%d" % data["defense"])
-	if data.has("speed_bonus"): stats.append("⚡ 이동속도: +%d%%" % int(data["speed_bonus"] * 100))
-	if data.has("weight_bonus"): stats.append("🎒 배낭 용량: +%.1fkg" % data["weight_bonus"])
+	if data.has("damage"): stats.append("• 공격력: %d" % data["damage"])
+	if data.has("defense"): stats.append("• 방어력: +%d" % data["defense"])
+	if data.has("speed_bonus"): stats.append("• 이동속도: +%d%%" % int(data["speed_bonus"] * 100))
+	if data.has("weight_bonus"): stats.append("• 배낭 용량: +%.1fkg" % data["weight_bonus"])
 		
 	var effects = data.get("effects", {})
-	if effects.has("hp"): stats.append("❤️ 체력 회복: +%d" % effects["hp"])
-	if effects.has("hunger"): stats.append("🍖 허기 회복: +%d" % effects["hunger"])
-	if effects.has("thirst"): stats.append("💧 갈증 해소: +%d" % effects["thirst"])
-	if effects.has("stamina"): stats.append("🏃 스태미나: +%d" % effects["stamina"])
-	if effects.get("cures_bleeding", false): stats.append("🩹 출혈 치료")
-	if effects.get("cures_fracture", false): stats.append("🦴 골절 치료")
-	if effects.get("poison_resist", false): stats.append("☣️ 방독/독 저항")
+	if effects.has("hp"): stats.append("• 체력 회복: +%d" % effects["hp"])
+	if effects.has("hunger"): stats.append("• 허기 회복: +%d" % effects["hunger"])
+	if effects.has("thirst"): stats.append("• 갈증 해소: +%d" % effects["thirst"])
+	if effects.has("stamina"): stats.append("• 스태미나: +%d" % effects["stamina"])
+	if effects.get("cures_bleeding", false): stats.append("• 출혈 지혈")
+	if effects.get("cures_fracture", false): stats.append("• 골절 부목 치료")
+	if effects.get("poison_resist", false): stats.append("• 방독/독성 저항")
 	
 	if stats_label:
 		if stats.size() > 0:

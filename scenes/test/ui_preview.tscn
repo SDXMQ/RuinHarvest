@@ -1,0 +1,272 @@
+[gd_scene load_steps=3 format=3 uid="uid://ui_preview_test_001"]
+
+[ext_resource type="Theme" uid="uid://tactical_theme_v1" path="res://ui/theme/tactical_theme.tres" id="1_theme"]
+[ext_resource type="Script" path="res://scenes/test/ui_preview.gd" id="2_script"]
+
+[node name="UIPreview" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("1_theme")
+script = ExtResource("2_script")
+
+[node name="BgRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.045, 0.055, 0.07, 1)
+
+[node name="MainMargin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="MainMargin"]
+layout_mode = 2
+theme_override_constants/separation = 16
+
+[node name="HeaderPanel" type="PanelContainer" parent="MainMargin/VBox"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+theme_type_variation = &"HeaderPanel"
+
+[node name="HeaderHBox" type="HBoxContainer" parent="MainMargin/VBox/HeaderPanel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleBox" type="VBoxContainer" parent="MainMargin/VBox/HeaderPanel/HeaderHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 2
+
+[node name="Title" type="Label" parent="MainMargin/VBox/HeaderPanel/HeaderHBox/TitleBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.72, 0.25, 1)
+theme_override_font_sizes/font_size = 16
+text = "RUIN HARVEST // TACTICAL UI DESIGN SYSTEM SANDBOX"
+
+[node name="Sub" type="Label" parent="MainMargin/VBox/HeaderPanel/HeaderHBox/TitleBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.58, 0.64, 0.72, 1)
+theme_override_font_sizes/font_size = 11
+text = "F6 단독 실행 테스트 — 버튼, 슬롯, 모달 및 2D 그리드 인벤토리 실시간 검증"
+
+[node name="OpenInvBtn" type="Button" parent="MainMargin/VBox/HeaderPanel/HeaderHBox"]
+custom_minimum_size = Vector2(180, 36)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "전체 인벤토리 창 열기"
+
+[node name="OpenNewGameBtn" type="Button" parent="MainMargin/VBox/HeaderPanel/HeaderHBox"]
+custom_minimum_size = Vector2(150, 36)
+layout_mode = 2
+text = "레이드 설정 모달"
+
+[node name="OpenSettingsBtn" type="Button" parent="MainMargin/VBox/HeaderPanel/HeaderHBox"]
+custom_minimum_size = Vector2(120, 36)
+layout_mode = 2
+text = "환경설정 모달"
+
+[node name="ContentHBox" type="HBoxContainer" parent="MainMargin/VBox"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 16
+
+[node name="LeftCol" type="VBoxContainer" parent="MainMargin/VBox/ContentHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="LeftHeader" type="PanelContainer" parent="MainMargin/VBox/ContentHBox/LeftCol"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_type_variation = &"HeaderPanel"
+
+[node name="Label" type="Label" parent="MainMargin/VBox/ContentHBox/LeftCol/LeftHeader"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.7, 0.25, 1)
+theme_override_font_sizes/font_size = 13
+text = "01 // UI COMPONENTS & VARIATIONS"
+
+[node name="ComponentsPanel" type="PanelContainer" parent="MainMargin/VBox/ContentHBox/LeftCol"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="VBox" type="VBoxContainer" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="BtnSectionLabel" type="Label" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.76, 1)
+theme_override_font_sizes/font_size = 12
+text = "BUTTON STATES & VARIATIONS"
+
+[node name="BtnRow" type="HBoxContainer" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="NormalBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/BtnRow"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+text = "기본 전술 버튼"
+
+[node name="PrimaryBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/BtnRow"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"PrimaryButton"
+text = "주요 액션 (Primary)"
+
+[node name="DangerBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/BtnRow"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"DangerButton"
+text = "위험/폐기 (Danger)"
+
+[node name="DisabledBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/BtnRow"]
+custom_minimum_size = Vector2(0, 36)
+layout_mode = 2
+size_flags_horizontal = 3
+disabled = true
+text = "비활성화 (Disabled)"
+
+[node name="HSeparator1" type="HSeparator" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+
+[node name="EquipSectionLabel" type="Label" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.76, 1)
+theme_override_font_sizes/font_size = 12
+text = "EQUIPMENT SLOTS & PROCEDURAL ICONS"
+
+[node name="EquipRow" type="HBoxContainer" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="HelmetBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/EquipRow"]
+custom_minimum_size = Vector2(130, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"EquipSlotButton"
+text = "HEAD // 헬멧"
+
+[node name="VestBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/EquipRow"]
+custom_minimum_size = Vector2(130, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"EquipSlotButton"
+text = "RIG // 방탄복"
+
+[node name="PackBtn" type="Button" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/EquipRow"]
+custom_minimum_size = Vector2(130, 56)
+layout_mode = 2
+size_flags_horizontal = 3
+theme_type_variation = &"EquipSlotButton"
+text = "PACK // 배낭"
+
+[node name="HSeparator2" type="HSeparator" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+
+[node name="ControlsSectionLabel" type="Label" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.62, 0.68, 0.76, 1)
+theme_override_font_sizes/font_size = 12
+text = "SLIDERS, PROGRESS BARS & INPUTS"
+
+[node name="ProgressRow" type="HBoxContainer" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="ProgressLbl" type="Label" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/ProgressRow"]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "장비 내구도:"
+
+[node name="SampleProgress" type="ProgressBar" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/ProgressRow"]
+custom_minimum_size = Vector2(0, 18)
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+value = 76.0
+
+[node name="InputRow" type="HBoxContainer" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="SampleInput" type="LineEdit" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/InputRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "콜사인 또는 아이템 검색어 입력..."
+
+[node name="SampleOpt" type="OptionButton" parent="MainMargin/VBox/ContentHBox/LeftCol/ComponentsPanel/VBox/InputRow"]
+custom_minimum_size = Vector2(160, 0)
+layout_mode = 2
+item_count = 3
+selected = 0
+popup/item_0/text = "하드코어 (Hardcore)"
+popup/item_0/id = 0
+popup/item_1/text = "표준 작전 (Standard)"
+popup/item_1/id = 1
+popup/item_2/text = "정찰 모드 (Recon)"
+popup/item_2/id = 2
+
+[node name="RightCol" type="VBoxContainer" parent="MainMargin/VBox/ContentHBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="RightHeader" type="PanelContainer" parent="MainMargin/VBox/ContentHBox/RightCol"]
+custom_minimum_size = Vector2(0, 32)
+layout_mode = 2
+theme_type_variation = &"HeaderPanel"
+
+[node name="HBox" type="HBoxContainer" parent="MainMargin/VBox/ContentHBox/RightCol/RightHeader"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="MainMargin/VBox/ContentHBox/RightCol/RightHeader/HBox"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_colors/font_color = Color(0.92, 0.7, 0.25, 1)
+theme_override_font_sizes/font_size = 13
+text = "02 // LIVE 2D TACTICAL GRID & TOOLTIP"
+
+[node name="SortBtn" type="Button" parent="MainMargin/VBox/ContentHBox/RightCol/RightHeader/HBox"]
+custom_minimum_size = Vector2(72, 24)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "자동 정렬"
+
+[node name="RepopulateBtn" type="Button" parent="MainMargin/VBox/ContentHBox/RightCol/RightHeader/HBox"]
+custom_minimum_size = Vector2(84, 24)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "샘플 리셋"
+
+[node name="GridPanel" type="PanelContainer" parent="MainMargin/VBox/ContentHBox/RightCol"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_type_variation = &"GridSurfacePanel"
+
+[node name="Center" type="CenterContainer" parent="MainMargin/VBox/ContentHBox/RightCol/GridPanel"]
+layout_mode = 2
+
+[node name="PreviewGridControl" type="Control" parent="MainMargin/VBox/ContentHBox/RightCol/GridPanel/Center"]
+custom_minimum_size = Vector2(300, 250)
+layout_mode = 2

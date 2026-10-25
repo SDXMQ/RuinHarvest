@@ -101,9 +101,9 @@ func _ready() -> void:
 	if inv_header_hbox:
 		var sort_btn = Button.new()
 		sort_btn.name = "AutoSortBtn"
-		sort_btn.text = "🔄 정렬"
+		sort_btn.text = "정렬"
 		sort_btn.tooltip_text = "동일 아이템 병합 및 빈 공간 자동 정렬"
-		sort_btn.custom_minimum_size = Vector2(64, 24)
+		sort_btn.custom_minimum_size = Vector2(56, 22)
 		sort_btn.add_theme_font_size_override("font_size", 11)
 		sort_btn.pressed.connect(func():
 			if inventory_grid and inventory_grid.has_method("sort_items"):
@@ -116,8 +116,9 @@ func _ready() -> void:
 	if container_section:
 		var loot_all_btn = Button.new()
 		loot_all_btn.name = "LootAllBtn"
-		loot_all_btn.text = "⏬ 모두 획득 [F]  (Ctrl+클릭: 빠른 이동)"
-		loot_all_btn.custom_minimum_size = Vector2(0, 28)
+		loot_all_btn.theme_type_variation = &"PrimaryButton"
+		loot_all_btn.text = "모두 획득 [F]   (Ctrl+클릭: 빠른 이동)"
+		loot_all_btn.custom_minimum_size = Vector2(0, 30)
 		loot_all_btn.add_theme_font_size_override("font_size", 11)
 		loot_all_btn.pressed.connect(_loot_all_from_container)
 		container_section.add_child(loot_all_btn)
@@ -251,7 +252,7 @@ func _update_grid_ui_size() -> void:
 	var total_w = inventory_grid.grid_width * CELL_SIZE
 	var total_h = inventory_grid.grid_height * CELL_SIZE
 	grid_control.custom_minimum_size = Vector2(total_w, total_h)
-	grid_title_label.text = "🎒 가방 (%d x %d, 총 %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
+	grid_title_label.text = "BACKPACK // 가방 (%d×%d, %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
 
 func _on_grid_draw() -> void:
 	InventoryUIHelper.draw_2d_grid(grid_control, inventory_grid, hovered_grid_cell, true, is_dragging, drag_data, CELL_SIZE)
@@ -484,7 +485,7 @@ func _update_container_list() -> void:
 		return
 		
 	container_section.visible = true
-	container_title_label.text = "📦 " + (target_title if target_title != "" else "수색 대상")
+	container_title_label.text = "CONTAINER // " + (target_title if target_title != "" else "수색 대상")
 	
 	for c in container_list.get_children():
 		if c != container_empty_label:
@@ -843,10 +844,10 @@ func _apply_backpack_grid_size() -> void:
 	_update_grid_ui_size()
 
 func _update_equipment_ui() -> void:
-	_render_equip_slot_button(helmet_slot, "helmet", "🪖 헬멧")
-	_render_equip_slot_button(vest_slot, "vest", "🦺 방탄복")
-	_render_equip_slot_button(backpack_slot, "backpack", "🎒 배낭")
-	_render_equip_slot_button(bottom_slot, "bottom", "👟 하의/신발")
+	_render_equip_slot_button(helmet_slot, "helmet", "HEAD\n헬멧")
+	_render_equip_slot_button(vest_slot, "vest", "RIG\n방탄복")
+	_render_equip_slot_button(backpack_slot, "backpack", "PACK\n배낭")
+	_render_equip_slot_button(bottom_slot, "bottom", "BOOTS\n전술화")
 	
 	_rebuild_drop_targets()
 	
@@ -917,7 +918,7 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 		wep_btn.text = "장착된 무기 없음 (드래그하여 장착)"
 	else:
 		var d = ItemDatabase.get_item_data(weapon_dict.get("id", ""))
-		wep_btn.text = "🔫 %s" % d.get("name", weapon_dict.get("id", ""))
+		wep_btn.text = d.get("name", weapon_dict.get("id", ""))
 		if ItemIconManager: wep_btn.icon = ItemIconManager.get_icon(weapon_dict.get("id", ""))
 	top_hbox.add_child(wep_btn)
 	
@@ -1287,7 +1288,7 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 func _update_weight_ui() -> void:
 	if not inventory_grid: return
 	var cur_w = inventory_grid.get_total_weight()
-	weight_label.text = "무게: %.1f / 50.0 kg" % cur_w
+	weight_label.text = "%.1f / 50.0 kg" % cur_w
 
 func _gui_input(event: InputEvent) -> void:
 	# UI 바깥 영역으로 마우스 놓으면 바닥에 아이템 드롭

@@ -47,6 +47,10 @@ window/stretch/aspect="expand"
 
 project/assembly_name="RuinHarvest"
 
+[gui]
+
+theme/custom="res://ui/theme/tactical_theme.tres"
+
 [input]
 
 move_up={
