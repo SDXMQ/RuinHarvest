@@ -12,9 +12,14 @@ var items: Array = []
 
 func _ready() -> void:
 	if items.is_empty():
-		items.resize(max_slots)
-		for i in range(max_slots):
-			items[i] = null
+		clear()
+
+func clear() -> void:
+	items.clear()
+	items.resize(max_slots)
+	for i in range(max_slots):
+		items[i] = null
+	inventory_changed.emit()
 
 func load_items(item_list: Array) -> void:
 	items.resize(max_slots)
