@@ -212,12 +212,22 @@ func setup(p_player: CharacterBody2D, p_grid: InventoryGrid = null, p_equip: Dic
 			"vest": {},
 			"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
 			"bottom": {},
-			"primary1": {"id": "M4_리시버", "name": "M4A1 소총", "attachments": {}},
+			"primary1": WeaponPartsDatabase.create_default_weapon("M4_리시버"),
 			"primary2": {},
-			"sidearm": {"id": "M9_리시버", "name": "M9 권총", "attachments": {}},
+			"sidearm": WeaponPartsDatabase.create_default_weapon("M9_리시버"),
 			"throwable": {"id": "수류탄", "amount": 2}
 		}
 		if player: player.set("equipment", equipment_data)
+		
+	# 무기 부품 키 "parts" 단일화 및 computed_stats 동기화
+	for slot_k in ["primary1", "primary2", "sidearm"]:
+		var w = equipment_data.get(slot_k, {})
+		if not w.is_empty() and w is Dictionary:
+			if not w.has("parts"):
+				w["parts"] = w.get("attachments", {}).duplicate(true)
+			w["attachments"] = w["parts"]
+			equipment_data[slot_k] = WeaponPartsDatabase.compute_weapon_from_dict(w)
+	_sync_weapon_to_player()
 		
 	_apply_backpack_grid_size()
 	_refresh_all()
@@ -370,14 +380,16 @@ func _handle_global_drop() -> void:
 		_try_drop_on_container()
 		return
 			
-	# 4. 주변(Vicinity) 컬럼 또는 화면 바깥으로 드롭했는지 검사 (월드에 버리기)
+	# 4. 주변(Vicinity) 컬럼으로 드롭했는지 검사 (오직 VICINITY 영역에 드롭했을 때만 월드에 버리기 허용)
 	var vicinity_rect = vicinity_section.get_global_rect() if is_instance_valid(vicinity_section) else $MainLayout/VicinityCol.get_global_rect()
-	var window_rect = get_rect()
-	if vicinity_rect.has_point(m_pos) or not window_rect.has_point(m_pos):
+	if vicinity_rect.has_point(m_pos):
 		var src = drag_data.get("source", "")
 		var item = drag_data.get("item", {})
 		if src == "grid":
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
+			_drop_item_to_world(item)
+		elif src == "split":
+			drag_data["is_split"] = false
 			_drop_item_to_world(item)
 		elif src == "equipment":
 			equipment_data[drag_data.get("slot_name", "")] = {}
@@ -385,7 +397,28 @@ func _handle_global_drop() -> void:
 			_update_equipment_ui()
 			_drop_item_to_world(item)
 		elif src == "weapon_slot":
-			equipment_data[drag_data.get("slot_name", "")] = {}
+			var w_slot_name = drag_data.get("slot_name", "")
+			equipment_data[w_slot_name] = {}
+			_sync_weapon_to_player(w_slot_name)
+			_update_weapons_ui()
+			_drop_item_to_world(item)
+		elif src == "attachment":
+			var w_slot = drag_data.get("weapon_slot", "primary1")
+			var a_slot = drag_data.get("attach_slot", "")
+			if equipment_data.has(w_slot):
+				var w_dict = equipment_data[w_slot]
+				var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
+				if w_parts.has(a_slot):
+					var p_val = w_parts[a_slot]
+					if p_val is Array:
+						p_val.erase(item.get("id", ""))
+						if p_val.is_empty(): w_parts.erase(a_slot)
+					else:
+						w_parts.erase(a_slot)
+				w_dict["parts"] = w_parts
+				w_dict["attachments"] = w_parts
+				equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+				_sync_weapon_to_player(w_slot)
 			_update_weapons_ui()
 			_drop_item_to_world(item)
 		_end_drag()
@@ -430,10 +463,14 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
 						var split_item = item.duplicate()
+						split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
 						split_item["amount"] = split_amt
 						item["amount"] -= split_amt
 						inventory_grid.grid_changed.emit()
-						_start_drag("grid", split_item, Vector2i(cell_x, cell_y))
+						_start_drag("split", split_item, Vector2i(cell_x, cell_y))
+						drag_data["is_split"] = true
+						drag_data["split_source_item"] = item
+						drag_data["split_amount"] = split_amt
 					)
 				else:
 					_start_drag("grid", item, Vector2i(cell_x, cell_y))
@@ -480,6 +517,8 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 				if rem_amt <= 0:
 					if src == "grid":
 						inventory_grid.remove_item_by_uid(uid)
+					elif src == "split":
+						drag_data["is_split"] = false
 					elif src == "container":
 						var orig_idx = drag_data.get("origin_index", -1)
 						if orig_idx != -1 and target_inventory:
@@ -503,6 +542,11 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					if src == "grid":
 						var orig_it = inventory_grid.get_item_by_uid(uid)
 						if not orig_it.is_empty(): orig_it["amount"] = rem_amt
+					elif src == "split":
+						var orig_sp = drag_data.get("split_source_item", {})
+						if not orig_sp.is_empty():
+							orig_sp["amount"] = int(orig_sp.get("amount", 0)) + rem_amt
+						drag_data["is_split"] = false
 					elif src == "container":
 						var orig_idx = drag_data.get("origin_index", -1)
 						if orig_idx != -1 and target_inventory:
@@ -522,10 +566,16 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 				return
 	
 	# 2. 빈 공간 배치 시도
-	if inventory_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid):
+	if inventory_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", "")):
 		if src == "grid":
 			inventory_grid.move_item(uid, cell_x, cell_y, is_rot)
 			if SoundManager: SoundManager.play("menu_select")
+		elif src == "split":
+			if inventory_grid.place_item(item, cell_x, cell_y, is_rot):
+				drag_data["is_split"] = false
+				if SoundManager: SoundManager.play("menu_select")
+			else:
+				if SoundManager: SoundManager.play("hit_melee")
 		else:
 			if inventory_grid.place_item(item, cell_x, cell_y, is_rot):
 				if src == "vicinity":
@@ -545,12 +595,25 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 				elif src == "weapon_slot":
 					var s_name = drag_data.get("slot_name", "")
 					equipment_data[s_name] = {}
+					_sync_weapon_to_player(s_name)
 					_update_weapons_ui()
 				elif src == "attachment":
 					var w_slot = drag_data.get("weapon_slot", "primary1")
 					var a_slot = drag_data.get("attach_slot", "")
-					if equipment_data.has(w_slot) and equipment_data[w_slot].has("attachments"):
-						equipment_data[w_slot]["attachments"].erase(a_slot)
+					if equipment_data.has(w_slot):
+						var w_dict = equipment_data[w_slot]
+						var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
+						if w_parts.has(a_slot):
+							var p_val = w_parts[a_slot]
+							if p_val is Array:
+								p_val.erase(item.get("id", ""))
+								if p_val.is_empty(): w_parts.erase(a_slot)
+							else:
+								w_parts.erase(a_slot)
+						w_dict["parts"] = w_parts
+						w_dict["attachments"] = w_parts
+						equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+						_sync_weapon_to_player(w_slot)
 					_update_weapons_ui()
 					
 				if SoundManager: SoundManager.play("menu_select")
@@ -718,6 +781,13 @@ func _try_drop_on_container() -> void:
 			else:
 				item["amount"] = rem
 				inventory_grid.grid_changed.emit()
+		elif src == "split":
+			if rem > 0:
+				var orig_item = drag_data.get("split_source_item", {})
+				if not orig_item.is_empty():
+					orig_item["amount"] = int(orig_item.get("amount", 0)) + rem
+					inventory_grid.grid_changed.emit()
+			drag_data["is_split"] = false
 		elif src == "equipment":
 			if rem <= 0:
 				equipment_data[drag_data.get("slot_name", "")] = {}
@@ -854,8 +924,7 @@ func _drop_item_to_world(item: Dictionary) -> void:
 	if not player or not get_parent(): return
 	
 	var g_item = GroundItemScene.instantiate()
-	var spawn_pos = player.global_position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
-	g_item.global_position = spawn_pos
+	g_item.global_position = player.global_position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
 	
 	var world_node = get_tree().current_scene
 	if world_node and world_node.has_node("Entities"):
@@ -1000,6 +1069,16 @@ func _render_equip_slot_button(btn: Button, slot_name: String, default_text: Str
 # ============================================================
 # 4. 무기 슬롯 & 부착물 서브 슬롯 모딩
 # ============================================================
+func _sync_weapon_to_player(slot_key: String = "") -> void:
+	if player:
+		player.set("equipment", equipment_data)
+		if "weapon_handler" in player and player.weapon_handler:
+			player.weapon_handler.equipment = equipment_data
+			if slot_key == "" or player.weapon_handler.active_weapon_slot == slot_key:
+				player.weapon_handler.switch_weapon_slot(player.weapon_handler.active_weapon_slot)
+		if "player_visuals" in player and player.player_visuals:
+			player.player_visuals.queue_redraw()
+
 func _update_weapons_ui() -> void:
 	for c in weapons_vbox.get_children():
 		c.queue_free()
@@ -1075,20 +1154,32 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 				var rem = inventory_grid.auto_add_item(weapon_dict.get("id", ""), weapon_dict.get("amount", 1), weapon_dict)
 				if rem <= 0:
 					equipment_data[slot_key] = {}
+					_sync_weapon_to_player(slot_key)
 					_update_weapons_ui()
 					if tooltip: tooltip.hide()
 					if SoundManager: SoundManager.play("menu_select")
 	)
 	
-	# 총기일 경우 5개 부착물 서브 슬롯 노출
-	if not weapon_dict.is_empty() and slot_key.begins_with("primary"):
+	# 총기일 경우 부착물 서브 슬롯 노출 (주무기 및 보조무기 sidearm 지원, barrel 및 rail 포함)
+	if not weapon_dict.is_empty() and (slot_key.begins_with("primary") or slot_key == "sidearm"):
+		var raw_id = weapon_dict.get("receiver", weapon_dict.get("id", ""))
+		var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
+		var receiver_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+		var allowed_slots = receiver_data.get("slots", {})
+		
 		var attach_hbox = HBoxContainer.new()
 		attach_hbox.add_theme_constant_override("separation", 4)
 		vbox.add_child(attach_hbox)
 		
-		var attach_dict = weapon_dict.get("attachments", {})
-		for a_type in ["optic", "muzzle", "grip", "magazine", "stock"]:
-			_create_attachment_sub_slot(attach_hbox, slot_key, a_type, attach_dict.get(a_type, ""))
+		var attach_dict = weapon_dict.get("parts", weapon_dict.get("attachments", {}))
+		for a_type in ["barrel", "optic", "muzzle", "grip", "magazine", "stock", "rail"]:
+			if not allowed_slots.is_empty() and not allowed_slots.has(a_type):
+				continue
+			var cur_p = attach_dict.get(a_type, "")
+			var cur_p_str = cur_p
+			if cur_p is Array:
+				cur_p_str = cur_p[0] if not cur_p.is_empty() else ""
+			_create_attachment_sub_slot(attach_hbox, slot_key, a_type, cur_p_str)
 			
 	weapons_vbox.add_child(panel)
 
@@ -1099,7 +1190,7 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 	btn.focus_mode = Control.FOCUS_NONE
 	
 	var slot_labels = {
-		"optic": "조준경", "muzzle": "총구", "grip": "손잡이", "magazine": "탄창", "stock": "개머리판"
+		"barrel": "총열", "optic": "조준경", "muzzle": "총구", "grip": "손잡이", "magazine": "탄창", "stock": "개머리판", "rail": "레일"
 	}
 	
 	if current_part_id == "":
@@ -1134,7 +1225,19 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 				# 부착물 가방으로 탈착
 				var rem = inventory_grid.auto_add_item(current_part_id, 1)
 				if rem <= 0:
-					equipment_data[weapon_slot_key]["attachments"].erase(attach_type)
+					var w_dict = equipment_data.get(weapon_slot_key, {})
+					var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
+					if w_parts.has(attach_type):
+						var p_val = w_parts[attach_type]
+						if p_val is Array:
+							p_val.erase(current_part_id)
+							if p_val.is_empty(): w_parts.erase(attach_type)
+						else:
+							w_parts.erase(attach_type)
+					w_dict["parts"] = w_parts
+					w_dict["attachments"] = w_parts
+					equipment_data[weapon_slot_key] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+					_sync_weapon_to_player(weapon_slot_key)
 					_update_weapons_ui()
 					if SoundManager: SoundManager.play("menu_select")
 	)
@@ -1177,12 +1280,16 @@ func _try_equip_weapon(slot_key: String) -> void:
 		equipment_data[orig_slot] = {}
 		
 	var prev = equipment_data.get(slot_key, {})
-	if not item.has("attachments"): item["attachments"] = {}
+	if not item.has("parts"):
+		item["parts"] = item.get("attachments", {}).duplicate(true)
+	item["attachments"] = item["parts"]
+	item = WeaponPartsDatabase.compute_weapon_from_dict(item)
 	equipment_data[slot_key] = item
 	
 	if not prev.is_empty():
 		inventory_grid.auto_add_item(prev.get("id", ""), prev.get("amount", 1), prev)
 		
+	_sync_weapon_to_player(slot_key)
 	_update_weapons_ui()
 	if SoundManager: SoundManager.play("menu_select")
 	_end_drag()
@@ -1203,18 +1310,63 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String) -> void
 			EventBus.event_logged.emit("⚠️ 부착 슬롯이 일치하지 않습니다 (%s != %s)" % [part_data.get("slot", ""), attach_type])
 		_end_drag()
 		return
+
+	var w = equipment_data.get(weapon_slot_key, {})
+	if w.is_empty():
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 무기가 장착되어 있지 않습니다.")
+		_end_drag()
+		return
+
+	var raw_id = w.get("receiver", w.get("id", ""))
+	var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
+	var receiver_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+	if not receiver_data.is_empty():
+		var allowed_slots = receiver_data.get("slots", {})
+		if not allowed_slots.has(attach_type):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 해당 무기에는 이 부품을 장착할 슬롯이 없습니다.")
+			_end_drag()
+			return
+		var comp_cats = part_data.get("compatible_categories", ["all"])
+		var rec_cat = receiver_data.get("category", "")
+		if not ("all" in comp_cats or rec_cat in comp_cats):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 해당 무기 카테고리와 호환되지 않는 부품입니다.")
+			_end_drag()
+			return
 		
 	var src = drag_data.get("source", "")
 	if src == "grid": inventory_grid.remove_item_by_uid(item.get("uid", ""))
 	elif src == "vicinity":
 		var ground_node = drag_data.get("ground_ref")
 		if is_instance_valid(ground_node): ground_node.queue_free()
+	elif src == "attachment":
+		var old_w_slot = drag_data.get("weapon_slot", "")
+		var old_a_slot = drag_data.get("attach_slot", "")
+		if equipment_data.has(old_w_slot):
+			var old_parts = equipment_data[old_w_slot].get("parts", {})
+			old_parts.erase(old_a_slot)
+			equipment_data[old_w_slot]["parts"] = old_parts
+			equipment_data[old_w_slot]["attachments"] = old_parts
+			equipment_data[old_w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[old_w_slot])
+			_sync_weapon_to_player(old_w_slot)
 		
-	if not equipment_data[weapon_slot_key].has("attachments"):
-		equipment_data[weapon_slot_key]["attachments"] = {}
+	if not equipment_data[weapon_slot_key].has("parts"):
+		equipment_data[weapon_slot_key]["parts"] = equipment_data[weapon_slot_key].get("attachments", {}).duplicate(true)
 		
-	var prev_part = equipment_data[weapon_slot_key]["attachments"].get(attach_type, "")
-	equipment_data[weapon_slot_key]["attachments"][attach_type] = part_id
+	var prev_part = equipment_data[weapon_slot_key]["parts"].get(attach_type, "")
+	if prev_part is Array:
+		prev_part = prev_part[0] if not prev_part.is_empty() else ""
+		
+	if attach_type == "rail":
+		equipment_data[weapon_slot_key]["parts"]["rail"] = [part_id]
+	else:
+		equipment_data[weapon_slot_key]["parts"][attach_type] = part_id
+		
+	equipment_data[weapon_slot_key]["attachments"] = equipment_data[weapon_slot_key]["parts"]
+	equipment_data[weapon_slot_key] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[weapon_slot_key])
+	_sync_weapon_to_player(weapon_slot_key)
 	
 	if prev_part != "":
 		inventory_grid.auto_add_item(prev_part, 1)
@@ -1322,6 +1474,14 @@ func _update_drag_preview_pos() -> void:
 	drag_preview.global_position = get_global_mouse_position() - center_offset
 
 func _end_drag() -> void:
+	if is_dragging and drag_data.get("is_split", false):
+		var orig = drag_data.get("split_source_item", {})
+		var split_amt = drag_data.get("split_amount", 0)
+		if not orig.is_empty() and split_amt > 0:
+			orig["amount"] = int(orig.get("amount", 0)) + split_amt
+			if inventory_grid:
+				inventory_grid.grid_changed.emit()
+		drag_data["is_split"] = false
 	is_dragging = false
 	drag_data.clear()
 	if drag_preview:
@@ -1397,14 +1557,15 @@ func _handle_item_quick_action(item: Dictionary) -> void:
 
 		var prev_weapon = equipment_data.get(target_slot, {})
 		inventory_grid.remove_item_by_uid(item.get("uid", ""))
-		if not item.has("attachments"):
-			item["attachments"] = {}
+		if not item.has("parts"):
+			item["parts"] = item.get("attachments", {}).duplicate(true)
+		item["attachments"] = item["parts"]
+		item = WeaponPartsDatabase.compute_weapon_from_dict(item)
 		equipment_data[target_slot] = item
 		if not prev_weapon.is_empty():
 			inventory_grid.auto_add_item(prev_weapon.get("id", ""), prev_weapon.get("amount", 1), prev_weapon)
+		_sync_weapon_to_player(target_slot)
 		_update_weapons_ui()
-		if player and "weapon_handler" in player and player.weapon_handler:
-			player.weapon_handler.switch_weapon_slot(target_slot)
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
 			if not prev_weapon.is_empty():
@@ -1413,39 +1574,74 @@ func _handle_item_quick_action(item: Dictionary) -> void:
 				EventBus.event_logged.emit("🔫 [%s] 무기 장착 완료!" % idata.get("name", id))
 		return
 
-	# 4. 총기 부착물 (조준경, 소음기, 손잡이, 탄창, 개머리판 등)
+	# 4. 총기 부착물 (조준경, 소음기, 손잡이, 탄창, 개머리판, 총열, 레일 등)
 	if WeaponPartsDatabase.PARTS.has(id):
 		var part_data = WeaponPartsDatabase.PARTS[id]
 		var attach_type = part_data.get("slot", "")
 		var candidate_slots = ["primary1", "primary2", "sidearm"]
 		var best_slot = ""
+		
+		# 1차 탐색: 해당 부품 슬롯이 비어있는 무기 우선
 		for s in candidate_slots:
 			var w = equipment_data.get(s, {})
 			if not w.is_empty():
-				var w_id = w.get("id", "")
-				var receiver_data = WeaponPartsDatabase.PARTS.get(w_id, {})
+				var raw_id = w.get("receiver", w.get("id", ""))
+				var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
+				var receiver_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+				if receiver_data.is_empty():
+					continue
 				var allowed_slots = receiver_data.get("slots", {})
-				if allowed_slots.has(attach_type) or allowed_slots.is_empty():
-					var w_att = w.get("attachments", {})
-					if not w_att.has(attach_type) or str(w_att[attach_type]).is_empty():
-						best_slot = s
-						break
+				if not allowed_slots.has(attach_type):
+					continue
+				var comp_cats = part_data.get("compatible_categories", ["all"])
+				var rec_cat = receiver_data.get("category", "")
+				if not ("all" in comp_cats or rec_cat in comp_cats):
+					continue
+				var w_parts = w.get("parts", w.get("attachments", {}))
+				var cur_val = w_parts.get(attach_type, null)
+				var is_empty_slot = (cur_val == null or cur_val == "" or (cur_val is Array and cur_val.is_empty()))
+				if is_empty_slot:
+					best_slot = s
+					break
+					
+		# 2차 탐색: 비어있는 곳이 없으면 이미 장착된 곳 대체
 		if best_slot == "":
 			for s in candidate_slots:
 				var w = equipment_data.get(s, {})
 				if not w.is_empty():
-					var w_id = w.get("id", "")
-					var receiver_data = WeaponPartsDatabase.PARTS.get(w_id, {})
+					var raw_id = w.get("receiver", w.get("id", ""))
+					var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
+					var receiver_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+					if receiver_data.is_empty():
+						continue
 					var allowed_slots = receiver_data.get("slots", {})
-					if allowed_slots.has(attach_type) or allowed_slots.is_empty():
-						best_slot = s
-						break
+					if not allowed_slots.has(attach_type):
+						continue
+					var comp_cats = part_data.get("compatible_categories", ["all"])
+					var rec_cat = receiver_data.get("category", "")
+					if not ("all" in comp_cats or rec_cat in comp_cats):
+						continue
+					best_slot = s
+					break
+					
 		if best_slot != "":
-			if not equipment_data[best_slot].has("attachments"):
-				equipment_data[best_slot]["attachments"] = {}
-			var prev_part = equipment_data[best_slot]["attachments"].get(attach_type, "")
+			if not equipment_data[best_slot].has("parts"):
+				equipment_data[best_slot]["parts"] = equipment_data[best_slot].get("attachments", {}).duplicate(true)
+			var w_parts = equipment_data[best_slot]["parts"]
+			var prev_part = w_parts.get(attach_type, "")
+			if prev_part is Array:
+				prev_part = prev_part[0] if not prev_part.is_empty() else ""
+				
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
-			equipment_data[best_slot]["attachments"][attach_type] = id
+			if attach_type == "rail":
+				w_parts["rail"] = [id]
+			else:
+				w_parts[attach_type] = id
+			equipment_data[best_slot]["parts"] = w_parts
+			equipment_data[best_slot]["attachments"] = w_parts
+			equipment_data[best_slot] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[best_slot])
+			_sync_weapon_to_player(best_slot)
+			
 			if prev_part != "":
 				inventory_grid.auto_add_item(prev_part, 1)
 			_update_weapons_ui()
@@ -1461,6 +1657,55 @@ func _handle_item_quick_action(item: Dictionary) -> void:
 func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 	if not player: return
 	
+	var item_name = idata.get("name", item.get("id", ""))
+	var item_id = item.get("id", "")
+	var target_uid = item.get("uid", "")
+	
+	if player.has_method("start_channeling"):
+		var duration = 2.0
+		if player.has_method("get_channeling_duration_for"):
+			duration = player.get_channeling_duration_for(item_id, idata)
+		elif item_id.contains("붕대") or item_id.contains("지혈") or item_id == "bandage":
+			duration = 1.5
+		elif item_id.contains("구급") or item_id.contains("수술") or item_id.contains("키트") or item_id.contains("부목") or item_id == "medkit":
+			duration = 3.0
+			
+		player.start_channeling(duration, item_name, func():
+			var effects = idata.get("effects", {})
+			if effects.has("hp"): player.hp = min(player.max_hp, player.hp + effects["hp"])
+			if effects.has("hunger"): player.hunger = min(player.max_hunger, player.hunger + effects["hunger"])
+			if effects.has("thirst"): player.thirst = min(player.max_thirst, player.thirst + effects["thirst"])
+			if effects.has("stamina"): player.stamina = min(player.max_stamina, player.stamina + effects["stamina"])
+			if effects.get("cures_bleeding", false): player.is_bleeding = false
+			if effects.get("cures_fracture", false): player.is_fractured = false
+			if effects.get("cures_infection", false) or effects.get("infection", 0) < 0: player.is_infected = false
+			
+			if inventory_grid:
+				var cur_item: Dictionary = {}
+				for it in inventory_grid.items:
+					if it.get("uid", "") == target_uid:
+						cur_item = it
+						break
+				if not cur_item.is_empty():
+					var amt = int(cur_item.get("amount", 1))
+					if amt > 1:
+						cur_item["amount"] = amt - 1
+						inventory_grid.grid_changed.emit()
+					else:
+						inventory_grid.remove_item_by_uid(target_uid)
+				else:
+					inventory_grid.remove_item_by_uid(target_uid)
+					
+			player.stats_changed.emit()
+			if SoundManager: SoundManager.play("menu_select")
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("✨ %s을(를) 사용 완료했습니다." % item_name)
+		)
+		if SoundManager: SoundManager.play("menu_select")
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⏳ %s 사용 시작 (%.1f초)..." % [item_name, duration])
+		return
+		
 	var effects = idata.get("effects", {})
 	if effects.has("hp"): player.hp = min(player.max_hp, player.hp + effects["hp"])
 	if effects.has("hunger"): player.hunger = min(player.max_hunger, player.hunger + effects["hunger"])
@@ -1473,7 +1718,7 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 	player.stats_changed.emit()
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("✨ %s을(를) 사용했습니다." % idata.get("name", item.get("id", "")))
+		EventBus.event_logged.emit("✨ %s을(를) 사용했습니다." % item_name)
 		
 	# 1개 소모
 	var amt = item.get("amount", 1)
@@ -1487,22 +1732,6 @@ func _update_weight_ui() -> void:
 	if not inventory_grid: return
 	var cur_w = inventory_grid.get_total_weight()
 	weight_label.text = "%.1f / 50.0 kg" % cur_w
-
-func _gui_input(event: InputEvent) -> void:
-	# UI 바깥 영역으로 마우스 놓으면 바닥에 아이템 드롭
-	if is_dragging and event is InputEventMouseButton and not event.pressed:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			var src = drag_data.get("source", "")
-			var item = drag_data.get("item", {})
-			if src == "grid":
-				inventory_grid.remove_item_by_uid(item.get("uid", ""))
-				_drop_item_to_world(item)
-			elif src == "equipment":
-				equipment_data[drag_data.get("slot_name", "")] = {}
-				_apply_backpack_grid_size()
-				_update_equipment_ui()
-				_drop_item_to_world(item)
-			_end_drag()
 
 func _on_close_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")

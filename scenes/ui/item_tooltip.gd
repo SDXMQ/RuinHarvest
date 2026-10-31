@@ -273,8 +273,10 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 					stats.append(" • 사격 소음: %+dpx" % val)
 				"weight":
 					stats.append(" • 무게: %+.2fkg" % val)
-				"mag_capacity":
-					stats.append(" • 탄창 용량: %+d발" % val)
+				"magazine_size", "mag_capacity":
+					stats.append(" • 탄창 용량: %d발" % val)
+				"reload_speed":
+					stats.append(" • 장전 시간: %.1f초" % val)
 				"zoom":
 					stats.append(" • 조준경 배율: %.1fx" % val)
 					

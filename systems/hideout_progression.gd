@@ -113,6 +113,18 @@ const QUESTS: Array = [
 		"req_human_kills": 0,
 		"reward_rubles": 24000,
 		"reward_items": [{"id": "SV98_리시버", "amount": 1}, {"id": "3레벨_방탄복", "amount": 1}]
+	},
+	{
+		"id": "q_field_terminal_1",
+		"trader": "펜스",
+		"title": "[의뢰 7] 랜드마크 기밀 단말기 해킹 작전",
+		"desc": "레이드 현장의 랜드마크 단말기에서 [E] 키를 3.0초간 홀드해 신호를 송출하고 암호화된 SSD를 회수하십시오.",
+		"req_items": {"암호화된_SSD": 1},
+		"req_kills": 0,
+		"req_human_kills": 0,
+		"req_field_objectives": 1,
+		"reward_rubles": 15000,
+		"reward_items": [{"id": "M4_리시버", "amount": 1}, {"id": "3레벨_헬멧", "amount": 1}]
 	}
 ]
 
@@ -351,6 +363,12 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			if req_hk > 0:
 				if human_kills < req_hk: can_complete = false
 				cond_strs.append("무장 적 처치 (%d/%d)" % [human_kills, req_hk])
+				
+			var req_fo = int(q.get("req_field_objectives", 0))
+			if req_fo > 0:
+				var fo_cnt = int(w_data["player"].get("field_objectives_completed", 0))
+				if fo_cnt < req_fo: can_complete = false
+				cond_strs.append("현장 단말기 해킹 (%d/%d)" % [fo_cnt, req_fo])
 				
 			var rew_strs = ["+%d RUB" % int(q["reward_rubles"])]
 			for r_it in q.get("reward_items", []):

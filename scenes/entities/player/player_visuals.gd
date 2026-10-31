@@ -111,7 +111,7 @@ func _draw() -> void:
 	var weapon_recoil_pos = Vector2(-recoil_offset, 0)
 	var w_id = equipped_weapon_data.get("id", "")
 	var w_type = equipped_weapon_data.get("type", "")
-	var attachments: Dictionary = equipped_weapon_data.get("attachments", {})
+	var attachments: Dictionary = equipped_weapon_data.get("parts", equipped_weapon_data.get("attachments", {}))
 	var sleeve_col = vest_base_col.lightened(0.05)
 
 	if equipped_weapon_data.is_empty():

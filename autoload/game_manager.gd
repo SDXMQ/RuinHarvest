@@ -27,6 +27,8 @@ var raid_duration_minutes: float = 30.0 # 레이드 기본 제한 시간(분)
 var time_elapsed_in_raid: float = 0.0
 
 var raid_kills_count: int = 0
+var raid_landmark_completed: bool = false
+const LANDMARK_EXTRACTION_BONUS: int = 15000
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 동작
@@ -130,6 +132,7 @@ func load_game(slot_name: String) -> void:
 func start_raid() -> void:
 	time_elapsed_in_raid = 0.0
 	raid_kills_count = 0
+	raid_landmark_completed = false
 	change_state(GameState.RAID_LOADING)
 	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 1.0)
 	current_state = GameState.IN_GAME
@@ -138,6 +141,15 @@ func start_raid() -> void:
 var last_raid_result: Dictionary = {}
 
 func end_raid(result: String, looted_items: Array = []) -> void:
+	if looted_items.is_empty():
+		var cur_scene = get_tree().current_scene if get_tree() else null
+		if cur_scene and cur_scene.has_method("get_backpack_items"):
+			looted_items = cur_scene.get_backpack_items()
+		elif get_tree():
+			var p = get_tree().get_first_node_in_group("player")
+			if p and "inventory_grid" in p and p.inventory_grid and "items" in p.inventory_grid:
+				looted_items = p.inventory_grid.items.duplicate(true)
+
 	# result: "survived" (탈출), "kia" (사망), "mia" (시간 초과)
 	last_raid_result = {
 		"result": result,
@@ -170,6 +182,11 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		if passive_income > 0:
 			current_world_data["player"]["rubles"] = int(current_world_data["player"].get("rubles", 0)) + passive_income
 			last_raid_result["passive_income"] = passive_income
+			
+		if raid_landmark_completed:
+			current_world_data["player"]["rubles"] = int(current_world_data["player"].get("rubles", 0)) + LANDMARK_EXTRACTION_BONUS
+			last_raid_result["landmark_bonus"] = LANDMARK_EXTRACTION_BONUS
+			raid_landmark_completed = false
 			
 		# 탈출 성공: 레이드에서 가져온 배낭 아이템들을 플레이어 소지품으로 정확히 보존
 		var saved_items = []

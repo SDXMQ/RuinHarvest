@@ -57,7 +57,9 @@ func switch_weapon_slot(slot_name: String) -> void:
 		EventBus.event_logged.emit("💣 투척 무기: %s (x%d)" % [equipped_weapon, weapon_dict.get("amount", 1)])
 	else:
 		var rec_id = weapon_dict.get("id", "")
-		if not weapon_dict.has("attachments"): weapon_dict["attachments"] = {}
+		if not weapon_dict.has("parts"):
+			weapon_dict["parts"] = weapon_dict.get("attachments", {}).duplicate(true)
+		weapon_dict["attachments"] = weapon_dict["parts"]
 		equipped_weapon_data = WeaponPartsDatabase.compute_weapon_from_dict(weapon_dict)
 		var w_name = weapon_dict.get("name", "")
 		if w_name == "":
@@ -66,6 +68,10 @@ func switch_weapon_slot(slot_name: String) -> void:
 		equipped_weapon = w_name
 		if weapon_dict.has("current_magazine_ammo"):
 			equipped_weapon_data["current_magazine_ammo"] = weapon_dict["current_magazine_ammo"]
+		if weapon_dict.has("durability"):
+			equipped_weapon_data["durability"] = weapon_dict["durability"]
+		if weapon_dict.has("max_durability"):
+			equipped_weapon_data["max_durability"] = weapon_dict["max_durability"]
 		EventBus.event_logged.emit("🔫 무기 전환: %s [%s]" % [w_name, get_slot_display_name(slot_name)])
 			
 	weapon_changed.emit()
@@ -109,6 +115,23 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	equipped_weapon_data["current_magazine_ammo"] = cur_mag - 1
 	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
 		equipment[active_weapon_slot]["current_magazine_ammo"] = cur_mag - 1
+	
+	# 무기 내구도 실시간 차감 (발당 0.15) 및 장비 슬롯 동기화
+	var max_dur = float(equipped_weapon_data.get("max_durability", 100.0))
+	var cur_dur = float(equipped_weapon_data.get("durability", max_dur))
+	cur_dur = max(0.0, cur_dur - 0.15)
+	equipped_weapon_data["durability"] = cur_dur
+	if not equipped_weapon_data.has("max_durability"):
+		equipped_weapon_data["max_durability"] = max_dur
+	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
+		equipment[active_weapon_slot]["durability"] = cur_dur
+		if not equipment[active_weapon_slot].has("max_durability"):
+			equipment[active_weapon_slot]["max_durability"] = max_dur
+	if player and "equipment" in player and player.equipment.has(active_weapon_slot) and not player.equipment[active_weapon_slot].is_empty():
+		player.equipment[active_weapon_slot]["durability"] = cur_dur
+		if not player.equipment[active_weapon_slot].has("max_durability"):
+			player.equipment[active_weapon_slot]["max_durability"] = max_dur
+	
 	ammo_changed.emit()
 	if player and player.has_signal("stats_changed"):
 		player.stats_changed.emit()

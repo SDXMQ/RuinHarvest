@@ -102,6 +102,7 @@ func _ready() -> void:
 	stash_grid_mgr = InventoryGrid.new()
 	stash_grid_mgr.grid_width = 10
 	stash_grid_mgr.grid_height = 12
+	stash_grid_mgr.has_secure_container = false
 	add_child(stash_grid_mgr)
 	
 	player_grid_mgr.grid_changed.connect(_on_grid_changed)
@@ -609,7 +610,7 @@ func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: in
 	var uid = item.get("uid", "")
 	var ignore_uid = uid if (src == ("player_grid" if is_dest_player else "stash_grid")) else ""
 	
-	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid):
+	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", "")):
 		if dest_grid.place_item(item, cell_x, cell_y, is_rot):
 			# 배치 성공 시 이전 위치에서 안전하게 제거
 			if src == "player_grid":
@@ -1064,6 +1065,11 @@ func _check_last_raid_result() -> void:
 			result_desc.text += "\n🔒 2x2 안전 파우치 보호: 귀중품 %d종이 분실되지 않고 보존되었습니다." % pouch_cnt
 		
 		var passive_inc = int(res.get("passive_income", 0))
+		var landmark_bon = int(res.get("landmark_bonus", 0))
+		if landmark_bon > 0:
+			result_desc.text += "\n📡 랜드마크 현장 단말기 작전 보너스: +%d RUB" % landmark_bon
+			_update_money_label()
+			
 		if passive_inc > 0:
 			result_desc.text += "\n⚡ 발전기/채굴 서버 패시브 수익: +%d RUB" % passive_inc
 			_update_money_label()
