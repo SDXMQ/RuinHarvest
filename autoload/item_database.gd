@@ -54,6 +54,7 @@ func _load_all_items():
 						d["equip_slot"] = res.equip_slot
 					if res.armor_defense > 0.0:
 						d["defense"] = res.armor_defense
+						d["armor_defense"] = res.armor_defense
 					if res.max_durability > 0:
 						d["max_durability"] = res.max_durability
 					if res.weight_bonus != 0.0:
@@ -154,11 +155,25 @@ var traders: Dictionary = {
 	}
 }
 
+func resolve_item_id(id: String) -> String:
+	if id in ["기밀_SSD", "기밀 SSD", "암호화된_SSD", "암호화된 SSD"]:
+		if items.has("암호화된 SSD"):
+			return "암호화된 SSD"
+	if items.has(id) or WeaponPartsDatabase.PARTS.has(id) or WeaponPartsDatabase.RECEIVERS.has(id):
+		return id
+	var id_space = id.replace("_", " ")
+	var id_under = id.replace(" ", "_")
+	if items.has(id_space) or WeaponPartsDatabase.PARTS.has(id_space) or WeaponPartsDatabase.RECEIVERS.has(id_space):
+		return id_space
+	elif items.has(id_under) or WeaponPartsDatabase.PARTS.has(id_under) or WeaponPartsDatabase.RECEIVERS.has(id_under):
+		return id_under
+	return id
+
 func get_item_data(id: String) -> Dictionary:
 	if _cached_item_data.has(id):
 		return _cached_item_data[id]
 		
-	var target_id = id
+	var target_id = resolve_item_id(id)
 	if not items.has(target_id) and not WeaponPartsDatabase.PARTS.has(target_id) and not WeaponPartsDatabase.RECEIVERS.has(target_id):
 		var id_space = id.replace("_", " ")
 		var id_under = id.replace(" ", "_")

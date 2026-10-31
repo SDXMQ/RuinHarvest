@@ -99,7 +99,7 @@ func _populate_sample_items() -> void:
 	sample_grid.auto_add_item("5.56mm", 20)
 	sample_grid.auto_add_item("전투_식량", 2)
 	sample_grid.auto_add_item("수류탄", 2)
-	sample_grid.auto_add_item("암호화된_SSD", 1)
+	sample_grid.auto_add_item("암호화된 SSD", 1)
 	
 	sample_container.clear()
 	sample_container.add_item("5.56mm", 15)

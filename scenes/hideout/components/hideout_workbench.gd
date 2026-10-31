@@ -18,6 +18,7 @@ signal money_spent(amount: int)
 @onready var wb_save_btn: Button = $VBox/MainHBox/StatsAndPresetPanel/VBox/SaveWeaponBtn
 @onready var wb_compat_hbox: HBoxContainer = $VBox/CompatPartsPanel/VBox/Scroll/CompatPartsHBox
 @onready var wb_compat_title: Label = $VBox/CompatPartsPanel/VBox/CompatTitle
+const ShootingRangeScript = preload("res://scenes/ui/shooting_range_window.gd")
 
 # 외부 주입 의존성
 var player_grid_mgr: InventoryGrid = null
@@ -632,6 +633,25 @@ func _refresh_workbench_stats_comparison() -> void:
 	_add_stat_compare_row("🔊 사격 소음", base.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false) # 소음 감소가 좋음
 	_add_stat_compare_row("⚖️ 총기 무게", base.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false) # 무게 감소가 좋음
 	_build_repair_controls()
+	
+	if not wb_selected_weapon.is_empty():
+		var sep2 = HSeparator.new()
+		wb_stats_vbox.add_child(sep2)
+		var test_btn = Button.new()
+		test_btn.text = "🎯 사격 시험 (Test Fire)"
+		test_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		test_btn.pressed.connect(_open_shooting_range_test)
+		wb_stats_vbox.add_child(test_btn)
+
+func _open_shooting_range_test() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var win = ShootingRangeScript.new()
+	var root = get_tree().current_scene
+	if root:
+		root.add_child(win)
+	else:
+		add_child(win)
+	win.setup(wb_selected_weapon)
 
 static func calculate_repair_cost_rubles(cur_dur: float, max_dur: float = 100.0) -> int:
 	var missing = max(0.0, max_dur - cur_dur)

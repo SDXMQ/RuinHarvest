@@ -17,6 +17,7 @@ signal channel_cancelled()
 
 var is_crouching: bool = false
 var is_sprinting: bool = false
+var _overweight_tier: int = 0
 
 var is_channeling: bool = false
 var channel_timer: float = 0.0
@@ -186,10 +187,12 @@ func _ready() -> void:
 	if not has_node("InventoryGrid"):
 		inventory_grid = InventoryGrid.new()
 		inventory_grid.name = "InventoryGrid"
+		inventory_grid.has_secure_container = true
 		inventory_grid.resize_grid(6, 5)
 		add_child(inventory_grid)
 	else:
 		inventory_grid = get_node("InventoryGrid")
+		inventory_grid.has_secure_container = true
 
 
 	# 컴포넌트 시그널 릴레이
@@ -216,6 +219,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("flashlight"):
 		player_lighting.toggle_flashlight()
 		if SoundManager: SoundManager.play("menu_select")
+		
+	if event is InputEventKey and event.is_pressed() and not event.is_echo():
+		var r_code = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		if r_code == KEY_R and event.alt_pressed:
+			if weapon_handler and weapon_handler.has_method("cycle_ammo_type"):
+				weapon_handler.cycle_ammo_type()
+			get_viewport().set_input_as_handled()
+			return
 		
 	if event.is_action_pressed("reload"):
 		weapon_handler.start_reload()
@@ -407,6 +418,23 @@ func _play_surface_footstep() -> void:
 	if is_sprinting and EventBus.has_signal("noise_created"):
 		EventBus.noise_created.emit(global_position, 140.0, "footstep")
 
+func show_floating_text(text: String, color: Color = Color(1.0, 0.9, 0.4), duration: float = 0.8) -> void:
+	var vis = player_visuals if player_visuals else get_node_or_null("Visuals")
+	if vis and vis.has_method("show_floating_text"):
+		vis.show_floating_text(text, color, duration)
+
+func get_total_weight() -> float:
+	var total = inventory_grid.get_total_weight() if inventory_grid else 0.0
+	for slot in ["primary1", "primary2", "sidearm", "throwable", "helmet", "vest", "backpack"]:
+		var eq: Dictionary = equipment.get(slot, {})
+		if not eq.is_empty():
+			if eq.has("computed_stats") and eq["computed_stats"].has("weight"):
+				total += float(eq["computed_stats"]["weight"])
+			else:
+				var d = ItemDatabase.get_item_data(String(eq.get("id", "")))
+				total += float(d.get("weight", 0.5)) * int(eq.get("amount", 1))
+	return total
+
 func _handle_movement(delta: float) -> void:
 	var input_vector = Vector2.ZERO
 	input_vector.x = Input.get_axis("move_left", "move_right")
@@ -420,9 +448,22 @@ func _handle_movement(delta: float) -> void:
 	if is_channeling:
 		is_sprinting = false
 	
+	# 무게 과적(Overweight) 단계별 페널티 (35kg 주의: 스태미나 소모 1.3배 / 50kg 초과: 질주 불가 및 이속 -35%)
+	var total_weight = get_total_weight()
+	var cur_overweight_tier = 2 if total_weight > 50.0 else (1 if total_weight >= 35.0 else 0)
+	if cur_overweight_tier > _overweight_tier:
+		show_floating_text("[OVERWEIGHT]", Color(1.0, 0.3, 0.3) if cur_overweight_tier == 2 else Color(1.0, 0.8, 0.25))
+	_overweight_tier = cur_overweight_tier
+	
+	if cur_overweight_tier >= 2:
+		is_sprinting = false
+	
 	var target_speed = walk_speed
 	var speed_mult = 1.0
+	var stamina_drain_mult = 1.3 if cur_overweight_tier >= 1 else 1.0
 	
+	if cur_overweight_tier >= 2:
+		speed_mult *= 0.65
 	if is_channeling:
 		speed_mult *= 0.45
 	if is_fractured: speed_mult *= 0.6
@@ -433,13 +474,14 @@ func _handle_movement(delta: float) -> void:
 	if not w_data.is_empty() and w_data.has("computed_stats"):
 		var w_weight = w_data["computed_stats"].get("weight", 3.0)
 		speed_mult -= min(0.3, w_weight * 0.05)
+	speed_mult = max(0.25, speed_mult)
 		
 	if is_crouching:
 		target_speed = crouch_speed * speed_mult
 		if survival_stats: survival_stats.regen_stamina(delta, 1.5)
 	elif is_sprinting and not is_exhausted and input_vector.length() > 0:
 		target_speed = sprint_speed * speed_mult
-		if survival_stats: survival_stats.consume_stamina(15.0 * delta)
+		if survival_stats: survival_stats.consume_stamina(15.0 * stamina_drain_mult * delta)
 	else:
 		target_speed = walk_speed * speed_mult
 		if input_vector.length() == 0:

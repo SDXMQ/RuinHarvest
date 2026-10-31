@@ -70,6 +70,12 @@ var hit_arc_overlay: Control = null
 var hit_arcs: Array = []
 var boss_entity: Node2D = null
 var landmark_objective: Node2D = null
+var field_objectives: Array = []
+
+var storm_lightning_timer: float = 18.0
+var storm_lightning_active: bool = false
+var storm_lightning_duration: float = 0.0
+var storm_thunder_delay: float = -1.0
 
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분
@@ -186,8 +192,12 @@ func _ready() -> void:
 		player.channel_cancelled.connect(_on_player_channel_finished)
 	if player.inventory_grid:
 		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
-	if player.weapon_handler and player.weapon_handler.has_signal("weapon_changed"):
-		player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
+		player.inventory_grid.grid_changed.connect(_update_quickslot_bar)
+	if player.weapon_handler:
+		if player.weapon_handler.has_signal("weapon_changed"):
+			player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
+		if player.weapon_handler.has_signal("ammo_changed"):
+			player.weapon_handler.ammo_changed.connect(_update_quickslot_bar)
 	_setup_quickslot_bar()
 	
 	# 일시정지 메뉴 버튼 시그널 연결
@@ -293,20 +303,48 @@ func _spawn_extraction_zones() -> void:
 		base_angle + TAU / 3.0 + randf_range(-0.25, 0.25),
 		base_angle + 2.0 * TAU / 3.0 + randf_range(-0.25, 0.25)
 	]
+	
+	var zone_configs = [
+		{
+			"type": 0, # DEFAULT
+			"name": "일반 탈출 지점 (헬기 착륙장)",
+			"time": 7.0,
+			"desc": "기본 탈출로 (소요: 7.0초)"
+		},
+		{
+			"type": 1, # VEHICLE
+			"name": "유료 탈출 지점 (장갑 SUV)",
+			"time": 2.0,
+			"desc": "급속 탈출 (3,000 RUB / 소요: 2.0초)"
+		},
+		{
+			"type": 2, # BUNKER
+			"name": "비상 벙커 탈출구 (지하 방공호)",
+			"time": 5.0,
+			"desc": "밀폐 벙커 (필드 단말기 해킹 필요 / 소요: 5.0초)"
+		}
+	]
+
 	for i in range(angles.size()):
 		var angle = angles[i]
 		var dist = randf_range(1800.0, 2400.0) # 원거리 탈출구
 		var pos = Vector2.RIGHT.rotated(angle) * dist
+		var cfg = zone_configs[i]
 		var zone = ExtractionZoneScene.instantiate()
 		zone.position = pos
-		zone.zone_name = "탈출구 " + str(i + 1)
+		zone.extraction_type = cfg["type"]
+		zone.zone_name = cfg["name"]
+		zone.extract_time = cfg["time"]
 		zone.extract_progress.connect(_on_extract_progress)
 		zone.extract_cancelled.connect(_on_extract_cancelled)
 		add_child(zone)
 		
 		extraction_points_data.append({
 			"name": zone.zone_name,
-			"pos": pos
+			"pos": pos,
+			"type": zone.extraction_type,
+			"extract_time": zone.extract_time,
+			"desc": cfg["desc"]
 		})
 
 func _on_extract_progress(cur: float, max_t: float) -> void:
@@ -473,7 +511,8 @@ func _open_map_window() -> void:
 		var cy = int(floor(player.global_position.y / 32.0))
 		biome = chunk_manager.generator.get_biome(cx, cy)
 		
-	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome)
+	var chunks_dict = chunk_manager.loaded_chunks if chunk_manager else {}
+	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome, boss_entity, airdrop_points_data, field_objectives, chunks_dict)
 	current_map_window.window_closed.connect(func(): current_map_window = null)
 
 func _on_compass_draw() -> void:
@@ -563,19 +602,22 @@ func _on_compass_draw() -> void:
 			compass_bar.draw_circle(Vector2(bx, 9), 4.5, Color(0.95, 0.15, 0.2))
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
 			
-	# 랜드마크 현장 단말기 마커 (청록색 통신 표식)
-	if is_instance_valid(landmark_objective) and not bool(landmark_objective.get("is_completed")):
-		var dir_to_obj = player.global_position.direction_to(landmark_objective.global_position)
-		var obj_deg = rad_to_deg(dir_to_obj.angle())
-		if obj_deg < 0: obj_deg += 360.0
-		var o_diff = obj_deg - player_deg
-		while o_diff < -180.0: o_diff += 360.0
-		while o_diff > 180.0: o_diff -= 360.0
-		if abs(o_diff) <= fov / 2.0:
-			var ox = center_x + o_diff * pixels_per_deg
-			var o_dist = player.global_position.distance_to(landmark_objective.global_position)
-			compass_bar.draw_circle(Vector2(ox, 9), 4.0, Color(0.2, 0.88, 1.0))
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(ox - 16, 22), "📡%.0fm" % o_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
+	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 지원)
+	var objs_to_draw = field_objectives if field_objectives.size() > 0 else ([landmark_objective] if is_instance_valid(landmark_objective) else [])
+	for obj_ref in objs_to_draw:
+		if is_instance_valid(obj_ref) and not bool(obj_ref.get("is_completed")):
+			var dir_to_obj = player.global_position.direction_to(obj_ref.global_position)
+			var obj_deg = rad_to_deg(dir_to_obj.angle())
+			if obj_deg < 0: obj_deg += 360.0
+			var o_diff = obj_deg - player_deg
+			while o_diff < -180.0: o_diff += 360.0
+			while o_diff > 180.0: o_diff -= 360.0
+			if abs(o_diff) <= fov / 2.0:
+				var ox = center_x + o_diff * pixels_per_deg
+				var o_dist = player.global_position.distance_to(obj_ref.global_position)
+				var icon_str = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "📡"
+				compass_bar.draw_circle(Vector2(ox, 9), 4.0, Color(0.2, 0.88, 1.0))
+				compass_bar.draw_string(ThemeDB.fallback_font, Vector2(ox - 16, 22), "%s%.0fm" % [icon_str, o_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
 
 	# 정중앙 조준 눈금 (노란 역삼각형)
 	var pointer = PackedVector2Array([
@@ -598,12 +640,37 @@ func _spawn_landmark_boss() -> void:
 	escort.position = boss_pos + Vector2(36, -24)
 	escort.enemy_type = 4 # EnemyType.RAIDER
 	entities_layer.add_child(escort)
-	# 랜드마크 현장 상호작용 퀘스트 단말기 스폰
-	var obj_node = StaticBody2D.new()
-	obj_node.set_script(FieldObjectiveScript)
-	obj_node.position = boss_pos + Vector2(-42, 28)
-	entities_layer.add_child(obj_node)
-	landmark_objective = obj_node
+	# 랜드마크 현장 상호작용 퀘스트 오브젝트 3종 스폰 (군사 단말기 / 병원 생체 표본 채취기 / 상업 지구 무선 중계기)
+	field_objectives.clear()
+	var obj_Offsets = [
+		boss_pos + Vector2(-42, 28),
+		player.global_position + Vector2.RIGHT.rotated(angle + TAU / 3.0) * randf_range(560.0, 760.0),
+		player.global_position + Vector2.RIGHT.rotated(angle + 2.0 * TAU / 3.0) * randf_range(560.0, 760.0)
+	]
+	for idx in range(3):
+		var obj_node = StaticBody2D.new()
+		obj_node.set_script(FieldObjectiveScript)
+		obj_node.objective_kind = idx
+		obj_node.position = obj_Offsets[idx]
+		if obj_node.has_signal("defense_wave_triggered"):
+			obj_node.defense_wave_triggered.connect(_on_field_objective_wave_triggered)
+		entities_layer.add_child(obj_node)
+		field_objectives.append(obj_node)
+		if idx == 0:
+			landmark_objective = obj_node
+
+func _on_field_objective_wave_triggered(obj_pos: Vector2, obj_kind: int) -> void:
+	for i in range(2):
+		var wave_enemy = EnemyScene.instantiate()
+		var spawn_ang = randf() * TAU
+		wave_enemy.position = obj_pos + Vector2.RIGHT.rotated(spawn_ang) * randf_range(190.0, 260.0)
+		if obj_kind == 0:
+			wave_enemy.enemy_type = 4 if i == 0 else 3 # 군사기지: 레이더 + 스캐브
+		elif obj_kind == 1:
+			wave_enemy.enemy_type = 1 if i == 0 else 2 # 병원구역: 러너 + 탱커
+		else:
+			wave_enemy.enemy_type = 3 if i == 0 else 1 # 상업지구: 스캐브 + 러너
+		entities_layer.add_child(wave_enemy)
 
 func _on_crosshair_draw() -> void:
 	if not crosshair_overlay or not player or get_tree().paused:
@@ -672,6 +739,8 @@ func _spawn_airdrop_crate() -> void:
 	var crate = StaticBody2D.new()
 	crate.set_script(AirdropCrateScript)
 	crate.position = drop_pos
+	if crate.has_signal("crate_landed"):
+		crate.crate_landed.connect(_on_airdrop_crate_landed)
 	entities_layer.add_child(crate)
 	
 	airdrop_points_data.append({
@@ -679,18 +748,19 @@ func _spawn_airdrop_crate() -> void:
 		"pos": drop_pos
 	})
 	airdrop_count += 1
-	
-	# 보급품 주변에 정예 호위 병력(RAIDER 1명, SCAV 1명) 스폰
-	for i in range(2):
-		var guard = EnemyScene.instantiate()
-		guard.position = drop_pos + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(45.0, 90.0)
-		guard.enemy_type = 4 if i == 0 else 3
-		entities_layer.add_child(guard)
 		
 	if SoundManager:
 		SoundManager.play("explosion_distant")
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("★ 🪂 [긴급 공수] 군용 항공 보급품이 투하되었습니다! (나침반 📦 마커 확인)")
+
+func _on_airdrop_crate_landed(drop_pos: Vector2) -> void:
+	# 보급품 착지(LANDED_IMPACT) 시점에 주변 정예 호위 병력(RAIDER 1명, SCAV 1명) 스폰
+	for i in range(2):
+		var guard = EnemyScene.instantiate()
+		guard.position = drop_pos + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(45.0, 90.0)
+		guard.enemy_type = 4 if i == 0 else 3
+		entities_layer.add_child(guard)
 
 func _update_weather_particles(delta: float) -> void:
 	if not particle_system or not WeatherSystem or not player:
@@ -764,7 +834,38 @@ func _process(delta: float) -> void:
 				
 		# 환경 조명 및 날씨 파티클 변화
 		if not get_tree().paused:
-			_update_day_night_cycle()
+			if WeatherSystem and WeatherSystem.current_weather == WeatherSystem.WeatherType.STORM:
+				storm_lightning_timer -= delta
+				if storm_lightning_timer <= 0.0:
+					storm_lightning_timer = randf_range(15.0, 25.0)
+					storm_lightning_active = true
+					storm_lightning_duration = 0.08
+					storm_thunder_delay = 1.0
+					if day_night_modulate:
+						day_night_modulate.color = Color(1.6, 1.8, 2.2) # 번개 섬광
+				
+				if storm_lightning_active:
+					storm_lightning_duration -= delta
+					if storm_lightning_duration <= 0.0:
+						storm_lightning_active = false
+						_update_day_night_cycle()
+				else:
+					_update_day_night_cycle()
+				
+				if storm_thunder_delay > 0.0:
+					storm_thunder_delay -= delta
+					if storm_thunder_delay <= 0.0:
+						storm_thunder_delay = -1.0
+						if SoundManager:
+							SoundManager.play("explosion_distant")
+						if EventBus.has_signal("camera_shake_requested"):
+							EventBus.camera_shake_requested.emit(4.5, 0.45)
+						if EventBus.has_signal("event_logged"):
+							EventBus.event_logged.emit("⚡ 콰르릉! 폭풍우 뇌우가 근처에 내리쳤습니다!")
+			else:
+				storm_lightning_active = false
+				_update_day_night_cycle()
+				
 			_update_weather_particles(delta)
 			if airdrop_count < max_airdrops:
 				airdrop_timer -= delta
@@ -786,7 +887,7 @@ func _process(delta: float) -> void:
 			debug_label.text = "위치: (%.1f, %.1f) | 청크: (%d, %d)" % [player.global_position.x, player.global_position.y, cx, cy]
 
 func _update_day_night_cycle() -> void:
-	if not day_night_modulate: return
+	if not day_night_modulate or storm_lightning_active: return
 	
 	# 영구 주간 (duration < 0) 설정 시 항상 밝은 낮 유지
 	if day_night_cycle_duration <= 0.0:
@@ -882,14 +983,14 @@ func _on_player_stats_changed() -> void:
 			weapon_durability_bar.max_value = max_dur
 			weapon_durability_bar.value = cur_dur
 			
-			var fill_style = StyleBoxFlat.new()
+			var fill_style: StyleBoxFlat = weapon_durability_bar.get_theme_stylebox("fill") as StyleBoxFlat
+			if not fill_style:
+				fill_style = StyleBoxFlat.new()
+				weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
 			var ratio = float(cur_dur) / max(1.0, float(max_dur))
-			if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
-			elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
-			else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
-			weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
-			
-	_update_quickslot_bar()
+			var target_fill_col = Color(0.2, 0.8, 0.3) if ratio > 0.6 else (Color(0.9, 0.7, 0.1) if ratio > 0.3 else Color(0.9, 0.2, 0.2))
+			if fill_style.bg_color != target_fill_col:
+				fill_style.bg_color = target_fill_col
 
 func _setup_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
@@ -968,99 +1069,7 @@ func _on_quickslot_N_pressed() -> void:
 
 func _update_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
-	
-	var cur_w_slot = player.active_weapon_slot if "active_weapon_slot" in player else "primary1"
-	
-	# Slot 1
-	var slot1 = quickslot_hbox.get_node_or_null("Slot1")
-	if slot1:
-		var eq1 = player.equipment.get("primary1", {})
-		var w1_name = eq1.get("name", "주무기1") if not eq1.is_empty() else "빈 슬롯"
-		slot1.text = "[1] %s" % w1_name
-		slot1.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if cur_w_slot == "primary1" else Color(0.85, 0.88, 0.92))
-		
-	# Slot 2
-	var slot2 = quickslot_hbox.get_node_or_null("Slot2")
-	if slot2:
-		var eq2 = player.equipment.get("primary2", {})
-		var w2_name = eq2.get("name", "주무기2") if not eq2.is_empty() else "빈 슬롯"
-		slot2.text = "[2] %s" % w2_name
-		slot2.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if cur_w_slot == "primary2" else Color(0.85, 0.88, 0.92))
-		
-	# Slot 3
-	var slot3 = quickslot_hbox.get_node_or_null("Slot3")
-	if slot3:
-		var eq3 = player.equipment.get("sidearm", {})
-		var w3_name = eq3.get("name", "권총") if not eq3.is_empty() else "빈 슬롯"
-		slot3.text = "[3] %s" % w3_name
-		slot3.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if cur_w_slot == "sidearm" else Color(0.85, 0.88, 0.92))
-		
-	# Slot 4
-	var slot4 = quickslot_hbox.get_node_or_null("Slot4")
-	if slot4:
-		var eq4 = player.equipment.get("throwable", {})
-		var amt4 = int(eq4.get("amount", 1)) if not eq4.is_empty() else 0
-		var w4_name = eq4.get("name", "투척") if not eq4.is_empty() else "빈 슬롯"
-		slot4.text = "[4] %s%s" % [w4_name, (" (%d)" % amt4) if amt4 > 0 else ""]
-		slot4.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25) if cur_w_slot == "throwable" else Color(0.85, 0.88, 0.92))
-		
-	# Slot 5 (Bleed / Bandage)
-	var slot5 = quickslot_hbox.get_node_or_null("Slot5")
-	if slot5:
-		var count5 = 0
-		var name5 = "붕대"
-		if player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var id = it.get("id", "")
-				var d = ItemDatabase.get_item_data(id)
-				var cat = d.get("category", -1)
-				var eff = d.get("effects", {})
-				if cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("cures_bleeding", false) or id.contains("붕대") or id.contains("지혈")):
-					count5 += int(it.get("amount", 1))
-					name5 = d.get("name", id)
-		slot5.text = "[5] %s%s" % [name5, (" %d" % count5) if count5 > 1 else (" 1" if count5 == 1 else " 0")]
-		slot5.add_theme_color_override("font_color", Color(0.85, 0.95, 0.85) if count5 > 0 else Color(0.5, 0.52, 0.58))
-		
-	# Slot 6 (Heal / Medkit)
-	var slot6 = quickslot_hbox.get_node_or_null("Slot6")
-	if slot6:
-		var count6 = 0
-		var name6 = "구급킷"
-		if player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var id = it.get("id", "")
-				var d = ItemDatabase.get_item_data(id)
-				var cat = d.get("category", -1)
-				var eff = d.get("effects", {})
-				if cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("hp", 0) > 0 or eff.get("cures_fracture", false) or eff.get("cures_infection", false) or id.contains("구급") or id.contains("키트") or id.contains("부목")):
-					count6 += int(it.get("amount", 1))
-					name6 = d.get("name", id)
-		slot6.text = "[6] %s%s" % [name6, (" %d" % count6) if count6 > 1 else (" 1" if count6 == 1 else " 0")]
-		slot6.add_theme_color_override("font_color", Color(0.85, 0.95, 0.85) if count6 > 0 else Color(0.5, 0.52, 0.58))
-		
-	# Slot 7 (Ration / Food / Water)
-	var slot7 = quickslot_hbox.get_node_or_null("Slot7")
-	if slot7:
-		var count7 = 0
-		var name7 = "식량"
-		if player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var id = it.get("id", "")
-				var d = ItemDatabase.get_item_data(id)
-				var cat = d.get("category", -1)
-				var eff = d.get("effects", {})
-				if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or eff.has("hunger") or eff.has("thirst"):
-					count7 += int(it.get("amount", 1))
-					name7 = d.get("name", id)
-		slot7.text = "[7] %s%s" % [name7, (" %d" % count7) if count7 > 1 else (" 1" if count7 == 1 else " 0")]
-		slot7.add_theme_color_override("font_color", Color(0.85, 0.95, 0.85) if count7 > 0 else Color(0.5, 0.52, 0.58))
-		
-	# Slot N (NVG)
-	var slotN = quickslot_hbox.get_node_or_null("SlotN")
-	if slotN:
-		var nvg_active = player.player_lighting.nvg_enabled if player.player_lighting else false
-		slotN.text = "[N] NVG %s" % ("(ON)" if nvg_active else "(OFF)")
-		slotN.add_theme_color_override("font_color", Color(0.3, 1.0, 0.4) if nvg_active else Color(0.7, 0.75, 0.82))
+	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
 
 func _on_player_channel_started(duration: float, item_name: String) -> void:
 	if channeling_bar:
@@ -1076,10 +1085,21 @@ func _on_player_channel_progress(current: float, total: float) -> void:
 		if channeling_label:
 			var rem = max(0.0, total - current)
 			channeling_label.text = "%s (%.1f초)" % [player.channel_item_name, rem]
+	if quickslot_hbox and player:
+		var ratio = current / max(0.01, total)
+		var item_str = player.channel_item_name
+		var slot_key = "6"
+		if item_str.contains("붕대") or item_str.contains("지혈"): slot_key = "5"
+		elif item_str.contains("구급") or item_str.contains("키트") or item_str.contains("부목"): slot_key = "6"
+		elif item_str.contains("식량") or item_str.contains("통조림") or item_str.contains("생수") or item_str.contains("물"): slot_key = "7"
+		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, slot_key, ratio)
 
 func _on_player_channel_finished() -> void:
 	if channeling_bar:
 		channeling_bar.visible = false
+	if quickslot_hbox:
+		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, "clear", 0.0)
+	_update_quickslot_bar()
 		
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_inventory_window == null:
