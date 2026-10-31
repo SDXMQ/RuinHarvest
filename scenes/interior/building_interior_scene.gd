@@ -587,9 +587,12 @@ func _on_player_stats_changed() -> void:
 			var cur_dur = player.equipped_weapon_data.get("durability", max_dur)
 			weapon_durability_bar.max_value = max_dur
 			weapon_durability_bar.value = cur_dur
-			var fill_style: StyleBoxFlat = weapon_durability_bar.get_theme_stylebox("fill") as StyleBoxFlat
+			var fill_style: StyleBoxFlat
+			if weapon_durability_bar.has_theme_stylebox_override("fill"):
+				fill_style = weapon_durability_bar.get_theme_stylebox("fill") as StyleBoxFlat
 			if not fill_style:
-				fill_style = StyleBoxFlat.new()
+				var base_style = weapon_durability_bar.get_theme_stylebox("fill")
+				fill_style = base_style.duplicate() as StyleBoxFlat if base_style is StyleBoxFlat else StyleBoxFlat.new()
 				weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
 			var ratio = float(cur_dur) / max(1.0, float(max_dur))
 			var target_fill_col = Color(0.2, 0.8, 0.3) if ratio > 0.6 else (Color(0.9, 0.7, 0.1) if ratio > 0.3 else Color(0.9, 0.2, 0.2))

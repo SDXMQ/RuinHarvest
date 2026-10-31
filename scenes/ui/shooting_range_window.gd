@@ -41,7 +41,7 @@ func _ready() -> void:
 func setup(w_data: Dictionary = {}) -> void:
 	weapon_data = w_data.duplicate(true)
 	if weapon_data.is_empty():
-		weapon_data = WeaponPartsDatabase.create_default_weapon("M4A1_리시버")
+		weapon_data = WeaponPartsDatabase.create_default_weapon("M4_리시버")
 	
 	computed_stats = weapon_data.get("computed_stats", {})
 	if computed_stats.is_empty():
