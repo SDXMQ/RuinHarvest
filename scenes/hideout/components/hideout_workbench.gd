@@ -342,11 +342,8 @@ func _select_workbench_weapon(weapon_dict: Dictionary, source_info: Dictionary) 
 	var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
 	wb_selected_weapon["receiver"] = rec_id
 	if not wb_selected_weapon.has("parts"):
-		wb_selected_weapon["parts"] = {}
-	if not wb_selected_weapon.has("attachments"):
-		wb_selected_weapon["attachments"] = wb_selected_weapon["parts"]
-	else:
-		wb_selected_weapon["parts"] = wb_selected_weapon["attachments"]
+		wb_selected_weapon["parts"] = wb_selected_weapon.get("attachments", {}).duplicate(true)
+	wb_selected_weapon["attachments"] = wb_selected_weapon["parts"]
 		
 	# 모딩 전 기준 스탯 산출
 	var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
@@ -634,6 +631,171 @@ func _refresh_workbench_stats_comparison() -> void:
 	_add_stat_compare_row("📦 탄창 용량", base.get("magazine_size", 15), cur_stats.get("magazine_size", 15), "%d발", true)
 	_add_stat_compare_row("🔊 사격 소음", base.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false) # 소음 감소가 좋음
 	_add_stat_compare_row("⚖️ 총기 무게", base.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false) # 무게 감소가 좋음
+	_build_repair_controls()
+
+static func calculate_repair_cost_rubles(cur_dur: float, max_dur: float = 100.0) -> int:
+	var missing = max(0.0, max_dur - cur_dur)
+	return int(round(missing * 35.0))
+
+static func calculate_repair_cost_scrap(cur_dur: float, max_dur: float = 100.0) -> int:
+	var missing = max(0.0, max_dur - cur_dur)
+	if missing <= 0.001:
+		return 0
+	return int(ceil(missing / 20.0))
+
+func _get_total_scrap_count() -> int:
+	var count = 0
+	if stash_grid_mgr:
+		count += stash_grid_mgr.get_item_count("고철")
+	if player_grid_mgr:
+		count += player_grid_mgr.get_item_count("고철")
+	return count
+
+func _consume_scrap(amount: int) -> void:
+	var rem = amount
+	if stash_grid_mgr and rem > 0:
+		rem = stash_grid_mgr.remove_item("고철", rem)
+	if player_grid_mgr and rem > 0:
+		player_grid_mgr.remove_item("고철", rem)
+
+func _build_repair_controls() -> void:
+	if not wb_stats_vbox or wb_selected_weapon.is_empty():
+		return
+	var sep = HSeparator.new()
+	wb_stats_vbox.add_child(sep)
+	
+	var w_id = wb_selected_weapon.get("id", wb_selected_weapon.get("receiver", "M4_리시버"))
+	var w_meta = ItemDatabase.get_item_data(w_id)
+	var max_dur = float(wb_selected_weapon.get("max_durability", w_meta.get("max_durability", 100.0)))
+	var cur_dur = float(wb_selected_weapon.get("durability", max_dur))
+	var missing = max(0.0, max_dur - cur_dur)
+	var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
+	var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
+	var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+	var cur_scrap = _get_total_scrap_count()
+	
+	var dur_lbl = Label.new()
+	dur_lbl.text = "🛠️ 총기 내구도: %.1f / %.0f" % [cur_dur, max_dur]
+	dur_lbl.add_theme_font_size_override("font_size", 11)
+	dur_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5) if missing <= 0.1 else Color(1.0, 0.78, 0.3))
+	wb_stats_vbox.add_child(dur_lbl)
+	
+	var btn_hbox = HBoxContainer.new()
+	btn_hbox.add_theme_constant_override("separation", 4)
+	
+	var rub_btn = Button.new()
+	rub_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rub_btn.add_theme_font_size_override("font_size", 10)
+	rub_btn.text = "🔧 루블 수리 (%d RUB)" % rub_cost if missing > 0.1 else "✅ 내구도 100%"
+	rub_btn.disabled = (missing <= 0.1 or cur_rubles < rub_cost)
+	rub_btn.pressed.connect(func(): _repair_selected_weapon(false))
+	btn_hbox.add_child(rub_btn)
+	
+	var scrap_btn = Button.new()
+	scrap_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scrap_btn.add_theme_font_size_override("font_size", 10)
+	scrap_btn.text = "🔩 고철 수리 (%d/%d)" % [cur_scrap, scrap_cost] if missing > 0.1 else "🔩 수리 불필요"
+	scrap_btn.disabled = (missing <= 0.1 or cur_scrap < scrap_cost)
+	scrap_btn.pressed.connect(func(): _repair_selected_weapon(true))
+	btn_hbox.add_child(scrap_btn)
+	wb_stats_vbox.add_child(btn_hbox)
+	
+	for a_slot in ["helmet", "vest"]:
+		var armor_dict = equipment_data.get(a_slot, {})
+		if armor_dict.is_empty():
+			continue
+		var a_id = armor_dict.get("id", "")
+		var a_meta = ItemDatabase.get_item_data(a_id)
+		var a_max = float(armor_dict.get("max_durability", a_meta.get("max_durability", 100.0)))
+		var a_cur = float(armor_dict.get("durability", a_max))
+		var a_miss = max(0.0, a_max - a_cur)
+		var a_rub = calculate_repair_cost_rubles(a_cur, a_max)
+		var a_scr = calculate_repair_cost_scrap(a_cur, a_max)
+		var slot_title = "🪖 헬멧" if a_slot == "helmet" else "🦺 방탄복"
+		
+		var a_row = HBoxContainer.new()
+		a_row.add_theme_constant_override("separation", 4)
+		var a_lbl = Label.new()
+		a_lbl.text = "%s (%.0f/%.0f)" % [slot_title, a_cur, a_max]
+		a_lbl.custom_minimum_size = Vector2(92, 0)
+		a_lbl.add_theme_font_size_override("font_size", 10)
+		a_row.add_child(a_lbl)
+		
+		var ar_btn = Button.new()
+		ar_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		ar_btn.add_theme_font_size_override("font_size", 10)
+		ar_btn.text = "%d RUB" % a_rub if a_miss > 0.1 else "완료"
+		ar_btn.disabled = (a_miss <= 0.1 or cur_rubles < a_rub)
+		var cap_slot = a_slot
+		ar_btn.pressed.connect(func(): _repair_equipped_armor(cap_slot, false))
+		a_row.add_child(ar_btn)
+		
+		var as_btn = Button.new()
+		as_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		as_btn.add_theme_font_size_override("font_size", 10)
+		as_btn.text = "고철 %d" % a_scr if a_miss > 0.1 else "-"
+		as_btn.disabled = (a_miss <= 0.1 or cur_scrap < a_scr)
+		as_btn.pressed.connect(func(): _repair_equipped_armor(cap_slot, true))
+		a_row.add_child(as_btn)
+		wb_stats_vbox.add_child(a_row)
+
+func _repair_selected_weapon(use_scrap: bool) -> void:
+	if wb_selected_weapon.is_empty():
+		return
+	var w_id = wb_selected_weapon.get("id", wb_selected_weapon.get("receiver", "M4_리시버"))
+	var w_meta = ItemDatabase.get_item_data(w_id)
+	var max_dur = float(wb_selected_weapon.get("max_durability", w_meta.get("max_durability", 100.0)))
+	var cur_dur = float(wb_selected_weapon.get("durability", max_dur))
+	if max_dur - cur_dur <= 0.1:
+		return
+		
+	if use_scrap:
+		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
+		if _get_total_scrap_count() < scrap_cost:
+			return
+		_consume_scrap(scrap_cost)
+	else:
+		var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
+		var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+		if cur_rubles < rub_cost:
+			return
+		if GameManager and GameManager.current_world_data.has("player"):
+			GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
+		money_spent.emit(rub_cost)
+		
+	wb_selected_weapon["durability"] = max_dur
+	_save_workbench_weapon()
+	_refresh_workbench_stats_comparison()
+
+func _repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
+	var armor_dict = equipment_data.get(slot_key, {})
+	if armor_dict.is_empty():
+		return
+	var a_id = armor_dict.get("id", "")
+	var a_meta = ItemDatabase.get_item_data(a_id)
+	var max_dur = float(armor_dict.get("max_durability", a_meta.get("max_durability", 100.0)))
+	var cur_dur = float(armor_dict.get("durability", max_dur))
+	if max_dur - cur_dur <= 0.1:
+		return
+		
+	if use_scrap:
+		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
+		if _get_total_scrap_count() < scrap_cost:
+			return
+		_consume_scrap(scrap_cost)
+	else:
+		var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
+		var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+		if cur_rubles < rub_cost:
+			return
+		if GameManager and GameManager.current_world_data.has("player"):
+			GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
+		money_spent.emit(rub_cost)
+		
+	armor_dict["durability"] = max_dur
+	equipment_data[slot_key] = armor_dict
+	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
+	_refresh_workbench_stats_comparison()
 
 func _add_stat_compare_row(title: String, base_val: float, cur_val: float, fmt: String, higher_is_better: bool) -> void:
 	var row = HBoxContainer.new()

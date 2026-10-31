@@ -6,6 +6,7 @@ extends Node
 
 # 플레이어 관련
 signal player_damaged(amount: float, source: String)
+signal player_hit_direction(attacker_pos: Vector2)
 signal player_healed(amount: float)
 signal player_died()
 signal stat_changed(stat_name: String, current_value: float, max_value: float)

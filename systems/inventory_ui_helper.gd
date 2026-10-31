@@ -126,6 +126,47 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		# 이름
 		ctrl.draw_string(font, item_rect.position + Vector2(6, 12), d.get("name", item.get("id", "")), HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 10, 10, Color(0.88, 0.91, 0.95, 0.9))
 
+		# 총기류 탄약 표기 (우하단: cur/max, 잔탄 0: 적색, 잔탄 보유: 연녹색)
+		var item_id_str = str(item.get("id", ""))
+		var cat = d.get("category", -1)
+		var is_gun = (cat == ItemDatabase.ItemCategory.WEAPON and d.get("type", "") != "melee" and not item_id_str in ["나이프", "파이프", "도끼", "야구방망이"]) or item.has("parts") or d.get("type", "") == "receiver" or item_id_str.contains("리시버") or item_id_str.contains("소총") or item_id_str.contains("권총") or item_id_str.contains("M4") or item_id_str.contains("AK") or item_id_str.contains("산탄총") or item_id_str.contains("SV98") or item.has("current_magazine_ammo")
+		if is_gun:
+			var max_ammo = 30
+			if item.has("computed_stats") and item["computed_stats"].has("magazine_size"):
+				max_ammo = int(item["computed_stats"]["magazine_size"])
+			elif item.has("parts"):
+				var stats = WeaponPartsDatabase.compute_weapon_stats(item_id_str, item.get("parts", {}))
+				max_ammo = int(stats.get("magazine_size", 30))
+			elif d.has("magazine_size"):
+				max_ammo = int(d["magazine_size"])
+			elif d.has("ammo"):
+				max_ammo = 30
+			var cur_ammo = int(item.get("current_magazine_ammo", max_ammo))
+			var ammo_str = "%d/%d" % [cur_ammo, max_ammo]
+			var ammo_col = Color(0.4, 1.0, 0.6) if cur_ammo > 0 else Color(1.0, 0.25, 0.25)
+			var font_sz = 9
+			var text_w = 42.0
+			ctrl.draw_string(font, item_rect.position + Vector2(item_rect.size.x - text_w - 4, item_rect.size.y - 4), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, font_sz, ammo_col)
+
+		# 방어구/헬멧 내구도 바 표기 (셀 하단)
+		var is_armor = (cat == ItemDatabase.ItemCategory.EQUIPMENT and (d.get("equip_slot") in ["vest", "helmet"] or item_id_str.contains("방탄") or item_id_str.contains("헬멧") or item_id_str.contains("조끼") or item_id_str.contains("방독면"))) or (not is_gun and (item.has("durability") or d.has("max_durability")))
+		if is_armor:
+			var max_dur = float(item.get("max_durability", d.get("max_durability", 100.0)))
+			if max_dur > 0.0:
+				var cur_dur = float(item.get("durability", max_dur))
+				var ratio = clamp(cur_dur / max_dur, 0.0, 1.0)
+				var bar_w = item_rect.size.x - 6.0
+				var bar_h = 3.0
+				var bar_rect = Rect2(item_rect.position.x + 3.0, item_rect.position.y + item_rect.size.y - bar_h - 2.0, bar_w, bar_h)
+				ctrl.draw_rect(bar_rect, Color(0.1, 0.12, 0.15, 0.85), true)
+				var dur_col = Color(0.25, 0.85, 0.4, 0.95)
+				if ratio < 0.25:
+					dur_col = Color(0.95, 0.25, 0.25, 0.95)
+				elif ratio < 0.6:
+					dur_col = Color(0.95, 0.75, 0.2, 0.95)
+				if ratio > 0.0:
+					ctrl.draw_rect(Rect2(bar_rect.position.x, bar_rect.position.y, bar_w * ratio, bar_h), dur_col, true)
+
 	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강)
 	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
 		var item = drag_data.get("item", {})
@@ -139,7 +180,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		var src = drag_data.get("source", "")
 		var uid = item.get("uid", "")
 		var ignore_uid = uid if (src == "grid" or src == ("player_grid" if is_player_grid else "stash_grid")) else ""
-		var can_place = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid)
+		var can_place = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid, item.get("id", ""))
 		var ghost_rect = Rect2(hovered_cell.x * cell_size, hovered_cell.y * cell_size, place_w * cell_size, place_h * cell_size)
 		
 		var col = Color(0.2, 0.8, 0.3, 0.4) if can_place else Color(0.9, 0.2, 0.2, 0.4)

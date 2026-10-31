@@ -745,6 +745,11 @@ func _draw() -> void:
 		draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), fill_color)
 """
 
+import sys
+if "--force-regenerate" not in sys.argv:
+	print("[DEPRECATED] create_player_components.py is archived/isolated to prevent overwriting live player components.")
+	sys.exit(0)
+
 with open("scenes/entities/player/survival_stats.gd", "w", encoding="utf-8") as f: f.write(survival_stats)
 with open("scenes/entities/player/weapon_handler.gd", "w", encoding="utf-8") as f: f.write(weapon_handler)
 with open("scenes/entities/player/interaction_detector.gd", "w", encoding="utf-8") as f: f.write(interaction_detector)

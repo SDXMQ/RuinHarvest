@@ -158,26 +158,35 @@ func get_item_data(id: String) -> Dictionary:
 	if _cached_item_data.has(id):
 		return _cached_item_data[id]
 		
+	var target_id = id
+	if not items.has(target_id) and not WeaponPartsDatabase.PARTS.has(target_id) and not WeaponPartsDatabase.RECEIVERS.has(target_id):
+		var id_space = id.replace("_", " ")
+		var id_under = id.replace(" ", "_")
+		if items.has(id_space) or WeaponPartsDatabase.PARTS.has(id_space) or WeaponPartsDatabase.RECEIVERS.has(id_space):
+			target_id = id_space
+		elif items.has(id_under) or WeaponPartsDatabase.PARTS.has(id_under) or WeaponPartsDatabase.RECEIVERS.has(id_under):
+			target_id = id_under
+
 	var d: Dictionary = {}
-	if items.has(id):
-		d = items[id]
+	if items.has(target_id):
+		d = items[target_id].duplicate()
 		if not d.has("name") or d["name"] == "":
-			d["name"] = id
-	elif WeaponPartsDatabase.PARTS.has(id):
-		var p = WeaponPartsDatabase.PARTS[id].duplicate()
+			d["name"] = target_id
+	elif WeaponPartsDatabase.PARTS.has(target_id):
+		var p = WeaponPartsDatabase.PARTS[target_id].duplicate()
 		p["category"] = ItemCategory.TOOL
 		p["stackable"] = false
 		p["max_stack"] = 1
 		p["weight"] = p.get("weight", 0.3)
-		p["description"] = "[총기 부품: %s] %s" % [p.get("slot", ""), p.get("name", id)]
+		p["description"] = "[총기 부품: %s] %s" % [p.get("slot", ""), p.get("name", target_id)]
 		d = p
-	elif WeaponPartsDatabase.RECEIVERS.has(id):
-		var r = WeaponPartsDatabase.RECEIVERS[id].duplicate()
+	elif WeaponPartsDatabase.RECEIVERS.has(target_id):
+		var r = WeaponPartsDatabase.RECEIVERS[target_id].duplicate()
 		r["category"] = ItemCategory.WEAPON
 		r["stackable"] = false
 		r["max_stack"] = 1
 		r["type"] = "receiver"
-		r["description"] = "[총기 리시버] %s" % r.get("name", id)
+		r["description"] = "[총기 리시버] %s" % r.get("name", target_id)
 		d = r
 	else:
 		d = {"name": id, "weight": 0.1, "max_stack": 1, "value": 500}

@@ -182,7 +182,7 @@ func _process(delta: float) -> void:
 			if raid_time_remaining < 60:
 				raid_timer_label.add_theme_color_override("font_color", Color.RED)
 		if raid_time_remaining <= 0:
-			GameManager.end_raid("mia")
+			GameManager.end_raid("mia", _get_backpack_items())
 
 func _on_player_stats_changed() -> void:
 	if not player: return
@@ -256,25 +256,32 @@ func _toggle_pause() -> void:
 				exit_btn.text = "작전 포기 및 탈주 (MIA - 전리품 유실)"
 				exit_btn.theme_type_variation = &"DangerButton"
 
+func _get_backpack_items() -> Array:
+	var items_arr = []
+	if player and player.inventory_grid:
+		for item in player.inventory_grid.items:
+			if item and not item.is_empty():
+				items_arr.append(item.duplicate(true))
+	elif player_inventory:
+		for item in player_inventory.items:
+			if item and not item.is_empty():
+				items_arr.append(item.duplicate(true))
+	return items_arr
+
 func _on_exit_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	get_tree().paused = false
 	if GameManager:
 		GameManager.is_paused = false
+		if player and not player.equipment.is_empty():
+			if not GameManager.current_world_data.has("player"):
+				GameManager.current_world_data["player"] = {}
+			GameManager.current_world_data["player"]["equipment"] = player.equipment.duplicate(true)
 		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
 		if is_sandbox:
-			var items_arr = []
-			if player and player.inventory_grid:
-				for item in player.inventory_grid.items:
-					if item and not item.is_empty():
-						items_arr.append(item.duplicate(true))
-			elif player_inventory:
-				for item in player_inventory.items:
-					if item and not item.is_empty():
-						items_arr.append(item.duplicate(true))
-			GameManager.end_raid("survived", items_arr)
+			GameManager.end_raid("survived", _get_backpack_items())
 		else:
-			GameManager.end_raid("mia")
+			GameManager.end_raid("mia", _get_backpack_items())
 
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_loot_window == null:
