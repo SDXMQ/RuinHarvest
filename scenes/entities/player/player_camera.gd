@@ -4,6 +4,7 @@ class_name PlayerCamera
 var base_camera_pos: Vector2 = Vector2.ZERO
 var base_zoom: Vector2 = Vector2(1.5, 1.5)
 var target_cam_offset: Vector2 = Vector2.ZERO
+var recoil_punch_offset: Vector2 = Vector2.ZERO
 var shake_intensity: float = 0.0
 var shake_timer: float = 0.0
 var walk_bob: float = 0.0
@@ -27,6 +28,7 @@ func _process(delta: float) -> void:
 	else:
 		walk_bob = lerp(walk_bob, 0.0, delta * 10.0)
 		
+	recoil_punch_offset = recoil_punch_offset.lerp(Vector2.ZERO, clamp(delta * 16.0, 0.0, 1.0))
 	_update_zoom(delta)
 	
 	if shake_timer > 0:
@@ -37,6 +39,12 @@ func _process(delta: float) -> void:
 func request_shake(intensity: float, duration: float) -> void:
 	shake_intensity = max(shake_intensity, intensity)
 	shake_timer = max(shake_timer, duration)
+
+func apply_recoil_punch(shot_dir: Vector2, recoil_amount: float = 20.0) -> void:
+	var kick_px = clamp(recoil_amount * 0.16, 2.0, 4.5)
+	recoil_punch_offset = (recoil_punch_offset - shot_dir.normalized() * kick_px).limit_length(8.0)
+	if camera:
+		camera.position += -shot_dir.normalized() * kick_px
 
 func _update_zoom(delta: float) -> void:
 	if not camera: return
@@ -75,4 +83,4 @@ func _update_zoom(delta: float) -> void:
 		target_cam_offset = Vector2.ZERO
 		
 	camera.zoom = camera.zoom.lerp(target_zoom, delta * 6.0)
-	camera.position = camera.position.lerp(base_camera_pos + target_cam_offset, delta * 7.5)
+	camera.position = camera.position.lerp(base_camera_pos + target_cam_offset + recoil_punch_offset, delta * 7.5)

@@ -44,6 +44,7 @@ extends Control
 const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
 const SplitDialogScene = preload("res://scenes/ui/split_dialog.tscn")
 var tooltip: PanelContainer
+const ShootingRangeScript = preload("res://scenes/ui/shooting_range_window.gd")
 
 # 2D 인벤토리 그리드 시스템
 var player_grid_mgr: InventoryGrid
@@ -83,6 +84,11 @@ func _ready() -> void:
 		tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
 		tool_btn.pressed.connect(_open_item_spawner)
 		$TopBar.add_child(tool_btn)
+		
+		var range_btn = Button.new()
+		range_btn.text = "🎯 사격장 (F2)"
+		range_btn.pressed.connect(_open_shooting_range)
+		$TopBar.add_child(range_btn)
 	
 	# 상인 버튼 연결
 	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
@@ -1109,8 +1115,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_weapon_modding_window()
 		elif event.physical_keycode == KEY_F1:
 			_open_item_spawner()
+		elif event.physical_keycode == KEY_F2:
+			_open_shooting_range()
 		elif event.physical_keycode == KEY_TAB or event.physical_keycode == KEY_I:
 			_open_inventory_window()
+
+func _open_shooting_range() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var target_wep = equipment_data.get("primary1", {})
+	if target_wep.is_empty():
+		target_wep = equipment_data.get("primary2", {})
+	if target_wep.is_empty():
+		target_wep = equipment_data.get("sidearm", {})
+	var win = ShootingRangeScript.new()
+	add_child(win)
+	win.setup(target_wep)
 
 func _open_inventory_window() -> void:
 	var inv_scene = preload("res://scenes/ui/inventory_window.tscn")

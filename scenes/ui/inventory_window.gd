@@ -50,6 +50,7 @@ var inventory_grid: InventoryGrid = null
 var target_inventory: Inventory = null
 var target_title: String = ""
 var tooltip: PanelContainer = null
+var context_menu_panel: PanelContainer = null
 
 # 플레이어 장비 데이터 딕셔너리
 # schema: { "helmet": {}, "vest": {}, "backpack": {}, "bottom": {}, "primary1": {}, "primary2": {}, "sidearm": {}, "throwable": {} }
@@ -295,11 +296,23 @@ func _calc_grid_hover_cell(m_global_pos: Vector2) -> Vector2i:
 func _input(event: InputEvent) -> void:
 	if not visible: return
 	
+	if is_instance_valid(context_menu_panel) and context_menu_panel.is_visible_in_tree():
+		if event is InputEventMouseButton and event.pressed:
+			var m_pos = get_global_mouse_position()
+			if not context_menu_panel.get_global_rect().has_point(m_pos):
+				_close_context_menu()
+		elif event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
+				_close_context_menu()
+				get_viewport().set_input_as_handled()
+				return
+
 	# Tab, ESC, 인벤토리 단축키 입력 시 인벤토리 창 닫기 (포커스 상태와 무관하게 즉시 닫힘 보장)
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_TAB or event.physical_keycode == KEY_TAB or event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE or event.is_action_pressed("inventory") or event.is_action_pressed("pause"):
 			if is_dragging:
 				_end_drag()
+			_close_context_menu()
 			_on_close_pressed()
 			get_viewport().set_input_as_handled()
 			return
@@ -372,7 +385,7 @@ func _handle_global_drop() -> void:
 				_try_equip_weapon(target.get("slot_key", ""))
 				return
 			elif t_type == "attachment":
-				_try_equip_attachment(target.get("weapon_slot_key", ""), target.get("attach_type", ""))
+				_try_equip_attachment(target.get("weapon_slot_key", ""), target.get("attach_type", ""), target.get("rail_index", -1))
 				return
 				
 	# 3. 수색 대상(ContainerSection) 위로 드롭했는지 검사
@@ -451,6 +464,7 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 		grid_control.queue_redraw()
 		
 	elif event is InputEventMouseButton and event.pressed:
+		_close_context_menu()
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = inventory_grid.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
@@ -477,7 +491,136 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			var item = inventory_grid.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
-				_handle_item_quick_action(item)
+				if Input.is_key_pressed(KEY_ALT):
+					_show_context_menu(item)
+				else:
+					_handle_item_quick_action(item)
+
+func _show_context_menu(item: Dictionary) -> void:
+	_close_context_menu()
+	var id = item.get("id", "")
+	var idata = ItemDatabase.get_item_data(id)
+	var item_name = idata.get("name", id)
+
+	context_menu_panel = PanelContainer.new()
+	context_menu_panel.name = "ContextMenuPanel"
+	context_menu_panel.z_index = 300
+
+	var sb = StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.10, 0.14, 0.98)
+	sb.border_color = Color(0.35, 0.45, 0.60, 0.9)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 6
+	sb.content_margin_right = 6
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	context_menu_panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	context_menu_panel.add_child(vbox)
+
+	var header_lbl = Label.new()
+	header_lbl.text = item_name
+	header_lbl.add_theme_font_size_override("font_size", 11)
+	header_lbl.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4))
+	header_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(header_lbl)
+	vbox.add_child(HSeparator.new())
+
+	var btn_use = Button.new()
+	btn_use.text = "⚡ 사용 / 장착"
+	btn_use.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn_use.custom_minimum_size = Vector2(130, 24)
+	btn_use.pressed.connect(func():
+		_close_context_menu()
+		_handle_item_quick_action(item)
+	)
+	vbox.add_child(btn_use)
+
+	var amt = int(item.get("amount", 1))
+	if amt > 1:
+		var btn_split = Button.new()
+		btn_split.text = "✂️ 수량 분할"
+		btn_split.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn_split.custom_minimum_size = Vector2(130, 24)
+		btn_split.pressed.connect(func():
+			_close_context_menu()
+			_open_split_dialog(item, func(split_amt):
+				var split_item = item.duplicate()
+				split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+				split_item["amount"] = split_amt
+				item["amount"] -= split_amt
+				inventory_grid.grid_changed.emit()
+				_start_drag("split", split_item, Vector2i(item.get("x", 0), item.get("y", 0)))
+				drag_data["is_split"] = true
+				drag_data["split_source_item"] = item
+				drag_data["split_amount"] = split_amt
+			)
+		)
+		vbox.add_child(btn_split)
+
+	var has_parts = false
+	var parts_dict: Dictionary = item.get("parts", item.get("attachments", {}))
+	for pk in parts_dict.keys():
+		var pv = parts_dict[pk]
+		if pv is Array and not pv.is_empty(): has_parts = true; break
+		elif pv != null and String(pv) != "": has_parts = true; break
+
+	if has_parts:
+		var btn_detach = Button.new()
+		btn_detach.text = "🔩 부품 모두 분리"
+		btn_detach.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn_detach.custom_minimum_size = Vector2(130, 24)
+		btn_detach.pressed.connect(func():
+			_close_context_menu()
+			_detach_all_item_parts(item)
+		)
+		vbox.add_child(btn_detach)
+
+	var btn_drop = Button.new()
+	btn_drop.text = "🗑️ 바닥에 버리기"
+	btn_drop.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn_drop.custom_minimum_size = Vector2(130, 24)
+	btn_drop.pressed.connect(func():
+		_close_context_menu()
+		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+		_drop_item_to_world(item)
+	)
+	vbox.add_child(btn_drop)
+
+	add_child(context_menu_panel)
+	var mpos = get_global_mouse_position() - global_position
+	mpos.x = min(mpos.x, size.x - 150)
+	mpos.y = min(mpos.y, size.y - 140)
+	context_menu_panel.position = mpos
+
+func _close_context_menu() -> void:
+	if context_menu_panel:
+		context_menu_panel.queue_free()
+		context_menu_panel = null
+
+func _detach_all_item_parts(item: Dictionary) -> void:
+	var parts_dict: Dictionary = item.get("parts", item.get("attachments", {}))
+	var detached_count = 0
+	for pk in parts_dict.keys():
+		var pv = parts_dict[pk]
+		if pv is Array:
+			for sub_p in pv:
+				if String(sub_p) != "":
+					inventory_grid.auto_add_item(String(sub_p), 1)
+					detached_count += 1
+		elif pv != null and String(pv) != "":
+			inventory_grid.auto_add_item(String(pv), 1)
+			detached_count += 1
+	item["parts"] = {}
+	item["attachments"] = {}
+	item = WeaponPartsDatabase.compute_weapon_from_dict(item)
+	inventory_grid.grid_changed.emit()
+	if SoundManager: SoundManager.play("menu_select")
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("🔩 총기 부품 %d개를 모두 분리했습니다." % detached_count)
 
 func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 	if not is_dragging: return
@@ -1046,15 +1189,11 @@ func _update_equipment_ui() -> void:
 	
 	_rebuild_drop_targets()
 	
-	# 플레이어 방어력 스탯 동기화
+	# 플레이어 장비 및 방어력 스탯 동기화
 	if player:
-		var total_defense = 0.0
-		for slot in ["helmet", "vest"]:
-			var it = equipment_data.get(slot, {})
-			if not it.is_empty():
-				var d = ItemDatabase.get_item_data(it.get("id", ""))
-				total_defense += d.get("defense", 0.0)
-		player.set("armor_defense", total_defense)
+		player.set("equipment", equipment_data)
+		if player.has_signal("stats_changed"):
+			player.stats_changed.emit()
 
 func _rebuild_drop_targets() -> void:
 	drop_targets.clear()
@@ -1080,6 +1219,8 @@ func _sync_weapon_to_player(slot_key: String = "") -> void:
 			player.player_visuals.queue_redraw()
 
 func _update_weapons_ui() -> void:
+	if not weapons_vbox:
+		return
 	for c in weapons_vbox.get_children():
 		c.queue_free()
 		
@@ -1176,14 +1317,19 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 			if not allowed_slots.is_empty() and not allowed_slots.has(a_type):
 				continue
 			var cur_p = attach_dict.get(a_type, "")
-			var cur_p_str = cur_p
-			if cur_p is Array:
-				cur_p_str = cur_p[0] if not cur_p.is_empty() else ""
-			_create_attachment_sub_slot(attach_hbox, slot_key, a_type, cur_p_str)
+			if a_type == "rail":
+				var rail_slots_count = int(allowed_slots.get("rail", 1))
+				var cur_rail_arr: Array = cur_p if (cur_p is Array) else ([String(cur_p)] if String(cur_p) != "" else [])
+				for r_i in range(rail_slots_count):
+					var r_part_id = cur_rail_arr[r_i] if r_i < cur_rail_arr.size() else ""
+					_create_attachment_sub_slot(attach_hbox, slot_key, "rail", r_part_id, r_i)
+			else:
+				var cur_p_str = String(cur_p[0]) if (cur_p is Array and not cur_p.is_empty()) else String(cur_p)
+				_create_attachment_sub_slot(attach_hbox, slot_key, a_type, cur_p_str, -1)
 			
 	weapons_vbox.add_child(panel)
 
-func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String, attach_type: String, current_part_id: String) -> void:
+func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String, attach_type: String, current_part_id: String, rail_index: int = -1) -> void:
 	var btn = Button.new()
 	btn.custom_minimum_size = Vector2(58, 28)
 	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1194,7 +1340,10 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 	}
 	
 	if current_part_id == "":
-		btn.text = slot_labels.get(attach_type, attach_type)
+		if attach_type == "rail" and rail_index >= 0:
+			btn.text = "레일%d" % (rail_index + 1)
+		else:
+			btn.text = slot_labels.get(attach_type, attach_type)
 		btn.add_theme_color_override("font_color", Color(0.5, 0.55, 0.6))
 		btn.add_theme_font_size_override("font_size", 10)
 	else:
@@ -1203,7 +1352,7 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 		btn.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 		btn.add_theme_font_size_override("font_size", 10)
 		
-	drop_targets.append({"control": btn, "type": "attachment", "weapon_slot_key": weapon_slot_key, "attach_type": attach_type})
+	drop_targets.append({"control": btn, "type": "attachment", "weapon_slot_key": weapon_slot_key, "attach_type": attach_type, "rail_index": rail_index})
 		
 	btn.mouse_entered.connect(func():
 		if not is_dragging and tooltip and current_part_id != "":
@@ -1220,7 +1369,7 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 		if event is InputEventMouseButton and event.pressed:
 			if event.button_index == MOUSE_BUTTON_LEFT:
 				if is_dragging:
-					_try_equip_attachment(weapon_slot_key, attach_type)
+					_try_equip_attachment(weapon_slot_key, attach_type, rail_index)
 			elif event.button_index == MOUSE_BUTTON_RIGHT and current_part_id != "":
 				# 부착물 가방으로 탈착
 				var rem = inventory_grid.auto_add_item(current_part_id, 1)
@@ -1230,7 +1379,10 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 					if w_parts.has(attach_type):
 						var p_val = w_parts[attach_type]
 						if p_val is Array:
-							p_val.erase(current_part_id)
+							if rail_index >= 0 and rail_index < p_val.size():
+								p_val.remove_at(rail_index)
+							else:
+								p_val.erase(current_part_id)
 							if p_val.is_empty(): w_parts.erase(attach_type)
 						else:
 							w_parts.erase(attach_type)
@@ -1246,8 +1398,87 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 
 func _try_equip_weapon(slot_key: String) -> void:
 	var item = drag_data.get("item", {})
+	var it_id = String(item.get("id", ""))
+	var it_data = ItemDatabase.get_item_data(it_id)
+	var it_cat = int(it_data.get("category", -1))
+	var it_type = String(it_data.get("type", ""))
+
+	# 탄약 드래그 앤 드롭 시 탄종 선택 재장전 및 잔탄 확인/교체 처리
+	if it_type == "ammo" or WeaponPartsDatabase.AMMO_TYPES.has(it_id) or it_id.contains("탄약") or it_id.contains("mm") or it_id.contains("게이지") or it_id.contains("ACP"):
+		var target_w = equipment_data.get(slot_key, {})
+		if target_w.is_empty():
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 탄약을 장전할 무기가 슬롯에 없습니다.")
+			_end_drag()
+			return
+
+		var raw_rec = target_w.get("receiver", target_w.get("id", ""))
+		var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_rec)
+		var rec_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+		var allowed_ammos: Array = rec_data.get("ammo_types", target_w.get("computed_stats", {}).get("ammo_types", []))
+		if allowed_ammos.is_empty() and rec_data.has("default_ammo"):
+			allowed_ammos = [rec_data["default_ammo"]]
+
+		if not (it_id in allowed_ammos or "탄약" in allowed_ammos):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ [%s] 탄약은 [%s]에 호환되지 않습니다." % [it_data.get("name", it_id), target_w.get("name", rec_id)])
+			_end_drag()
+			return
+
+		var stats = target_w.get("computed_stats", {})
+		var max_mag = int(stats.get("magazine_size", 15))
+		var old_ammo = target_w.get("loaded_ammo", rec_data.get("default_ammo", it_id))
+		var old_count = int(target_w.get("current_magazine_ammo", 0))
+		var drag_amt = int(item.get("amount", 1))
+
+		var load_amt = min(drag_amt, max_mag)
+
+		# 이전 잔탄 가방으로 회수
+		if old_count > 0 and old_ammo != "":
+			inventory_grid.auto_add_item(old_ammo, old_count)
+
+		var src = drag_data.get("source", "")
+		if drag_amt <= load_amt:
+			if src == "grid":
+				inventory_grid.remove_item_by_uid(item.get("uid", ""))
+			elif src == "vicinity":
+				var ground_node = drag_data.get("ground_ref")
+				if is_instance_valid(ground_node): ground_node.queue_free()
+				_update_vicinity_list(true)
+			elif src == "container":
+				var orig_idx = drag_data.get("origin_index", -1)
+				if orig_idx != -1 and target_inventory:
+					target_inventory.remove_item_at(orig_idx, drag_amt)
+					_update_container_list()
+		else:
+			item["amount"] = drag_amt - load_amt
+			if src == "grid":
+				inventory_grid.grid_changed.emit()
+			elif src == "vicinity":
+				var ground_node = drag_data.get("ground_ref")
+				if is_instance_valid(ground_node):
+					ground_node.amount = item["amount"]
+					ground_node.update_visuals()
+				_update_vicinity_list(true)
+			elif src == "container":
+				var orig_idx = drag_data.get("origin_index", -1)
+				if orig_idx != -1 and target_inventory:
+					target_inventory.remove_item_at(orig_idx, load_amt)
+					_update_container_list()
+
+		target_w["loaded_ammo"] = it_id
+		target_w["current_magazine_ammo"] = load_amt
+		target_w = WeaponPartsDatabase.compute_weapon_from_dict(target_w)
+		equipment_data[slot_key] = target_w
+		_sync_weapon_to_player(slot_key)
+		_update_weapons_ui()
+		if SoundManager: SoundManager.play("menu_select")
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🔄 [%s] 탄약으로 교체 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), load_amt, max_mag])
+		_end_drag()
+		return
+
 	var eq_slot = ItemDatabase.get_item_equip_slot(item.get("id", ""))
-	
 	var valid = false
 	if slot_key.begins_with("primary") and (eq_slot == "primary" or eq_slot == ""): valid = true
 	elif slot_key == "sidearm" and (eq_slot == "sidearm" or eq_slot == "melee"): valid = true
@@ -1294,7 +1525,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	_end_drag()
 
-func _try_equip_attachment(weapon_slot_key: String, attach_type: String) -> void:
+func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_index: int = -1) -> void:
 	var item = drag_data.get("item", {})
 	var part_id = item.get("id", "")
 	
@@ -1337,16 +1568,31 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String) -> void
 			return
 		
 	var src = drag_data.get("source", "")
-	if src == "grid": inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	if src == "grid":
+		inventory_grid.remove_item_by_uid(item.get("uid", ""))
 	elif src == "vicinity":
 		var ground_node = drag_data.get("ground_ref")
 		if is_instance_valid(ground_node): ground_node.queue_free()
+	elif src == "container":
+		var orig_idx = drag_data.get("origin_index", -1)
+		if orig_idx != -1 and target_inventory:
+			target_inventory.remove_item_at(orig_idx, 1)
+			_update_container_list()
 	elif src == "attachment":
 		var old_w_slot = drag_data.get("weapon_slot", "")
 		var old_a_slot = drag_data.get("attach_slot", "")
+		var old_rail_idx = drag_data.get("rail_index", -1)
 		if equipment_data.has(old_w_slot):
 			var old_parts = equipment_data[old_w_slot].get("parts", {})
-			old_parts.erase(old_a_slot)
+			if old_a_slot == "rail" and old_parts.get("rail") is Array:
+				if old_rail_idx >= 0 and old_rail_idx < old_parts["rail"].size():
+					old_parts["rail"].remove_at(old_rail_idx)
+				else:
+					old_parts["rail"].erase(part_id)
+				if old_parts["rail"].is_empty():
+					old_parts.erase("rail")
+			else:
+				old_parts.erase(old_a_slot)
 			equipment_data[old_w_slot]["parts"] = old_parts
 			equipment_data[old_w_slot]["attachments"] = old_parts
 			equipment_data[old_w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[old_w_slot])
@@ -1355,13 +1601,25 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String) -> void
 	if not equipment_data[weapon_slot_key].has("parts"):
 		equipment_data[weapon_slot_key]["parts"] = equipment_data[weapon_slot_key].get("attachments", {}).duplicate(true)
 		
-	var prev_part = equipment_data[weapon_slot_key]["parts"].get(attach_type, "")
-	if prev_part is Array:
-		prev_part = prev_part[0] if not prev_part.is_empty() else ""
-		
+	var prev_part = ""
 	if attach_type == "rail":
-		equipment_data[weapon_slot_key]["parts"]["rail"] = [part_id]
+		var raw_rails = equipment_data[weapon_slot_key]["parts"].get("rail", [])
+		var cur_rails: Array = raw_rails if (raw_rails is Array) else ([str(raw_rails)] if str(raw_rails) != "" else [])
+		if rail_index >= 0 and rail_index < cur_rails.size():
+			prev_part = cur_rails[rail_index]
+			cur_rails[rail_index] = part_id
+		elif rail_index >= 0:
+			cur_rails.append(part_id)
+		else:
+			var max_r = receiver_data.get("slots", {}).get("rail", 1)
+			if cur_rails.size() < max_r:
+				cur_rails.append(part_id)
+			else:
+				prev_part = cur_rails[0]
+				cur_rails[0] = part_id
+		equipment_data[weapon_slot_key]["parts"]["rail"] = cur_rails
 	else:
+		prev_part = equipment_data[weapon_slot_key]["parts"].get(attach_type, "")
 		equipment_data[weapon_slot_key]["parts"][attach_type] = part_id
 		
 	equipment_data[weapon_slot_key]["attachments"] = equipment_data[weapon_slot_key]["parts"]
@@ -1488,7 +1746,8 @@ func _end_drag() -> void:
 		drag_preview.queue_free()
 		drag_preview = null
 	_clear_slot_highlights()
-	grid_control.queue_redraw()
+	if grid_control:
+		grid_control.queue_redraw()
 
 func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
 	InventoryUIHelper.highlight_compatible_slots(drop_targets, item, hovered_ctrl)
@@ -1628,15 +1887,25 @@ func _handle_item_quick_action(item: Dictionary) -> void:
 			if not equipment_data[best_slot].has("parts"):
 				equipment_data[best_slot]["parts"] = equipment_data[best_slot].get("attachments", {}).duplicate(true)
 			var w_parts = equipment_data[best_slot]["parts"]
-			var prev_part = w_parts.get(attach_type, "")
-			if prev_part is Array:
-				prev_part = prev_part[0] if not prev_part.is_empty() else ""
-				
+			var prev_part = ""
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
 			if attach_type == "rail":
-				w_parts["rail"] = [id]
+				var raw_rails = w_parts.get("rail", [])
+				var cur_rails: Array = raw_rails if (raw_rails is Array) else ([str(raw_rails)] if str(raw_rails) != "" else [])
+				var raw_id = equipment_data[best_slot].get("receiver", equipment_data[best_slot].get("id", ""))
+				var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
+				var receiver_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+				var max_rails = receiver_data.get("slots", {}).get("rail", 1)
+				if cur_rails.size() < max_rails:
+					cur_rails.append(id)
+				else:
+					prev_part = cur_rails[0]
+					cur_rails[0] = id
+				w_parts["rail"] = cur_rails
 			else:
+				prev_part = w_parts.get(attach_type, "")
 				w_parts[attach_type] = id
+
 			equipment_data[best_slot]["parts"] = w_parts
 			equipment_data[best_slot]["attachments"] = w_parts
 			equipment_data[best_slot] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[best_slot])
@@ -1704,6 +1973,7 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⏳ %s 사용 시작 (%.1f초)..." % [item_name, duration])
+		_on_close_pressed()
 		return
 		
 	var effects = idata.get("effects", {})
@@ -1729,9 +1999,17 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 		inventory_grid.remove_item_by_uid(item.get("uid", ""))
 
 func _update_weight_ui() -> void:
-	if not inventory_grid: return
-	var cur_w = inventory_grid.get_total_weight()
-	weight_label.text = "%.1f / 50.0 kg" % cur_w
+	if not inventory_grid or not weight_label: return
+	var cur_w = player.get_total_weight() if (player and player.has_method("get_total_weight")) else inventory_grid.get_total_weight()
+	if cur_w > 50.0:
+		weight_label.text = "%.1f / 50.0 kg [초과적]" % cur_w
+		weight_label.add_theme_color_override("font_color", Color(1.0, 0.28, 0.28))
+	elif cur_w >= 35.0:
+		weight_label.text = "%.1f / 50.0 kg [과적 주의]" % cur_w
+		weight_label.add_theme_color_override("font_color", Color(1.0, 0.82, 0.25))
+	else:
+		weight_label.text = "%.1f / 50.0 kg" % cur_w
+		weight_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
 
 func _on_close_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")

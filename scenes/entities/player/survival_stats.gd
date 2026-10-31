@@ -18,7 +18,12 @@ var is_fractured: bool = false
 var is_exhausted: bool = false
 var is_god_mode: bool = false
 
-var armor_defense: float = 0.0
+var base_armor_defense: float = 0.0
+var armor_defense: float:
+	get:
+		return get_total_armor_defense()
+	set(v):
+		base_armor_defense = v
 var _ui_sync_timer: float = 0.0
 
 @onready var player = get_parent()
@@ -30,13 +35,14 @@ func _ready() -> void:
 		hp = max_hp
 
 func get_total_armor_defense() -> float:
-	var total = armor_defense
-	if player and "equipment" in player:
+	var total = base_armor_defense
+	var p = player if player else get_parent()
+	if p and "equipment" in p:
 		for slot in ["helmet", "vest"]:
-			var eq = player.equipment.get(slot, {})
+			var eq = p.equipment.get(slot, {})
 			if not eq.is_empty():
 				var d = ItemDatabase.get_item_data(eq.get("id", ""))
-				var base_defense = float(d.get("armor_defense", 0))
+				var base_defense = float(d.get("armor_defense", d.get("defense", 0)))
 				var max_dur = float(eq.get("max_durability", d.get("max_durability", 100.0)))
 				var cur_dur = float(eq.get("durability", max_dur))
 				if max_dur > 0.0 and cur_dur > 0.0:
@@ -101,12 +107,17 @@ func take_damage(amount: float, source: String) -> void:
 			if not eq.is_empty():
 				var d = ItemDatabase.get_item_data(eq.get("id", ""))
 				var max_dur = float(eq.get("max_durability", d.get("max_durability", 100.0)))
-				var cur_dur = float(eq.get("durability", max_dur))
-				cur_dur = max(0.0, cur_dur - (amount * 0.35))
+				var prev_dur = float(eq.get("durability", max_dur))
+				var cur_dur = max(0.0, prev_dur - (amount * 0.35))
 				eq["durability"] = cur_dur
 				if not eq.has("max_durability"):
 					eq["max_durability"] = max_dur
 				player.equipment[slot] = eq
+				if prev_dur > 0.0 and cur_dur <= 0.0:
+					if player.has_method("show_floating_text"):
+						player.show_floating_text("[BROKEN]", Color(1.0, 0.25, 0.25))
+					if EventBus.has_signal("event_logged"):
+						EventBus.event_logged.emit("🛡️ [%s] 내구도가 0이 되어 방어력을 상실했습니다!" % d.get("name", eq.get("id", slot)))
 				
 	if source == "zombie" and randf() < 0.28:
 		is_infected = true

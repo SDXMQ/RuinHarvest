@@ -1,6 +1,8 @@
 # res://scenes/world/objects/airdrop_crate.gd
 extends StaticBody2D
 
+signal crate_landed(drop_pos: Vector2)
+
 enum DropState { FLARE_PHASE, CHUTE_FALL, LANDED_IMPACT, LOOTABLE }
 
 var current_state: DropState = DropState.FLARE_PHASE
@@ -58,6 +60,7 @@ func _process(delta: float) -> void:
 				state_timer = 0.0
 				fall_altitude = 0.0
 				chute_sway = 0.0
+				crate_landed.emit(global_position)
 
 				# 3단계(LANDED_IMPACT): 지면 충돌 사운드, 착지 먼지 파티클, 카메라 쉐이크
 				if SoundManager:

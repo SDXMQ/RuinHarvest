@@ -2,13 +2,35 @@ extends Node2D
 class_name PlayerVisuals
 
 var hit_flash_tween: Tween
+var floating_texts: Array = []
 @onready var player = get_parent()
 
 func _ready() -> void:
 	if EventBus.has_signal("player_damaged"):
 		EventBus.player_damaged.connect(_on_player_damaged)
 
-func _process(_delta: float) -> void:
+func show_floating_text(text: String, color: Color = Color(1.0, 0.9, 0.4), duration: float = 0.8) -> void:
+	# 동일 텍스트가 최근에 떠있다면 타이머 갱신
+	for ft in floating_texts:
+		if ft["text"] == text:
+			ft["elapsed"] = 0.0
+			ft["duration"] = duration
+			ft["color"] = color
+			return
+	floating_texts.append({
+		"text": text,
+		"color": color,
+		"elapsed": 0.0,
+		"duration": max(0.2, duration)
+	})
+	queue_redraw()
+
+func _process(delta: float) -> void:
+	if floating_texts.size() > 0:
+		for i in range(floating_texts.size() - 1, -1, -1):
+			floating_texts[i]["elapsed"] += delta
+			if floating_texts[i]["elapsed"] >= floating_texts[i]["duration"]:
+				floating_texts.remove_at(i)
 	queue_redraw()
 
 func _on_player_damaged(_amount: float, _source: String) -> void:
@@ -234,3 +256,21 @@ func _draw() -> void:
 		draw_rect(Rect2(bar_pos + Vector2(-1, -1), Vector2(bar_w + 2, bar_h + 2)), Color(0, 0, 0, 0.8))
 		var fill_color = Color(1.0, 0.8, 0.2).lerp(Color(0.2, 0.9, 0.3), ratio)
 		draw_rect(Rect2(bar_pos, Vector2(bar_w * ratio, bar_h)), fill_color)
+
+	# 5. 월드 플로팅 텍스트 및 전술 상태 팝업 (0.8초간 상승하며 페이드아웃, 플레이어 회전에 무관하게 정방향 표시)
+	if floating_texts.size() > 0:
+		var counter_rot = -(player.rotation if player else 0.0) - rotation
+		draw_set_transform(Vector2(0, -bob_y), counter_rot, Vector2.ONE)
+		var font = ThemeDB.fallback_font
+		for idx in range(floating_texts.size()):
+			var ft = floating_texts[idx]
+			var t = clamp(float(ft["elapsed"]) / float(ft["duration"]), 0.0, 1.0)
+			var alpha = clamp(1.0 - pow(t, 1.6), 0.0, 1.0)
+			var y_off = -30.0 - t * 18.0 - idx * 14.0
+			var txt: String = String(ft["text"])
+			var col: Color = ft["color"]
+			col.a = alpha
+			var shadow_col = Color(0.0, 0.0, 0.0, 0.85 * alpha)
+			draw_string(font, Vector2(-60.0 + 1.0, y_off + 1.0), txt, HORIZONTAL_ALIGNMENT_CENTER, 120.0, 11, shadow_col)
+			draw_string(font, Vector2(-60.0, y_off), txt, HORIZONTAL_ALIGNMENT_CENTER, 120.0, 11, col)
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

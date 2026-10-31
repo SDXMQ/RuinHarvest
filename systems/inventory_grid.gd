@@ -8,7 +8,18 @@ signal grid_changed
 
 @export var grid_width: int = 6
 @export var grid_height: int = 4
-@export var has_secure_container: bool = true
+@export var has_secure_container: bool = false
+
+static func is_same_item_id(a: String, b: String) -> bool:
+	if a == b:
+		return true
+	var na = a.replace("_", " ").strip_edges()
+	var nb = b.replace("_", " ").strip_edges()
+	if na == nb:
+		return true
+	if (na == "기밀 SSD" or na == "암호화된 SSD") and (nb == "기밀 SSD" or nb == "암호화된 SSD"):
+		return true
+	return false
 
 func is_allowed_in_secure_container(item_id: String) -> bool:
 	if item_id == "":
@@ -97,8 +108,11 @@ func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: St
 	if check_id == "" and ignore_uid != "":
 		var existing = get_item_by_uid(ignore_uid)
 		check_id = existing.get("id", "")
-	if has_secure_container and target_x < 2 and target_y < 2 and check_id != "":
-		if not is_allowed_in_secure_container(check_id):
+	if has_secure_container and target_x < 2 and target_y < 2:
+		# 안전 컨테이너(2x2) 영역과 겹치는 아이템은 경계를 걸쳐 놓을 수 없으며 완전히 내부(2x2)에 들어와야 함
+		if target_x + w > 2 or target_y + h > 2:
+			return false
+		if check_id != "" and not is_allowed_in_secure_container(check_id):
 			return false
 		
 	for dy in range(h):
@@ -197,7 +211,7 @@ func remove_item_by_uid(uid: String, should_emit: bool = true) -> Dictionary:
 func get_item_count(id: String) -> int:
 	var total = 0
 	for item in items:
-		if item.get("id", "") == id:
+		if is_same_item_id(String(item.get("id", "")), id):
 			total += item.get("amount", 1)
 	return total
 
@@ -209,7 +223,7 @@ func remove_item(id: String, amount: int = 1) -> int:
 	var i = items.size() - 1
 	while i >= 0 and remaining > 0:
 		var item = items[i]
-		if item.get("id", "") == id:
+		if is_same_item_id(String(item.get("id", "")), id):
 			var cur_amt = item.get("amount", 1)
 			if cur_amt <= remaining:
 				remaining -= cur_amt
@@ -253,14 +267,15 @@ func find_first_fit(base_w: int, base_h: int, item_id: String = "") -> Dictionar
 	return {"found": false, "x": -1, "y": -1, "rotated": false}
 
 func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
-	var item_data = ItemDatabase.get_item_data(id)
+	var resolved_id = ItemDatabase.resolve_item_id(id) if ItemDatabase and ItemDatabase.has_method("resolve_item_id") else id
+	var item_data = ItemDatabase.get_item_data(resolved_id)
 	var max_stack = int(item_data.get("max_stack", 1))
 	var remaining = amount
 	
 	# 1. 스택 가능한 아이템이면 기존 스택에 먼저 채우기
 	if max_stack > 1:
 		for item in items:
-			if item.get("id", "") == id and int(item.get("amount", 1)) < max_stack:
+			if is_same_item_id(String(item.get("id", "")), resolved_id) and int(item.get("amount", 1)) < max_stack:
 				var space = max_stack - int(item.get("amount", 1))
 				var to_add = min(space, remaining)
 				item["amount"] = int(item.get("amount", 1)) + to_add
@@ -270,9 +285,9 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 					return 0
 					
 	# 2. 남은 수량을 빈 공간에 Auto-Fit
-	var base_size = ItemDatabase.get_item_grid_size(id)
+	var base_size = ItemDatabase.get_item_grid_size(resolved_id)
 	while remaining > 0:
-		var fit = find_first_fit(base_size.x, base_size.y, id)
+		var fit = find_first_fit(base_size.x, base_size.y, resolved_id)
 		if not fit["found"]:
 			grid_changed.emit()
 			return remaining # 더 이상 넣을 공간 없음
@@ -280,7 +295,7 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 		var to_add = min(max_stack, remaining)
 		var new_item = {
 			"uid": "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000],
-			"id": id,
+			"id": resolved_id,
 			"amount": to_add,
 			"w": base_size.x,
 			"h": base_size.y,

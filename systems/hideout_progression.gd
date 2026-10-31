@@ -12,7 +12,7 @@ const FACILITIES: Dictionary = {
 		"levels": [
 			{"rubles": 4000, "items": {"나무": 2, "못": 2}, "bonus_rows": 4},
 			{"rubles": 9000, "items": {"나무": 3, "고철": 2, "못": 3}, "bonus_rows": 8},
-			{"rubles": 18000, "items": {"고철": 4, "기계_부품": 2}, "bonus_rows": 12}
+			{"rubles": 18000, "items": {"고철": 4, "기계 부품": 2}, "bonus_rows": 12}
 		]
 	},
 	"med_station": {
@@ -30,8 +30,8 @@ const FACILITIES: Dictionary = {
 		"desc": "레이드에서 생존 복귀할 때마다 고정 패시브 수익(RUB)을 창출합니다.",
 		"max_level": 3,
 		"levels": [
-			{"rubles": 5000, "items": {"폐전선": 2, "비상용_배터리": 1}, "income": 1500},
-			{"rubles": 12000, "items": {"기계_부품": 2, "CPU": 1}, "income": 3500},
+			{"rubles": 5000, "items": {"폐전선": 2, "비상용 배터리": 1}, "income": 1500},
+			{"rubles": 12000, "items": {"기계 부품": 2, "CPU": 1}, "income": 3500},
 			{"rubles": 25000, "items": {"그래픽카드": 1, "CPU": 1}, "income": 7500}
 		]
 	},
@@ -40,9 +40,9 @@ const FACILITIES: Dictionary = {
 		"desc": "상인 구매 가격을 할인받고 아이템 매각 단가 비율을 높입니다.",
 		"max_level": 3,
 		"levels": [
-			{"rubles": 4500, "items": {"라디오_부품": 1, "폐전선": 1}, "discount": 0.05, "sell_bonus": 0.06},
-			{"rubles": 10000, "items": {"장거리_무전기": 1, "라디오_부품": 2}, "discount": 0.10, "sell_bonus": 0.12},
-			{"rubles": 22000, "items": {"암호화된_SSD": 1, "장거리_무전기": 1}, "discount": 0.15, "sell_bonus": 0.20}
+			{"rubles": 4500, "items": {"라디오 부품": 1, "폐전선": 1}, "discount": 0.05, "sell_bonus": 0.06},
+			{"rubles": 10000, "items": {"장거리 무전기": 1, "라디오 부품": 2}, "discount": 0.10, "sell_bonus": 0.12},
+			{"rubles": 22000, "items": {"암호화된 SSD": 1, "장거리 무전기": 1}, "discount": 0.15, "sell_bonus": 0.20}
 		]
 	}
 }
@@ -119,7 +119,7 @@ const QUESTS: Array = [
 		"trader": "펜스",
 		"title": "[의뢰 7] 랜드마크 기밀 단말기 해킹 작전",
 		"desc": "레이드 현장의 랜드마크 단말기에서 [E] 키를 3.0초간 홀드해 신호를 송출하고 암호화된 SSD를 회수하십시오.",
-		"req_items": {"암호화된_SSD": 1},
+		"req_items": {"암호화된 SSD": 1},
 		"req_kills": 0,
 		"req_human_kills": 0,
 		"req_field_objectives": 1,

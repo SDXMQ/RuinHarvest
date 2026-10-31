@@ -115,7 +115,7 @@ func _update_interaction(delta: float) -> void:
 				elif i_type == Vector2i(7, 2):
 					prompt_text = "[E] 🪂 항공 보급품 상자 열기"
 				else:
-					prompt_text = "[E 3초 홀드] 📡 랜드마크 기밀 단말기 해킹"
+					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[E 3초 홀드] 📡 랜드마크 기밀 단말기 해킹"
 					active_objective_node = collider
 				interactable_type = i_type
 				if object_layer:

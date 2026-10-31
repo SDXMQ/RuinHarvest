@@ -8,6 +8,8 @@ uniform float vignette_intensity : hint_range(0.0, 1.0) = 0.0;
 uniform vec4 tint_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float low_hp_pulse : hint_range(0.0, 1.0) = 0.0;
 uniform float grain_strength : hint_range(0.0, 0.5) = 0.03;
+uniform float nvg_active : hint_range(0.0, 1.0) = 0.0;
+uniform float lightning_flash : hint_range(0.0, 1.0) = 0.0;
 
 // 난수 생성 함수 (필름 그레인용)
 float random(vec2 uv) {
@@ -23,6 +25,19 @@ void fragment() {
 	// 1. 컬러 그레이딩 (날씨/시간대 틴트)
 	color *= tint_color.rgb;
 	
+	// 1-2. 전술 야간투시경(NVG) 녹색 단색화 + 스캔라인 + 고글 비네팅
+	if (nvg_active > 0.01) {
+		float lum = dot(color, vec3(0.299, 0.587, 0.114));
+		float boosted = pow(clamp(lum * 2.4 + 0.08, 0.0, 1.0), 0.85);
+		vec3 nvg_col = vec3(0.12, 0.95, 0.28) * boosted;
+		float scanline = sin(uv.y * 420.0) * 0.045;
+		nvg_col -= scanline;
+		float goggle_dist = distance(uv, vec2(0.5, 0.5));
+		float goggle_vig = smoothstep(0.78, 0.36, goggle_dist);
+		nvg_col *= mix(0.22, 1.0, goggle_vig);
+		color = mix(color, nvg_col, nvg_active);
+	}
+	
 	// 2. 비네팅 (Vignette) - 낮에는 0.0으로 완전 투명, 밤/실내에서만 부드럽게 적용
 	if (vignette_intensity > 0.001) {
 		float dist = distance(uv, vec2(0.5, 0.5));
@@ -36,9 +51,15 @@ void fragment() {
 		color = mix(color, vec3(0.8, 0.0, 0.0), pulse * 0.7);
 	}
 	
-	// 4. 필름 그레인 (Film Grain)
-	float grain = random(uv + vec2(TIME, -TIME)) * grain_strength;
+	// 4. 필름 그레인 (Film Grain - NVG 가동 시 증폭)
+	float eff_grain = grain_strength + (nvg_active * 0.045);
+	float grain = random(uv + vec2(TIME, -TIME)) * eff_grain;
 	color -= grain;
 	
-	COLOR = vec4(color, 1.0);
+	// 5. 악천후(STORM) 낙뢰 섬광 (Lightning Flash)
+	if (lightning_flash > 0.001) {
+		color = mix(color, vec3(0.92, 0.96, 1.0), lightning_flash * 0.82);
+	}
+	
+	COLOR = vec4(clamp(color, vec3(0.0), vec3(1.0)), 1.0);
 }
