@@ -22,7 +22,9 @@ static func style_quickslot_button(
 	btn.tooltip_text = tooltip_str
 	btn.clip_contents = true
 
-	var style: StyleBoxFlat = btn.get_theme_stylebox("normal") as StyleBoxFlat
+	var style: StyleBoxFlat
+	if btn.has_theme_stylebox_override("normal"):
+		style = btn.get_theme_stylebox("normal") as StyleBoxFlat
 	if not style:
 		style = StyleBoxFlat.new()
 		style.corner_radius_top_left = 5

@@ -101,6 +101,7 @@ func _ready() -> void:
 	
 	# 2D 인벤토리 매니저 인스턴스화
 	player_grid_mgr = InventoryGrid.new()
+	player_grid_mgr.has_secure_container = true
 	player_grid_mgr.grid_width = 6
 	player_grid_mgr.grid_height = 4
 	add_child(player_grid_mgr)

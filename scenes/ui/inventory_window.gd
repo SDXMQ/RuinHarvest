@@ -196,6 +196,8 @@ func setup(p_player: CharacterBody2D, p_grid: InventoryGrid = null, p_equip: Dic
 		inventory_grid.grid_width = 6
 		inventory_grid.grid_height = 4
 		add_child(inventory_grid)
+	if inventory_grid:
+		inventory_grid.has_secure_container = true
 		
 	if not inventory_grid.grid_changed.is_connected(_on_grid_changed):
 		inventory_grid.grid_changed.connect(_on_grid_changed)
@@ -248,25 +250,29 @@ func _process(delta: float) -> void:
 func _refresh_all() -> void:
 	_update_grid_ui_size()
 	_update_container_list()
-	_update_vicinity_list()
+	if is_inside_tree():
+		_update_vicinity_list()
 	_update_equipment_ui()
 	_update_weapons_ui()
 	_update_weight_ui()
-	grid_control.queue_redraw()
+	if grid_control:
+		grid_control.queue_redraw()
 
 func _on_grid_changed() -> void:
 	_update_weight_ui()
-	grid_control.queue_redraw()
+	if grid_control:
+		grid_control.queue_redraw()
 
 # ============================================================
 # 1. 타르코프식 2D 그리드 (WxH) 렌더링 및 인터랙션
 # ============================================================
 func _update_grid_ui_size() -> void:
-	if not inventory_grid: return
+	if not inventory_grid or not grid_control: return
 	var total_w = inventory_grid.grid_width * CELL_SIZE
 	var total_h = inventory_grid.grid_height * CELL_SIZE
 	grid_control.custom_minimum_size = Vector2(total_w, total_h)
-	grid_title_label.text = "BACKPACK // 가방 (%d×%d, %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
+	if grid_title_label:
+		grid_title_label.text = "BACKPACK // 가방 (%d×%d, %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
 
 func _on_grid_draw() -> void:
 	InventoryUIHelper.draw_2d_grid(grid_control, inventory_grid, hovered_grid_cell, true, is_dragging, drag_data, CELL_SIZE)
@@ -416,15 +422,19 @@ func _handle_global_drop() -> void:
 			_update_weapons_ui()
 			_drop_item_to_world(item)
 		elif src == "attachment":
-			var w_slot = drag_data.get("weapon_slot", "primary1")
-			var a_slot = drag_data.get("attach_slot", "")
+			var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
+			var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
+			var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
 			if equipment_data.has(w_slot):
 				var w_dict = equipment_data[w_slot]
 				var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
 				if w_parts.has(a_slot):
 					var p_val = w_parts[a_slot]
 					if p_val is Array:
-						p_val.erase(item.get("id", ""))
+						if r_idx >= 0 and r_idx < p_val.size():
+							p_val.remove_at(r_idx)
+						else:
+							p_val.erase(item.get("id", ""))
 						if p_val.is_empty(): w_parts.erase(a_slot)
 					else:
 						w_parts.erase(a_slot)
@@ -601,26 +611,57 @@ func _close_context_menu() -> void:
 		context_menu_panel.queue_free()
 		context_menu_panel = null
 
+func _spawn_ground_item(p_id: String, amount: int = 1) -> void:
+	_drop_item_to_world({"id": p_id, "amount": amount})
+
 func _detach_all_item_parts(item: Dictionary) -> void:
 	var parts_dict: Dictionary = item.get("parts", item.get("attachments", {}))
 	var detached_count = 0
+	var dropped_count = 0
 	for pk in parts_dict.keys():
 		var pv = parts_dict[pk]
 		if pv is Array:
 			for sub_p in pv:
-				if String(sub_p) != "":
-					inventory_grid.auto_add_item(String(sub_p), 1)
-					detached_count += 1
+				var p_id = String(sub_p)
+				if p_id != "":
+					var rem = inventory_grid.auto_add_item(p_id, 1) if inventory_grid else 1
+					if rem > 0:
+						_spawn_ground_item(p_id, rem)
+						dropped_count += rem
+					else:
+						detached_count += 1
 		elif pv != null and String(pv) != "":
-			inventory_grid.auto_add_item(String(pv), 1)
-			detached_count += 1
+			var p_id = String(pv)
+			var rem = inventory_grid.auto_add_item(p_id, 1) if inventory_grid else 1
+			if rem > 0:
+				_spawn_ground_item(p_id, rem)
+				dropped_count += rem
+			else:
+				detached_count += 1
 	item["parts"] = {}
 	item["attachments"] = {}
-	item = WeaponPartsDatabase.compute_weapon_from_dict(item)
-	inventory_grid.grid_changed.emit()
+	var computed = WeaponPartsDatabase.compute_weapon_from_dict(item)
+	item.clear()
+	for k in computed:
+		item[k] = computed[k]
+	var max_mag = int(item.get("computed_stats", {}).get("magazine_size", 10))
+	var cur_mag = int(item.get("current_magazine_ammo", 0))
+	if cur_mag > max_mag:
+		var excess = cur_mag - max_mag
+		var l_ammo = item.get("loaded_ammo", "")
+		if excess > 0 and l_ammo != "":
+			var rem = inventory_grid.auto_add_item(l_ammo, excess) if inventory_grid else excess
+			if rem > 0:
+				_spawn_ground_item(l_ammo, rem)
+		item["current_magazine_ammo"] = max_mag
+	if inventory_grid:
+		inventory_grid.grid_changed.emit()
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("🔩 총기 부품 %d개를 모두 분리했습니다." % detached_count)
+		if dropped_count > 0:
+			EventBus.event_logged.emit("🔩 총기 부품 %d개를 가방에 넣고, 공간이 부족한 %d개는 바닥에 드랍했습니다." % [detached_count, dropped_count])
+		else:
+			EventBus.event_logged.emit("🔩 총기 부품 %d개를 모두 분리했습니다." % detached_count)
 
 func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 	if not is_dragging: return
@@ -679,6 +720,28 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					elif src == "weapon_slot":
 						var s_name = drag_data.get("slot_name", "")
 						equipment_data[s_name] = {}
+						_update_weapons_ui()
+					elif src == "attachment":
+						var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
+						var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
+						var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
+						if equipment_data.has(w_slot):
+							var w_dict = equipment_data[w_slot]
+							var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
+							if w_parts.has(a_slot):
+								var p_val = w_parts[a_slot]
+								if p_val is Array:
+									if r_idx >= 0 and r_idx < p_val.size():
+										p_val.remove_at(r_idx)
+									else:
+										p_val.erase(item.get("id", ""))
+									if p_val.is_empty(): w_parts.erase(a_slot)
+								else:
+									w_parts.erase(a_slot)
+							w_dict["parts"] = w_parts
+							w_dict["attachments"] = w_parts
+							equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+							_sync_weapon_to_player(w_slot)
 						_update_weapons_ui()
 				else:
 					item["amount"] = rem_amt
@@ -741,15 +804,19 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					_sync_weapon_to_player(s_name)
 					_update_weapons_ui()
 				elif src == "attachment":
-					var w_slot = drag_data.get("weapon_slot", "primary1")
-					var a_slot = drag_data.get("attach_slot", "")
+					var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
+					var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
+					var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
 					if equipment_data.has(w_slot):
 						var w_dict = equipment_data[w_slot]
 						var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
 						if w_parts.has(a_slot):
 							var p_val = w_parts[a_slot]
 							if p_val is Array:
-								p_val.erase(item.get("id", ""))
+								if r_idx >= 0 and r_idx < p_val.size():
+									p_val.remove_at(r_idx)
+								else:
+									p_val.erase(item.get("id", ""))
 								if p_val.is_empty(): w_parts.erase(a_slot)
 							else:
 								w_parts.erase(a_slot)
@@ -940,10 +1007,35 @@ func _try_drop_on_container() -> void:
 				item["amount"] = rem
 		elif src == "weapon_slot":
 			if rem <= 0:
-				equipment_data[drag_data.get("slot_name", "")] = {}
+				var s_name = drag_data.get("slot_name", "")
+				equipment_data[s_name] = {}
+				_sync_weapon_to_player(s_name)
 				_update_weapons_ui()
 			else:
 				item["amount"] = rem
+		elif src == "attachment":
+			if rem <= 0:
+				var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
+				var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
+				var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
+				if equipment_data.has(w_slot):
+					var w_dict = equipment_data[w_slot]
+					var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
+					if w_parts.has(a_slot):
+						var p_val = w_parts[a_slot]
+						if p_val is Array:
+							if r_idx >= 0 and r_idx < p_val.size():
+								p_val.remove_at(r_idx)
+							else:
+								p_val.erase(item.get("id", ""))
+							if p_val.is_empty(): w_parts.erase(a_slot)
+						else:
+							w_parts.erase(a_slot)
+					w_dict["parts"] = w_parts
+					w_dict["attachments"] = w_parts
+					equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+					_sync_weapon_to_player(w_slot)
+				_update_weapons_ui()
 		elif src == "vicinity":
 			var ground_node = drag_data.get("ground_ref")
 			if is_instance_valid(ground_node):
@@ -963,6 +1055,7 @@ func _try_drop_on_container() -> void:
 	_end_drag()
 
 func _update_vicinity_list(force_rebuild: bool = false) -> void:
+	if not is_inside_tree() or not get_tree(): return
 	var p_pos = player.global_position if player else Vector2.ZERO
 	var ground_items = get_tree().get_nodes_in_group("ground_items")
 	var nearby_items: Array = []
@@ -1064,23 +1157,31 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	vicinity_list.add_child(btn)
 
 func _drop_item_to_world(item: Dictionary) -> void:
-	if not player or not get_parent(): return
+	if not player: return
 	
 	var g_item = GroundItemScene.instantiate()
 	g_item.global_position = player.global_position + Vector2(randf_range(-20, 20), randf_range(-20, 20))
 	
-	var world_node = get_tree().current_scene
+	var world_node = get_tree().current_scene if (is_inside_tree() and get_tree()) else null
 	if world_node and world_node.has_node("Entities"):
 		world_node.get_node("Entities").add_child(g_item)
-	else:
+	elif world_node:
 		world_node.add_child(g_item)
+	elif is_inside_tree() and get_tree() and get_tree().root:
+		get_tree().root.add_child(g_item)
+	elif player.get_parent():
+		player.get_parent().add_child(g_item)
+	else:
+		g_item.free()
+		return
 		
 	g_item.setup(item.get("id", ""), item.get("amount", 1), item.get("custom_data", {}))
 	
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("📦 %s을(를) 바닥에 버렸습니다." % ItemDatabase.get_item_data(item.get("id", "")).get("name", item.get("id", "")))
-	_update_vicinity_list(true)
+	if is_inside_tree():
+		_update_vicinity_list(true)
 
 # ============================================================
 # 3. 캐릭터 장비 슬롯 & 가방 용량 연동
@@ -1370,6 +1471,21 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 			if event.button_index == MOUSE_BUTTON_LEFT:
 				if is_dragging:
 					_try_equip_attachment(weapon_slot_key, attach_type, rail_index)
+				elif current_part_id != "":
+					if tooltip: tooltip.hide()
+					var part_dict = {
+						"id": current_part_id,
+						"part_slot": attach_type,
+						"attach_slot": attach_type,
+						"rail_index": rail_index,
+						"weapon_slot": weapon_slot_key,
+						"amount": 1
+					}
+					_start_drag("attachment", part_dict)
+					drag_data["weapon_slot"] = weapon_slot_key
+					drag_data["attach_slot"] = attach_type
+					drag_data["part_slot"] = attach_type
+					drag_data["rail_index"] = rail_index
 			elif event.button_index == MOUSE_BUTTON_RIGHT and current_part_id != "":
 				# 부착물 가방으로 탈착
 				var rem = inventory_grid.auto_add_item(current_part_id, 1)
@@ -1427,20 +1543,41 @@ func _try_equip_weapon(slot_key: String) -> void:
 
 		var stats = target_w.get("computed_stats", {})
 		var max_mag = int(stats.get("magazine_size", 15))
-		var old_ammo = target_w.get("loaded_ammo", rec_data.get("default_ammo", it_id))
+		var old_ammo = str(target_w.get("loaded_ammo", ""))
+		if old_ammo == "":
+			old_ammo = str(rec_data.get("default_ammo", it_id))
 		var old_count = int(target_w.get("current_magazine_ammo", 0))
-		var drag_amt = int(item.get("amount", 1))
+		var drag_amt = max(1, int(item.get("amount", 1)))
 
-		var load_amt = min(drag_amt, max_mag)
+		var load_amt = 0
+		var final_mag_ammo = 0
+		var is_same_ammo = (old_count > 0 and old_ammo == it_id)
 
-		# 이전 잔탄 가방으로 회수
-		if old_count > 0 and old_ammo != "":
-			inventory_grid.auto_add_item(old_ammo, old_count)
+		if is_same_ammo:
+			var needed = max(0, max_mag - old_count)
+			if needed <= 0:
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 이미 탄창이 가득 차 있습니다. (%d/%d발)" % [old_count, max_mag])
+				_end_drag()
+				return
+			load_amt = min(drag_amt, needed)
+			final_mag_ammo = old_count + load_amt
+		else:
+			# 이전 잔탄 가방으로 회수
+			if old_count > 0 and old_ammo != "":
+				var rem = inventory_grid.auto_add_item(old_ammo, old_count) if inventory_grid else old_count
+				if rem > 0:
+					_spawn_ground_item(old_ammo, rem)
+			load_amt = min(drag_amt, max_mag)
+			final_mag_ammo = load_amt
 
 		var src = drag_data.get("source", "")
 		if drag_amt <= load_amt:
 			if src == "grid":
-				inventory_grid.remove_item_by_uid(item.get("uid", ""))
+				if inventory_grid:
+					inventory_grid.remove_item_by_uid(item.get("uid", ""))
+			elif src == "split":
+				drag_data["is_split"] = false
 			elif src == "vicinity":
 				var ground_node = drag_data.get("ground_ref")
 				if is_instance_valid(ground_node): ground_node.queue_free()
@@ -1453,7 +1590,17 @@ func _try_equip_weapon(slot_key: String) -> void:
 		else:
 			item["amount"] = drag_amt - load_amt
 			if src == "grid":
-				inventory_grid.grid_changed.emit()
+				if inventory_grid:
+					var orig_it = inventory_grid.get_item_by_uid(item.get("uid", ""))
+					if not orig_it.is_empty(): orig_it["amount"] = item["amount"]
+					inventory_grid.grid_changed.emit()
+			elif src == "split":
+				var orig_sp = drag_data.get("split_source_item", {})
+				if not orig_sp.is_empty():
+					orig_sp["amount"] = int(orig_sp.get("amount", 0)) + item["amount"]
+				drag_data["is_split"] = false
+				if inventory_grid:
+					inventory_grid.grid_changed.emit()
 			elif src == "vicinity":
 				var ground_node = drag_data.get("ground_ref")
 				if is_instance_valid(ground_node):
@@ -1467,14 +1614,17 @@ func _try_equip_weapon(slot_key: String) -> void:
 					_update_container_list()
 
 		target_w["loaded_ammo"] = it_id
-		target_w["current_magazine_ammo"] = load_amt
+		target_w["current_magazine_ammo"] = final_mag_ammo
 		target_w = WeaponPartsDatabase.compute_weapon_from_dict(target_w)
 		equipment_data[slot_key] = target_w
 		_sync_weapon_to_player(slot_key)
 		_update_weapons_ui()
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🔄 [%s] 탄약으로 교체 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), load_amt, max_mag])
+			if is_same_ammo:
+				EventBus.event_logged.emit("🔄 [%s] 탄약 추가 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), final_mag_ammo, max_mag])
+			else:
+				EventBus.event_logged.emit("🔄 [%s] 탄약으로 교체 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), final_mag_ammo, max_mag])
 		_end_drag()
 		return
 
@@ -1579,9 +1729,9 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 			target_inventory.remove_item_at(orig_idx, 1)
 			_update_container_list()
 	elif src == "attachment":
-		var old_w_slot = drag_data.get("weapon_slot", "")
-		var old_a_slot = drag_data.get("attach_slot", "")
-		var old_rail_idx = drag_data.get("rail_index", -1)
+		var old_w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", ""))
+		var old_a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
+		var old_rail_idx = drag_data.get("rail_index", item.get("rail_index", -1))
 		if equipment_data.has(old_w_slot):
 			var old_parts = equipment_data[old_w_slot].get("parts", {})
 			if old_a_slot == "rail" and old_parts.get("rail") is Array:
@@ -1655,8 +1805,9 @@ func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = V
 	}
 	
 	_rebuild_drag_preview()
-	hovered_grid_cell = _calc_grid_hover_cell(get_global_mouse_position())
-	grid_control.queue_redraw()
+	if is_inside_tree() and grid_control:
+		hovered_grid_cell = _calc_grid_hover_cell(get_global_mouse_position())
+		grid_control.queue_redraw()
 	_highlight_compatible_slots(item, null)
 
 func _rebuild_drag_preview() -> void:
@@ -1722,7 +1873,7 @@ func _rebuild_drag_preview() -> void:
 	_update_drag_preview_pos()
 
 func _update_drag_preview_pos() -> void:
-	if not drag_preview or not is_dragging: return
+	if not drag_preview or not is_dragging or not is_inside_tree(): return
 	var item = drag_data.get("item", {})
 	var is_rot = drag_data.get("rotated", false)
 	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
