@@ -38,6 +38,8 @@ func get_item_count(id: String) -> int:
 	return total
 
 func add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
+	if items.size() < max_slots:
+		items.resize(max_slots)
 	var item_data = ItemDatabase.get_item_data(id)
 	if item_data.is_empty(): return amount
 	

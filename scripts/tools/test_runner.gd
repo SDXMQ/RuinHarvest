@@ -496,5 +496,144 @@ func _ready() -> void:
 		printerr("[FAIL] Test 27: Signal or MapWindow fields missing (Sig: %s, Map: %s)" % [str(has_event_sig), str(map_fields_ok)])
 	map_win.free()
 
+	# Test 28: _drop_item_to_world preserves modified parts, ammo, and reduced armor durability
+	total_tests += 1
+	var t28_world = Node2D.new()
+	var t28_entities = Node2D.new()
+	t28_entities.name = "Entities"
+	t28_world.add_child(t28_entities)
+	var t28_player = preload("res://scenes/entities/player/player.tscn").instantiate()
+	t28_entities.add_child(t28_player)
+	add_child(t28_world)
+	var t28_win = preload("res://scenes/ui/inventory_window.gd").new()
+	t28_win.player = t28_player
+	var mod_gun = WeaponPartsDatabase.create_default_weapon("M4_리시버")
+	mod_gun["parts"]["optic"] = "8배율_스나이퍼_스코프"
+	mod_gun["current_magazine_ammo"] = 7
+	mod_gun["durability"] = 63.0
+	mod_gun["custom_data"] = {} # Simulate stale/empty custom_data
+	t28_win._drop_item_to_world(mod_gun)
+	var dropped_ground: GroundItem = null
+	for ch in get_tree().root.get_children():
+		if ch is GroundItem:
+			dropped_ground = ch
+			break
+	if dropped_ground == null:
+		for ch in t28_entities.get_children():
+			if ch is GroundItem:
+				dropped_ground = ch
+				break
+	var t28_grid = InventoryGrid.new()
+	t28_grid.resize_grid(6, 6)
+	var t28_ok = false
+	if dropped_ground != null:
+		t28_grid.auto_add_item(dropped_ground.item_id, dropped_ground.amount, dropped_ground.custom_data)
+		if t28_grid.items.size() == 1:
+			var recovered = t28_grid.items[0]
+			t28_ok = recovered.get("parts", {}).get("optic", "") == "8배율_스나이퍼_스코프" and int(recovered.get("current_magazine_ammo", -1)) == 7 and is_equal_approx(float(recovered.get("durability", 0.0)), 63.0)
+		dropped_ground.free()
+	if t28_ok:
+		print("[PASS] Test 28: _drop_item_to_world preserves top-level parts, remaining ammo, and damaged durability")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 28: _drop_item_to_world lost top-level attributes")
+	t28_grid.free()
+	t28_win.free()
+	t28_world.free()
+
+	# Test 29: InventoryGrid.place_item unpacks custom_data keys on direct drag-and-drop
+	total_tests += 1
+	var t29_grid = InventoryGrid.new()
+	t29_grid.resize_grid(6, 6)
+	var drag_payload = {
+		"id": "AK_리시버",
+		"amount": 1,
+		"w": 3,
+		"h": 2,
+		"custom_data": {
+			"parts": {"muzzle": "소음기"},
+			"loaded_ammo": "7.62mm",
+			"current_magazine_ammo": 22,
+			"durability": 55.0
+		}
+	}
+	var placed_ok = t29_grid.place_item(drag_payload, 2, 0, false)
+	var placed_it = t29_grid.get_item_at(2, 0)
+	if placed_ok and placed_it.get("parts", {}).get("muzzle", "") == "소음기" and int(placed_it.get("current_magazine_ammo", 0)) == 22 and is_equal_approx(float(placed_it.get("durability", 0.0)), 55.0):
+		print("[PASS] Test 29: InventoryGrid.place_item unpacks custom_data attributes to top-level")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 29: place_item failed to unpack custom_data: ", placed_it)
+	t29_grid.free()
+
+	# Test 30: Context menu [Use / Equip] ignores open container instead of transferring item into container
+	total_tests += 1
+	var t30_win = preload("res://scenes/ui/inventory_window.gd").new()
+	var t30_grid = InventoryGrid.new()
+	t30_grid.resize_grid(6, 6)
+	var t30_container = Inventory.new()
+	t30_container.clear()
+	t30_win.inventory_grid = t30_grid
+	t30_win.target_inventory = t30_container
+	t30_win.equipment_data = {"helmet": {}, "vest": {}, "backpack": {}, "bottom": {}, "primary1": {}, "primary2": {}, "sidearm": {}, "throwable": {}}
+	t30_grid.auto_add_item("3레벨_헬멧", 1, {"durability": 88.0})
+	var helmet_in_bag = t30_grid.items[0]
+	t30_win._handle_item_quick_action(helmet_in_bag, true)
+	var equipped_h = t30_win.equipment_data.get("helmet", {})
+	var container_has_helmet = t30_container.get_item_count("3레벨_헬멧") > 0
+	if equipped_h.get("id", "") == "3레벨_헬멧" and not container_has_helmet:
+		print("[PASS] Test 30: _handle_item_quick_action(item, true) equips item even while container is open")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 30: Context quick action sent item to container or failed to equip")
+	t30_container.free()
+	t30_grid.free()
+	t30_win.free()
+
+	# Test 31: AirdropCrate bonus weapon is assembled via create_default_weapon with parts and ammo
+	total_tests += 1
+	var t31_mw = preload("res://scenes/world/main_world.gd").new()
+	t31_mw._on_object_interacted(Vector2.ZERO, Vector2i(99, 99), Vector2i(7, 2))
+	var airdrop_inv: Inventory = t31_mw.container_inventories.get(Vector2i(99, 99), null)
+	var found_complete_gun = false
+	if airdrop_inv != null:
+		for s_it in airdrop_inv.items:
+			if s_it != null and s_it.get("id", "") in ["M4_리시버", "AK_리시버", "SV98_리시버"]:
+				if s_it.has("parts") and not s_it["parts"].is_empty() and int(s_it.get("current_magazine_ammo", 0)) > 0:
+					found_complete_gun = true
+					break
+	if found_complete_gun:
+		print("[PASS] Test 31: AirdropCrate spawns fully assembled weapon with parts and loaded magazine")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 31: AirdropCrate bonus weapon missing parts or ammo")
+	t31_mw.free()
+
+	# Test 32: EventSystem RAID defense_check fails when unarmored (spawning Raiders & HP penalty) and passes when armored
+	total_tests += 1
+	var t32_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t32_p)
+	t32_p.hp = 100.0
+	t32_p.armor_defense = 0.0
+	t32_p.equipped_weapon = "맨손"
+	t32_p.equipped_weapon_data = {}
+	t32_p.equipment = {}
+	var raid_spawn_info = {"raiders": 0}
+	var raid_cb = func(ev_id: String, ev_data: Dictionary):
+		if ev_id == "야간_습격":
+			raid_spawn_info["raiders"] = int(ev_data.get("raider_count", 0))
+	EventBus.random_world_event_triggered.connect(raid_cb)
+	var def_fail_res = EventSystem.trigger_event("야간_습격", t32_p)
+	var hp_after_fail = t32_p.hp
+	t32_p.armor_defense = 25.0
+	var def_pass_res = EventSystem.trigger_event("야간_습격", t32_p)
+	EventBus.random_world_event_triggered.disconnect(raid_cb)
+	if (not def_fail_res) and is_equal_approx(hp_after_fail, 80.0) and raid_spawn_info["raiders"] >= 2 and def_pass_res:
+		print("[PASS] Test 32: EventSystem RAID defense_check penalizes unarmored player (-20 HP, %d Raiders) and passes at 25 armor" % raid_spawn_info["raiders"])
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 32: RAID defense_check failed (FailRes: %s, HP: %.1f, Raiders: %d, PassRes: %s)" % [str(def_fail_res), hp_after_fail, raid_spawn_info["raiders"], str(def_pass_res)])
+	t32_p.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

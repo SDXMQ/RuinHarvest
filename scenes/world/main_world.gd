@@ -935,7 +935,16 @@ func _update_day_night_cycle() -> void:
 
 func _on_random_world_event_triggered(_event_id: String, event_data: Dictionary) -> void:
 	if not player: return
-	if event_data.has("enemy_count"):
+	if event_data.has("raider_count"):
+		var r_count = int(event_data.get("raider_count", 2))
+		for i in range(r_count):
+			var angle = randf() * TAU
+			var spawn_pos = player.global_position + Vector2.RIGHT.rotated(angle) * randf_range(280.0, 420.0)
+			var raider = EnemyScene.instantiate()
+			raider.position = spawn_pos
+			raider.enemy_type = 4 # EnemyType.RAIDER
+			entities_layer.add_child(raider)
+	elif event_data.has("enemy_count"):
 		var count = int(event_data.get("enemy_count", 8))
 		for i in range(count):
 			_spawn_enemy_near_player(randf_range(320.0, 520.0))
@@ -1210,16 +1219,19 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		else:
 			inv = Inventory.new()
 			inv.max_slots = slots
+			inv.clear()
 			add_child(inv)
-			var loot_items = ItemDatabase.generate_loot(table_name)
-			for item in loot_items:
-				inv.add_item(item["id"], item["amount"])
 			if type == Vector2i(7, 2):
 				var bonus_weapons = ["M4_리시버", "AK_리시버", "SV98_리시버"]
 				var bonus_gear = ["3레벨_방탄복", "3레벨_헬멧", "3레벨_가방", "고급 치료킷", "구급상자", "장거리 무전기", "금시계"]
-				inv.add_item(bonus_weapons[randi() % bonus_weapons.size()], 1)
+				var rec_id = bonus_weapons[randi() % bonus_weapons.size()]
+				var w_dict = WeaponPartsDatabase.create_default_weapon(rec_id)
+				inv.add_item(rec_id, 1, w_dict)
 				inv.add_item(bonus_gear[randi() % bonus_gear.size()], 1)
 				inv.add_item("수류탄", 2)
+			var loot_items = ItemDatabase.generate_loot(table_name)
+			for item in loot_items:
+				inv.add_item(item["id"], item["amount"])
 			container_inventories[tile_pos] = inv
 			
 		_open_loot_window(inv, loot_title)
@@ -1227,6 +1239,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 
 func _open_inventory_window(target_inv: Inventory = null, title: String = "") -> void:
 	if current_inventory_window != null: return
+	if not is_inside_tree() or get_tree() == null: return
 	get_tree().paused = true
 	current_inventory_window = InventoryWindowScene.instantiate()
 	$UI.add_child(current_inventory_window)

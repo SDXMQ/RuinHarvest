@@ -546,7 +546,7 @@ func _show_context_menu(item: Dictionary) -> void:
 	btn_use.custom_minimum_size = Vector2(130, 24)
 	btn_use.pressed.connect(func():
 		_close_context_menu()
-		_handle_item_quick_action(item)
+		_handle_item_quick_action(item, true)
 	)
 	vbox.add_child(btn_use)
 
@@ -994,7 +994,7 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
 			if event.button_index == MOUSE_BUTTON_RIGHT or (event.button_index == MOUSE_BUTTON_LEFT and Input.is_key_pressed(KEY_CTRL)):
-				var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item.get("custom_data", {}))
+				var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item)
 				var added = amt - rem
 				if added > 0:
 					target_inventory.remove_item_at(index, added)
@@ -1009,8 +1009,14 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 					"amount": amt,
 					"w": base_size.x,
 					"h": base_size.y,
-					"custom_data": slot_item.get("custom_data", {})
+					"custom_data": slot_item.duplicate(true)
 				}
+				var slot_cdata = slot_item.get("custom_data", {})
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+					if slot_item.has(k):
+						item_dict[k] = slot_item[k]
+					elif slot_cdata is Dictionary and slot_cdata.has(k):
+						item_dict[k] = slot_cdata[k]
 				_start_drag("container", item_dict, Vector2i(index, 0))
 				drag_data["origin_index"] = index
 	)
@@ -1240,8 +1246,12 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 					"amount": g_item.amount,
 					"w": base_size.x,
 					"h": base_size.y,
-					"custom_data": g_item.custom_data
+					"custom_data": g_item.custom_data.duplicate(true) if g_item.custom_data is Dictionary else {}
 				}
+				if g_item.custom_data is Dictionary:
+					for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+						if g_item.custom_data.has(k):
+							item_dict[k] = g_item.custom_data[k]
 				_start_drag("vicinity", item_dict, Vector2i.ZERO, "", g_item)
 	)
 	
@@ -1265,8 +1275,11 @@ func _drop_item_to_world(item: Dictionary) -> void:
 	else:
 		g_item.free()
 		return
-		
-	g_item.setup(item.get("id", ""), item.get("amount", 1), item.get("custom_data", {}))
+	
+	var drop_data: Dictionary = item.duplicate(true)
+	for transient_k in ["uid", "x", "y", "rotated", "w", "h"]:
+		drop_data.erase(transient_k)
+	g_item.setup(item.get("id", ""), item.get("amount", 1), drop_data)
 	
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
@@ -2034,9 +2047,9 @@ func _open_split_dialog(item: Dictionary, on_confirm: Callable) -> void:
 	diag.setup(item.get("amount", 1))
 	diag.split_confirmed.connect(on_confirm)
 
-func _handle_item_quick_action(item: Dictionary) -> void:
-	# 0. 파밍 상자나 보관함이 열려있다면 가방에서 보관함으로 빠른 전송
-	if target_inventory != null:
+func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false) -> void:
+	# 0. 파밍 상자나 보관함이 열려있다면 가방에서 보관함으로 빠른 전송 (단, 컨텍스트 메뉴 [사용/장착] 시에는 무시)
+	if target_inventory != null and not ignore_container:
 		_quick_transfer_grid_to_container(item)
 		return
 

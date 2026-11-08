@@ -81,7 +81,7 @@ func load_items(saved_items: Array) -> void:
 			place_item(item, ix, iy, is_rot)
 		else:
 			# 불가하면 Auto-Fit으로 공간 찾아 배치
-			auto_add_item(item["id"], item.get("amount", 1), item.get("custom_data", {}))
+			auto_add_item(item["id"], item.get("amount", 1), item)
 	grid_changed.emit()
 
 func _init_grid_map() -> void:
@@ -129,6 +129,7 @@ func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: St
 
 func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = false) -> bool:
 	var item_id = item.get("id", "")
+	var item_data = ItemDatabase.get_item_data(item_id)
 	var base_size = ItemDatabase.get_item_grid_size(item_id)
 	var w = base_size.x
 	var h = base_size.y
@@ -146,6 +147,15 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 		
 	# 기존 아이템 목록에 있으면 제거 후 재배치
 	remove_item_by_uid(uid, false)
+	
+	# custom_data 내부 핵심 속성을 최상위로 승격 (기존 최상위 값이 있으면 보존)
+	var cdata = item.get("custom_data", {})
+	if cdata is Dictionary and not cdata.is_empty():
+		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+			if not item.has(k) and cdata.has(k):
+				item[k] = cdata[k]
+	if not item.has("durability") and item_data.has("max_durability"):
+		item["durability"] = item_data["max_durability"]
 	
 	item["x"] = target_x
 	item["y"] = target_y

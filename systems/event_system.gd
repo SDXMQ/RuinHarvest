@@ -131,20 +131,97 @@ func _process(delta: float) -> void:
 		var current_day = GameManager.current_world_data.get("current_day", 1)
 		_check_random_events(current_day)
 
-func _apply_event_to_live_player(event: GameEvent) -> void:
-	if GameManager.current_world_data.has("player"):
-		event.apply_effects(GameManager.current_world_data["player"])
-	var p = get_tree().get_first_node_in_group("player")
-	if is_instance_valid(p):
-		var eff: Dictionary = event.data.get("effects", {}) if event and event.data else {}
+func _apply_effect_dict(eff: Dictionary, p_override: Node = null) -> void:
+	if eff.is_empty():
+		return
+	if GameManager and GameManager.current_world_data.has("player"):
+		var player_data = GameManager.current_world_data["player"]
 		if eff.has("hp"):
-			p.hp = clamp(p.hp + eff["hp"], 1.0, p.max_hp)
+			player_data["hp"] = float(player_data.get("hp", 100.0)) + float(eff["hp"])
+		if eff.has("stress"):
+			player_data["stress"] = float(player_data.get("stress", 0.0)) + float(eff["stress"])
 		if eff.has("hunger"):
-			p.hunger = clamp(p.hunger + eff["hunger"], 0.0, p.max_hunger)
+			player_data["hunger"] = float(player_data.get("hunger", 100.0)) + float(eff["hunger"])
 		if eff.has("thirst"):
-			p.thirst = clamp(p.thirst + eff["thirst"], 0.0, p.max_thirst)
+			player_data["thirst"] = float(player_data.get("thirst", 100.0)) + float(eff["thirst"])
+	var p = p_override
+	if not is_instance_valid(p) and is_inside_tree() and get_tree():
+		p = get_tree().get_first_node_in_group("player")
+	if is_instance_valid(p):
+		if eff.has("hp"):
+			p.hp = clamp(p.hp + float(eff["hp"]), 1.0, p.max_hp)
+		if eff.has("hunger"):
+			p.hunger = clamp(p.hunger + float(eff["hunger"]), 0.0, p.max_hunger)
+		if eff.has("thirst"):
+			p.thirst = clamp(p.thirst + float(eff["thirst"]), 0.0, p.max_thirst)
 		if p.has_signal("stats_changed"):
 			p.stats_changed.emit()
+
+func _apply_event_to_live_player(event: GameEvent, p_override: Node = null) -> void:
+	var eff: Dictionary = event.data.get("effects", {}) if event and event.data else {}
+	_apply_effect_dict(eff, p_override)
+
+func evaluate_raid_defense(threshold: float, p_override: Node = null) -> bool:
+	var p = p_override
+	if not is_instance_valid(p) and is_inside_tree() and get_tree():
+		p = get_tree().get_first_node_in_group("player")
+	var defense_score: float = 0.0
+	if is_instance_valid(p):
+		defense_score += float(p.get("armor_defense") if p.get("armor_defense") != null else 0.0)
+		var wep_data = p.get("equipped_weapon_data")
+		var wep_name = str(p.get("equipped_weapon") if p.get("equipped_weapon") != null else "맨손")
+		if wep_data is Dictionary and not wep_data.is_empty() and wep_name != "맨손":
+			if int(wep_data.get("current_magazine_ammo", 0)) > 0:
+				defense_score += 8.0
+			else:
+				defense_score += 3.0
+		var eq = p.get("equipment")
+		if eq is Dictionary:
+			for s in ["primary1", "primary2", "sidearm"]:
+				var sw = eq.get(s, {})
+				if sw is Dictionary and not sw.is_empty():
+					defense_score = max(defense_score, float(p.get("armor_defense") if p.get("armor_defense") != null else 0.0) + (8.0 if int(sw.get("current_magazine_ammo", 0)) > 0 else 3.0))
+	elif GameManager and GameManager.current_world_data.has("player"):
+		var eq_saved: Dictionary = GameManager.current_world_data["player"].get("equipment", {})
+		for slot_k in ["helmet", "vest"]:
+			var arm = eq_saved.get(slot_k, {})
+			if arm is Dictionary and not arm.is_empty():
+				var idata = ItemDatabase.get_item_data(arm.get("id", ""))
+				var max_d = float(arm.get("max_durability", idata.get("max_durability", 100.0)))
+				var cur_d = float(arm.get("durability", max_d))
+				if cur_d > 0.0:
+					defense_score += float(idata.get("defense", 0.0)) * clamp(cur_d / max(1.0, max_d), 0.0, 1.0)
+		for ws in ["primary1", "primary2", "sidearm"]:
+			var sw2 = eq_saved.get(ws, {})
+			if sw2 is Dictionary and not sw2.is_empty():
+				defense_score += 8.0 if int(sw2.get("current_magazine_ammo", 0)) > 0 else 3.0
+				break
+	return defense_score >= threshold
+
+func _resolve_and_apply_event(event: GameEvent, p_override: Node = null) -> bool:
+	var event_data = event.data
+	if event_data.has("defense_check"):
+		var threshold = float(event_data.get("defense_check", 20.0))
+		if evaluate_raid_defense(threshold, p_override):
+			_apply_event_to_live_player(event, p_override)
+			add_log("✓ " + event.title + ": " + event_data.get("defense_success_msg", ""))
+			return true
+		else:
+			var fail_eff: Dictionary = event_data.get("defense_fail_effects", {})
+			_apply_effect_dict(fail_eff, p_override)
+			add_log("⚠ " + event.title + ": " + event_data.get("defense_fail_msg", "습격 방어에 실패했습니다!"))
+			var payload = event_data.duplicate(true)
+			if not payload.has("raider_count"):
+				payload["raider_count"] = randi_range(2, 3)
+			if EventBus and EventBus.has_signal("random_world_event_triggered"):
+				EventBus.random_world_event_triggered.emit(event.id, payload)
+			return false
+	else:
+		_apply_event_to_live_player(event, p_override)
+		add_log("★ " + event.title + ": " + event.description)
+		if EventBus and EventBus.has_signal("random_world_event_triggered"):
+			EventBus.random_world_event_triggered.emit(event.id, event.data)
+		return true
 
 func _check_random_events(current_day: int) -> void:
 	var event_keys = RANDOM_EVENTS.keys()
@@ -158,15 +235,7 @@ func _check_random_events(current_day: int) -> void:
 		var chance = event_data.get("chance", 0.0)
 		if randf() < chance:
 			var event = GameEvent.new(event_id, event_data)
-			
-			if event_data.has("defense_check"):
-				add_log("✓ " + event.title + ": " + event_data.get("defense_success_msg", ""))
-			else:
-				_apply_event_to_live_player(event)
-				add_log("★ " + event.title + ": " + event.description)
-				if EventBus.has_signal("random_world_event_triggered"):
-					EventBus.random_world_event_triggered.emit(event.id, event.data)
-				
+			_resolve_and_apply_event(event)
 			active_events.append(event)
 			break # 한 번에 한 이벤트만 발생
 
@@ -178,12 +247,11 @@ func add_log(msg: String, duration: float = 8.0) -> void:
 	if EventBus.has_signal("event_logged"):
 		EventBus.emit_signal("event_logged", msg)
 
-func trigger_event(event_id: String) -> void:
+func trigger_event(event_id: String, p_override: Node = null) -> bool:
 	if RANDOM_EVENTS.has(event_id):
 		var event_data = RANDOM_EVENTS[event_id]
 		var event = GameEvent.new(event_id, event_data)
-		_apply_event_to_live_player(event)
+		var defended = _resolve_and_apply_event(event, p_override)
 		active_events.append(event)
-		add_log("★ " + event.title + ": " + event.description)
-		if EventBus.has_signal("random_world_event_triggered"):
-			EventBus.random_world_event_triggered.emit(event.id, event.data)
+		return defended
+	return false
