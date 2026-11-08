@@ -44,6 +44,7 @@ extends Control
 const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
 const SplitDialogScene = preload("res://scenes/ui/split_dialog.tscn")
 var tooltip: PanelContainer
+const ShootingRangeScript = preload("res://scenes/ui/shooting_range_window.gd")
 
 # 2D 인벤토리 그리드 시스템
 var player_grid_mgr: InventoryGrid
@@ -83,6 +84,11 @@ func _ready() -> void:
 		tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
 		tool_btn.pressed.connect(_open_item_spawner)
 		$TopBar.add_child(tool_btn)
+		
+		var range_btn = Button.new()
+		range_btn.text = "🎯 사격장 (F2)"
+		range_btn.pressed.connect(_open_shooting_range)
+		$TopBar.add_child(range_btn)
 	
 	# 상인 버튼 연결
 	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
@@ -95,6 +101,7 @@ func _ready() -> void:
 	
 	# 2D 인벤토리 매니저 인스턴스화
 	player_grid_mgr = InventoryGrid.new()
+	player_grid_mgr.has_secure_container = true
 	player_grid_mgr.grid_width = 6
 	player_grid_mgr.grid_height = 4
 	add_child(player_grid_mgr)
@@ -102,6 +109,7 @@ func _ready() -> void:
 	stash_grid_mgr = InventoryGrid.new()
 	stash_grid_mgr.grid_width = 10
 	stash_grid_mgr.grid_height = 12
+	stash_grid_mgr.has_secure_container = false
 	add_child(stash_grid_mgr)
 	
 	player_grid_mgr.grid_changed.connect(_on_grid_changed)
@@ -609,7 +617,7 @@ func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: in
 	var uid = item.get("uid", "")
 	var ignore_uid = uid if (src == ("player_grid" if is_dest_player else "stash_grid")) else ""
 	
-	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid):
+	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", "")):
 		if dest_grid.place_item(item, cell_x, cell_y, is_rot):
 			# 배치 성공 시 이전 위치에서 안전하게 제거
 			if src == "player_grid":
@@ -1064,6 +1072,11 @@ func _check_last_raid_result() -> void:
 			result_desc.text += "\n🔒 2x2 안전 파우치 보호: 귀중품 %d종이 분실되지 않고 보존되었습니다." % pouch_cnt
 		
 		var passive_inc = int(res.get("passive_income", 0))
+		var landmark_bon = int(res.get("landmark_bonus", 0))
+		if landmark_bon > 0:
+			result_desc.text += "\n📡 랜드마크 현장 단말기 작전 보너스: +%d RUB" % landmark_bon
+			_update_money_label()
+			
 		if passive_inc > 0:
 			result_desc.text += "\n⚡ 발전기/채굴 서버 패시브 수익: +%d RUB" % passive_inc
 			_update_money_label()
@@ -1103,8 +1116,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_weapon_modding_window()
 		elif event.physical_keycode == KEY_F1:
 			_open_item_spawner()
+		elif event.physical_keycode == KEY_F2:
+			_open_shooting_range()
 		elif event.physical_keycode == KEY_TAB or event.physical_keycode == KEY_I:
 			_open_inventory_window()
+
+func _open_shooting_range() -> void:
+	if SoundManager: SoundManager.play("menu_select")
+	var target_wep = equipment_data.get("primary1", {})
+	if target_wep.is_empty():
+		target_wep = equipment_data.get("primary2", {})
+	if target_wep.is_empty():
+		target_wep = equipment_data.get("sidearm", {})
+	var win = ShootingRangeScript.new()
+	add_child(win)
+	win.setup(target_wep)
 
 func _open_inventory_window() -> void:
 	var inv_scene = preload("res://scenes/ui/inventory_window.tscn")

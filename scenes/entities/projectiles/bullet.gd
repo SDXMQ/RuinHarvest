@@ -57,6 +57,8 @@ func _on_body_entered(body: Node2D) -> void:
 		hit_targets.append(body)
 		var eff_dmg = _get_effective_damage()
 		EventBus.player_damaged.emit(eff_dmg, "gunshot")
+		if EventBus.has_signal("player_hit_direction"):
+			EventBus.player_hit_direction.emit(global_position)
 		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
 		if ps:
 			ps.emit("blood", global_position.x, global_position.y, 5)

@@ -19,6 +19,20 @@ extends Node2D
 @onready var compass_bar: Control = $UI/HUD/CompassBar
 @onready var event_log_vbox: VBoxContainer = $UI/HUD/EventLog
 
+# 상태이상 배지
+@onready var status_badges_container: HBoxContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer")
+@onready var badge_bleed: PanelContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge")
+@onready var badge_fracture: PanelContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge")
+@onready var badge_biohazard: PanelContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge")
+
+# 채널링 진행 바
+@onready var channeling_bar: ProgressBar = get_node_or_null("UI/HUD/ChannelingBar")
+@onready var channeling_label: Label = get_node_or_null("UI/HUD/ChannelingBar/Label")
+
+# 퀵슬롯 HUD 바
+@onready var quickslot_bar: PanelContainer = get_node_or_null("UI/HUD/QuickslotBar")
+@onready var quickslot_hbox: HBoxContainer = get_node_or_null("UI/HUD/QuickslotBar/HBox")
+
 # 좌하단 무기 상태 패널
 @onready var weapon_panel: Panel = $UI/HUD/WeaponPanel
 @onready var weapon_icon: TextureRect = $UI/HUD/WeaponPanel/HBox/WeaponIcon
@@ -32,7 +46,6 @@ var extraction_points_data: Array = []
 
 const PlayerScene = preload("res://scenes/entities/player/player.tscn")
 var player: CharacterBody2D
-var player_inventory: Inventory
 var container_inventories: Dictionary = {} # tile_pos -> Inventory
 
 const InventoryWindowScene = preload("res://scenes/ui/inventory_window.tscn")
@@ -43,6 +56,7 @@ var current_spawner_window: Control = null
 
 const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
 const AirdropCrateScript = preload("res://scenes/world/objects/airdrop_crate.gd")
+const FieldObjectiveScript = preload("res://scenes/world/objects/field_objective.gd")
 var enemy_spawn_timer: float = 10.0
 var max_enemies_count: int = 22
 var airdrop_timer: float = 65.0
@@ -52,7 +66,16 @@ var airdrop_points_data: Array = []
 var weather_particle_timer: float = 0.0
 var crosshair_overlay: Control = null
 var crosshair_spread: float = 12.0
+var hit_arc_overlay: Control = null
+var hit_arcs: Array = []
 var boss_entity: Node2D = null
+var landmark_objective: Node2D = null
+var field_objectives: Array = []
+
+var storm_lightning_timer: float = 18.0
+var storm_lightning_active: bool = false
+var storm_lightning_duration: float = 0.0
+var storm_thunder_delay: float = -1.0
 
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분
@@ -92,15 +115,8 @@ func _ready() -> void:
 		
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.connect(_on_event_logged)
-	
-	# 플레이어 인벤토리 생성 및 데이터 복원
-	player_inventory = Inventory.new()
-	player_inventory.max_slots = 12
-	add_child(player_inventory)
-	
-	if GameManager and not GameManager.current_world_data.is_empty():
-		var p_items = GameManager.current_world_data.get("player", {}).get("inventory", [])
-		player_inventory.load_items(p_items)
+	if EventBus.has_signal("random_world_event_triggered"):
+		EventBus.random_world_event_triggered.connect(_on_random_world_event_triggered)
 	
 	# 플레이어 인스턴스화 및 씬 트리 등록 (@onready 컴포넌트 초기화 선행)
 	player = PlayerScene.instantiate()
@@ -115,7 +131,6 @@ func _ready() -> void:
 		spawn_pos = _get_random_spawn_pos()
 		
 	player.position = spawn_pos
-	player.inventory = player_inventory
 	entities_layer.add_child(player)
 		
 	# 복귀 시 스탯 및 타이머 복원 (add_child 이후에 적용해야 SurvivalStats._ready()에 덮어써지지 않음)
@@ -169,9 +184,23 @@ func _ready() -> void:
 	player.stats_changed.connect(_on_player_stats_changed)
 	player.interact_prompt.connect(_on_interact_prompt)
 	player.object_interacted.connect(_on_object_interacted)
-	player_inventory.inventory_changed.connect(_on_player_stats_changed)
+	if player.has_signal("channel_started"):
+		player.channel_started.connect(_on_player_channel_started)
+	if player.has_signal("channel_progress"):
+		player.channel_progress.connect(_on_player_channel_progress)
+	if player.has_signal("channel_completed"):
+		player.channel_completed.connect(_on_player_channel_finished)
+	if player.has_signal("channel_cancelled"):
+		player.channel_cancelled.connect(_on_player_channel_finished)
 	if player.inventory_grid:
 		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
+		player.inventory_grid.grid_changed.connect(_update_quickslot_bar)
+	if player.weapon_handler:
+		if player.weapon_handler.has_signal("weapon_changed"):
+			player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
+		if player.weapon_handler.has_signal("ammo_changed"):
+			player.weapon_handler.ammo_changed.connect(_update_quickslot_bar)
+	_setup_quickslot_bar()
 	
 	# 일시정지 메뉴 버튼 시그널 연결
 	resume_btn.pressed.connect(_on_resume_pressed)
@@ -202,6 +231,17 @@ func _ready() -> void:
 	crosshair_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	crosshair_overlay.draw.connect(_on_crosshair_draw)
 	$UI/HUD.add_child(crosshair_overlay)
+	
+	# 피격 방향 인디케이터(Hit Arc) 오버레이 생성 및 시그널 연결
+	hit_arc_overlay = Control.new()
+	hit_arc_overlay.name = "HitArcOverlay"
+	hit_arc_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hit_arc_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hit_arc_overlay.draw.connect(_on_hit_arc_draw)
+	$UI/HUD.add_child(hit_arc_overlay)
+	
+	if EventBus.has_signal("player_hit_direction"):
+		EventBus.player_hit_direction.connect(_on_player_hit_direction)
 	
 	if EventBus.has_signal("event_logged"):
 		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
@@ -265,20 +305,48 @@ func _spawn_extraction_zones() -> void:
 		base_angle + TAU / 3.0 + randf_range(-0.25, 0.25),
 		base_angle + 2.0 * TAU / 3.0 + randf_range(-0.25, 0.25)
 	]
+	
+	var zone_configs = [
+		{
+			"type": 0, # DEFAULT
+			"name": "일반 탈출 지점 (헬기 착륙장)",
+			"time": 7.0,
+			"desc": "기본 탈출로 (소요: 7.0초)"
+		},
+		{
+			"type": 1, # VEHICLE
+			"name": "유료 탈출 지점 (장갑 SUV)",
+			"time": 2.0,
+			"desc": "급속 탈출 (3,000 RUB / 소요: 2.0초)"
+		},
+		{
+			"type": 2, # BUNKER
+			"name": "비상 벙커 탈출구 (지하 방공호)",
+			"time": 5.0,
+			"desc": "밀폐 벙커 (필드 단말기 해킹 필요 / 소요: 5.0초)"
+		}
+	]
+
 	for i in range(angles.size()):
 		var angle = angles[i]
 		var dist = randf_range(1800.0, 2400.0) # 원거리 탈출구
 		var pos = Vector2.RIGHT.rotated(angle) * dist
+		var cfg = zone_configs[i]
 		var zone = ExtractionZoneScene.instantiate()
 		zone.position = pos
-		zone.zone_name = "탈출구 " + str(i + 1)
+		zone.extraction_type = cfg["type"]
+		zone.zone_name = cfg["name"]
+		zone.extract_time = cfg["time"]
 		zone.extract_progress.connect(_on_extract_progress)
 		zone.extract_cancelled.connect(_on_extract_cancelled)
 		add_child(zone)
 		
 		extraction_points_data.append({
 			"name": zone.zone_name,
-			"pos": pos
+			"pos": pos,
+			"type": zone.extraction_type,
+			"extract_time": zone.extract_time,
+			"desc": cfg["desc"]
 		})
 
 func _on_extract_progress(cur: float, max_t: float) -> void:
@@ -419,7 +487,7 @@ func _open_weapon_modding_window() -> void:
 		var win = modding_script.new()
 		$UI.add_child(win)
 		var cur_w = player.equipped_weapon_data if player else {}
-		var inv_target = player.inventory_grid if player and player.inventory_grid else player_inventory
+		var inv_target = player.inventory_grid if player else null
 		win.setup(inv_target, null, cur_w)
 		win.window_closed.connect(func(): _on_player_stats_changed())
 
@@ -427,7 +495,7 @@ func _open_crafting_window() -> void:
 	get_tree().paused = true
 	current_crafting_window = CraftingWindowScene.instantiate()
 	$UI.add_child(current_crafting_window)
-	var inv_target = player.inventory_grid if player and player.inventory_grid else player_inventory
+	var inv_target = player.inventory_grid if player else null
 	current_crafting_window.setup(inv_target)
 	current_crafting_window.window_closed.connect(func():
 		current_crafting_window = null
@@ -445,7 +513,8 @@ func _open_map_window() -> void:
 		var cy = int(floor(player.global_position.y / 32.0))
 		biome = chunk_manager.generator.get_biome(cx, cy)
 		
-	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome)
+	var chunks_dict = chunk_manager.loaded_chunks if chunk_manager else {}
+	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome, boss_entity, airdrop_points_data, field_objectives, chunks_dict)
 	current_map_window.window_closed.connect(func(): current_map_window = null)
 
 func _on_compass_draw() -> void:
@@ -501,8 +570,17 @@ func _on_compass_draw() -> void:
 			var diamond = PackedVector2Array([
 				Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)
 			])
-			compass_bar.draw_colored_polygon(diamond, Color(0.2, 1.0, 0.3))
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.3, 1.0, 0.4))
+			var pt_type = int(pt.get("type", 0))
+			var pt_col = Color(0.2, 1.0, 0.3)
+			var txt_col = Color(0.3, 1.0, 0.4)
+			if pt_type == 1:
+				pt_col = Color(1.0, 0.82, 0.15)
+				txt_col = Color(1.0, 0.9, 0.3)
+			elif pt_type == 2:
+				pt_col = Color(0.2, 0.85, 1.0)
+				txt_col = Color(0.4, 0.9, 1.0)
+			compass_bar.draw_colored_polygon(diamond, pt_col)
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
 	# 항공 보급품 마커 (주황/붉은 다이아몬드)
 	for ad in airdrop_points_data:
@@ -535,6 +613,23 @@ func _on_compass_draw() -> void:
 			compass_bar.draw_circle(Vector2(bx, 9), 4.5, Color(0.95, 0.15, 0.2))
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
 			
+	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 지원)
+	var objs_to_draw = field_objectives if field_objectives.size() > 0 else ([landmark_objective] if is_instance_valid(landmark_objective) else [])
+	for obj_ref in objs_to_draw:
+		if is_instance_valid(obj_ref) and not bool(obj_ref.get("is_completed")):
+			var dir_to_obj = player.global_position.direction_to(obj_ref.global_position)
+			var obj_deg = rad_to_deg(dir_to_obj.angle())
+			if obj_deg < 0: obj_deg += 360.0
+			var o_diff = obj_deg - player_deg
+			while o_diff < -180.0: o_diff += 360.0
+			while o_diff > 180.0: o_diff -= 360.0
+			if abs(o_diff) <= fov / 2.0:
+				var ox = center_x + o_diff * pixels_per_deg
+				var o_dist = player.global_position.distance_to(obj_ref.global_position)
+				var icon_str = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "📡"
+				compass_bar.draw_circle(Vector2(ox, 9), 4.0, Color(0.2, 0.88, 1.0))
+				compass_bar.draw_string(ThemeDB.fallback_font, Vector2(ox - 16, 22), "%s%.0fm" % [icon_str, o_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
+
 	# 정중앙 조준 눈금 (노란 역삼각형)
 	var pointer = PackedVector2Array([
 		Vector2(center_x - 4, 0), Vector2(center_x + 4, 0), Vector2(center_x, 6)
@@ -556,6 +651,37 @@ func _spawn_landmark_boss() -> void:
 	escort.position = boss_pos + Vector2(36, -24)
 	escort.enemy_type = 4 # EnemyType.RAIDER
 	entities_layer.add_child(escort)
+	# 랜드마크 현장 상호작용 퀘스트 오브젝트 3종 스폰 (군사 단말기 / 병원 생체 표본 채취기 / 상업 지구 무선 중계기)
+	field_objectives.clear()
+	var obj_Offsets = [
+		boss_pos + Vector2(-220, 140),
+		player.global_position + Vector2.RIGHT.rotated(angle + TAU / 3.0) * randf_range(560.0, 760.0),
+		player.global_position + Vector2.RIGHT.rotated(angle + 2.0 * TAU / 3.0) * randf_range(560.0, 760.0)
+	]
+	for idx in range(3):
+		var obj_node = StaticBody2D.new()
+		obj_node.set_script(FieldObjectiveScript)
+		obj_node.objective_kind = idx
+		obj_node.position = obj_Offsets[idx]
+		if obj_node.has_signal("defense_wave_triggered"):
+			obj_node.defense_wave_triggered.connect(_on_field_objective_wave_triggered)
+		entities_layer.add_child(obj_node)
+		field_objectives.append(obj_node)
+		if idx == 0:
+			landmark_objective = obj_node
+
+func _on_field_objective_wave_triggered(obj_pos: Vector2, obj_kind: int) -> void:
+	for i in range(2):
+		var wave_enemy = EnemyScene.instantiate()
+		var spawn_ang = randf() * TAU
+		wave_enemy.position = obj_pos + Vector2.RIGHT.rotated(spawn_ang) * randf_range(190.0, 260.0)
+		if obj_kind == 0:
+			wave_enemy.enemy_type = 4 if i == 0 else 3 # 군사기지: 레이더 + 스캐브
+		elif obj_kind == 1:
+			wave_enemy.enemy_type = 1 if i == 0 else 2 # 병원구역: 러너 + 탱커
+		else:
+			wave_enemy.enemy_type = 3 if i == 0 else 1 # 상업지구: 스캐브 + 러너
+		entities_layer.add_child(wave_enemy)
 
 func _on_crosshair_draw() -> void:
 	if not crosshair_overlay or not player or get_tree().paused:
@@ -575,6 +701,54 @@ func _on_crosshair_draw() -> void:
 		crosshair_overlay.draw_line(p1, p2, col, 1.6)
 	crosshair_overlay.draw_circle(m_pos, 1.8, col)
 
+	# 총기 기능고장 (JAM) 발생 시 우하단 붉은색 점멸 라벨 표시
+	var w_handler = player.weapon_handler if player and "weapon_handler" in player else null
+	if w_handler and bool(w_handler.get("is_jammed")):
+		if (Time.get_ticks_msec() / 250) % 2 == 0:
+			var jam_pos = m_pos + Vector2(16, 16)
+			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.8))
+			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
+
+func _on_player_hit_direction(attacker_pos: Vector2) -> void:
+	if not player: return
+	var diff = attacker_pos - player.global_position
+	var dist = diff.length()
+	var angle = diff.angle() if dist > 0.001 else 0.0
+	hit_arcs.append({
+		"angle": angle,
+		"timer": 0.4,
+		"max_time": 0.4
+	})
+	if EventBus.has_signal("camera_shake_requested"):
+		EventBus.camera_shake_requested.emit(4.0, 0.2)
+	if hit_arc_overlay:
+		hit_arc_overlay.queue_redraw()
+
+func _on_hit_arc_draw() -> void:
+	if not hit_arc_overlay or hit_arcs.is_empty():
+		return
+	var center = hit_arc_overlay.size * 0.5
+	var arc_radius = 130.0
+	var arc_width = 3.5
+	var arc_spread = deg_to_rad(38.0) # 아크 각도 범위 (약 38도)
+
+	for arc_data in hit_arcs:
+		var alpha = clamp(arc_data["timer"] / arc_data["max_time"], 0.0, 1.0)
+		var arc_angle = arc_data["angle"]
+		var col = Color(1.0, 0.15, 0.15, 0.85 * alpha)
+		var shadow_col = Color(0.1, 0.0, 0.0, 0.45 * alpha)
+
+		# 붉은색 호 및 외곽 쉐도우
+		hit_arc_overlay.draw_arc(center, arc_radius, arc_angle - arc_spread * 0.5, arc_angle + arc_spread * 0.5, 16, shadow_col, arc_width + 2.0)
+		hit_arc_overlay.draw_arc(center, arc_radius, arc_angle - arc_spread * 0.5, arc_angle + arc_spread * 0.5, 16, col, arc_width)
+
+		# 공격자 방향을 가리키는 전술적 화살표 팁
+		var tip_dir = Vector2.RIGHT.rotated(arc_angle)
+		var tip_pos = center + tip_dir * (arc_radius + 6.0)
+		var p_left = center + Vector2.RIGHT.rotated(arc_angle - 0.09) * (arc_radius + 1.0)
+		var p_right = center + Vector2.RIGHT.rotated(arc_angle + 0.09) * (arc_radius + 1.0)
+		hit_arc_overlay.draw_colored_polygon(PackedVector2Array([tip_pos, p_left, p_right]), col)
+
 func _spawn_airdrop_crate() -> void:
 	if not player: return
 	var angle = randf() * TAU
@@ -584,6 +758,8 @@ func _spawn_airdrop_crate() -> void:
 	var crate = StaticBody2D.new()
 	crate.set_script(AirdropCrateScript)
 	crate.position = drop_pos
+	if crate.has_signal("crate_landed"):
+		crate.crate_landed.connect(_on_airdrop_crate_landed)
 	entities_layer.add_child(crate)
 	
 	airdrop_points_data.append({
@@ -591,18 +767,19 @@ func _spawn_airdrop_crate() -> void:
 		"pos": drop_pos
 	})
 	airdrop_count += 1
-	
-	# 보급품 주변에 정예 호위 병력(RAIDER 1명, SCAV 1명) 스폰
-	for i in range(2):
-		var guard = EnemyScene.instantiate()
-		guard.position = drop_pos + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(45.0, 90.0)
-		guard.enemy_type = 4 if i == 0 else 3
-		entities_layer.add_child(guard)
 		
 	if SoundManager:
 		SoundManager.play("explosion_distant")
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("★ 🪂 [긴급 공수] 군용 항공 보급품이 투하되었습니다! (나침반 📦 마커 확인)")
+
+func _on_airdrop_crate_landed(drop_pos: Vector2) -> void:
+	# 보급품 착지(LANDED_IMPACT) 시점에 주변 정예 호위 병력(RAIDER 1명, SCAV 1명) 스폰
+	for i in range(2):
+		var guard = EnemyScene.instantiate()
+		guard.position = drop_pos + Vector2.RIGHT.rotated(randf() * TAU) * randf_range(45.0, 90.0)
+		guard.enemy_type = 4 if i == 0 else 3
+		entities_layer.add_child(guard)
 
 func _update_weather_particles(delta: float) -> void:
 	if not particle_system or not WeatherSystem or not player:
@@ -643,6 +820,24 @@ func _process(delta: float) -> void:
 			crosshair_spread = lerp(crosshair_spread, target_spread, clamp(delta * 14.0, 0.0, 1.0))
 			crosshair_overlay.queue_redraw()
 		
+		# 피격 방향 인디케이터(Hit Arc) 타이머 갱신 및 페이드아웃
+		if hit_arcs.size() > 0:
+			for i in range(hit_arcs.size() - 1, -1, -1):
+				hit_arcs[i]["timer"] -= delta
+				if hit_arcs[i]["timer"] <= 0.0:
+					hit_arcs.remove_at(i)
+			if hit_arc_overlay:
+				hit_arc_overlay.queue_redraw()
+		
+		# 상태이상 배지 맥동 점멸 연출 (0.35 ~ 1.0)
+		var pulse_alpha = 0.675 + 0.325 * sin(Time.get_ticks_msec() * 0.008)
+		if badge_bleed and badge_bleed.visible:
+			badge_bleed.modulate.a = pulse_alpha
+		if badge_fracture and badge_fracture.visible:
+			badge_fracture.modulate.a = pulse_alpha
+		if badge_biohazard and badge_biohazard.visible:
+			badge_biohazard.modulate.a = pulse_alpha
+
 		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신
 		if not get_tree().paused and raid_time_remaining > 0:
 			raid_time_remaining -= delta
@@ -654,11 +849,48 @@ func _process(delta: float) -> void:
 					raid_timer_label.add_theme_color_override("font_color", Color.RED)
 			if raid_time_remaining <= 0:
 				EventBus.event_logged.emit("탈출 시간 초과. 작전 실패.")
-				if GameManager: GameManager.end_raid("mia")
+				if GameManager: GameManager.end_raid("mia", get_backpack_items())
 				
 		# 환경 조명 및 날씨 파티클 변화
 		if not get_tree().paused:
-			_update_day_night_cycle()
+			if WeatherSystem and WeatherSystem.current_weather == WeatherSystem.WeatherType.STORM:
+				storm_lightning_timer -= delta
+				if storm_lightning_timer <= 0.0:
+					storm_lightning_timer = randf_range(15.0, 25.0)
+					storm_lightning_active = true
+					storm_lightning_duration = 0.35
+					storm_thunder_delay = 1.0
+					if day_night_modulate:
+						day_night_modulate.color = Color(1.6, 1.8, 2.2) # 번개 섬광
+				
+				if storm_lightning_active:
+					storm_lightning_duration -= delta
+					if storm_lightning_duration <= 0.0:
+						storm_lightning_active = false
+						_update_day_night_cycle()
+					elif day_night_modulate:
+						# 부드러운 잔광 (Afterglow) lerp 보간
+						var flash_color = Color(1.6, 1.8, 2.2)
+						var target_ambient = _get_current_ambient_color()
+						var t = clamp(storm_lightning_duration / 0.35, 0.0, 1.0)
+						day_night_modulate.color = target_ambient.lerp(flash_color, t)
+				else:
+					_update_day_night_cycle()
+				
+				if storm_thunder_delay > 0.0:
+					storm_thunder_delay -= delta
+					if storm_thunder_delay <= 0.0:
+						storm_thunder_delay = -1.0
+						if SoundManager:
+							SoundManager.play("explosion_distant")
+						if EventBus.has_signal("camera_shake_requested"):
+							EventBus.camera_shake_requested.emit(4.5, 0.45)
+						if EventBus.has_signal("event_logged"):
+							EventBus.event_logged.emit("⚡ 콰르릉! 폭풍우 뇌우가 근처에 내리쳤습니다!")
+			else:
+				storm_lightning_active = false
+				_update_day_night_cycle()
+				
 			_update_weather_particles(delta)
 			if airdrop_count < max_airdrops:
 				airdrop_timer -= delta
@@ -679,33 +911,36 @@ func _process(delta: float) -> void:
 			var cy = floor(player.global_position.y / (16 * 32))
 			debug_label.text = "위치: (%.1f, %.1f) | 청크: (%d, %d)" % [player.global_position.x, player.global_position.y, cx, cy]
 
-func _update_day_night_cycle() -> void:
-	if not day_night_modulate: return
-	
-	# 영구 주간 (duration < 0) 설정 시 항상 밝은 낮 유지
+func _get_current_ambient_color() -> Color:
 	if day_night_cycle_duration <= 0.0:
-		day_night_modulate.color = Color(1.0, 1.0, 1.0)
-		return
-		
+		return Color(1.0, 1.0, 1.0)
 	var time_elapsed = raid_total_time - raid_time_remaining
 	var cycle_pos = fposmod(time_elapsed, day_night_cycle_duration)
-	var progress = cycle_pos / day_night_cycle_duration # 0.0 ~ 1.0 순환 사이클
-	
-	# 낮 -> 황혼 -> 밤 -> 새벽 사이클
-	var target_color: Color
-	if progress < 0.3: # 낮 (0.0 ~ 0.3)
-		target_color = Color(1.0, 1.0, 1.0)
-	elif progress < 0.5: # 황혼 (0.3 ~ 0.5)
+	var progress = cycle_pos / day_night_cycle_duration
+	if progress < 0.3:
+		return Color(1.0, 1.0, 1.0)
+	elif progress < 0.5:
 		var t = (progress - 0.3) / 0.2
-		target_color = Color(1.0, 1.0, 1.0).lerp(Color(0.7, 0.45, 0.4), t)
-	elif progress < 0.8: # 심야 (0.5 ~ 0.8)
+		return Color(1.0, 1.0, 1.0).lerp(Color(0.7, 0.45, 0.4), t)
+	elif progress < 0.8:
 		var t = (progress - 0.5) / 0.3
-		target_color = Color(0.7, 0.45, 0.4).lerp(Color(0.12, 0.12, 0.22), t)
-	else: # 새벽/여명 (0.8 ~ 1.0)
+		return Color(0.7, 0.45, 0.4).lerp(Color(0.12, 0.12, 0.22), t)
+	else:
 		var t = (progress - 0.8) / 0.2
-		target_color = Color(0.12, 0.12, 0.22).lerp(Color(0.5, 0.5, 0.65), t)
-		
-	day_night_modulate.color = target_color
+		return Color(0.12, 0.12, 0.22).lerp(Color(0.5, 0.5, 0.65), t)
+
+func _update_day_night_cycle() -> void:
+	if not day_night_modulate or storm_lightning_active: return
+	day_night_modulate.color = _get_current_ambient_color()
+
+func _on_random_world_event_triggered(_event_id: String, event_data: Dictionary) -> void:
+	if not player: return
+	if event_data.has("enemy_count"):
+		var count = int(event_data.get("enemy_count", 8))
+		for i in range(count):
+			_spawn_enemy_near_player(randf_range(320.0, 520.0))
+	elif event_data.has("loot"):
+		_spawn_airdrop_crate()
 
 func _on_player_stats_changed() -> void:
 	if not player: return
@@ -722,12 +957,21 @@ func _on_player_stats_changed() -> void:
 	if thirst_bar:
 		thirst_bar.value = player.thirst
 		
+	var has_status = player.is_bleeding or player.is_fractured or player.is_infected
+	if badge_bleed:
+		badge_bleed.visible = player.is_bleeding
+	if badge_fracture:
+		badge_fracture.visible = player.is_fractured
+	if badge_biohazard:
+		badge_biohazard.visible = player.is_infected
+		
 	if status_label:
 		var statuses = []
 		if player.is_bleeding: statuses.append("출혈")
 		if player.is_fractured: statuses.append("골절")
 		if player.is_infected: statuses.append("감염")
 		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+		status_label.visible = not has_status
 		
 	# 좌하단 무기 상태 패널 갱신
 	if weapon_panel:
@@ -767,12 +1011,126 @@ func _on_player_stats_changed() -> void:
 			weapon_durability_bar.max_value = max_dur
 			weapon_durability_bar.value = cur_dur
 			
-			var fill_style = StyleBoxFlat.new()
+			var fill_style: StyleBoxFlat
+			if weapon_durability_bar.has_theme_stylebox_override("fill"):
+				fill_style = weapon_durability_bar.get_theme_stylebox("fill") as StyleBoxFlat
+			if not fill_style:
+				var base_style = weapon_durability_bar.get_theme_stylebox("fill")
+				fill_style = base_style.duplicate() as StyleBoxFlat if base_style is StyleBoxFlat else StyleBoxFlat.new()
+				weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
 			var ratio = float(cur_dur) / max(1.0, float(max_dur))
-			if ratio > 0.6: fill_style.bg_color = Color(0.2, 0.8, 0.3)
-			elif ratio > 0.3: fill_style.bg_color = Color(0.9, 0.7, 0.1)
-			else: fill_style.bg_color = Color(0.9, 0.2, 0.2)
-			weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
+			var target_fill_col = Color(0.2, 0.8, 0.3) if ratio > 0.6 else (Color(0.9, 0.7, 0.1) if ratio > 0.3 else Color(0.9, 0.2, 0.2))
+			if fill_style.bg_color != target_fill_col:
+				fill_style.bg_color = target_fill_col
+
+func _setup_quickslot_bar() -> void:
+	if not quickslot_hbox or not player: return
+	
+	var slot1 = quickslot_hbox.get_node_or_null("Slot1")
+	var slot2 = quickslot_hbox.get_node_or_null("Slot2")
+	var slot3 = quickslot_hbox.get_node_or_null("Slot3")
+	var slot4 = quickslot_hbox.get_node_or_null("Slot4")
+	var slot5 = quickslot_hbox.get_node_or_null("Slot5")
+	var slot6 = quickslot_hbox.get_node_or_null("Slot6")
+	var slot7 = quickslot_hbox.get_node_or_null("Slot7")
+	var slotN = quickslot_hbox.get_node_or_null("SlotN")
+	
+	if slot1 and not slot1.pressed.is_connected(_on_quickslot_1_pressed):
+		slot1.pressed.connect(_on_quickslot_1_pressed)
+	if slot2 and not slot2.pressed.is_connected(_on_quickslot_2_pressed):
+		slot2.pressed.connect(_on_quickslot_2_pressed)
+	if slot3 and not slot3.pressed.is_connected(_on_quickslot_3_pressed):
+		slot3.pressed.connect(_on_quickslot_3_pressed)
+	if slot4 and not slot4.pressed.is_connected(_on_quickslot_4_pressed):
+		slot4.pressed.connect(_on_quickslot_4_pressed)
+	if slot5 and not slot5.pressed.is_connected(_on_quickslot_5_pressed):
+		slot5.pressed.connect(_on_quickslot_5_pressed)
+	if slot6 and not slot6.pressed.is_connected(_on_quickslot_6_pressed):
+		slot6.pressed.connect(_on_quickslot_6_pressed)
+	if slot7 and not slot7.pressed.is_connected(_on_quickslot_7_pressed):
+		slot7.pressed.connect(_on_quickslot_7_pressed)
+	if slotN and not slotN.pressed.is_connected(_on_quickslot_N_pressed):
+		slotN.pressed.connect(_on_quickslot_N_pressed)
+		
+	_update_quickslot_bar()
+
+func _on_quickslot_1_pressed() -> void:
+	if player and player.weapon_handler:
+		if player.is_channeling: player.cancel_channeling()
+		player.weapon_handler.switch_weapon_slot("primary1")
+		_update_quickslot_bar()
+
+func _on_quickslot_2_pressed() -> void:
+	if player and player.weapon_handler:
+		if player.is_channeling: player.cancel_channeling()
+		player.weapon_handler.switch_weapon_slot("primary2")
+		_update_quickslot_bar()
+
+func _on_quickslot_3_pressed() -> void:
+	if player and player.weapon_handler:
+		if player.is_channeling: player.cancel_channeling()
+		player.weapon_handler.switch_weapon_slot("sidearm")
+		_update_quickslot_bar()
+
+func _on_quickslot_4_pressed() -> void:
+	if player and player.weapon_handler:
+		if player.is_channeling: player.cancel_channeling()
+		player.weapon_handler.switch_weapon_slot("throwable")
+		_update_quickslot_bar()
+
+func _on_quickslot_5_pressed() -> void:
+	if player and player.has_method("_use_quickslot_item"):
+		player._use_quickslot_item("bleed")
+
+func _on_quickslot_6_pressed() -> void:
+	if player and player.has_method("_use_quickslot_item"):
+		player._use_quickslot_item("heal")
+
+func _on_quickslot_7_pressed() -> void:
+	if player and player.has_method("_use_quickslot_item"):
+		player._use_quickslot_item("ration")
+
+func _on_quickslot_N_pressed() -> void:
+	if player and player.player_lighting and player.player_lighting.has_method("toggle_nvg"):
+		player.player_lighting.toggle_nvg()
+		if SoundManager: SoundManager.play("menu_select")
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🥽 야간투시경(NVG): %s" % ("ON" if player.player_lighting.nvg_enabled else "OFF"))
+		_update_quickslot_bar()
+
+func _update_quickslot_bar() -> void:
+	if not quickslot_hbox or not player: return
+	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
+
+func _on_player_channel_started(duration: float, item_name: String) -> void:
+	if channeling_bar:
+		channeling_bar.visible = true
+		channeling_bar.max_value = duration
+		channeling_bar.value = 0.0
+		if channeling_label:
+			channeling_label.text = "%s 사용 중... (%.1f초)" % [item_name, duration]
+
+func _on_player_channel_progress(current: float, total: float) -> void:
+	if channeling_bar:
+		channeling_bar.value = current
+		if channeling_label:
+			var rem = max(0.0, total - current)
+			channeling_label.text = "%s (%.1f초)" % [player.channel_item_name, rem]
+	if quickslot_hbox and player:
+		var ratio = current / max(0.01, total)
+		var item_str = player.channel_item_name
+		var slot_key = "6"
+		if item_str.contains("붕대") or item_str.contains("지혈"): slot_key = "5"
+		elif item_str.contains("구급") or item_str.contains("키트") or item_str.contains("부목"): slot_key = "6"
+		elif item_str.contains("식량") or item_str.contains("통조림") or item_str.contains("생수") or item_str.contains("물"): slot_key = "7"
+		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, slot_key, ratio)
+
+func _on_player_channel_finished() -> void:
+	if channeling_bar:
+		channeling_bar.visible = false
+	if quickslot_hbox:
+		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, "clear", 0.0)
+	_update_quickslot_bar()
 		
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_inventory_window == null:
@@ -857,8 +1215,8 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			for item in loot_items:
 				inv.add_item(item["id"], item["amount"])
 			if type == Vector2i(7, 2):
-				var bonus_weapons = ["M4A1 카빈", "AK-74M 돌격소총", "AWM 저격소총", "SV-98 저격소총"]
-				var bonus_gear = ["6B43 6A급 중방탄복", "알틴 방탄 헬멧", "군용 대형 배낭", "군용 수술 키트", "군용 무전기", "골드 시계"]
+				var bonus_weapons = ["M4_리시버", "AK_리시버", "SV98_리시버"]
+				var bonus_gear = ["3레벨_방탄복", "3레벨_헬멧", "3레벨_가방", "고급 치료킷", "구급상자", "장거리 무전기", "금시계"]
 				inv.add_item(bonus_weapons[randi() % bonus_weapons.size()], 1)
 				inv.add_item(bonus_gear[randi() % bonus_gear.size()], 1)
 				inv.add_item("수류탄", 2)
@@ -888,15 +1246,9 @@ func _on_chunk_unloaded(_chunk_pos: Vector2i) -> void:
 	pass
 
 func _can_instant_extract() -> bool:
-	if player and player.is_god_mode:
-		return true
-	if GameManager and GameManager.current_world_data.get("difficulty", "") == "casual":
-		return true
-	if player:
-		for pt in extraction_points_data:
-			if player.global_position.distance_to(pt["pos"]) <= 90.0:
-				return true
-	return false
+	# 샌드박스 모드에서만 ESC 메뉴를 통한 즉시 안전 탈출 허용 (일반 모드는 인게임 탈출구에서만 가능)
+	var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
+	return is_sandbox
 
 func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused
@@ -905,8 +1257,10 @@ func _toggle_pause() -> void:
 	if next_pause_state and exit_btn:
 		if _can_instant_extract():
 			exit_btn.text = "은신처로 안전 복귀 (전리품 보존)"
+			exit_btn.theme_type_variation = &"PrimaryButton"
 		else:
-			exit_btn.text = "작전 포기 및 복귀 (MIA - 배낭 분실)"
+			exit_btn.text = "작전 포기 및 탈주 (MIA - 전리품 유실)"
+			exit_btn.theme_type_variation = &"DangerButton"
 	if GameManager:
 		GameManager.is_paused = next_pause_state
 
@@ -918,10 +1272,6 @@ func get_backpack_items() -> Array:
 	var items_arr = []
 	if player and player.inventory_grid:
 		for item in player.inventory_grid.items:
-			if item and not item.is_empty():
-				items_arr.append(item.duplicate(true))
-	elif player_inventory:
-		for item in player_inventory.items:
 			if item and not item.is_empty():
 				items_arr.append(item.duplicate(true))
 	return items_arr
@@ -938,4 +1288,4 @@ func _on_exit_pressed() -> void:
 		if _can_instant_extract():
 			GameManager.end_raid("survived", get_backpack_items())
 		else:
-			GameManager.end_raid("mia")
+			GameManager.end_raid("mia", get_backpack_items())

@@ -11,11 +11,13 @@ var equipped_weapon: String = "맨손"
 var equipped_weapon_data: Dictionary = {}
 var active_weapon_slot: String = "primary1"
 var equipment: Dictionary = {}
+var preferred_ammo_type: String = ""
 
 var attack_cooldown_timer: float = 0.0
 var recoil_offset: float = 0.0
 var is_reloading: bool = false
 var reload_timer: float = 0.0
+var is_jammed: bool = false
 
 @onready var player = get_parent()
 
@@ -38,6 +40,7 @@ func switch_weapon_slot(slot_name: String) -> void:
 	if is_reloading:
 		is_reloading = false
 		reload_timer = 0.0
+	is_jammed = false
 		
 	active_weapon_slot = slot_name
 	var weapon_dict = equipment.get(slot_name, {})
@@ -57,7 +60,9 @@ func switch_weapon_slot(slot_name: String) -> void:
 		EventBus.event_logged.emit("💣 투척 무기: %s (x%d)" % [equipped_weapon, weapon_dict.get("amount", 1)])
 	else:
 		var rec_id = weapon_dict.get("id", "")
-		if not weapon_dict.has("attachments"): weapon_dict["attachments"] = {}
+		if not weapon_dict.has("parts"):
+			weapon_dict["parts"] = weapon_dict.get("attachments", {}).duplicate(true)
+		weapon_dict["attachments"] = weapon_dict["parts"]
 		equipped_weapon_data = WeaponPartsDatabase.compute_weapon_from_dict(weapon_dict)
 		var w_name = weapon_dict.get("name", "")
 		if w_name == "":
@@ -66,6 +71,10 @@ func switch_weapon_slot(slot_name: String) -> void:
 		equipped_weapon = w_name
 		if weapon_dict.has("current_magazine_ammo"):
 			equipped_weapon_data["current_magazine_ammo"] = weapon_dict["current_magazine_ammo"]
+		if weapon_dict.has("durability"):
+			equipped_weapon_data["durability"] = weapon_dict["durability"]
+		if weapon_dict.has("max_durability"):
+			equipped_weapon_data["max_durability"] = weapon_dict["max_durability"]
 		EventBus.event_logged.emit("🔫 무기 전환: %s [%s]" % [w_name, get_slot_display_name(slot_name)])
 			
 	weapon_changed.emit()
@@ -96,25 +105,79 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	if item_info.get("weapon_type", "") == "melee" or w_id in ["나이프", "파이프", "도끼", "야구방망이"]:
 		_melee_punch(aim_dir, spawn_pos, float(item_info.get("damage", 24.0)))
 		return
+
+	if is_jammed:
+		attack_cooldown_timer = 0.35
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("[JAMMED]", Color(1.0, 0.4, 0.2))
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 총기 노리쇠가 걸려있습니다! [R 키로 탄걸림 제거]")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
 		
+	# 무기 내구도 0 도달 시 고장(BROKEN)으로 격발 불가
+	var max_dur = float(equipped_weapon_data.get("max_durability", 100.0))
+	var cur_dur = float(equipped_weapon_data.get("durability", max_dur))
+	if cur_dur <= 0.0:
+		attack_cooldown_timer = 0.35
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("[BROKEN]", Color(1.0, 0.25, 0.25))
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 총기 내구도가 0이 되어 격발할 수 없습니다! (작업대 수리 필요)")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+
+	# 저내구도(<40%) 총기 사격 시 5% 확률로 잼(탄걸림) 발생
+	if cur_dur <= 40.0 and randf() < 0.05:
+		is_jammed = true
+		attack_cooldown_timer = 0.4
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("[JAMMED]", Color(1.0, 0.4, 0.2))
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 총기 기능고장(Jam) 발생! 탄피가 걸렸습니다. [R 키로 조치]")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+
 	var stats = equipped_weapon_data.get("computed_stats", {})
 	var rpm = stats.get("rpm", 150)
 	attack_cooldown_timer = 60.0 / float(max(45, rpm))
 	
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	if cur_mag <= 0:
+		if get_available_ammo_count() <= 0 and player and player.has_method("show_floating_text"):
+			player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
 		start_reload()
 		return
 		
 	equipped_weapon_data["current_magazine_ammo"] = cur_mag - 1
 	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
 		equipment[active_weapon_slot]["current_magazine_ammo"] = cur_mag - 1
+	
+	# 무기 내구도 실시간 차감 (발당 0.15) 및 장비 슬롯 동기화
+	var prev_dur = cur_dur
+	cur_dur = max(0.0, cur_dur - 0.15)
+	equipped_weapon_data["durability"] = cur_dur
+	if not equipped_weapon_data.has("max_durability"):
+		equipped_weapon_data["max_durability"] = max_dur
+	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
+		equipment[active_weapon_slot]["durability"] = cur_dur
+		if not equipment[active_weapon_slot].has("max_durability"):
+			equipment[active_weapon_slot]["max_durability"] = max_dur
+	if player and "equipment" in player and player.equipment.has(active_weapon_slot) and not player.equipment[active_weapon_slot].is_empty():
+		player.equipment[active_weapon_slot]["durability"] = cur_dur
+		if not player.equipment[active_weapon_slot].has("max_durability"):
+			player.equipment[active_weapon_slot]["max_durability"] = max_dur
+	if prev_dur > 0.0 and cur_dur <= 0.0 and player and player.has_method("show_floating_text"):
+		player.show_floating_text("[BROKEN]", Color(1.0, 0.25, 0.25))
+	
 	ammo_changed.emit()
 	if player and player.has_signal("stats_changed"):
 		player.stats_changed.emit()
 	
 	var recoil_val = stats.get("recoil", 20.0)
 	recoil_offset = recoil_val * 0.2
+	if player and player.player_camera and player.player_camera.has_method("apply_recoil_punch"):
+		player.player_camera.apply_recoil_punch(aim_dir, recoil_val)
 	if EventBus.has_signal("camera_shake_requested"):
 		EventBus.camera_shake_requested.emit(clamp(recoil_val * 0.08, 1.2, 5.0), 0.12)
 	
@@ -265,18 +328,71 @@ func _spawn_grenade_entity(start_pos: Vector2, target_pos: Vector2, blast_dmg: f
 		gren.queue_free()
 	)
 
+func cycle_ammo_type() -> void:
+	if is_reloading or equipped_weapon_data.is_empty() or active_weapon_slot == "throwable":
+		return
+	if not player or not player.has_node("InventoryGrid"):
+		return
+	var inv_grid: InventoryGrid = player.get_node("InventoryGrid")
+	var compat_types = get_compatible_ammo_types()
+	var owned_ammo_options: Array[String] = []
+	for a_type in compat_types:
+		for it in inv_grid.items:
+			var it_id = String(it.get("id", ""))
+			if it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"):
+				if not (it_id in owned_ammo_options):
+					owned_ammo_options.append(it_id)
+	if owned_ammo_options.size() <= 0:
+		if player.has_method("show_floating_text"):
+			player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
+		return
+
+	var cur_idx = owned_ammo_options.find(preferred_ammo_type)
+	var next_idx = (cur_idx + 1) % owned_ammo_options.size()
+	preferred_ammo_type = owned_ammo_options[next_idx]
+
+	# 기존 탄창의 잔탄을 가방으로 회수 후 선택한 탄종으로 재장전 시작
+	var cur_mag = int(equipped_weapon_data.get("current_magazine_ammo", 0))
+	if cur_mag > 0:
+		var return_cal = String(compat_types[0]) if compat_types.size() > 0 else "9mm"
+		inv_grid.auto_add_item(return_cal, cur_mag)
+		equipped_weapon_data["current_magazine_ammo"] = 0
+		if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
+			equipment[active_weapon_slot]["current_magazine_ammo"] = 0
+
+	if player.has_method("show_floating_text"):
+		player.show_floating_text("[AMMO: %s]" % preferred_ammo_type, Color(1.0, 0.88, 0.35))
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("🔄 [Alt+R] 탄종 선택: %s" % preferred_ammo_type)
+	start_reload()
+
 func start_reload() -> void:
 	if is_reloading or equipped_weapon_data.is_empty() or active_weapon_slot == "throwable": return
+	if is_jammed:
+		is_jammed = false
+		is_reloading = true
+		reload_timer = 0.8
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("[CLEAR]", Color(0.4, 1.0, 0.5))
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🔧 탄걸림 기능고장 조치 완료! 노리쇠를 전진시켰습니다.")
+		if SoundManager: SoundManager.play("menu_select")
+		return
+
 	var stats = equipped_weapon_data.get("computed_stats", {})
 	if equipped_weapon_data.get("current_magazine_ammo", 0) >= stats.get("magazine_size", 15): return
 	
 	if get_available_ammo_count() <= 0:
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
 		EventBus.event_logged.emit("⚠️ 장전할 수 있는 호환 탄약이 없습니다!")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 		
 	is_reloading = true
 	reload_timer = stats.get("reload_speed", 1.8)
+	if player and player.has_method("show_floating_text"):
+		player.show_floating_text("[RELOADING...]", Color(0.4, 0.9, 1.0))
 	EventBus.event_logged.emit("🔄 재장전 중... (%.1f초)" % reload_timer)
 	if SoundManager: SoundManager.play("menu_select")
 
@@ -288,27 +404,31 @@ func _finish_reload() -> void:
 	var mag_size = stats.get("magazine_size", 15)
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	var needed = mag_size - cur_mag
-	var ammo_types = get_compatible_ammo_types()
+	var ammo_types = get_compatible_ammo_types().duplicate()
+	if preferred_ammo_type != "" and preferred_ammo_type in ammo_types:
+		ammo_types.erase(preferred_ammo_type)
+		ammo_types.push_front(preferred_ammo_type)
+	elif preferred_ammo_type != "":
+		ammo_types.push_front(preferred_ammo_type)
 	
 	var loaded = 0
 	var inv_grid = player.get_node("InventoryGrid")
-	for it in inv_grid.items.duplicate():
-		var it_id = it.get("id", "")
-		var is_match = false
-		for a_type in ammo_types:
-			if it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"):
-				is_match = true
-				break
-		if is_match:
-			var amt = it.get("amount", 1)
-			var take = min(amt, needed - loaded)
-			loaded += take
-			if amt - take <= 0:
-				inv_grid.remove_item_by_uid(it.get("uid", ""))
-			else:
-				it["amount"] -= take
-				inv_grid.grid_changed.emit()
-			if loaded >= needed: break
+	for a_type in ammo_types:
+		if loaded >= needed:
+			break
+		for it in inv_grid.items.duplicate():
+			var it_id = String(it.get("id", ""))
+			var is_match = (it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"))
+			if is_match:
+				var amt = it.get("amount", 1)
+				var take = min(amt, needed - loaded)
+				loaded += take
+				if amt - take <= 0:
+					inv_grid.remove_item_by_uid(it.get("uid", ""))
+				else:
+					it["amount"] -= take
+					inv_grid.grid_changed.emit()
+				if loaded >= needed: break
 				
 	equipped_weapon_data["current_magazine_ammo"] = cur_mag + loaded
 	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():

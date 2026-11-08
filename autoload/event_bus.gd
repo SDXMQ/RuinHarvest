@@ -6,6 +6,7 @@ extends Node
 
 # 플레이어 관련
 signal player_damaged(amount: float, source: String)
+signal player_hit_direction(attacker_pos: Vector2)
 signal player_healed(amount: float)
 signal player_died()
 signal stat_changed(stat_name: String, current_value: float, max_value: float)
@@ -31,6 +32,7 @@ signal time_tick(hour: int, minute: int, total_minutes: float)
 signal day_changed(new_day: int)
 signal weather_changed(new_weather: String)
 signal event_logged(msg: String)
+signal random_world_event_triggered(event_id: String, event_data: Dictionary)
 signal noise_created(position: Vector2, radius: float, source_type: String)
 signal door_toggled(tile_pos: Vector2i, is_open: bool)
 signal window_broken(tile_pos: Vector2i)

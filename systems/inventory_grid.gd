@@ -8,6 +8,32 @@ signal grid_changed
 
 @export var grid_width: int = 6
 @export var grid_height: int = 4
+@export var has_secure_container: bool = false
+
+static func is_same_item_id(a: String, b: String) -> bool:
+	if a == b:
+		return true
+	var na = a.replace("_", " ").strip_edges()
+	var nb = b.replace("_", " ").strip_edges()
+	if na == nb:
+		return true
+	if (na == "기밀 SSD" or na == "암호화된 SSD") and (nb == "기밀 SSD" or nb == "암호화된 SSD"):
+		return true
+	return false
+
+func is_allowed_in_secure_container(item_id: String) -> bool:
+	if item_id == "":
+		return true
+	var data = ItemDatabase.get_item_data(item_id)
+	var item_type = str(data.get("type", ""))
+	if item_type == "ammo" or item_id == "탄약" or item_id.contains("9mm") or item_id.contains("5.56") or item_id.contains("7.62") or item_id.contains("12게이지") or item_id.contains(".45"):
+		return true
+	var cat = int(data.get("category", -1))
+	if cat == ItemDatabase.ItemCategory.WEAPON or cat == ItemDatabase.ItemCategory.EQUIPMENT:
+		return false
+	if item_type == "receiver" or (WeaponPartsDatabase and WeaponPartsDatabase.RECEIVERS.has(item_id)):
+		return false
+	return true
 
 # items: Array[Dictionary]
 # item schema:
@@ -51,7 +77,7 @@ func load_items(saved_items: Array) -> void:
 			item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
 		
 		# 원래 좌표에 배치 가능하면 그대로 배치
-		if ix >= 0 and iy >= 0 and can_place_item(cur_w, cur_h, ix, iy):
+		if ix >= 0 and iy >= 0 and can_place_item(cur_w, cur_h, ix, iy, "", item["id"]):
 			place_item(item, ix, iy, is_rot)
 		else:
 			# 불가하면 Auto-Fit으로 공간 찾아 배치
@@ -72,11 +98,22 @@ func _init_grid_map() -> void:
 		var cur_h = item.get("w", 1) if item.get("rotated", false) else item.get("h", 1)
 		_mark_grid(item.get("x", 0), item.get("y", 0), cur_w, cur_h, item.get("uid", ""))
 
-func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "") -> bool:
+func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "", item_id: String = "") -> bool:
 	if target_x < 0 or target_y < 0:
 		return false
 	if target_x + w > grid_width or target_y + h > grid_height:
 		return false
+		
+	var check_id = item_id
+	if check_id == "" and ignore_uid != "":
+		var existing = get_item_by_uid(ignore_uid)
+		check_id = existing.get("id", "")
+	if has_secure_container and target_x < 2 and target_y < 2:
+		# 안전 컨테이너(2x2) 영역과 겹치는 아이템은 경계를 걸쳐 놓을 수 없으며 완전히 내부(2x2)에 들어와야 함
+		if target_x + w > 2 or target_y + h > 2:
+			return false
+		if check_id != "" and not is_allowed_in_secure_container(check_id):
+			return false
 		
 	for dy in range(h):
 		for dx in range(w):
@@ -91,7 +128,8 @@ func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: St
 	return true
 
 func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = false) -> bool:
-	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+	var item_id = item.get("id", "")
+	var base_size = ItemDatabase.get_item_grid_size(item_id)
 	var w = base_size.x
 	var h = base_size.y
 	
@@ -103,7 +141,7 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 		uid = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
 		item["uid"] = uid
 		
-	if not can_place_item(actual_w, actual_h, target_x, target_y, uid):
+	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id):
 		return false
 		
 	# 기존 아이템 목록에 있으면 제거 후 재배치
@@ -126,13 +164,14 @@ func move_item(uid: String, target_x: int, target_y: int, rotated: bool) -> bool
 	var item = get_item_by_uid(uid)
 	if item.is_empty(): return false
 	
-	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
+	var item_id = item.get("id", "")
+	var base_size = ItemDatabase.get_item_grid_size(item_id)
 	var base_w = item.get("w", base_size.x)
 	var base_h = item.get("h", base_size.y)
 	var actual_w = base_h if rotated else base_w
 	var actual_h = base_w if rotated else base_h
 	
-	if not can_place_item(actual_w, actual_h, target_x, target_y, uid):
+	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id):
 		return false
 		
 	# 기존 영역 해제
@@ -172,7 +211,7 @@ func remove_item_by_uid(uid: String, should_emit: bool = true) -> Dictionary:
 func get_item_count(id: String) -> int:
 	var total = 0
 	for item in items:
-		if item.get("id", "") == id:
+		if is_same_item_id(String(item.get("id", "")), id):
 			total += item.get("amount", 1)
 	return total
 
@@ -184,7 +223,7 @@ func remove_item(id: String, amount: int = 1) -> int:
 	var i = items.size() - 1
 	while i >= 0 and remaining > 0:
 		var item = items[i]
-		if item.get("id", "") == id:
+		if is_same_item_id(String(item.get("id", "")), id):
 			var cur_amt = item.get("amount", 1)
 			if cur_amt <= remaining:
 				remaining -= cur_amt
@@ -211,43 +250,44 @@ func get_item_at(grid_x: int, grid_y: int) -> Dictionary:
 		return get_item_by_uid(uid)
 	return {}
 
-func find_first_fit(base_w: int, base_h: int) -> Dictionary:
+func find_first_fit(base_w: int, base_h: int, item_id: String = "") -> Dictionary:
 	# 1. 정방향 (W x H) 탐색 (0,0부터)
 	for y in range(grid_height - base_h + 1):
 		for x in range(grid_width - base_w + 1):
-			if can_place_item(base_w, base_h, x, y):
+			if can_place_item(base_w, base_h, x, y, "", item_id):
 				return {"found": true, "x": x, "y": y, "rotated": false}
 				
 	# 2. 회전방향 (H x W) 탐색 (크기가 다를 때만)
 	if base_w != base_h:
 		for y in range(grid_height - base_w + 1):
 			for x in range(grid_width - base_h + 1):
-				if can_place_item(base_h, base_w, x, y):
+				if can_place_item(base_h, base_w, x, y, "", item_id):
 					return {"found": true, "x": x, "y": y, "rotated": true}
 					
 	return {"found": false, "x": -1, "y": -1, "rotated": false}
 
 func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
-	var item_data = ItemDatabase.get_item_data(id)
-	var max_stack = item_data.get("max_stack", 1)
+	var resolved_id = ItemDatabase.resolve_item_id(id) if ItemDatabase and ItemDatabase.has_method("resolve_item_id") else id
+	var item_data = ItemDatabase.get_item_data(resolved_id)
+	var max_stack = int(item_data.get("max_stack", 1))
 	var remaining = amount
 	
 	# 1. 스택 가능한 아이템이면 기존 스택에 먼저 채우기
 	if max_stack > 1:
 		for item in items:
-			if item.get("id", "") == id and item.get("amount", 1) < max_stack:
-				var space = max_stack - item.get("amount", 1)
+			if is_same_item_id(String(item.get("id", "")), resolved_id) and int(item.get("amount", 1)) < max_stack:
+				var space = max_stack - int(item.get("amount", 1))
 				var to_add = min(space, remaining)
-				item["amount"] += to_add
+				item["amount"] = int(item.get("amount", 1)) + to_add
 				remaining -= to_add
 				if remaining <= 0:
 					grid_changed.emit()
 					return 0
 					
 	# 2. 남은 수량을 빈 공간에 Auto-Fit
-	var base_size = ItemDatabase.get_item_grid_size(id)
+	var base_size = ItemDatabase.get_item_grid_size(resolved_id)
 	while remaining > 0:
-		var fit = find_first_fit(base_size.x, base_size.y)
+		var fit = find_first_fit(base_size.x, base_size.y, resolved_id)
 		if not fit["found"]:
 			grid_changed.emit()
 			return remaining # 더 이상 넣을 공간 없음
@@ -255,14 +295,18 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 		var to_add = min(max_stack, remaining)
 		var new_item = {
 			"uid": "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000],
-			"id": id,
+			"id": resolved_id,
 			"amount": to_add,
 			"w": base_size.x,
 			"h": base_size.y,
-			"rotated": fit["rotated"],
-			"custom_data": custom_data
+			"rotated": fit["rotated"]
 		}
-		if item_data.has("max_durability"):
+		if not custom_data.is_empty():
+			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+				if custom_data.has(k):
+					new_item[k] = custom_data[k]
+			new_item["custom_data"] = custom_data
+		if not new_item.has("durability") and item_data.has("max_durability"):
 			new_item["durability"] = item_data["max_durability"]
 			
 		place_item(new_item, fit["x"], fit["y"], fit["rotated"])
@@ -270,6 +314,36 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 		
 	grid_changed.emit()
 	return 0
+
+## 동일 아이템 스택 자동 통합 (최대 스택 한도 준수)
+func consolidate_stacks() -> void:
+	if items.is_empty(): return
+	var changed = false
+	var i = 0
+	while i < items.size():
+		var item = items[i]
+		var id = item.get("id", "")
+		var item_data = ItemDatabase.get_item_data(id)
+		var max_stack = int(item_data.get("max_stack", 1))
+		if max_stack > 1 and int(item.get("amount", 1)) < max_stack:
+			var cur_amt = int(item.get("amount", 1))
+			for j in range(items.size() - 1, i, -1):
+				var other = items[j]
+				if other.get("id", "") == id and other.get("uid", "") != item.get("uid", ""):
+					var space = max_stack - cur_amt
+					var other_amt = int(other.get("amount", 1))
+					var to_take = min(space, other_amt)
+					cur_amt += to_take
+					item["amount"] = cur_amt
+					other["amount"] = other_amt - to_take
+					changed = true
+					if other["amount"] <= 0:
+						remove_item_by_uid(other.get("uid", ""), false)
+					if cur_amt >= max_stack:
+						break
+		i += 1
+	if changed:
+		grid_changed.emit()
 
 func resize_grid(new_w: int, new_h: int) -> Array[Dictionary]:
 	var dropped_items: Array[Dictionary] = []
@@ -287,11 +361,11 @@ func resize_grid(new_w: int, new_h: int) -> Array[Dictionary]:
 		var ix = item.get("x", 0)
 		var iy = item.get("y", 0)
 		
-		if can_place_item(cur_w, cur_h, ix, iy):
+		if can_place_item(cur_w, cur_h, ix, iy, "", item.get("id", "")):
 			place_item(item, ix, iy, item.get("rotated", false))
 		else:
 			# 기존 자리에 못 들어가면 빈 자리에 Auto-Fit 시도
-			var fit = find_first_fit(item.get("w", 1), item.get("h", 1))
+			var fit = find_first_fit(item.get("w", 1), item.get("h", 1), item.get("id", ""))
 			if fit["found"]:
 				place_item(item, fit["x"], fit["y"], fit["rotated"])
 			else:
@@ -374,7 +448,7 @@ func sort_items() -> void:
 	for it in merged:
 		var bw = int(it.get("w", 1))
 		var bh = int(it.get("h", 1))
-		var fit = find_first_fit(bw, bh)
+		var fit = find_first_fit(bw, bh, it.get("id", ""))
 		if fit["found"]:
 			place_item(it, fit["x"], fit["y"], fit["rotated"])
 		else:

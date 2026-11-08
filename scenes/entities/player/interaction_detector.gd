@@ -9,8 +9,23 @@ var interactable_type: Vector2i = Vector2i(-1, -1)
 var interact_cooldown: float = 0.0
 var vault_timer: float = 0.0
 const VAULT_DURATION: float = 1.0
+var objective_hold_timer: float = 0.0
+const OBJECTIVE_HOLD_DURATION: float = 3.0
+var active_objective_node: Node = null
 
 @onready var player = get_parent()
+
+func _ready() -> void:
+	if EventBus and EventBus.has_signal("player_damaged"):
+		EventBus.player_damaged.connect(_on_player_damaged_interrupt)
+
+func _on_player_damaged_interrupt(_amount: float, _source: String) -> void:
+	if objective_hold_timer > 0.0:
+		objective_hold_timer = 0.0
+		if is_instance_valid(active_objective_node) and active_objective_node.has_method("set_hold_progress"):
+			active_objective_node.set_hold_progress(0.0)
+		if EventBus and EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 피격으로 인해 단말기 해킹 작업이 중단되었습니다!")
 
 func _process(delta: float) -> void:
 	if interact_cooldown > 0:
@@ -56,6 +71,7 @@ func _update_interaction(delta: float) -> void:
 		if Input.is_action_just_pressed("interact") or (Input.is_physical_key_pressed(KEY_E) and interact_cooldown <= 0.0):
 			interact_cooldown = 0.3
 			var rem = 0
+			var orig_amt = closest_ground_item.amount
 			if player and player.inventory_grid:
 				rem = player.inventory_grid.auto_add_item(closest_ground_item.item_id, closest_ground_item.amount, closest_ground_item.custom_data)
 			elif player and player.inventory:
@@ -64,11 +80,16 @@ func _update_interaction(delta: float) -> void:
 			if rem <= 0:
 				closest_ground_item.queue_free()
 				if SoundManager: SoundManager.play("menu_select")
-				EventBus.event_logged.emit("📦 %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), closest_ground_item.amount])
+				EventBus.event_logged.emit("📦 %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), orig_amt])
 			else:
+				var picked = orig_amt - rem
 				closest_ground_item.amount = rem
 				closest_ground_item.update_visuals()
-				EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+				if picked > 0:
+					if SoundManager: SoundManager.play("menu_select")
+					EventBus.event_logged.emit("📦 %s x%d 획득! (바닥에 %d개 남음)" % [idata.get("name", closest_ground_item.item_id), picked, rem])
+				else:
+					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
 		interact_prompt.emit(true, prompt_text)
 		return
 
@@ -87,9 +108,15 @@ func _update_interaction(delta: float) -> void:
 		var collider = res["collider"]
 		if collider and collider.get("interactable_type") != null:
 			var i_type = collider.get("interactable_type")
-			if typeof(i_type) == TYPE_VECTOR2I and (i_type == Vector2i(5, 1) or i_type == Vector2i(7, 2)):
+			if typeof(i_type) == TYPE_VECTOR2I and (i_type == Vector2i(5, 1) or i_type == Vector2i(7, 2) or i_type == Vector2i(8, 2)):
 				can_interact = true
-				prompt_text = "[E] 폐차 트렁크 열기" if i_type == Vector2i(5, 1) else "[E] 🪂 항공 보급품 상자 열기"
+				if i_type == Vector2i(5, 1):
+					prompt_text = "[E] 폐차 트렁크 열기"
+				elif i_type == Vector2i(7, 2):
+					prompt_text = "[E] 🪂 항공 보급품 상자 열기"
+				else:
+					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[E 3초 홀드] 📡 랜드마크 기밀 단말기 해킹"
+					active_objective_node = collider
 				interactable_type = i_type
 				if object_layer:
 					interactable_tile_pos = object_layer.local_to_map(collider.global_position)
@@ -140,7 +167,30 @@ func _update_interaction(delta: float) -> void:
 	
 	interact_prompt.emit(can_interact, prompt_text)
 	
-	if can_interact and interact_cooldown <= 0.0 and interactable_type != Vector2i(2, 2):
+	# 현장 퀘스트 단말기 3.0초 홀드 처리
+	if can_interact and interactable_type == Vector2i(8, 2) and is_instance_valid(active_objective_node):
+		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_pressed("interact"):
+			objective_hold_timer += delta
+			if active_objective_node.has_method("set_hold_progress"):
+				active_objective_node.set_hold_progress(objective_hold_timer / OBJECTIVE_HOLD_DURATION)
+			if objective_hold_timer >= OBJECTIVE_HOLD_DURATION:
+				objective_hold_timer = 0.0
+				interact_cooldown = 0.5
+				if active_objective_node.has_method("complete_objective"):
+					active_objective_node.complete_objective(player)
+				return
+		else:
+			if objective_hold_timer > 0.0:
+				objective_hold_timer = 0.0
+				if active_objective_node.has_method("set_hold_progress"):
+					active_objective_node.set_hold_progress(0.0)
+		return
+	elif objective_hold_timer > 0.0:
+		objective_hold_timer = 0.0
+		if is_instance_valid(active_objective_node) and active_objective_node.has_method("set_hold_progress"):
+			active_objective_node.set_hold_progress(0.0)
+	
+	if can_interact and interact_cooldown <= 0.0 and interactable_type != Vector2i(2, 2) and interactable_type != Vector2i(8, 2):
 		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_just_pressed("interact"):
 			interact_cooldown = 0.35
 			object_interacted.emit(check_pos, interactable_tile_pos, interactable_type)

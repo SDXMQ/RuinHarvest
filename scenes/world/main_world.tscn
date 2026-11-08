@@ -127,6 +127,40 @@ theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
 theme_override_font_sizes/font_size = 12
 text = "상태이상: 없음"
 
+[node name="StatusBadgesContainer" type="HBoxContainer" parent="UI/HUD/Panel/VBox"]
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="BleedBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
+visible = false
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.25, 0.25, 1)
+theme_override_font_sizes/font_size = 11
+text = "🩸 BLEED"
+
+[node name="FractureBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
+visible = false
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.6, 0.15, 1)
+theme_override_font_sizes/font_size = 11
+text = "🦴 FRACTURE"
+
+[node name="BiohazardBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
+visible = false
+layout_mode = 2
+
+[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.25, 1, 0.35, 1)
+theme_override_font_sizes/font_size = 11
+text = "☣ BIO-HAZARD"
+
 [node name="WeaponPanel" type="Panel" parent="UI/HUD"]
 layout_mode = 1
 anchors_preset = 2
@@ -293,6 +327,103 @@ theme_override_font_sizes/font_size = 16
 text = "탈출 중... 5.0초"
 horizontal_alignment = 1
 vertical_alignment = 1
+
+[node name="ChannelingBar" type="ProgressBar" parent="UI/HUD"]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = 75.0
+offset_right = 150.0
+offset_bottom = 100.0
+grow_horizontal = 2
+grow_vertical = 2
+max_value = 1.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HUD/ChannelingBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_colors/font_color = Color(1, 0.95, 0.75, 1)
+theme_override_font_sizes/font_size = 13
+text = "치료 중... (1.5초)"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="QuickslotBar" type="PanelContainer" parent="UI/HUD"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -260.0
+offset_top = -64.0
+offset_right = 260.0
+offset_bottom = -16.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="HBox" type="HBoxContainer" parent="UI/HUD/QuickslotBar"]
+layout_mode = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="Slot1" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[1] 주무기1"
+
+[node name="Slot2" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[2] 주무기2"
+
+[node name="Slot3" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[3] 권총"
+
+[node name="Slot4" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[4] 투척"
+
+[node name="Slot5" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[5] 붕대"
+
+[node name="Slot6" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[6] 구급킷"
+
+[node name="Slot7" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[7] 식량"
+
+[node name="SlotN" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[N] NVG"
 
 [node name="PauseMenu" type="Control" parent="UI"]
 process_mode = 2

@@ -31,6 +31,10 @@ var max_mag_ammo: int = 8
 var reload_timer: float = 0.0
 var strafe_sign: float = 1.0
 var strafe_change_timer: float = 0.0
+var boss_burst_remaining: int = 0
+var boss_burst_timer: float = 0.0
+var boss_grenade_cooldown: float = 4.0
+var active_boss_grenades: Array = []
 
 var wander_dir: Vector2 = Vector2.ZERO
 var wander_timer: float = 0.0
@@ -194,10 +198,30 @@ func _physics_process(delta: float) -> void:
 			target_player = players[0]
 			
 	attack_timer -= delta
+	boss_grenade_cooldown -= delta
 	strafe_change_timer -= delta
 	if strafe_change_timer <= 0:
 		strafe_change_timer = randf_range(1.2, 2.6)
 		strafe_sign = -strafe_sign
+		
+	if active_boss_grenades.size() > 0:
+		for gi in range(active_boss_grenades.size() - 1, -1, -1):
+			active_boss_grenades[gi]["timer"] -= delta
+			if active_boss_grenades[gi]["timer"] <= 0.0:
+				var g_info = active_boss_grenades[gi]
+				active_boss_grenades.remove_at(gi)
+				_detonate_boss_grenade(g_info)
+		if has_node("Visuals"):
+			get_node("Visuals").queue_redraw()
+			
+	if enemy_type == EnemyType.BOSS and boss_burst_remaining > 0 and reload_timer <= 0.0:
+		boss_burst_timer -= delta
+		if boss_burst_timer <= 0.0:
+			boss_burst_timer = 0.09
+			boss_burst_remaining -= 1
+			var burst_t: Node2D = target_entity if is_instance_valid(target_entity) else target_player
+			if is_instance_valid(burst_t):
+				_fire_ranged_shot(burst_t)
 	
 	# 인간형 무장 적 응급 치료 (체력 35% 이하 시 1회 자가 회복)
 	if is_ranged_human and not has_used_medkit and (hp / max_hp) <= 0.35:
@@ -319,17 +343,60 @@ func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> 
 	if not is_instance_valid(target_player):
 		return
 	var has_los = _has_line_of_sight(target_player.global_position)
+	if not has_los:
+		visuals.modulate.a = lerp(visuals.modulate.a, 0.0, clamp(delta * 14.0, 0.0, 1.0))
+		return
+
 	var p_forward = Vector2.RIGHT.rotated(target_player.rotation)
 	var dir_from_p = target_player.global_position.direction_to(global_position)
-	var in_fov = p_forward.dot(dir_from_p) >= 0.34 # 전방 약 140도 시야각
-	var in_close = dist <= 85.0 # 주변 360도 근접 인지 반경
-	
-	# 벽 뒤(LoS 차단)이거나 시야각/근접 반경 밖이면 완전히 마스킹(alpha 0.0)
+	var dot_p = p_forward.dot(dir_from_p)
+
+	# 어둠/야간 여부 판단
+	var is_darkness = false
+	var current_scene = get_tree().current_scene
+	var day_night = current_scene.get_node_or_null("DayNightModulate") if current_scene else null
+	if day_night and day_night is CanvasModulate:
+		if day_night.color.v < 0.45:
+			is_darkness = true
+	elif current_scene and "Interior" in current_scene.name:
+		is_darkness = true
+
 	var target_alpha = 0.0
-	if has_los and (in_close or in_fov):
-		target_alpha = 1.0
-		
+
+	if is_darkness:
+		var flashlight_on = false
+		var nvg_on = false
+		if target_player.get("player_lighting") != null:
+			var pl = target_player.player_lighting
+			flashlight_on = bool(pl.flashlight_enabled)
+			nvg_on = bool(pl.nvg_enabled)
+		elif target_player.get("flashlight_enabled") != null:
+			flashlight_on = bool(target_player.flashlight_enabled)
+			if target_player.get("nvg_enabled") != null:
+				nvg_on = bool(target_player.nvg_enabled)
+
+		# 야간 및 암흑: 손전등 콘(전방 62도 각도 및 340px 거리 이내) 또는 NVG 활성화 또는 근접 35px 이외에는 어둠 속에 완전히 은폐
+		var in_nvg = nvg_on and (dot_p >= 0.34 or dist <= 85.0)
+		var in_flashlight_cone = flashlight_on and (dist <= 340.0) and (dot_p >= 0.85)
+		var in_close_touch = dist <= 35.0
+
+		if in_nvg or in_flashlight_cone or in_close_touch:
+			target_alpha = 1.0
+		else:
+			target_alpha = 0.0
+	else:
+		# 주간: 140도 전방 시야 (dot >= 0.34) 또는 근접 85px 내 감지 시
+		var in_fov = dot_p >= 0.34
+		var in_close = dist <= 85.0
+		if in_fov or in_close:
+			target_alpha = 1.0
+		else:
+			target_alpha = 0.0
+
+	var prev_a = visuals.modulate.a
 	visuals.modulate.a = lerp(visuals.modulate.a, target_alpha, clamp(delta * 14.0, 0.0, 1.0))
+	if abs(visuals.modulate.a - prev_a) > 0.01:
+		visuals.queue_redraw()
 
 func _get_steered_direction(target_pos: Vector2) -> Vector2:
 	var desired_dir = global_position.direction_to(target_pos)
@@ -375,37 +442,90 @@ func _try_attack(victim: Node2D = null) -> void:
 		
 	if is_ranged_human:
 		if mag_ammo <= 0:
+			boss_burst_remaining = 0
 			reload_timer = 1.9 if enemy_type == EnemyType.SCAV else 1.4
 			return
-		mag_ammo -= 1
-		attack_timer = attack_cooldown * randf_range(0.85, 1.2)
-		
-		var aim_dir = global_position.direction_to(target_node.global_position)
-		var spread_deg = 7.5 if enemy_type == EnemyType.SCAV else (2.8 if enemy_type == EnemyType.BOSS else 4.0)
-		var shot_dir = aim_dir.rotated(deg_to_rad(randf_range(-spread_deg, spread_deg)))
-		var muzzle_pos = global_position + aim_dir * 18.0
-		
-		var bullet = BulletScene.instantiate()
-		get_tree().current_scene.add_child(bullet)
-		var pen = 3 if enemy_type == EnemyType.BOSS else (2 if enemy_type == EnemyType.RAIDER else 1)
-		var b_speed = 700.0 if enemy_type == EnemyType.BOSS else (540.0 if enemy_type == EnemyType.SCAV else 640.0)
-		bullet.setup(muzzle_pos, shot_dir, damage, attack_radius * 1.35, pen, "enemies", b_speed)
-		
-		var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
-		if ps:
-			ps.emit("muzzle", muzzle_pos.x, muzzle_pos.y, 3, shot_dir.angle())
-			ps.emit("bullet_shell", global_position.x, global_position.y, 1, rotation - PI * 0.5)
-		if SoundManager:
-			SoundManager.play("hit_ranged")
-		EventBus.noise_created.emit(global_position, 450.0, "gunshot")
+		if enemy_type == EnemyType.BOSS:
+			var dist_to_v = global_position.distance_to(target_node.global_position)
+			if boss_grenade_cooldown <= 0.0 and dist_to_v >= 110.0 and dist_to_v <= 600.0:
+				_throw_boss_grenade(target_node.global_position)
+				boss_grenade_cooldown = 9.5
+				attack_timer = 0.75
+				return
+			# 보스 특수 패턴 1: 6연발 제압 사격 (Suppressive Burst Fire)
+			boss_burst_remaining = 5
+			boss_burst_timer = 0.09
+			attack_timer = 1.35
+			_fire_ranged_shot(target_node)
+		else:
+			attack_timer = attack_cooldown * randf_range(0.85, 1.2)
+			_fire_ranged_shot(target_node)
 	else:
 		attack_timer = attack_cooldown
 		if target_node == target_player:
 			EventBus.player_damaged.emit(damage, "zombie")
+			if EventBus.has_signal("player_hit_direction"):
+				EventBus.player_hit_direction.emit(global_position)
 		elif target_node.has_method("take_damage"):
 			target_node.take_damage(damage, global_position.direction_to(target_node.global_position))
 		if SoundManager:
 			SoundManager.play("hit_melee")
+
+func _fire_ranged_shot(target_node: Node2D) -> void:
+	if mag_ammo <= 0 or not is_instance_valid(target_node):
+		return
+	mag_ammo -= 1
+	var aim_dir = global_position.direction_to(target_node.global_position)
+	var spread_deg = 7.5 if enemy_type == EnemyType.SCAV else (2.8 if enemy_type == EnemyType.BOSS else 4.0)
+	var shot_dir = aim_dir.rotated(deg_to_rad(randf_range(-spread_deg, spread_deg)))
+	var muzzle_pos = global_position + aim_dir * 18.0
+	
+	var bullet = BulletScene.instantiate()
+	get_tree().current_scene.add_child(bullet)
+	var pen = 3 if enemy_type == EnemyType.BOSS else (2 if enemy_type == EnemyType.RAIDER else 1)
+	var b_speed = 700.0 if enemy_type == EnemyType.BOSS else (540.0 if enemy_type == EnemyType.SCAV else 640.0)
+	bullet.setup(muzzle_pos, shot_dir, damage, attack_radius * 1.35, pen, "enemies", b_speed)
+	
+	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+	if ps:
+		ps.emit("muzzle", muzzle_pos.x, muzzle_pos.y, 3, shot_dir.angle())
+		ps.emit("bullet_shell", global_position.x, global_position.y, 1, rotation - PI * 0.5)
+	if SoundManager:
+		SoundManager.play("hit_ranged")
+	EventBus.noise_created.emit(global_position, 450.0, "gunshot")
+
+func _throw_boss_grenade(target_pos: Vector2) -> void:
+	if global_position.distance_to(target_pos) > 600.0:
+		return
+	active_boss_grenades.append({
+		"pos": target_pos,
+		"timer": 1.8,
+		"max_time": 1.8,
+		"radius": 120.0,
+		"damage": 45.0
+	})
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("⚠️ 💣 [경고] 보스가 세열 수류탄을 투척했습니다! (1.8초 후 폭발, 반경 120px 이탈 요망)")
+	if has_node("Visuals"):
+		get_node("Visuals").queue_redraw()
+
+func _detonate_boss_grenade(g_info: Dictionary) -> void:
+	var g_pos: Vector2 = g_info.get("pos", global_position)
+	var g_rad: float = float(g_info.get("radius", 120.0))
+	var g_dmg: float = float(g_info.get("damage", 45.0))
+	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem") if get_tree() and get_tree().current_scene else null
+	if ps:
+		ps.emit("explosion", g_pos.x, g_pos.y, 24)
+		ps.emit("spark", g_pos.x, g_pos.y, 16)
+	if SoundManager:
+		SoundManager.play("explosion")
+	EventBus.noise_created.emit(g_pos, 550.0, "explosion")
+	if EventBus.has_signal("camera_shake_requested"):
+		EventBus.camera_shake_requested.emit(8.0, 0.35)
+	if is_instance_valid(target_player) and target_player.global_position.distance_to(g_pos) <= g_rad:
+		EventBus.player_damaged.emit(g_dmg, "explosion")
+		if EventBus.has_signal("player_hit_direction"):
+			EventBus.player_hit_direction.emit(g_pos)
 
 func take_damage(amount: float, hit_dir: Vector2) -> void:
 	hp -= amount
@@ -520,11 +640,33 @@ func _spawn_loot_drop() -> void:
 			]
 			drops.append(high_pool.pick_random())
 		EnemyType.BOSS:
-			drops.append({"id": "6B43 6A급 중방탄복", "amount": 1})
-			drops.append({"id": "알틴 방탄 헬멧", "amount": 1})
-			drops.append({"id": "M4A1 카빈" if randf() > 0.5 else "AWM 저격소총", "amount": 1})
-			drops.append({"id": "군용 수술 키트", "amount": 1})
-			drops.append({"id": "기밀 문서", "amount": 1})
+			var boss_parts = {
+				"barrel": "정밀_롱헤비_총열",
+				"muzzle": "소음기",
+				"optic": "4배율_ACOG",
+				"stock": "PRS_정밀_저격_스톡",
+				"grip": "RK-1_인체공학_그립",
+				"magazine": "50발_드럼_탄창",
+				"rail": ["적색_레이저_표적지시기"]
+			}
+			var boss_stats = WeaponPartsDatabase.compute_weapon_stats("M4_리시버", boss_parts, "5.56mm")
+			var boss_wep_custom = {
+				"id": "M4_리시버",
+				"receiver": "M4_리시버",
+				"name": "보스 특제 M4A1 전술소총",
+				"parts": boss_parts,
+				"attachments": boss_parts,
+				"computed_stats": boss_stats,
+				"current_magazine_ammo": int(boss_stats.get("magazine_size", 50)),
+				"loaded_ammo": "5.56mm",
+				"durability": 100.0
+			}
+			drops.append({"id": "M4_리시버", "amount": 1, "custom_data": boss_wep_custom})
+			drops.append({"id": "3레벨_방탄복", "amount": 1})
+			drops.append({"id": "3레벨_헬멧", "amount": 1})
+			drops.append({"id": "고급 치료킷", "amount": 1})
+			drops.append({"id": "암호화된 SSD", "amount": 1})
+			drops.append({"id": "장거리 무전기", "amount": 1})
 			
 	for i in range(drops.size()):
 		var d = drops[i]
@@ -532,10 +674,20 @@ func _spawn_loot_drop() -> void:
 		var offset = Vector2(randf_range(-14, 14), randf_range(-14, 14))
 		g_item.global_position = global_position + offset
 		get_parent().call_deferred("add_child", g_item)
-		g_item.call_deferred("setup", d["id"], d["amount"])
+		g_item.call_deferred("setup", d["id"], d["amount"], d.get("custom_data", {}))
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
+	for g_info in active_boss_grenades:
+		var local_g = visuals.to_local(g_info["pos"])
+		var g_rad = float(g_info.get("radius", 120.0))
+		var g_ratio = 1.0 - clamp(float(g_info.get("timer", 0.0)) / float(g_info.get("max_time", 1.8)), 0.0, 1.0)
+		visuals.draw_circle(local_g, g_rad, Color(0.95, 0.15, 0.15, 0.14 + 0.18 * g_ratio))
+		visuals.draw_arc(local_g, g_rad, 0, TAU, 32, Color(1.0, 0.25, 0.15, 0.85), 2.0)
+		visuals.draw_circle(local_g, 5.0, Color(0.2, 0.25, 0.2, 0.95))
+	# 은폐 상태(modulate.a < 0.05)일 때 머리 위 느낌표, HP 바, 레이저 포인터까지 일괄 숨김 처리
+	if visuals.modulate.a < 0.05:
+		return
 	
 	# 기본 크기 비례
 	var scale_f = 1.0
