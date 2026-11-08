@@ -176,33 +176,69 @@ func _draw() -> void:
 		if not is_pistol or attachments.get("stock", "") != "":
 			draw_rect(Rect2(right_hand + Vector2(-6, -2.5), Vector2(6, 3.5)), Color(0.22, 0.18, 0.14))
 			
-		# 리시버 & 총열 (Receiver & Barrel)
+		# 리시버 & 총열 (Receiver & Dynamic Barrel Length)
+		var barrel_id = String(attachments.get("barrel", ""))
 		var barrel_len = 10.0 if is_pistol else (22.0 if is_sniper else 16.0)
+		var is_long_barrel = barrel_id.contains("롱") or barrel_id.contains("장총열") or barrel_id.contains("정밀")
+		var is_short_barrel = barrel_id.contains("짧은") or barrel_id.contains("단축")
+		if is_long_barrel:
+			barrel_len += 6.0
+		elif is_short_barrel:
+			barrel_len = max(8.0, barrel_len - 4.0)
 		var gun_col = Color(0.18, 0.20, 0.22) if not is_sniper else Color(0.28, 0.34, 0.24)
-		draw_rect(Rect2(right_hand + Vector2(-1, -3), Vector2(barrel_len * 0.6, 4.5)), gun_col)
+		var receiver_len = max(7.0, barrel_len * 0.58)
+		draw_rect(Rect2(right_hand + Vector2(-1, -3), Vector2(receiver_len, 4.5)), gun_col)
 		draw_rect(Rect2(right_hand + Vector2(2, -2.2), Vector2(barrel_len, 2.8)), Color(0.12, 0.12, 0.14))
+		if is_long_barrel:
+			# 장총열 방열 핸드가드 및 강화 총신 디테일
+			draw_rect(Rect2(right_hand + Vector2(receiver_len - 1.0, -2.6), Vector2(5.5, 3.6)), gun_col.darkened(0.18))
+			draw_line(right_hand + Vector2(2.0 + barrel_len - 3.0, -2.2), right_hand + Vector2(2.0 + barrel_len - 3.0, 0.6), Color(0.32, 0.35, 0.38), 1.0)
 		
+		# 하단 전방 손잡이 (Underbarrel Foregrip)
+		var grip_id = String(attachments.get("grip", ""))
+		if not is_pistol and grip_id != "":
+			draw_rect(Rect2(right_hand + Vector2(8.5, 1.0), Vector2(2.4, 4.8)), Color(0.14, 0.14, 0.16))
+			
 		# 탄창 (Magazine)
 		var mag_id = String(attachments.get("magazine", ""))
 		if not is_pistol:
 			var mag_w = 5.0 if mag_id.contains("대용량") or mag_id.contains("드럼") else 3.0
 			var mag_h = 6.5 if mag_id.contains("대용량") or mag_id.contains("드럼") else 4.5
-			draw_rect(Rect2(right_hand + Vector2(5, 1), Vector2(mag_w, mag_h)), Color(0.25, 0.22, 0.18))
+			draw_rect(Rect2(right_hand + Vector2(4.2, 1.0), Vector2(mag_w, mag_h)), Color(0.25, 0.22, 0.18))
 			
-		# 조준경 (Optic)
+		# 조준경 (Optic: 8배율 스코프 / 4배율 ACOG / 레드닷 사이트 구분 렌더링)
 		var optic_id = String(attachments.get("optic", ""))
 		if optic_id != "" or is_sniper:
-			var scope_len = 8.0 if (optic_id.contains("배율") or optic_id.contains("스코프") or is_sniper) else 4.5
-			draw_rect(Rect2(right_hand + Vector2(1, -4.2), Vector2(scope_len, 2.2)), Color(0.08, 0.08, 0.10))
-			draw_circle(right_hand + Vector2(1 + scope_len, -3.1), 1.2, Color(0.2, 0.8, 0.9, 0.85))
+			if optic_id.contains("8배율") or optic_id.contains("스나이퍼") or (optic_id == "" and is_sniper):
+				var scope_len = 11.5
+				draw_rect(Rect2(right_hand + Vector2(1.5, -3.4), Vector2(1.5, 1.2)), Color(0.12, 0.12, 0.14))
+				draw_rect(Rect2(right_hand + Vector2(7.0, -3.4), Vector2(1.5, 1.2)), Color(0.12, 0.12, 0.14))
+				draw_rect(Rect2(right_hand + Vector2(0.0, -5.2), Vector2(scope_len, 2.2)), Color(0.07, 0.08, 0.10))
+				draw_rect(Rect2(right_hand + Vector2(scope_len - 2.2, -5.8), Vector2(2.6, 3.4)), Color(0.09, 0.10, 0.13))
+				draw_circle(right_hand + Vector2(scope_len + 0.4, -4.1), 1.4, Color(0.25, 0.85, 0.98, 0.9))
+			elif optic_id.contains("4배율") or optic_id.contains("ACOG") or optic_id.contains("배율"):
+				var acog_len = 7.5
+				draw_rect(Rect2(right_hand + Vector2(1.0, -5.0), Vector2(acog_len, 2.6)), Color(0.10, 0.11, 0.14))
+				draw_line(right_hand + Vector2(2.0, -5.2), right_hand + Vector2(6.5, -5.2), Color(0.95, 0.35, 0.15, 0.9), 1.0)
+				draw_circle(right_hand + Vector2(1.0 + acog_len, -3.7), 1.2, Color(0.2, 0.8, 0.9, 0.85))
+			else:
+				draw_rect(Rect2(right_hand + Vector2(2.0, -4.8), Vector2(4.2, 2.2)), Color(0.10, 0.10, 0.12))
+				draw_circle(right_hand + Vector2(4.1, -3.8), 1.0, Color(1.0, 0.2, 0.2, 0.9))
 			
-		# 소음기 / 총구 파츠 (Muzzle / Suppressor)
+		# 소음기 / 총구 파츠 (Muzzle: 검은색 원통형 소음기 vs 총구 보정기 연장 렌더링)
 		var muzzle_id = String(attachments.get("muzzle", ""))
 		var muzzle_tip_x = 2.0 + barrel_len
 		if muzzle_id != "":
-			var sup_len = 7.0 if muzzle_id.contains("소음기") else 3.5
-			draw_rect(Rect2(right_hand + Vector2(muzzle_tip_x, -2.6), Vector2(sup_len, 3.6)), Color(0.10, 0.10, 0.12))
-			muzzle_tip_x += sup_len
+			if muzzle_id.contains("소음기"):
+				var sup_len = 8.5
+				draw_rect(Rect2(right_hand + Vector2(muzzle_tip_x, -2.9), Vector2(sup_len, 4.2)), Color(0.06, 0.07, 0.08))
+				draw_rect(Rect2(right_hand + Vector2(muzzle_tip_x + 1.5, -2.9), Vector2(1.0, 4.2)), Color(0.16, 0.17, 0.20))
+				draw_rect(Rect2(right_hand + Vector2(muzzle_tip_x + 5.5, -2.9), Vector2(1.0, 4.2)), Color(0.16, 0.17, 0.20))
+				muzzle_tip_x += sup_len
+			else:
+				var comp_len = 3.8
+				draw_rect(Rect2(right_hand + Vector2(muzzle_tip_x, -2.4), Vector2(comp_len, 3.2)), Color(0.20, 0.22, 0.25))
+				muzzle_tip_x += comp_len
 			
 		# 총구 화염 (Muzzle Flash)
 		if muzzle_flash_timer > 0.0:

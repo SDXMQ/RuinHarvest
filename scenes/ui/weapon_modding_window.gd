@@ -230,23 +230,28 @@ func _build_ui() -> void:
 
 		stat_bars[sd["key"]] = {"bar": pbar, "lbl": v_lbl}
 
-	# 하단 액션 버튼
+	# 하단 액션 버튼 (좌측: 🎯 사격장 테스트 직행 / 우측: 부품 모두 분리 & 개조 적용)
 	var footer = HBoxContainer.new()
-	footer.alignment = BoxContainer.ALIGNMENT_END
+	footer.name = "FooterHBox"
 	footer.add_theme_constant_override("separation", 12)
 	root_vbox.add_child(footer)
+
+	var shooting_range_btn = Button.new()
+	shooting_range_btn.name = "TestInRangeBtn"
+	shooting_range_btn.text = "🎯 사격장 테스트 (Test in Range)"
+	shooting_range_btn.custom_minimum_size = Vector2(220, 40)
+	shooting_range_btn.pressed.connect(_on_open_shooting_range)
+	footer.add_child(shooting_range_btn)
+
+	var footer_spacer = Control.new()
+	footer_spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	footer.add_child(footer_spacer)
 
 	var disassemble_btn = Button.new()
 	disassemble_btn.text = "장착 부품 모두 분리 (Detach All)"
 	disassemble_btn.custom_minimum_size = Vector2(210, 40)
 	disassemble_btn.pressed.connect(_on_disassemble_pressed)
 	footer.add_child(disassemble_btn)
-
-	var shooting_range_btn = Button.new()
-	shooting_range_btn.text = "🎯 사격장 테스트 (Shooting Range)"
-	shooting_range_btn.custom_minimum_size = Vector2(210, 40)
-	shooting_range_btn.pressed.connect(_on_open_shooting_range)
-	footer.add_child(shooting_range_btn)
 
 	var apply_btn = Button.new()
 	apply_btn.text = "개조 적용 및 장착 (Apply)"
@@ -255,10 +260,11 @@ func _build_ui() -> void:
 	footer.add_child(apply_btn)
 
 func _on_open_shooting_range() -> void:
+	_recompute_and_update_ui()
 	if ShootingRangeScript:
 		var sr = Control.new()
 		sr.set_script(ShootingRangeScript)
-		sr.setup(current_weapon)
+		sr.setup(current_weapon.duplicate(true))
 		sr.window_closed.connect(func():
 			sr.queue_free()
 		)
@@ -490,7 +496,7 @@ func _recompute_and_update_ui() -> void:
 	if stats.get("laser_sight", false): tags.append("🔴 레이저 조준기")
 	if stats.get("tac_flashlight", false): tags.append("🔦 전술 라이트")
 	tags.append("탄창 용량: %d발" % stats.get("magazine_size", 15))
-	tags.append("관통 등급: Lv.%d" % stats.get("penetration", 1))
+	tags.append("관통력: %d" % int(stats.get("penetration", 10)))
 
 	if special_tags_lbl:
 		special_tags_lbl.text = " | ".join(tags)

@@ -236,9 +236,12 @@ static func clear_slot_highlights(drop_targets: Array) -> void:
 static func render_equip_slot_button(btn: Button, slot_name: String, default_text: String, equipment_data: Dictionary) -> void:
 	if not btn: return
 	var equipped = equipment_data.get(slot_name, {})
+	var dur_bar: ProgressBar = btn.get_node_or_null("SlotDurabilityBar") as ProgressBar
 	if equipped.is_empty():
 		btn.text = default_text
 		btn.icon = null
+		if dur_bar:
+			dur_bar.visible = false
 	else:
 		var item_id = equipped.get("id", "")
 		var d = ItemDatabase.get_item_data(item_id)
@@ -246,3 +249,34 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 		if ItemIconManager:
 			btn.icon = ItemIconManager.get_icon(item_id)
 			btn.expand_icon = true
+		var max_dur = float(equipped.get("max_durability", d.get("max_durability", 0.0)))
+		if (slot_name in ["helmet", "vest"] or equipped.has("durability")) and max_dur > 0.0:
+			var cur_dur = clamp(float(equipped.get("durability", max_dur)), 0.0, max_dur)
+			if dur_bar == null:
+				dur_bar = ProgressBar.new()
+				dur_bar.name = "SlotDurabilityBar"
+				dur_bar.show_percentage = false
+				dur_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				dur_bar.custom_minimum_size = Vector2(0, 4)
+				dur_bar.anchor_left = 0.0
+				dur_bar.anchor_right = 1.0
+				dur_bar.anchor_top = 1.0
+				dur_bar.anchor_bottom = 1.0
+				dur_bar.offset_left = 4.0
+				dur_bar.offset_right = -4.0
+				dur_bar.offset_top = -6.0
+				dur_bar.offset_bottom = -2.0
+				var bg_style = StyleBoxFlat.new()
+				bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.65)
+				dur_bar.add_theme_stylebox_override("background", bg_style)
+				btn.add_child(dur_bar)
+			dur_bar.max_value = max_dur
+			dur_bar.value = cur_dur
+			var ratio = cur_dur / max_dur
+			var fill_style = StyleBoxFlat.new()
+			fill_style.bg_color = Color(0.2, 0.85, 0.3) if ratio > 0.5 else (Color(0.9, 0.7, 0.1) if ratio > 0.25 else Color(0.9, 0.2, 0.2))
+			dur_bar.add_theme_stylebox_override("fill", fill_style)
+			dur_bar.visible = true
+		elif dur_bar:
+			dur_bar.visible = false
+

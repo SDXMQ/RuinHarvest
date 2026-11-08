@@ -16,6 +16,7 @@ var damage: float = 12.0
 var attack_cooldown: float = 1.0
 var attack_timer: float = 0.0
 var armor_tier: int = 0
+var armor_value: float = 0.0
 var has_used_medkit: bool = false
 
 var current_state: State = State.IDLE
@@ -63,6 +64,7 @@ func _exit_tree() -> void:
 func _setup_stats_by_type() -> void:
 	is_ranged_human = false
 	armor_tier = 0
+	armor_value = 0.0
 	has_used_medkit = false
 	match enemy_type:
 		EnemyType.ZOMBIE:
@@ -82,11 +84,13 @@ func _setup_stats_by_type() -> void:
 			speed = 45.0
 			damage = 25.0
 			armor_tier = 1
+			armor_value = 12.0
 			detection_radius = 220.0
 			attack_radius = 34.0
 		EnemyType.SCAV:
 			is_ranged_human = true
 			armor_tier = 1
+			armor_value = 15.0
 			max_hp = 55.0
 			speed = 82.0
 			damage = 10.0
@@ -98,6 +102,7 @@ func _setup_stats_by_type() -> void:
 		EnemyType.RAIDER:
 			is_ranged_human = true
 			armor_tier = 2
+			armor_value = 30.0
 			max_hp = 95.0
 			speed = 94.0
 			damage = 14.0
@@ -109,6 +114,7 @@ func _setup_stats_by_type() -> void:
 		EnemyType.BOSS:
 			is_ranged_human = true
 			armor_tier = 3
+			armor_value = 45.0
 			max_hp = 260.0
 			speed = 90.0
 			damage = 18.0
@@ -639,6 +645,8 @@ func _spawn_loot_drop() -> void:
 				{"id": "2레벨_헬멧", "amount": 1}
 			]
 			drops.append(high_pool.pick_random())
+			if randf() < 0.28:
+				drops.append({"id": "보안 키카드" if randf() < 0.32 else "무기고 열쇠", "amount": 1})
 		EnemyType.BOSS:
 			var boss_parts = {
 				"barrel": "정밀_롱헤비_총열",
@@ -667,6 +675,8 @@ func _spawn_loot_drop() -> void:
 			drops.append({"id": "고급 치료킷", "amount": 1})
 			drops.append({"id": "암호화된 SSD", "amount": 1})
 			drops.append({"id": "장거리 무전기", "amount": 1})
+			drops.append({"id": "보안 키카드", "amount": 1})
+			drops.append({"id": "무기고 열쇠", "amount": 1})
 			
 	for i in range(drops.size()):
 		var d = drops[i]

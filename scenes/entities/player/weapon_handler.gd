@@ -107,12 +107,17 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		return
 
 	if is_jammed:
-		attack_cooldown_timer = 0.35
+		attack_cooldown_timer = 0.28
+		recoil_offset = 1.5
+		var jam_muzzle = spawn_pos + aim_dir.normalized() * 18.0
+		var jam_ps = get_tree().current_scene.get_node_or_null("ParticleSystem") if get_tree() and get_tree().current_scene else null
+		if jam_ps:
+			jam_ps.emit("smoke", jam_muzzle.x, jam_muzzle.y, 2, aim_dir.angle())
 		if player and player.has_method("show_floating_text"):
-			player.show_floating_text("[JAMMED]", Color(1.0, 0.4, 0.2))
+			player.show_floating_text("[JAMMED - 철컥!]", Color(1.0, 0.4, 0.2))
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⚠️ 총기 노리쇠가 걸려있습니다! [R 키로 탄걸림 제거]")
-		if SoundManager: SoundManager.play("hit_melee")
+		if SoundManager: SoundManager.play("dry_fire")
 		return
 		
 	# 무기 내구도 0 도달 시 고장(BROKEN)으로 격발 불가
@@ -124,18 +129,22 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 			player.show_floating_text("[BROKEN]", Color(1.0, 0.25, 0.25))
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⚠️ 총기 내구도가 0이 되어 격발할 수 없습니다! (작업대 수리 필요)")
-		if SoundManager: SoundManager.play("hit_melee")
+		if SoundManager: SoundManager.play("dry_fire")
 		return
 
 	# 저내구도(<40%) 총기 사격 시 5% 확률로 잼(탄걸림) 발생
 	if cur_dur <= 40.0 and randf() < 0.05:
 		is_jammed = true
-		attack_cooldown_timer = 0.4
+		attack_cooldown_timer = 0.35
+		var jam_pos = spawn_pos + aim_dir.normalized() * 18.0
+		var jam_ps2 = get_tree().current_scene.get_node_or_null("ParticleSystem") if get_tree() and get_tree().current_scene else null
+		if jam_ps2:
+			jam_ps2.emit("smoke", jam_pos.x, jam_pos.y, 2, aim_dir.angle())
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[JAMMED]", Color(1.0, 0.4, 0.2))
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⚠️ 총기 기능고장(Jam) 발생! 탄피가 걸렸습니다. [R 키로 조치]")
-		if SoundManager: SoundManager.play("hit_melee")
+		if SoundManager: SoundManager.play("dry_fire")
 		return
 
 	var stats = equipped_weapon_data.get("computed_stats", {})
@@ -201,7 +210,7 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		spread_max *= 0.45 # 정조준 시 집탄율 대폭 상승
 	
 	var eff_range = max(260.0, float(stats.get("range", 50.0)) * 12.0)
-	var pen = int(stats.get("penetration", 1))
+	var pen = int(stats.get("penetration", 10))
 	
 	for p in range(pellets):
 		var spread = randf_range(-spread_max, spread_max)

@@ -34,6 +34,29 @@ func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_nod
 	if map_canvas:
 		map_canvas.queue_redraw()
 
+static func get_extraction_lock_info(z_type: int, objectives: Array = []) -> Dictionary:
+	if z_type == 1:
+		var rubles = 0
+		if GameManager and GameManager.current_world_data:
+			var p_data = GameManager.current_world_data.get("player", {})
+			rubles = int(p_data.get("rubles", GameManager.current_world_data.get("rubles", 0)))
+		if rubles < 3000:
+			return {"locked": true, "reason": "잠김: 3,000R 필요"}
+	elif z_type == 2:
+		var obj_done = false
+		if GameManager:
+			if GameManager.raid_landmark_completed:
+				obj_done = true
+			elif int(GameManager.current_world_data.get("player", {}).get("field_objectives_completed", 0)) >= 1:
+				obj_done = true
+		for obj in objectives:
+			if is_instance_valid(obj) and bool(obj.get("is_completed")):
+				obj_done = true
+				break
+		if not obj_done:
+			return {"locked": true, "reason": "잠김: 단말기 미해킹"}
+	return {"locked": false, "reason": ""}
+
 func _ready() -> void:
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
@@ -163,19 +186,22 @@ func _on_map_draw() -> void:
 						break
 			map_canvas.draw_string(ThemeDB.fallback_font, b_pos + b_label_offset, "💀 랜드마크 보스 (%.0fm)" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
 
-	# 7. 조건부 탈출구 3종 마커 (일반 / 차량 / 벙커)
+	# 7. 조건부 탈출구 3종 마커 (일반 / 차량 / 벙커 + 조건 충족 여부 실시간 시각화)
 	for pt in extraction_points:
 		var pt_pos = map_origin + pt["pos"] * scale_factor
 		if pt_pos.x >= -60 and pt_pos.x <= w + 60 and pt_pos.y >= -60 and pt_pos.y <= h + 60:
-			var z_type = pt.get("type", 0)
+			var z_type = int(pt.get("type", 0))
+			var lock_info = get_extraction_lock_info(z_type, field_objectives_list)
+			var is_locked: bool = lock_info["locked"]
+			var lock_reason: String = lock_info["reason"]
 			var z_col = Color(0.2, 1.0, 0.3)
 			var z_tag = "일반"
 			if z_type == 1:
-				z_col = Color(1.0, 0.82, 0.15)
-				z_tag = "차량(3천R)"
+				z_col = Color(0.55, 0.55, 0.58, 0.52) if is_locked else Color(1.0, 0.82, 0.15)
+				z_tag = "차량"
 			elif z_type == 2:
-				z_col = Color(0.2, 0.85, 1.0)
-				z_tag = "벙커(해킹필요)"
+				z_col = Color(0.55, 0.55, 0.58, 0.52) if is_locked else Color(0.2, 0.85, 1.0)
+				z_tag = "벙커"
 				
 			var dist = player_pos.distance_to(pt["pos"])
 			if z_type == 1:
@@ -189,9 +215,14 @@ func _on_map_draw() -> void:
 			else:
 				map_canvas.draw_circle(pt_pos, 7.0, z_col)
 				
-			map_canvas.draw_arc(pt_pos, 11.0, 0, TAU, 16, z_col, 1.5)
-			var label_text = "[%s] %s (%.0fm)" % [z_tag, pt["name"], dist]
-			map_canvas.draw_string(ThemeDB.fallback_font, pt_pos + Vector2(13, 4), label_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, z_col)
+			var arc_col = Color(0.95, 0.35, 0.35, 0.55) if is_locked else z_col
+			map_canvas.draw_arc(pt_pos, 11.0, 0, TAU, 16, arc_col, 1.5)
+			var base_text = "[%s] %s (%.0fm)" % [z_tag, pt["name"], dist]
+			var base_col = Color(0.72, 0.72, 0.75, 0.65) if is_locked else z_col
+			map_canvas.draw_string(ThemeDB.fallback_font, pt_pos + Vector2(13, 4), base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, base_col)
+			if is_locked and lock_reason != "":
+				var base_w = ThemeDB.fallback_font.get_string_size(base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+				map_canvas.draw_string(ThemeDB.fallback_font, pt_pos + Vector2(17.0 + base_w, 4), "[%s]" % lock_reason, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.38, 0.38, 0.85))
 			
 	# 8. 플레이어 위치 (중앙, 노란색 시선 화살표)
 	map_canvas.draw_circle(center, 6.0, Color.RED)

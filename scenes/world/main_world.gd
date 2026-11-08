@@ -573,14 +573,36 @@ func _on_compass_draw() -> void:
 			var pt_type = int(pt.get("type", 0))
 			var pt_col = Color(0.2, 1.0, 0.3)
 			var txt_col = Color(0.3, 1.0, 0.4)
+			var lock_suffix = ""
 			if pt_type == 1:
-				pt_col = Color(1.0, 0.82, 0.15)
-				txt_col = Color(1.0, 0.9, 0.3)
+				var cur_rub = int(GameManager.current_world_data.get("player", {}).get("rubles", GameManager.current_world_data.get("rubles", 0))) if GameManager else 0
+				if cur_rub < 3000:
+					pt_col = Color(0.55, 0.55, 0.58, 0.55)
+					txt_col = Color(0.95, 0.42, 0.42, 0.78)
+					lock_suffix = " [잠김: 3,000R 필요]"
+				else:
+					pt_col = Color(1.0, 0.82, 0.15)
+					txt_col = Color(1.0, 0.9, 0.3)
 			elif pt_type == 2:
-				pt_col = Color(0.2, 0.85, 1.0)
-				txt_col = Color(0.4, 0.9, 1.0)
+				var bunker_unlocked = false
+				if GameManager:
+					if GameManager.raid_landmark_completed:
+						bunker_unlocked = true
+					elif int(GameManager.current_world_data.get("player", {}).get("field_objectives_completed", 0)) >= 1:
+						bunker_unlocked = true
+				for f_obj in field_objectives:
+					if is_instance_valid(f_obj) and bool(f_obj.get("is_completed")):
+						bunker_unlocked = true
+						break
+				if not bunker_unlocked:
+					pt_col = Color(0.55, 0.55, 0.58, 0.55)
+					txt_col = Color(0.95, 0.42, 0.42, 0.78)
+					lock_suffix = " [잠김: 단말기 미해킹]"
+				else:
+					pt_col = Color(0.2, 0.85, 1.0)
+					txt_col = Color(0.4, 0.9, 1.0)
 			compass_bar.draw_colored_polygon(diamond, pt_col)
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
 	# 항공 보급품 마커 (주황/붉은 다이아몬드)
 	for ad in airdrop_points_data:

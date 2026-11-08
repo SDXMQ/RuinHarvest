@@ -507,7 +507,46 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 				else:
 					_handle_item_quick_action(item)
 
-func _show_context_menu(item: Dictionary) -> void:
+func perform_item_repair(item: Dictionary, slot_ref: String = "") -> bool:
+	if item.is_empty():
+		return false
+	var id = item.get("id", "")
+	var idata = ItemDatabase.get_item_data(id)
+	var item_name = idata.get("name", id)
+	var max_dur = float(item.get("max_durability", idata.get("max_durability", 0.0)))
+	var cur_dur = float(item.get("durability", max_dur))
+	var missing_dur = max_dur - cur_dur
+	if max_dur <= 0.0 or missing_dur <= 0.5:
+		return false
+
+	var is_field_repair: bool = (GameManager != null and GameManager.current_state == GameManager.GameState.IN_GAME)
+	var cost_mult: float = 15.0 if is_field_repair else 10.0
+	var repair_cost: int = int(ceil(missing_dur * cost_mult))
+	if not _deduct_player_rubles(repair_cost):
+		return false
+
+	if is_field_repair:
+		var new_max_dur = max(10.0, round(max_dur * 0.9))
+		item["max_durability"] = new_max_dur
+		item["durability"] = new_max_dur
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🛠️ [%s] 야전 응급 수리 완료! (-%d RUB, 최대 내구도 %.0f ➔ %.0f)" % [item_name, repair_cost, max_dur, new_max_dur])
+	else:
+		item["max_durability"] = max_dur
+		item["durability"] = max_dur
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🔧 [%s] 은신처 정밀 수리 완료! (-%d RUB, 내구도 %.0f/%.0f)" % [item_name, repair_cost, max_dur, max_dur])
+
+	if inventory_grid:
+		inventory_grid.grid_changed.emit()
+	if slot_ref != "":
+		_sync_weapon_to_player(slot_ref)
+	_update_weapons_ui()
+	_update_equipment_ui()
+	if SoundManager: SoundManager.play("craft_complete")
+	return true
+
+func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref: String = "") -> void:
 	_close_context_menu()
 	var id = item.get("id", "")
 	var idata = ItemDatabase.get_item_data(id)
@@ -540,37 +579,57 @@ func _show_context_menu(item: Dictionary) -> void:
 	vbox.add_child(header_lbl)
 	vbox.add_child(HSeparator.new())
 
-	var btn_use = Button.new()
-	btn_use.text = "⚡ 사용 / 장착"
-	btn_use.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn_use.custom_minimum_size = Vector2(130, 24)
-	btn_use.pressed.connect(func():
-		_close_context_menu()
-		_handle_item_quick_action(item, true)
-	)
-	vbox.add_child(btn_use)
-
-	var amt = int(item.get("amount", 1))
-	if amt > 1:
-		var btn_split = Button.new()
-		btn_split.text = "✂️ 수량 분할"
-		btn_split.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn_split.custom_minimum_size = Vector2(130, 24)
-		btn_split.pressed.connect(func():
+	if source_type == "grid":
+		var btn_use = Button.new()
+		btn_use.text = "⚡ 사용 / 장착"
+		btn_use.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn_use.custom_minimum_size = Vector2(130, 24)
+		btn_use.pressed.connect(func():
 			_close_context_menu()
-			_open_split_dialog(item, func(split_amt):
-				var split_item = item.duplicate()
-				split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
-				split_item["amount"] = split_amt
-				item["amount"] -= split_amt
-				inventory_grid.grid_changed.emit()
-				_start_drag("split", split_item, Vector2i(item.get("x", 0), item.get("y", 0)))
-				drag_data["is_split"] = true
-				drag_data["split_source_item"] = item
-				drag_data["split_amount"] = split_amt
-			)
+			_handle_item_quick_action(item, true)
 		)
-		vbox.add_child(btn_split)
+		vbox.add_child(btn_use)
+
+		var amt = int(item.get("amount", 1))
+		if amt > 1:
+			var btn_split = Button.new()
+			btn_split.text = "✂️ 수량 분할"
+			btn_split.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			btn_split.custom_minimum_size = Vector2(130, 24)
+			btn_split.pressed.connect(func():
+				_close_context_menu()
+				_open_split_dialog(item, func(split_amt):
+					var split_item = item.duplicate()
+					split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+					split_item["amount"] = split_amt
+					item["amount"] -= split_amt
+					inventory_grid.grid_changed.emit()
+					_start_drag("split", split_item, Vector2i(item.get("x", 0), item.get("y", 0)))
+					drag_data["is_split"] = true
+					drag_data["split_source_item"] = item
+					drag_data["split_amount"] = split_amt
+				)
+			)
+			vbox.add_child(btn_split)
+	elif source_type in ["equipment", "weapon_slot"] and slot_ref != "":
+		var btn_unequip = Button.new()
+		btn_unequip.text = "📤 가방으로 장착 해제"
+		btn_unequip.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn_unequip.custom_minimum_size = Vector2(130, 24)
+		btn_unequip.pressed.connect(func():
+			_close_context_menu()
+			var rem = inventory_grid.auto_add_item(item.get("id", ""), item.get("amount", 1), item) if inventory_grid else 1
+			if rem <= 0:
+				equipment_data[slot_ref] = {}
+				if source_type == "equipment":
+					_apply_backpack_grid_size()
+					_update_equipment_ui()
+				else:
+					_sync_weapon_to_player(slot_ref)
+					_update_weapons_ui()
+				if SoundManager: SoundManager.play("menu_select")
+		)
+		vbox.add_child(btn_unequip)
 
 	var has_parts = false
 	var parts_dict: Dictionary = item.get("parts", item.get("attachments", {}))
@@ -587,6 +646,9 @@ func _show_context_menu(item: Dictionary) -> void:
 		btn_detach.pressed.connect(func():
 			_close_context_menu()
 			_detach_all_item_parts(item)
+			if source_type == "weapon_slot" and slot_ref != "":
+				_sync_weapon_to_player(slot_ref)
+				_update_weapons_ui()
 		)
 		vbox.add_child(btn_detach)
 
@@ -606,20 +668,27 @@ func _show_context_menu(item: Dictionary) -> void:
 			item["current_magazine_ammo"] = 0
 			if inventory_grid:
 				inventory_grid.grid_changed.emit()
+			if source_type == "weapon_slot" and slot_ref != "":
+				_sync_weapon_to_player(slot_ref)
+				_update_weapons_ui()
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("🔄 [%s] 탄약 %d발을 회수했습니다." % [item_name, cur_mag_ammo - rem])
 		)
 		vbox.add_child(btn_unload)
 
-	# 손상된 장비 수리 (Repair)
+	# 손상된 장비 수리 (은신처 정가 수리 vs 인레이드 야전 응급 수리 차등화)
 	var max_dur = float(item.get("max_durability", idata.get("max_durability", 0.0)))
 	var cur_dur = float(item.get("durability", max_dur))
 	var missing_dur = max_dur - cur_dur
 	if max_dur > 0 and missing_dur > 0.5:
-		var repair_cost = int(ceil(missing_dur * 10))
+		var is_field_repair: bool = (GameManager != null and GameManager.current_state == GameManager.GameState.IN_GAME)
+		var repair_cost = int(ceil(missing_dur * (15.0 if is_field_repair else 10.0)))
 		var btn_repair = Button.new()
-		btn_repair.text = "🔧 수리하기 (%d RUB)" % repair_cost
+		if is_field_repair:
+			btn_repair.text = "🛠️ 야전 응급 수리 (%d RUB | 최대 -10%%)" % repair_cost
+		else:
+			btn_repair.text = "🔧 수리하기 (%d RUB)" % repair_cost
 		btn_repair.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		btn_repair.custom_minimum_size = Vector2(130, 24)
 		var user_funds = _get_player_rubles()
@@ -628,15 +697,7 @@ func _show_context_menu(item: Dictionary) -> void:
 			btn_repair.text += " (잔액 부족)"
 		btn_repair.pressed.connect(func():
 			_close_context_menu()
-			if _deduct_player_rubles(repair_cost):
-				item["durability"] = max_dur
-				if inventory_grid:
-					inventory_grid.grid_changed.emit()
-				_update_weapons_ui()
-				_update_equipment_ui()
-				if SoundManager: SoundManager.play("menu_select")
-				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🔧 [%s] 내구도를 완전히 수리했습니다. (-%d RUB)" % [item_name, repair_cost])
+			perform_item_repair(item, slot_ref)
 		)
 		vbox.add_child(btn_repair)
 
@@ -646,15 +707,24 @@ func _show_context_menu(item: Dictionary) -> void:
 	btn_drop.custom_minimum_size = Vector2(130, 24)
 	btn_drop.pressed.connect(func():
 		_close_context_menu()
-		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+		if source_type == "grid" and inventory_grid:
+			inventory_grid.remove_item_by_uid(item.get("uid", ""))
+		elif source_type == "equipment" and slot_ref != "":
+			equipment_data[slot_ref] = {}
+			_apply_backpack_grid_size()
+			_update_equipment_ui()
+		elif source_type == "weapon_slot" and slot_ref != "":
+			equipment_data[slot_ref] = {}
+			_sync_weapon_to_player(slot_ref)
+			_update_weapons_ui()
 		_drop_item_to_world(item)
 	)
 	vbox.add_child(btn_drop)
 
 	add_child(context_menu_panel)
 	var mpos = get_global_mouse_position() - global_position
-	mpos.x = min(mpos.x, size.x - 150)
-	mpos.y = min(mpos.y, size.y - 140)
+	mpos.x = min(mpos.x, size.x - 170)
+	mpos.y = min(mpos.y, size.y - 150)
 	context_menu_panel.position = mpos
 
 func _close_context_menu() -> void:
@@ -1312,15 +1382,19 @@ func _connect_equipment_slot(btn: Button, slot_name: String) -> void:
 					if not equipped.is_empty():
 						_start_drag("equipment", equipped, Vector2i.ZERO, slot_name)
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
-				# 우클릭 시 가방으로 탈착
 				var equipped = equipment_data.get(slot_name, {})
 				if not equipped.is_empty():
-					var rem = inventory_grid.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
-					if rem <= 0:
-						equipment_data[slot_name] = {}
-						_apply_backpack_grid_size()
-						_update_equipment_ui()
-						if SoundManager: SoundManager.play("menu_select")
+					if event.alt_pressed or Input.is_key_pressed(KEY_ALT):
+						if tooltip: tooltip.hide()
+						_show_context_menu(equipped, "equipment", slot_name)
+					else:
+						# 우클릭 시 가방으로 탈착
+						var rem = inventory_grid.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
+						if rem <= 0:
+							equipment_data[slot_name] = {}
+							_apply_backpack_grid_size()
+							_update_equipment_ui()
+							if SoundManager: SoundManager.play("menu_select")
 	)
 
 func _try_equip_dragged_item(slot_name: String) -> void:
@@ -1524,14 +1598,18 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 					if tooltip: tooltip.hide()
 					_start_drag("weapon_slot", weapon_dict, Vector2i.ZERO, slot_key)
 			elif event.button_index == MOUSE_BUTTON_RIGHT and not weapon_dict.is_empty():
-				# 우클릭 시 가방으로 탈착
-				var rem = inventory_grid.auto_add_item(weapon_dict.get("id", ""), weapon_dict.get("amount", 1), weapon_dict)
-				if rem <= 0:
-					equipment_data[slot_key] = {}
-					_sync_weapon_to_player(slot_key)
-					_update_weapons_ui()
+				if event.alt_pressed or Input.is_key_pressed(KEY_ALT):
 					if tooltip: tooltip.hide()
-					if SoundManager: SoundManager.play("menu_select")
+					_show_context_menu(weapon_dict, "weapon_slot", slot_key)
+				else:
+					# 우클릭 시 가방으로 탈착
+					var rem = inventory_grid.auto_add_item(weapon_dict.get("id", ""), weapon_dict.get("amount", 1), weapon_dict)
+					if rem <= 0:
+						equipment_data[slot_key] = {}
+						_sync_weapon_to_player(slot_key)
+						_update_weapons_ui()
+						if tooltip: tooltip.hide()
+						if SoundManager: SoundManager.play("menu_select")
 	)
 	
 	# 총기일 경우 부착물 서브 슬롯 노출 (주무기 및 보조무기 sidearm 지원, barrel 및 rail 포함)

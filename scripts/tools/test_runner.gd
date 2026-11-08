@@ -764,5 +764,117 @@ func _ready() -> void:
 	t36_cm.free()
 	t36_mw.free()
 
+	# Test 37: Armor slot buttons (Helmet, Vest) render 4px SlotDurabilityBar & support slot context menu
+	total_tests += 1
+	var t37_helm_btn := Button.new()
+	var t37_vest_btn := Button.new()
+	var t37_eq := {
+		"helmet": {"id": "3레벨_헬멧", "durability": 42.0, "max_durability": 100.0},
+		"vest": {"id": "2레벨_방탄복", "durability": 18.0, "max_durability": 80.0}
+	}
+	InventoryUIHelper.render_equip_slot_button(t37_helm_btn, "helmet", "HEAD", t37_eq)
+	InventoryUIHelper.render_equip_slot_button(t37_vest_btn, "vest", "RIG", t37_eq)
+	var h_bar: ProgressBar = t37_helm_btn.get_node_or_null("SlotDurabilityBar") as ProgressBar
+	var v_bar: ProgressBar = t37_vest_btn.get_node_or_null("SlotDurabilityBar") as ProgressBar
+	var t37_win = preload("res://scenes/ui/inventory_window.tscn").instantiate()
+	add_child(t37_win)
+	t37_win.equipment_data = t37_eq
+	t37_win._show_context_menu(t37_eq["helmet"], "equipment", "helmet")
+	var ctx_ok = t37_win.context_menu_panel != null
+	if h_bar != null and h_bar.visible and is_equal_approx(h_bar.value, 42.0) and v_bar != null and v_bar.visible and is_equal_approx(v_bar.value, 18.0) and ctx_ok:
+		print("[PASS] Test 37: Helmet & Vest slots render 4px SlotDurabilityBar and open slot context menu")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 37: Armor durability bar or context menu failed")
+	t37_helm_btn.free()
+	t37_vest_btn.free()
+	t37_win.free()
+
+	# Test 38: MapWindow conditional extraction lock status ([잠김: 3,000R 필요] & [잠김: 단말기 미해킹])
+	total_tests += 1
+	var MapWinScript = preload("res://scenes/ui/map_window.gd")
+	GameManager.current_world_data = {"player": {"rubles": 1200, "field_objectives_completed": 0}}
+	GameManager.raid_landmark_completed = false
+	var lock_v1: Dictionary = MapWinScript.get_extraction_lock_info(1, [])
+	var lock_b1: Dictionary = MapWinScript.get_extraction_lock_info(2, [])
+	GameManager.current_world_data["player"]["rubles"] = 4500
+	GameManager.raid_landmark_completed = true
+	var lock_v2: Dictionary = MapWinScript.get_extraction_lock_info(1, [])
+	var lock_b2: Dictionary = MapWinScript.get_extraction_lock_info(2, [])
+	if bool(lock_v1["locked"]) and String(lock_v1["reason"]) == "잠김: 3,000R 필요" and bool(lock_b1["locked"]) and String(lock_b1["reason"]) == "잠김: 단말기 미해킹" and not bool(lock_v2["locked"]) and not bool(lock_b2["locked"]):
+		print("[PASS] Test 38: Tactical Map conditional extractions report exact lock reasons and unlock dynamically")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 38: Conditional extraction lock check failed: ", lock_v1, lock_b1, lock_v2, lock_b2)
+
+	# Test 39: WeaponModdingWindow left TestInRangeBtn & Differentiated Repair (Hideout 1.0x vs In-Raid 1.5x & -10% max_durability)
+	total_tests += 1
+	var t39_grid := InventoryGrid.new()
+	var t39_mod = preload("res://scenes/ui/weapon_modding_window.gd").new()
+	add_child(t39_mod)
+	t39_mod.setup(t39_grid, null, WeaponPartsDatabase.create_default_weapon("M4_리시버"))
+	var range_btn = t39_mod.find_child("TestInRangeBtn", true, false)
+	var range_is_leftmost = range_btn != null and range_btn.get_index() == 0
+	var t39_win = preload("res://scenes/ui/inventory_window.gd").new()
+	GameManager.current_world_data = {"player": {"rubles": 5000}}
+	GameManager.current_state = GameManager.GameState.HIDEOUT
+	var vest_hideout = {"id": "3레벨_방탄복", "durability": 80.0, "max_durability": 100.0}
+	var rep_h_ok = t39_win.perform_item_repair(vest_hideout)
+	var rub_after_h = int(GameManager.current_world_data["player"]["rubles"]) # 5000 - 200 = 4800
+	GameManager.current_state = GameManager.GameState.IN_GAME
+	var vest_field = {"id": "3레벨_방탄복", "durability": 80.0, "max_durability": 100.0}
+	var rep_f_ok = t39_win.perform_item_repair(vest_field)
+	var rub_after_f = int(GameManager.current_world_data["player"]["rubles"]) # 4800 - 300 = 4500
+	if range_is_leftmost and rep_h_ok and rub_after_h == 4800 and is_equal_approx(float(vest_hideout["max_durability"]), 100.0) and rep_f_ok and rub_after_f == 4500 and is_equal_approx(float(vest_field["max_durability"]), 90.0) and is_equal_approx(float(vest_field["durability"]), 90.0):
+		print("[PASS] Test 39: Modding footer has leftmost TestInRangeBtn & Field Repair applies 1.5x cost and -10% max_durability")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 39: Modding range button or repair differentiation failed")
+	t39_win.free()
+	t39_mod.free()
+	t39_grid.free()
+
+	# Test 40: Jammed weapon dry_fire WAV & try_attack dry-fire handling
+	total_tests += 1
+	var dry_wav = SoundManager.get_sound("dry_fire")
+	var t40_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t40_p)
+	var t40_wh = t40_p.get_node("WeaponHandler")
+	t40_wh.equipped_weapon_data = WeaponPartsDatabase.create_default_weapon("M4_리시버")
+	t40_wh.equipped_weapon_data["current_magazine_ammo"] = 20
+	t40_wh.is_jammed = true
+	t40_wh.try_attack(Vector2.RIGHT, Vector2.ZERO)
+	if dry_wav != null and dry_wav.data.size() > 100 and int(t40_wh.equipped_weapon_data["current_magazine_ammo"]) == 20 and t40_wh.attack_cooldown_timer > 0.0:
+		print("[PASS] Test 40: SoundManager generates dry_fire WAV and jammed weapon triggers dry-fire without spending ammo")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 40: Jammed dry-fire check failed")
+	t40_p.free()
+
+	# Test 41: Ammo penetration vs Enemy armor_value (Scav=15, Raider=30, Boss=45) up to 60% damage reduction
+	total_tests += 1
+	var BulletScript = preload("res://scenes/entities/projectiles/bullet.gd")
+	var e_scav = preload("res://scenes/entities/enemies/enemy.tscn").instantiate()
+	e_scav.enemy_type = 3
+	add_child(e_scav)
+	var e_raider = preload("res://scenes/entities/enemies/enemy.tscn").instantiate()
+	e_raider.enemy_type = 4
+	add_child(e_raider)
+	var e_boss = preload("res://scenes/entities/enemies/enemy.tscn").instantiate()
+	e_boss.enemy_type = 5
+	add_child(e_boss)
+	var mult_buckshot_boss: float = BulletScript.compute_armor_damage_multiplier(5.0, e_boss.armor_value) # ~0.4667
+	var mult_9mm_raider: float = BulletScript.compute_armor_damage_multiplier(10.0, e_raider.armor_value) # 0.60
+	var mult_762_raider: float = BulletScript.compute_armor_damage_multiplier(35.0, e_raider.armor_value) # 1.00
+	var mult_zero_boss: float = BulletScript.compute_armor_damage_multiplier(0.0, e_boss.armor_value) # 0.40 (max 60% reduction)
+	if is_equal_approx(e_scav.armor_value, 15.0) and is_equal_approx(e_raider.armor_value, 30.0) and is_equal_approx(e_boss.armor_value, 45.0) and is_equal_approx(mult_9mm_raider, 0.60) and is_equal_approx(mult_762_raider, 1.0) and is_equal_approx(mult_zero_boss, 0.40) and mult_buckshot_boss < 0.50:
+		print("[PASS] Test 41: Enemy armor (15/30/45) vs ammo penetration scales damage accurately (9mm vs Raider=%.2f, 7.62 vs Raider=%.2f)" % [mult_9mm_raider, mult_762_raider])
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 41: Penetration vs enemy armor check failed")
+	e_scav.free()
+	e_raider.free()
+	e_boss.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

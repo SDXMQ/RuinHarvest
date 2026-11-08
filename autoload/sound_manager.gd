@@ -31,7 +31,8 @@ func _preload_sounds() -> void:
 	var sounds_to_load = [
 		"hit_melee", "hit_ranged", "player_hurt", "enemy_die",
 		"pickup", "craft_complete", "menu_hover", "menu_select",
-		"door_open", "footstep", "alert", "game_over", "day_start"
+		"door_open", "footstep", "alert", "game_over", "day_start",
+		"dry_fire", "armor_ricochet"
 	]
 	for s in sounds_to_load:
 		get_sound(s)
@@ -60,7 +61,7 @@ func play(sound_name: String, volume_mult: float = 1.0, pitch_scale: float = 1.0
 	player_to_use.stream = stream
 	player_to_use.volume_db = linear_to_db(volume_mult)
 	var final_pitch = pitch_scale
-	if is_equal_approx(pitch_scale, 1.0) and (sound_name.begins_with("footstep") or sound_name in ["hit_ranged", "hit_melee", "enemy_die", "player_hurt", "explosion_distant"]):
+	if is_equal_approx(pitch_scale, 1.0) and (sound_name.begins_with("footstep") or sound_name in ["hit_ranged", "hit_melee", "enemy_die", "player_hurt", "explosion_distant", "dry_fire", "armor_ricochet"]):
 		final_pitch = randf_range(0.92, 1.08)
 	player_to_use.pitch_scale = final_pitch
 	player_to_use.play()
@@ -78,6 +79,10 @@ func _create_sound(s_name: String) -> AudioStreamWAV:
 		return _generate_tone(150.0, 0.15, 0.4, "square")
 	elif s_name == "hit_ranged":
 		return _generate_tone(800.0, 0.08, 0.3, "noise")
+	elif s_name == "dry_fire":
+		return _generate_dry_fire_sound()
+	elif s_name == "armor_ricochet":
+		return _generate_tone(1420.0, 0.06, 0.22, "square")
 	elif s_name == "player_hurt":
 		return _generate_tone(200.0, 0.3, 0.3, "sawtooth")
 	elif s_name == "enemy_die":
@@ -112,6 +117,27 @@ func _create_sound(s_name: String) -> AudioStreamWAV:
 		return _generate_tone(440.0, 0.3, 0.2, "sine")
 	else:
 		return _generate_tone(440.0, 0.1, 0.1, "sine")
+
+func _generate_dry_fire_sound() -> AudioStreamWAV:
+	var duration := 0.075
+	var num_samples: int = int(SAMPLE_RATE * duration)
+	var data := PackedByteArray()
+	data.resize(num_samples * 2)
+	for i in range(num_samples):
+		var t: float = float(i) / SAMPLE_RATE
+		# 철컥! 이중 금속 공이 타격음 (초반 고주파 클릭 + 중반 노리쇠 걸림음)
+		var env1: float = exp(-t * 95.0)
+		var click1: float = sin(TAU * 1680.0 * t) * 0.65 + randf_range(-0.35, 0.35)
+		var env2: float = exp(-max(0.0, t - 0.022) * 80.0) if t >= 0.022 else 0.0
+		var click2: float = (1.0 if sin(TAU * 620.0 * (t - 0.022)) > 0.0 else -1.0) * 0.55
+		var sample_val: float = clamp((click1 * env1 + click2 * env2) * 0.42, -1.0, 1.0)
+		data.encode_s16(i * 2, int(sample_val * 32767.0))
+	var wav = AudioStreamWAV.new()
+	wav.format = AudioStreamWAV.FORMAT_16_BITS
+	wav.mix_rate = SAMPLE_RATE
+	wav.stereo = false
+	wav.data = data
+	return wav
 
 func _generate_tone(frequency: float, duration: float, volume: float = 0.3, wave_type: String = "sine", fade_out: bool = true) -> AudioStreamWAV:
 	var num_samples: int = int(SAMPLE_RATE * duration)
