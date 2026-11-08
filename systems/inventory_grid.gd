@@ -299,10 +299,14 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 			"amount": to_add,
 			"w": base_size.x,
 			"h": base_size.y,
-			"rotated": fit["rotated"],
-			"custom_data": custom_data
+			"rotated": fit["rotated"]
 		}
-		if item_data.has("max_durability"):
+		if not custom_data.is_empty():
+			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+				if custom_data.has(k):
+					new_item[k] = custom_data[k]
+			new_item["custom_data"] = custom_data
+		if not new_item.has("durability") and item_data.has("max_durability"):
 			new_item["durability"] = item_data["max_durability"]
 			
 		place_item(new_item, fit["x"], fit["y"], fit["rotated"])

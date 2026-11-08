@@ -666,6 +666,7 @@ func _spawn_loot_drop() -> void:
 			drops.append({"id": "3레벨_헬멧", "amount": 1})
 			drops.append({"id": "고급 치료킷", "amount": 1})
 			drops.append({"id": "암호화된 SSD", "amount": 1})
+			drops.append({"id": "장거리 무전기", "amount": 1})
 			
 	for i in range(drops.size()):
 		var d = drops[i]

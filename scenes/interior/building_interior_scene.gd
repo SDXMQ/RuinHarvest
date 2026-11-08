@@ -435,6 +435,14 @@ func _on_crosshair_draw() -> void:
 		crosshair_overlay.draw_line(p1, p2, col, 1.6)
 	crosshair_overlay.draw_circle(m_pos, 1.8, col)
 
+	# 총기 기능고장 (JAM) 발생 시 우하단 붉은색 점멸 라벨 표시
+	var w_handler = player.weapon_handler if player and "weapon_handler" in player else null
+	if w_handler and bool(w_handler.get("is_jammed")):
+		if (Time.get_ticks_msec() / 250) % 2 == 0:
+			var jam_pos = m_pos + Vector2(16, 16)
+			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.8))
+			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
+
 func _on_player_hit_direction(attacker_pos: Vector2) -> void:
 	if not player: return
 	var diff = attacker_pos - player.global_position

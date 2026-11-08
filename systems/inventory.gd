@@ -37,31 +37,37 @@ func get_item_count(id: String) -> int:
 			total += item["amount"]
 	return total
 
-func add_item(id: String, amount: int) -> int:
+func add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
 	var item_data = ItemDatabase.get_item_data(id)
 	if item_data.is_empty(): return amount
 	
 	var max_stack = item_data.get("max_stack", 1)
 	var remaining = amount
 	
-	# 1. 기존 스택 채우기
-	for i in range(max_slots):
-		var slot = items[i]
-		if slot != null and slot["id"] == id and slot["amount"] < max_stack:
-			var space = max_stack - slot["amount"]
-			var to_add = min(space, remaining)
-			slot["amount"] += to_add
-			remaining -= to_add
-			if remaining <= 0:
-				inventory_changed.emit()
-				return 0
-				
+	# 1. 기존 스택 채우기 (커스텀 데이터가 없을 때만 스택 병합)
+	if max_stack > 1 and custom_data.is_empty():
+		for i in range(max_slots):
+			var slot = items[i]
+			if slot != null and slot["id"] == id and slot["amount"] < max_stack:
+				var space = max_stack - slot["amount"]
+				var to_add = min(space, remaining)
+				slot["amount"] += to_add
+				remaining -= to_add
+				if remaining <= 0:
+					inventory_changed.emit()
+					return 0
+					
 	# 2. 빈 슬롯에 넣기
 	for i in range(max_slots):
 		if items[i] == null:
 			var to_add = min(max_stack, remaining)
 			var item_dict = {"id": id, "amount": to_add}
-			if item_data.has("max_durability"):
+			if not custom_data.is_empty():
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+					if custom_data.has(k):
+						item_dict[k] = custom_data[k]
+				item_dict["custom_data"] = custom_data
+			if not item_dict.has("durability") and item_data.has("max_durability"):
 				item_dict["durability"] = item_data["max_durability"]
 			items[i] = item_dict
 			remaining -= to_add

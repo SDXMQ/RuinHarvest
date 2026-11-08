@@ -13,6 +13,9 @@ var boss_entity: Node2D = null
 var airdrop_points: Array = []
 var field_objectives_list: Array = []
 var loaded_chunks: Dictionary = {}
+var scale_factor: float = 0.085
+var map_pan_offset: Vector2 = Vector2.ZERO
+var is_panning: bool = false
 
 signal window_closed
 
@@ -36,12 +39,30 @@ func _ready() -> void:
 		close_btn.pressed.connect(_on_close_pressed)
 	if map_canvas:
 		map_canvas.draw.connect(_on_map_draw)
+		map_canvas.gui_input.connect(_on_map_canvas_gui_input)
+
+func _on_map_canvas_gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP and event.pressed:
+			scale_factor = clamp(scale_factor * 1.15, 0.05, 0.28)
+			map_canvas.queue_redraw()
+			accept_event()
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN and event.pressed:
+			scale_factor = clamp(scale_factor / 1.15, 0.05, 0.28)
+			map_canvas.queue_redraw()
+			accept_event()
+		elif event.button_index == MOUSE_BUTTON_LEFT or event.button_index == MOUSE_BUTTON_RIGHT or event.button_index == MOUSE_BUTTON_MIDDLE:
+			is_panning = event.pressed
+			accept_event()
+	elif event is InputEventMouseMotion and is_panning:
+		map_pan_offset += event.relative
+		map_canvas.queue_redraw()
+		accept_event()
 
 func _on_map_draw() -> void:
 	var w = map_canvas.size.x
 	var h = map_canvas.size.y
 	var center = Vector2(w / 2.0, h / 2.0)
-	var scale_factor = 0.085 # 2200px 원거리 탈출구가 캔버스 중심에서 약 187px 위치에 배치됨
 	
 	# 1. 지도 배경 및 전술 격자선
 	map_canvas.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.09, 0.12, 0.10, 0.96))
@@ -52,7 +73,7 @@ func _on_map_draw() -> void:
 	for y in range(0, int(h), int(grid_size)):
 		map_canvas.draw_line(Vector2(0, y), Vector2(w, y), Color(0.18, 0.26, 0.18, 0.35))
 		
-	var map_origin = center - player_pos * scale_factor
+	var map_origin = center + map_pan_offset - player_pos * scale_factor
 
 	# 2. 로드된 청크 지형/도로/건물 개요 렌더링
 	var chunk_px_size = 16.0 * 32.0 * scale_factor # 512 * 0.085 = 43.52px
@@ -110,7 +131,12 @@ func _on_map_draw() -> void:
 					o_title += " [완료]"
 				map_canvas.draw_circle(o_pos, 6.0, o_col)
 				map_canvas.draw_arc(o_pos, 9.5, 0, TAU, 16, o_col, 1.5)
-				map_canvas.draw_string(ThemeDB.fallback_font, o_pos + Vector2(11, 4), "%s %s (%.0fm)" % [o_icon, o_title, dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, o_col)
+				var obj_label_offset = Vector2(11, 4)
+				if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
+					var b_pos = map_origin + boss_entity.global_position * scale_factor
+					if o_pos.distance_to(b_pos) < 32.0:
+						obj_label_offset = Vector2(11, 14)
+				map_canvas.draw_string(ThemeDB.fallback_font, o_pos + obj_label_offset, "%s %s (%.0fm)" % [o_icon, o_title, dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, o_col)
 				
 	# 5. 항공 보급품 (에어드랍 크레이트)
 	for a_pt in airdrop_points:
@@ -128,7 +154,14 @@ func _on_map_draw() -> void:
 			var dist = player_pos.distance_to(boss_entity.global_position)
 			map_canvas.draw_circle(b_pos, 7.5, Color(1.0, 0.15, 0.15, 0.9))
 			map_canvas.draw_arc(b_pos, 11.5, 0, TAU, 16, Color(1.0, 0.35, 0.35), 1.8)
-			map_canvas.draw_string(ThemeDB.fallback_font, b_pos + Vector2(13, 4), "💀 랜드마크 보스 (%.0fm)" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
+			var b_label_offset = Vector2(13, 4)
+			for obj in field_objectives_list:
+				if is_instance_valid(obj):
+					var o_pos = map_origin + obj.global_position * scale_factor
+					if b_pos.distance_to(o_pos) < 32.0:
+						b_label_offset = Vector2(13, -10)
+						break
+			map_canvas.draw_string(ThemeDB.fallback_font, b_pos + b_label_offset, "💀 랜드마크 보스 (%.0fm)" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
 
 	# 7. 조건부 탈출구 3종 마커 (일반 / 차량 / 벙커)
 	for pt in extraction_points:

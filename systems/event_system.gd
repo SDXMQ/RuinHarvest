@@ -164,6 +164,8 @@ func _check_random_events(current_day: int) -> void:
 			else:
 				_apply_event_to_live_player(event)
 				add_log("★ " + event.title + ": " + event.description)
+				if EventBus.has_signal("random_world_event_triggered"):
+					EventBus.random_world_event_triggered.emit(event.id, event.data)
 				
 			active_events.append(event)
 			break # 한 번에 한 이벤트만 발생
@@ -183,3 +185,5 @@ func trigger_event(event_id: String) -> void:
 		_apply_event_to_live_player(event)
 		active_events.append(event)
 		add_log("★ " + event.title + ": " + event.description)
+		if EventBus.has_signal("random_world_event_triggered"):
+			EventBus.random_world_event_triggered.emit(event.id, event.data)
