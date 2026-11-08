@@ -635,5 +635,134 @@ func _ready() -> void:
 		printerr("[FAIL] Test 32: RAID defense_check failed (FailRes: %s, HP: %.1f, Raiders: %d, PassRes: %s)" % [str(def_fail_res), hp_after_fail, raid_spawn_info["raiders"], str(def_pass_res)])
 	t32_p.free()
 
+	# Test 33: New procedural tiles (Bed, Desk, Shelf, Locked Door, Horizontal Road Line, Crosswalk) & Secure Container Keys
+	total_tests += 1
+	var ts_check := TileManager.get_tileset()
+	var atlas_src: TileSetAtlasSource = ts_check.get_source(0) as TileSetAtlasSource if ts_check and ts_check.get_source_count() > 0 else null
+	var tiles_valid := false
+	if atlas_src != null:
+		var has_bed_col = atlas_src.has_tile(TileManager.OBJ_BED) and atlas_src.get_tile_data(TileManager.OBJ_BED, 0).get_collision_polygons_count(0) > 0
+		var has_desk_col = atlas_src.has_tile(TileManager.OBJ_DESK) and atlas_src.get_tile_data(TileManager.OBJ_DESK, 0).get_collision_polygons_count(0) > 0
+		var has_shelf_col = atlas_src.has_tile(TileManager.OBJ_SHELF) and atlas_src.get_tile_data(TileManager.OBJ_SHELF, 0).get_collision_polygons_count(0) > 0
+		var has_locked_col = atlas_src.has_tile(TileManager.OBJ_DOOR_LOCKED) and atlas_src.get_tile_data(TileManager.OBJ_DOOR_LOCKED, 0).get_collision_polygons_count(0) > 0
+		var has_road_h = atlas_src.has_tile(TileManager.TILE_ROAD_LINE_H) and atlas_src.has_tile(TileManager.TILE_CROSSWALK)
+		tiles_valid = has_bed_col and has_desk_col and has_shelf_col and has_locked_col and has_road_h
+	var t33_grid := InventoryGrid.new()
+	var key_sec_ok = t33_grid.is_allowed_in_secure_container("무기고 열쇠") and t33_grid.is_allowed_in_secure_container("보안 키카드")
+	t33_grid.free()
+	if tiles_valid and key_sec_ok:
+		print("[PASS] Test 33: New furniture/locked-door/road tiles registered with physics & keys allowed in Secure Container")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 33: TileSet or Secure Container key check failed (tiles_valid=%s, key_sec_ok=%s)" % [str(tiles_valid), str(key_sec_ok)])
+
+	# Test 34: Procedural WorldGenerator indoor mask (0 indoor grass/trees) & hybrid road continuity
+	total_tests += 1
+	var t34_gen := WorldGenerator.new(123456)
+	var t34_bad_indoor := 0
+	var t34_bad_road := 0
+	for cy in range(-3, 3):
+		for cx in range(-3, 3):
+			var cd := t34_gen.generate_chunk(Vector2i(cx, cy))
+			var c_tiles: Array = cd["tiles"]
+			var c_objs: Array = cd["objects"]
+			var c_in: PackedByteArray = cd["inside_mask"]
+			for i in range(WorldGenerator.CHUNK_SIZE * WorldGenerator.CHUNK_SIZE):
+				if c_in[i] == 1:
+					if c_tiles[i] == TileManager.TILE_GRASS or c_objs[i] == TileManager.OBJ_TREE or c_objs[i] == TileManager.OBJ_ROCK:
+						t34_bad_indoor += 1
+				var wx := cx * WorldGenerator.CHUNK_SIZE + (i % WorldGenerator.CHUNK_SIZE)
+				var wy := cy * WorldGenerator.CHUNK_SIZE + int(i / WorldGenerator.CHUNK_SIZE)
+				if t34_gen.is_road(wx, wy):
+					var rn := 0
+					for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+						if t34_gen.is_road(wx + d.x, wy + d.y):
+							rn += 1
+					if rn < 2:
+						t34_bad_road += 1
+	if t34_bad_indoor == 0 and t34_bad_road == 0:
+		print("[PASS] Test 34: WorldGenerator guarantees 0 indoor grass/trees and 100% continuous non-crumbling roads")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 34: WorldGenerator check failed (bad_indoor=%d, bad_road=%d)" % [t34_bad_indoor, t34_bad_road])
+
+	# Test 35: All 12 BuildingPresets flood-fill interior & furniture reachability
+	total_tests += 1
+	var t35_ok := true
+	for bt in BuildingPresets.BuildingType.values():
+		var pr := BuildingPresets.get_preset(bt)
+		var bw := int(pr["width"])
+		var bh := int(pr["height"])
+		var is_l: bool = String(pr.get("shape", "rect")) == "l_shape"
+		var f_map := {}
+		for f in pr.get("furniture", []):
+			f_map[Vector2i(int(f["x"]), int(f["y"]))] = true
+		var walk := {}
+		for ry in range(bh):
+			for rx in range(bw):
+				if is_l and rx >= bw / 2 and ry < bh / 2:
+					continue
+				var pt := Vector2i(rx, ry)
+				var ext := (rx == 0 or ry == bh - 1 or (ry == 0 and rx < bw / 2) or (rx == bw - 1 and ry >= bh / 2) or (rx == bw / 2 - 1 and ry <= bh / 2) or (ry == bh / 2 and rx >= bw / 2 - 1)) if is_l else (rx == 0 or rx == bw - 1 or ry == 0 or ry == bh - 1)
+				if ext:
+					if pt in pr.get("doors", []): walk[pt] = true
+				else:
+					if pt in pr.get("locked_doors", []) or pt in pr.get("inner_doors", []): walk[pt] = true
+					elif not (pt in pr.get("inner_walls", []) or f_map.has(pt)): walk[pt] = true
+		var vis := {}
+		var q: Array[Vector2i] = []
+		for d_pt in pr.get("doors", []):
+			if walk.has(d_pt):
+				vis[d_pt] = true
+				q.append(d_pt)
+		while not q.is_empty():
+			var cur: Vector2i = q.pop_front()
+			for d in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+				if walk.has(cur + d) and not vis.has(cur + d):
+					vis[cur + d] = true
+					q.append(cur + d)
+		if vis.size() != walk.size():
+			t35_ok = false
+		for f_pt in f_map.keys():
+			if not (vis.has(f_pt + Vector2i(1, 0)) or vis.has(f_pt + Vector2i(-1, 0)) or vis.has(f_pt + Vector2i(0, 1)) or vis.has(f_pt + Vector2i(0, -1))):
+				t35_ok = false
+	if t35_ok:
+		print("[PASS] Test 35: All 12 BuildingPresets pass 100% floor and furniture flood-fill reachability")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 35: One or more BuildingPresets have unreachable rooms or blocked furniture")
+
+	# Test 36: Locked Door (OBJ_DOOR_LOCKED) blocks keyless player and unlocks when key is in Secure Container
+	total_tests += 1
+	var t36_mw = preload("res://scenes/world/main_world.gd").new()
+	var t36_cm = preload("res://scenes/world/chunk_manager.gd").new()
+	t36_cm.object_layer = TileMapLayer.new()
+	t36_cm.object_layer.tile_set = TileManager.get_tileset()
+	t36_cm.add_child(t36_cm.object_layer)
+	t36_mw.chunk_manager = t36_cm
+	var t36_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t36_p)
+	t36_mw.player = t36_p
+	var lock_pos := Vector2i(42, 42)
+	t36_cm.object_layer.set_cell(lock_pos, 0, TileManager.OBJ_DOOR_LOCKED)
+	# Attempt without key -> remains OBJ_DOOR_LOCKED
+	t36_mw._on_object_interacted(Vector2.ZERO, lock_pos, TileManager.OBJ_DOOR_LOCKED)
+	var still_locked = t36_cm.object_layer.get_cell_atlas_coords(lock_pos) == TileManager.OBJ_DOOR_LOCKED
+	# Place key inside 2x2 Secure Container at (0, 0) and retry -> becomes OBJ_DOOR_OPEN
+	t36_p.inventory_grid.place_item({"id": "무기고 열쇠", "amount": 1, "w": 1, "h": 1}, 0, 0, false)
+	t36_mw._on_object_interacted(Vector2.ZERO, lock_pos, TileManager.OBJ_DOOR_LOCKED)
+	var unlocked_now = t36_cm.object_layer.get_cell_atlas_coords(lock_pos) == TileManager.OBJ_DOOR_OPEN
+	# Also verify new Desk furniture container interaction populates loot
+	t36_mw._on_object_interacted(Vector2.ZERO, Vector2i(43, 42), TileManager.OBJ_DESK)
+	var desk_inv_ok = t36_mw.container_inventories.has(Vector2i(43, 42))
+	if still_locked and unlocked_now and desk_inv_ok:
+		print("[PASS] Test 36: OBJ_DOOR_LOCKED requires key, unlocks via Secure Container key, and OBJ_DESK spawns container loot")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 36: Locked door / Desk interaction failed (still_locked=%s, unlocked_now=%s, desk_inv_ok=%s)" % [str(still_locked), str(unlocked_now), str(desk_inv_ok)])
+	t36_p.free()
+	t36_cm.free()
+	t36_mw.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

@@ -1168,9 +1168,21 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		loot_title = "폐차 트렁크"
 		slots = 8
 	elif type == Vector2i(0, 2): # OBJ_FRIDGE
-		table_name = "residential"
+		table_name = "fridge"
 		loot_title = "냉장고"
 		slots = 6
+	elif type == Vector2i(0, 3): # OBJ_BED
+		table_name = "bed"
+		loot_title = "침대 주변"
+		slots = 6
+	elif type == Vector2i(1, 3): # OBJ_DESK
+		table_name = "desk"
+		loot_title = "책상 서랍"
+		slots = 8
+	elif type == Vector2i(2, 3): # OBJ_SHELF
+		table_name = "shelf"
+		loot_title = "수납 선반장"
+		slots = 8
 	elif type == Vector2i(7, 2): # Airdrop Crate
 		table_name = "military"
 		loot_title = "🪂 군용 항공 보급품"
@@ -1180,6 +1192,31 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			player.set_flashlight(not player.flashlight_enabled)
 		if SoundManager: SoundManager.play("menu_select")
 		EventBus.event_logged.emit("💡 조명 스위치를 작동했습니다.")
+		return
+	elif type == Vector2i(3, 3): # OBJ_DOOR_LOCKED
+		var req_key = "무기고 열쇠"
+		if chunk_manager and chunk_manager.generator:
+			var b_info = chunk_manager.generator.get_building_at(tile_pos.x, tile_pos.y)
+			if not b_info.is_empty():
+				req_key = String(b_info.get("preset", {}).get("locked_key", "무기고 열쇠"))
+		var has_valid_key = false
+		var used_key_name = req_key
+		if player and player.inventory_grid:
+			if player.inventory_grid.has_item(req_key, 1):
+				has_valid_key = true
+			elif req_key == "무기고 열쇠" and player.inventory_grid.has_item("보안 키카드", 1):
+				has_valid_key = true
+				used_key_name = "보안 키카드"
+		if not has_valid_key:
+			if SoundManager: SoundManager.play("hit_melee")
+			EventBus.event_logged.emit("🔒 잠겨 있습니다! [%s]가 가방 또는 안전 컨테이너에 필요합니다." % req_key)
+			return
+		if chunk_manager and chunk_manager.object_layer:
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
+		EventBus.noise_created.emit(world_pos, 140.0, "door")
+		EventBus.door_toggled.emit(tile_pos, true)
+		EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다!" % used_key_name)
+		if SoundManager: SoundManager.play("item_pickup")
 		return
 	elif type == Vector2i(6, 1): # OBJ_DOOR_CLOSED
 		# 닫힌 문 열기 -> 열린 문으로 타일 교체 및 소음 발생
@@ -1213,6 +1250,26 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		return
 		
 	if table_name != "":
+		var in_locked_vault_kind = ""
+		if chunk_manager and chunk_manager.generator and type != Vector2i(7, 2):
+			var b_at = chunk_manager.generator.get_building_at(tile_pos.x, tile_pos.y)
+			if not b_at.is_empty():
+				var b_preset: Dictionary = b_at.get("preset", {})
+				if b_preset.has("locked_rect"):
+					var l_rect: Rect2i = b_preset["locked_rect"]
+					var rel_pt = Vector2i(tile_pos.x - int(b_at["wx"]), tile_pos.y - int(b_at["wy"]))
+					if l_rect.has_point(rel_pt):
+						var t_name = String(b_preset.get("type_name", ""))
+						if t_name == "hospital":
+							in_locked_vault_kind = "medical"
+							table_name = "locked_medical"
+							loot_title = "🏥 원장실 보안 보관함"
+							slots = 12
+						else:
+							in_locked_vault_kind = "armory"
+							table_name = "locked_armory"
+							loot_title = "🔐 특수 무기고 보관함"
+							slots = 12
 		var inv: Inventory
 		if container_inventories.has(tile_pos):
 			inv = container_inventories[tile_pos]
@@ -1229,6 +1286,13 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 				inv.add_item(rec_id, 1, w_dict)
 				inv.add_item(bonus_gear[randi() % bonus_gear.size()], 1)
 				inv.add_item("수류탄", 2)
+			elif in_locked_vault_kind == "armory" and type == Vector2i(3, 1):
+				var vault_weapons = ["M4_리시버", "AK_리시버", "SV98_리시버"]
+				var v_rec = vault_weapons[randi() % vault_weapons.size()]
+				inv.add_item(v_rec, 1, WeaponPartsDatabase.create_default_weapon(v_rec))
+			elif in_locked_vault_kind == "medical" and type == Vector2i(3, 1):
+				inv.add_item("고급 치료킷", 1)
+				inv.add_item("암호화된 SSD", 1)
 			var loot_items = ItemDatabase.generate_loot(table_name)
 			for item in loot_items:
 				inv.add_item(item["id"], item["amount"])

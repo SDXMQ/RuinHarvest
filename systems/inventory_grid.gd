@@ -26,6 +26,8 @@ func is_allowed_in_secure_container(item_id: String) -> bool:
 		return true
 	var data = ItemDatabase.get_item_data(item_id)
 	var item_type = str(data.get("type", ""))
+	if item_type in ["key", "keycard"] or item_id.contains("열쇠") or item_id.contains("키카드"):
+		return true
 	if item_type == "ammo" or item_id == "탄약" or item_id.contains("9mm") or item_id.contains("5.56") or item_id.contains("7.62") or item_id.contains("12게이지") or item_id.contains(".45"):
 		return true
 	var cat = int(data.get("category", -1))

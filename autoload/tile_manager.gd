@@ -40,30 +40,48 @@ const OBJ_GATE = Vector2i(4, 2)          # 열린 게이트 (통과 가능)
 const OBJ_LIGHT_SWITCH = Vector2i(5, 2)  # 조명 스위치 (벽 부착물)
 const TILE_ROOF = Vector2i(6, 2)         # 건물 지붕 (실외에서 덮는 지붕 타일)
 
+# 신규 실내 가구, 보안 잠금문 및 정밀 도로 마킹 타일 (y=3)
+const OBJ_BED = Vector2i(0, 3)           # 침대 (의료품/의류 루팅)
+const OBJ_DESK = Vector2i(1, 3)          # 책상/테이블 (귀중품/전자부품/열쇠 루팅)
+const OBJ_SHELF = Vector2i(2, 3)         # 선반장/진열대 (식량/잡화 루팅)
+const OBJ_DOOR_LOCKED = Vector2i(3, 3)   # 잠긴 보안 문 (열쇠/키카드 필요, 충돌+차폐)
+const TILE_ROAD_LINE_H = Vector2i(4, 3)  # 가로 방향 차선 아스팔트
+const TILE_CROSSWALK = Vector2i(5, 3)    # 교차로 횡단보도 아스팔트
+
+func get_tileset() -> TileSet:
+	if not tileset:
+		_generate_procedural_tileset()
+	return tileset
+
 func _ready() -> void:
 	_generate_procedural_tileset()
 
 func _generate_procedural_tileset() -> void:
-	# 8x3 타일 아틀라스 이미지 생성
-	var img = Image.create_empty(8 * TILE_SIZE, 3 * TILE_SIZE, false, Image.FORMAT_RGBA8)
+	# 8x4 타일 아틀라스 이미지 생성
+	var img = Image.create_empty(8 * TILE_SIZE, 4 * TILE_SIZE, false, Image.FORMAT_RGBA8)
 	
 	# 색상 정의
 	var colors = {
 		TILE_GRASS: Color(0.25, 0.5, 0.2),
 		TILE_DIRT: Color(0.55, 0.45, 0.3),
-		TILE_ROAD: Color(0.3, 0.3, 0.35),
+		TILE_ROAD: Color(0.24, 0.25, 0.29),
 		TILE_CONCRETE: Color(0.6, 0.6, 0.65),
 		TILE_FLOOR_WOOD: Color(0.6, 0.45, 0.3),
-		TILE_FLOOR_TILE: Color(0.7, 0.7, 0.7),
-		TILE_ROAD_LINE: Color(0.8, 0.8, 0.2)
+		TILE_FLOOR_TILE: Color(0.7, 0.7, 0.7)
 	}
 	
 	# 바닥 타일 그리기 (y=0)
 	for coords in colors.keys():
 		_fill_rect_noisy(img, coords.x * TILE_SIZE, coords.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, colors[coords])
 	
-	# 자갈길 그리기
+	# 정밀 도로 차선 및 횡단보도 그리기
+	_draw_road_line(img, TILE_ROAD_LINE.x * TILE_SIZE, TILE_ROAD_LINE.y * TILE_SIZE, true)
+	_draw_road_line(img, TILE_ROAD_LINE_H.x * TILE_SIZE, TILE_ROAD_LINE_H.y * TILE_SIZE, false)
+	_draw_crosswalk(img, TILE_CROSSWALK.x * TILE_SIZE, TILE_CROSSWALK.y * TILE_SIZE)
+	
+	# 자갈길 및 수역 그리기
 	_draw_gravel(img, TILE_GRAVEL.x * TILE_SIZE, TILE_GRAVEL.y * TILE_SIZE)
+	_fill_rect_noisy(img, TILE_WATER.x * TILE_SIZE, TILE_WATER.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.15, 0.35, 0.55))
 		
 	# 오브젝트 타일 그리기 (y=1)
 	_draw_tree(img, OBJ_TREE.x * TILE_SIZE, OBJ_TREE.y * TILE_SIZE)
@@ -84,6 +102,12 @@ func _generate_procedural_tileset() -> void:
 	_draw_light_switch(img, OBJ_LIGHT_SWITCH.x * TILE_SIZE, OBJ_LIGHT_SWITCH.y * TILE_SIZE)
 	_draw_roof(img, TILE_ROOF.x * TILE_SIZE, TILE_ROOF.y * TILE_SIZE)
 	
+	# 신규 가구 및 보안 잠금문 타일 그리기 (y=3)
+	_draw_bed(img, OBJ_BED.x * TILE_SIZE, OBJ_BED.y * TILE_SIZE)
+	_draw_desk(img, OBJ_DESK.x * TILE_SIZE, OBJ_DESK.y * TILE_SIZE)
+	_draw_shelf(img, OBJ_SHELF.x * TILE_SIZE, OBJ_SHELF.y * TILE_SIZE)
+	_draw_door_locked(img, OBJ_DOOR_LOCKED.x * TILE_SIZE, OBJ_DOOR_LOCKED.y * TILE_SIZE)
+	
 	var texture = ImageTexture.create_from_image(img)
 	
 	# TileSet 및 Source 생성
@@ -101,7 +125,7 @@ func _generate_procedural_tileset() -> void:
 	source.texture_region_size = Vector2i(TILE_SIZE, TILE_SIZE)
 	
 	# 바닥 타일 등록
-	for coords in [TILE_GRASS, TILE_DIRT, TILE_ROAD, TILE_CONCRETE, TILE_FLOOR_WOOD, TILE_FLOOR_TILE, TILE_ROAD_LINE, TILE_GRAVEL]:
+	for coords in [TILE_GRASS, TILE_DIRT, TILE_ROAD, TILE_CONCRETE, TILE_FLOOR_WOOD, TILE_FLOOR_TILE, TILE_ROAD_LINE, TILE_ROAD_LINE_H, TILE_CROSSWALK, TILE_GRAVEL, TILE_WATER]:
 		source.create_tile(coords)
 		
 	tileset.add_source(source, 0)
@@ -110,7 +134,8 @@ func _generate_procedural_tileset() -> void:
 	var all_objects = [
 		OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS,
 		OBJ_DOOR_CLOSED, OBJ_DOOR_OPEN, OBJ_FRIDGE,
-		OBJ_WINDOW, OBJ_WINDOW_BROKEN, OBJ_FENCE, OBJ_GATE, OBJ_LIGHT_SWITCH, TILE_ROOF
+		OBJ_WINDOW, OBJ_WINDOW_BROKEN, OBJ_FENCE, OBJ_GATE, OBJ_LIGHT_SWITCH, TILE_ROOF,
+		OBJ_BED, OBJ_DESK, OBJ_SHELF, OBJ_DOOR_LOCKED
 	]
 	
 	for coords in all_objects:
@@ -129,9 +154,17 @@ func _generate_procedural_tileset() -> void:
 			var has_collision = false
 			var col_poly = full_poly
 			
-			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_CRATE, OBJ_FRIDGE]:
+			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_FRIDGE]:
 				has_collision = true
 				col_poly = full_poly
+			elif coords in [OBJ_BED, OBJ_DESK, OBJ_SHELF]:
+				has_collision = true
+				col_poly = PackedVector2Array([
+					Vector2(-TILE_SIZE*0.42, -TILE_SIZE*0.42),
+					Vector2(TILE_SIZE*0.42, -TILE_SIZE*0.42),
+					Vector2(TILE_SIZE*0.42, TILE_SIZE*0.42),
+					Vector2(-TILE_SIZE*0.42, TILE_SIZE*0.42)
+				])
 			elif coords in [OBJ_TREE, OBJ_ROCK, OBJ_BARREL, OBJ_DEBRIS]:
 				has_collision = true
 				col_poly = PackedVector2Array([
@@ -150,9 +183,9 @@ func _generate_procedural_tileset() -> void:
 				tile_data.add_collision_polygon(0)
 				tile_data.set_collision_polygon_points(0, 0, col_poly)
 				
-			# 빛 차폐(Occluder) 등록 (빛을 막는 벽, 닫힌 문, 상자, 바위, 냉장고 등)
-			# 창문, 깨진 창문, 울타리, 게이트, 열린 문은 빛을 통과시킴!
-			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE]:
+			# 빛 차폐(Occluder) 등록 (빛을 막는 벽, 닫힌/잠긴 문, 상자, 바위, 냉장고, 높은 선반장 등)
+			# 창문, 깨진 창문, 울타리, 게이트, 열린 문, 낮은 가구(침대/책상)는 빛을 통과시킴!
+			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE, OBJ_SHELF]:
 				var occluder = OccluderPolygon2D.new()
 				occluder.polygon = full_poly
 				tile_data.add_occluder_polygon(0)
@@ -400,3 +433,87 @@ func _draw_roof(img: Image, x: int, y: int) -> void:
 			# 약간의 밝은 하이라이트 라인
 			if iy % 8 == 1:
 				img.set_pixel(x + ix, y + iy, Color(0.24, 0.26, 0.3))
+
+func _draw_road_line(img: Image, x: int, y: int, is_vertical: bool) -> void:
+	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.24, 0.25, 0.29))
+	var line_col = Color(0.88, 0.78, 0.18)
+	var edge_col = Color(0.72, 0.62, 0.14)
+	if is_vertical:
+		for iy in range(3, TILE_SIZE - 3):
+			img.set_pixel(x + TILE_SIZE - 4, y + iy, edge_col)
+			img.set_pixel(x + TILE_SIZE - 3, y + iy, line_col)
+			img.set_pixel(x + TILE_SIZE - 2, y + iy, line_col)
+	else:
+		for ix in range(3, TILE_SIZE - 3):
+			img.set_pixel(x + ix, y + TILE_SIZE - 4, edge_col)
+			img.set_pixel(x + ix, y + TILE_SIZE - 3, line_col)
+			img.set_pixel(x + ix, y + TILE_SIZE - 2, line_col)
+
+func _draw_crosswalk(img: Image, x: int, y: int) -> void:
+	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.24, 0.25, 0.29))
+	var stripe_col = Color(0.82, 0.84, 0.86, 0.92)
+	for s in [4, 12, 20, 27]:
+		for iy in range(4, TILE_SIZE - 4):
+			for dx in range(3):
+				if s + dx < TILE_SIZE - 2:
+					img.set_pixel(x + s + dx, y + iy, stripe_col)
+
+func _draw_bed(img: Image, x: int, y: int) -> void:
+	for iy in range(3, TILE_SIZE - 3):
+		for ix in range(5, TILE_SIZE - 5):
+			var c = Color(0.32, 0.45, 0.62) # 침구 담요 (차분한 네이비 블루)
+			if ix == 5 or ix == TILE_SIZE - 6 or iy == 3 or iy == TILE_SIZE - 4:
+				c = Color(0.38, 0.24, 0.14) # 원목 프레임
+			elif iy <= 10 and ix >= 7 and ix <= TILE_SIZE - 8:
+				c = Color(0.90, 0.90, 0.88) # 흰색 베개
+			elif iy == 11:
+				c = Color(0.75, 0.78, 0.82) # 시트 접힌 부분
+			img.set_pixel(x + ix, y + iy, c)
+
+func _draw_desk(img: Image, x: int, y: int) -> void:
+	for iy in range(5, TILE_SIZE - 5):
+		for ix in range(3, TILE_SIZE - 3):
+			var c = Color(0.52, 0.36, 0.22) # 원목 책상 상판
+			if ix == 3 or ix == TILE_SIZE - 4 or iy == 5 or iy == TILE_SIZE - 6:
+				c = Color(0.28, 0.18, 0.10) # 테두리
+			elif ix == int(TILE_SIZE * 0.62):
+				c = Color(0.34, 0.22, 0.12) # 서랍 구분선
+			elif ix >= 7 and ix <= 14 and iy >= 9 and iy <= 16:
+				c = Color(0.86, 0.85, 0.78) # 놓여있는 서류 용지
+			elif ix >= TILE_SIZE - 9 and ix <= TILE_SIZE - 7 and iy == TILE_SIZE - 7:
+				c = Color(0.85, 0.72, 0.25) # 황동 서랍 손잡이
+			img.set_pixel(x + ix, y + iy, c)
+
+func _draw_shelf(img: Image, x: int, y: int) -> void:
+	for iy in range(4, TILE_SIZE - 4):
+		for ix in range(3, TILE_SIZE - 3):
+			var c = Color(0.36, 0.38, 0.42) # 철제/목재 선반 프레임
+			if ix == 3 or ix == TILE_SIZE - 4 or iy == 4 or iy == TILE_SIZE - 5 or iy == 12 or iy == 20:
+				c = Color(0.22, 0.24, 0.28) # 선반 칸막이
+			else:
+				if (ix >= 6 and ix <= 11) and (iy >= 6 and iy <= 10):
+					c = Color(0.75, 0.32, 0.22) # 붉은 상자/통조림
+				elif (ix >= 14 and ix <= 21) and (iy >= 6 and iy <= 10):
+					c = Color(0.28, 0.58, 0.36) # 녹색 탄약/구급팩
+				elif (ix >= 7 and ix <= 16) and (iy >= 14 and iy <= 18):
+					c = Color(0.68, 0.56, 0.32) # 종이 박스
+				elif (ix >= 19 and ix <= 25) and (iy >= 14 and iy <= 18):
+					c = Color(0.32, 0.52, 0.78) # 생수/물품
+			img.set_pixel(x + ix, y + iy, c)
+
+func _draw_door_locked(img: Image, x: int, y: int) -> void:
+	for iy in range(TILE_SIZE):
+		for ix in range(TILE_SIZE):
+			var c = Color(0.22, 0.25, 0.30) # 중장갑 강철 보안문
+			if ix < 3 or ix > TILE_SIZE - 4 or iy < 3 or iy > TILE_SIZE - 4:
+				c = Color(0.12, 0.14, 0.18) # 강철 문틀
+			elif iy >= 6 and iy <= 9:
+				# 적색/황색 보안 경고 스트라이프
+				c = Color(0.85, 0.18, 0.18) if ((ix + iy) / 3) % 2 == 0 else Color(0.88, 0.72, 0.15)
+			elif ix >= TILE_SIZE - 10 and ix <= TILE_SIZE - 5 and iy >= 13 and iy <= 20:
+				# 전자식 키패드 / 황금 자물쇠 인디케이터
+				c = Color(0.95, 0.78, 0.20)
+				if ix >= TILE_SIZE - 8 and ix <= TILE_SIZE - 7 and iy >= 15 and iy <= 16:
+					c = Color(1.0, 0.15, 0.15) # 적색 LOCKED LED
+			img.set_pixel(x + ix, y + iy, c)
+

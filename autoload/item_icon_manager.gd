@@ -169,6 +169,10 @@ func _generate_icon(item_id: String) -> Texture2D:
 		_draw_vase(img, size)
 	elif item_id.contains("무전기") or item_id.contains("라디오"):
 		_draw_radio(img, size)
+	elif item_id.contains("열쇠") or lower_id.contains("key_"):
+		_draw_key(img, size)
+	elif item_id.contains("키카드") or lower_id.contains("keycard"):
+		_draw_keycard(img, size)
 	elif item_id.contains("SSD") or lower_id.contains("ssd"):
 		_draw_ssd(img, size)
 	else:
@@ -855,3 +859,36 @@ func _draw_generic_box(img: Image, _size: int) -> void:
 			var c = Color(0.5, 0.5, 0.55)
 			if x == 8 or x == 23 or y == 8 or y == 23: c = Color(0.2, 0.2, 0.25)
 			img.set_pixel(x, y, c)
+
+func _draw_key(img: Image, _size: int) -> void:
+	var brass = Color(0.92, 0.76, 0.24)
+	var dark_brass = Color(0.62, 0.48, 0.12)
+	# 열쇠 손잡이 고리 (좌상단 원형)
+	for x in range(6, 16):
+		for y in range(9, 19):
+			var d2 = (x - 10.5) * (x - 10.5) + (y - 13.5) * (y - 13.5)
+			if d2 <= 20.0 and d2 >= 5.0:
+				img.set_pixel(x, y, brass if y < 14 else dark_brass)
+	# 열쇠 몸통 축
+	for x in range(15, 27):
+		img.set_pixel(x, 13, brass)
+		img.set_pixel(x, 14, dark_brass)
+	# 열쇠 이빨 (우하단)
+	for x in [21, 22, 25, 26]:
+		for y in range(15, 19):
+			img.set_pixel(x, y, brass)
+
+func _draw_keycard(img: Image, _size: int) -> void:
+	for x in range(5, 27):
+		for y in range(8, 24):
+			var c = Color(0.15, 0.38, 0.72) # 블루 보안 카드 본체
+			if x == 5 or x == 26 or y == 8 or y == 23:
+				c = Color(0.85, 0.90, 0.98) # 흰색 테두리
+			elif y >= 10 and y <= 12:
+				c = Color(0.10, 0.12, 0.16) # 마그네틱 띠
+			elif x >= 8 and x <= 12 and y >= 15 and y <= 19:
+				c = Color(0.95, 0.80, 0.25) # IC 골드 칩
+			elif x >= 15 and x <= 23 and (y == 16 or y == 19):
+				c = Color(0.65, 0.82, 0.98) # 바코드/텍스트 라인
+			img.set_pixel(x, y, c)
+

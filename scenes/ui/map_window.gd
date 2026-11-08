@@ -104,9 +104,9 @@ func _on_map_draw() -> void:
 				var t_scr = c_scr + Vector2(lx * cell_w, ly * cell_w)
 				var t_sz = Vector2(cell_w + 0.3, cell_w + 0.3)
 				
-				if obj_coords == TileManager.OBJ_WALL or obj_coords == TileManager.OBJ_DOOR_CLOSED or obj_coords == TileManager.OBJ_DOOR_OPEN:
+				if obj_coords == TileManager.OBJ_WALL or obj_coords == TileManager.OBJ_DOOR_CLOSED or obj_coords == TileManager.OBJ_DOOR_OPEN or obj_coords == TileManager.OBJ_DOOR_LOCKED:
 					map_canvas.draw_rect(Rect2(t_scr, t_sz), Color(0.38, 0.44, 0.52, 0.9)) # 건물 구조체
-				elif tile_coords == TileManager.TILE_ROAD or tile_coords == TileManager.TILE_ROAD_LINE or tile_coords == TileManager.TILE_CONCRETE:
+				elif tile_coords == TileManager.TILE_ROAD or tile_coords == TileManager.TILE_ROAD_LINE or tile_coords == TileManager.TILE_ROAD_LINE_H or tile_coords == TileManager.TILE_CROSSWALK or tile_coords == TileManager.TILE_CONCRETE:
 					map_canvas.draw_rect(Rect2(t_scr, t_sz), Color(0.26, 0.28, 0.30, 0.85)) # 도로/아스팔트
 				elif tile_coords == TileManager.TILE_WATER:
 					map_canvas.draw_rect(Rect2(t_scr, t_sz), Color(0.15, 0.30, 0.48, 0.8)) # 수역

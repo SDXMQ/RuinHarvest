@@ -131,11 +131,15 @@ func _update_interaction(delta: float) -> void:
 		var tile_coords = object_layer.get_cell_atlas_coords(t_pos)
 		
 		var texts = {
-			Vector2i(3,1): "[E] 수색하기", Vector2i(4,1): "[E] 가구 수색하기",
+			Vector2i(3,1): "[E] 수색하기", Vector2i(4,1): "[E] 드럼통 수색하기",
 			Vector2i(5,1): "[E] 잔해물 뒤지기", Vector2i(6,1): "[E] 문 열기",
 			Vector2i(7,1): "[E] 문 닫기", Vector2i(0,2): "[E] 냉장고 수색하기",
 			Vector2i(1,2): "[E] 창문 깨기", Vector2i(2,2): "[E 꾹 누르기] 창문 넘어가기",
-			Vector2i(5,2): "[E] 조명 스위치 작동"
+			Vector2i(5,2): "[E] 조명 스위치 작동",
+			Vector2i(0,3): "[E] 침대 수색하기",
+			Vector2i(1,3): "[E] 책상 서랍 수색하기",
+			Vector2i(2,3): "[E] 선반장 수색하기",
+			Vector2i(3,3): "[E] 🔒 보안 잠금문 해제 (열쇠 / 보안 키카드)"
 		}
 		if texts.has(tile_coords):
 			can_interact = true

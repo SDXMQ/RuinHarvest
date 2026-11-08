@@ -75,8 +75,37 @@ func _load_all_items():
 						d["ammo"] = res.ammo
 					items[res.id] = d
 			fname = dir.get_next()
+	# 잠긴 특수 방(무기고/원장실) 개방용 열쇠 및 보안 키카드 내장 등록
+	if not items.has("무기고 열쇠"):
+		items["무기고 열쇠"] = {
+			"id": "무기고 열쇠",
+			"name": "무기고 열쇠",
+			"category": ItemCategory.QUEST,
+			"type": "key",
+			"description": "경찰서 및 군사 시설의 잠긴 무기고 보안문을 여는 강철 열쇠입니다. (안전 컨테이너 보관 가능)",
+			"stackable": false,
+			"max_stack": 1,
+			"weight": 0.05,
+			"rarity": 3,
+			"value": 18000,
+			"effects": {}
+		}
+	if not items.has("보안 키카드"):
+		items["보안 키카드"] = {
+			"id": "보안 키카드",
+			"name": "보안 키카드",
+			"category": ItemCategory.QUEST,
+			"type": "keycard",
+			"description": "병원 원장실 및 특수 보안 구역의 전자 잠금장치를 해제하는 마그네틱 키카드입니다. (안전 컨테이너 보관 가능)",
+			"stackable": false,
+			"max_stack": 1,
+			"weight": 0.05,
+			"rarity": 4,
+			"value": 28000,
+			"effects": {}
+		}
 
-# 13개 장소별 루트 테이블
+# 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {
 	"crate": [
 		{"id": "식량통조림", "chance": 0.35}, {"id": "생수", "chance": 0.35},
@@ -96,6 +125,26 @@ var loot_tables: Dictionary = {
 		{"id": "식량통조림", "chance": 0.5}, {"id": "생수", "chance": 0.5},
 		{"id": "초콜릿", "chance": 0.3}, {"id": "에너지드링크", "chance": 0.25}
 	],
+	"residential": [
+		{"id": "식량통조림", "chance": 0.5}, {"id": "생수", "chance": 0.5},
+		{"id": "초콜릿", "chance": 0.25}, {"id": "에너지드링크", "chance": 0.25}
+	],
+	"bed": [
+		{"id": "붕대", "chance": 0.45}, {"id": "진통제", "chance": 0.3},
+		{"id": "천", "chance": 0.4}, {"id": "1레벨_가방", "chance": 0.12},
+		{"id": "은반지", "chance": 0.12}
+	],
+	"desk": [
+		{"id": "나침반", "chance": 0.18}, {"id": "지도", "chance": 0.18},
+		{"id": "9mm", "chance": 0.28}, {"id": "CPU", "chance": 0.15},
+		{"id": "금시계", "chance": 0.12}, {"id": "장거리 무전기", "chance": 0.08},
+		{"id": "무기고 열쇠", "chance": 0.08}, {"id": "보안 키카드", "chance": 0.05}
+	],
+	"shelf": [
+		{"id": "식량통조림", "chance": 0.35}, {"id": "생수", "chance": 0.35},
+		{"id": "고철", "chance": 0.35}, {"id": "못", "chance": 0.3},
+		{"id": "손전등", "chance": 0.2}, {"id": "비상용 배터리", "chance": 0.2}
+	],
 	"house": [
 		{"id": "식량통조림", "chance": 0.3}, {"id": "생수", "chance": 0.3},
 		{"id": "마른 빵", "chance": 0.2}, {"id": "나이프", "chance": 0.1},
@@ -112,6 +161,18 @@ var loot_tables: Dictionary = {
 		{"id": "레버액션 소총", "chance": 0.05}, {"id": "방탄조끼", "chance": 0.12},
 		{"id": "구급상자", "chance": 0.2}, {"id": "수류탄", "chance": 0.1},
 		{"id": "암호화된 SSD", "chance": 0.05}
+	],
+	"locked_armory": [
+		{"id": "5.56mm", "chance": 0.65}, {"id": "7.62mm", "chance": 0.65},
+		{"id": "3레벨_방탄복", "chance": 0.35}, {"id": "3레벨_헬멧", "chance": 0.35},
+		{"id": "수류탄", "chance": 0.45}, {"id": "소음기", "chance": 0.3},
+		{"id": "4배율_ACOG", "chance": 0.28}, {"id": "암호화된 SSD", "chance": 0.25},
+		{"id": "장거리 무전기", "chance": 0.25}
+	],
+	"locked_medical": [
+		{"id": "고급 치료킷", "chance": 0.75}, {"id": "구급상자", "chance": 0.65},
+		{"id": "진통제", "chance": 0.55}, {"id": "암호화된 SSD", "chance": 0.35},
+		{"id": "그래픽카드", "chance": 0.22}, {"id": "금시계", "chance": 0.3}
 	]
 }
 
@@ -150,7 +211,10 @@ var traders: Dictionary = {
 			{"id": "천", "price": 200, "amount": 5},
 			{"id": "폐전선", "price": 1200},
 			{"id": "손전등", "price": 2000},
-			{"id": "가방", "price": 8000}
+			{"id": "가방", "price": 8000},
+			{"id": "장거리 무전기", "price": 9500},
+			{"id": "무기고 열쇠", "price": 22000},
+			{"id": "보안 키카드", "price": 32000}
 		]
 	}
 }

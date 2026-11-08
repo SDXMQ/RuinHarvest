@@ -2,10 +2,11 @@
 class_name WorldGenerator
 extends RefCounted
 
-## 비선형 도로망, 12종 건물 프리셋, 울타리/마당, 자갈길 연결을 지원하는 절차적 월드 생성기
+## 도심 격자 + 외곽 연속 곡선(SDF) 하이브리드 도로망, 12종 다중 방 건축 평면도, 실내 마스크 보호를 지원하는 절차적 월드 생성기
 
 const CHUNK_SIZE: int = 16
-const LOT_SIZE: int = 32 # 건물 필지 그리드 크기
+const LOT_SIZE: int = 32 # 건물 필지 그리드 크기 (주간선 64 간격, 보조도로 32 간격과 정렬)
+const MAIN_ROAD_PITCH: int = 64
 
 var noise: FastNoiseLite
 var biome_noise: FastNoiseLite
@@ -28,18 +29,18 @@ func _init(seed_value: int) -> void:
 	road_warp_noise = FastNoiseLite.new()
 	road_warp_noise.seed = seed_value + 2
 	road_warp_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX
-	road_warp_noise.frequency = 0.03
+	road_warp_noise.frequency = 0.02
 
 # ==========================================================
 # 바이옴 판정
 # ==========================================================
 func get_biome(wx: int, wy: int) -> String:
-	var dist = sqrt(wx * wx + wy * wy)
+	var dist = sqrt(float(wx * wx + wy * wy))
 	var noise_val = biome_noise.get_noise_2d(wx, wy)
 	
-	if dist < 35:
+	if dist < 35.0:
 		return "residential" # 스폰 중심 주거지
-	elif dist < 140:
+	elif dist < 140.0:
 		if noise_val > 0.35: return "military"
 		elif noise_val > 0.1: return "industrial"
 		elif noise_val > -0.15: return "commercial"
@@ -50,52 +51,106 @@ func get_biome(wx: int, wy: int) -> String:
 		else: return "forest"
 
 # ==========================================================
-# 도로 판정 (도메인 워핑 기반 유기적 비선형 도로)
+# 하이브리드 도로망 판정 (도심 반듯한 직교 도로 + 외곽 연속 1D 곡선 중심선 도로)
 # ==========================================================
-func _get_warped_coords(wx: int, wy: int) -> Vector2:
-	# 노이즈를 통한 좌표 워핑으로 직선 도로를 부드러운 곡선으로 변형
-	var warp_x = road_warp_noise.get_noise_2d(wx * 0.5, wy * 0.5) * 6.0
-	var warp_y = road_warp_noise.get_noise_2d(wx * 0.5 + 50.0, wy * 0.5 + 50.0) * 6.0
-	return Vector2(wx + warp_x, wy + warp_y)
+func _get_v_highway_x0(kx: int, wy: int) -> int:
+	var anchor_dist = sqrt(float((kx * MAIN_ROAD_PITCH) * (kx * MAIN_ROAD_PITCH) + wy * wy))
+	var blend = clamp((anchor_dist - 135.0) / 40.0, 0.0, 1.0)
+	var curve = 0.0
+	if blend > 0.0:
+		curve = road_warp_noise.get_noise_2d(float(wy) * 0.55, float(kx) * 37.0) * 10.0 * blend
+	var center_x = float(kx * MAIN_ROAD_PITCH) + 1.5 + curve
+	return int(floor(center_x)) - 1
+
+func _get_h_highway_y0(ky: int, wx: int) -> int:
+	var anchor_dist = sqrt(float(wx * wx + (ky * MAIN_ROAD_PITCH) * (ky * MAIN_ROAD_PITCH)))
+	var blend = clamp((anchor_dist - 135.0) / 40.0, 0.0, 1.0)
+	var curve = 0.0
+	if blend > 0.0:
+		curve = road_warp_noise.get_noise_2d(float(wx) * 0.55, float(ky) * 53.0 + 100.0) * 10.0 * blend
+	var center_y = float(ky * MAIN_ROAD_PITCH) + 1.5 + curve
+	return int(floor(center_y)) - 1
+
+func _get_block_info(block_x: int, block_y: int) -> Dictionary:
+	var bc_x = block_x * MAIN_ROAD_PITCH + 32
+	var bc_y = block_y * MAIN_ROAD_PITCH + 32
+	var bc_dist = sqrt(float(bc_x * bc_x + bc_y * bc_y))
+	var bc_biome = get_biome(bc_x, bc_y)
+	return {
+		"is_urban": bc_dist <= 136.0 and bc_biome != "forest",
+		"biome": bc_biome
+	}
+
+func get_road_tile(wx: int, wy: int) -> Vector2i:
+	var kx = int(round((float(wx) - 1.5) / float(MAIN_ROAD_PITCH)))
+	var x0 = _get_v_highway_x0(kx, wy)
+	var in_v_main = (wx >= x0 and wx <= x0 + 3)
+	
+	var ky = int(round((float(wy) - 1.5) / float(MAIN_ROAD_PITCH)))
+	var y0 = _get_h_highway_y0(ky, wx)
+	var in_h_main = (wy >= y0 and wy <= y0 + 3)
+	
+	var block_x = int(floor(float(wx) / float(MAIN_ROAD_PITCH)))
+	var block_y = int(floor(float(wy) / float(MAIN_ROAD_PITCH)))
+	var b_info = _get_block_info(block_x, block_y)
+	var is_urban_block: bool = b_info["is_urban"]
+	var block_biome: String = b_info["biome"]
+	
+	var mx64 = posmod(wx, MAIN_ROAD_PITCH)
+	var my64 = posmod(wy, MAIN_ROAD_PITCH)
+	
+	# 보조 도로 (폭 2타일): 64x64 도시 블록 단위로 양끝 주간선 도로까지 끊김 없이 관통
+	var in_h_sec = false
+	var in_v_sec = false
+	if is_urban_block:
+		if my64 == 32 or my64 == 33:
+			var left_x0 = _get_v_highway_x0(block_x, wy)
+			var right_x0 = _get_v_highway_x0(block_x + 1, wy)
+			in_h_sec = (wx >= left_x0 and wx <= right_x0 + 3)
+		if block_biome != "residential" and (mx64 == 32 or mx64 == 33):
+			var top_y0 = _get_h_highway_y0(block_y, wx)
+			var bot_y0 = _get_h_highway_y0(block_y + 1, wx)
+			in_v_sec = (wy >= top_y0 and wy <= bot_y0 + 3)
+	
+	var in_v = in_v_main or in_v_sec
+	var in_h = in_h_main or in_h_sec
+	
+	if not in_v and not in_h:
+		return Vector2i(-1, -1)
+		
+	# 교차로 내부는 차선 겹침 없이 깔끔한 아스팔트 처리
+	if in_v and in_h:
+		return TileManager.TILE_ROAD
+		
+	# 도심 주간선 교차로 직전 횡단보도 마킹
+	if is_urban_block and in_v_main and (my64 == 5 or my64 == 62):
+		return TileManager.TILE_CROSSWALK
+		
+	# 연속 중앙선 (주간선 폭 4타일 중 중심 타일 x0+1 / y0+1)
+	if in_v_main and wx == x0 + 1:
+		return TileManager.TILE_ROAD_LINE
+	if in_h_main and wy == y0 + 1:
+		return TileManager.TILE_ROAD_LINE_H
+		
+	return TileManager.TILE_ROAD
 
 func is_road(wx: int, wy: int) -> bool:
-	var biome = get_biome(wx, wy)
-	var warped = _get_warped_coords(wx, wy)
-	
-	if biome == "forest":
-		# 숲에서는 주요 간선 도로만 통과 (60 간격, 두께 3)
-		var frx = fposmod(warped.x, 60.0)
-		if frx > 30.0: frx = 60.0 - frx
-		var fry = fposmod(warped.y, 60.0)
-		if fry > 30.0: fry = 60.0 - fry
-		return frx <= 1.5 or fry <= 1.5
-		
-	# 주간선도로 (40간격, 두께 4)
-	var rx = fposmod(warped.x, 40.0)
-	if rx > 20.0: rx = 40.0 - rx
-	var ry = fposmod(warped.y, 40.0)
-	if ry > 20.0: ry = 40.0 - ry
-	
-	if rx <= 2.0 or ry <= 2.0:
-		return true
-		
-	# 보조도로 (20간격, 두께 2 - 상업/공업/군사 지역)
-	if biome != "residential":
-		var sx = fposmod(warped.x, 20.0)
-		if sx > 10.0: sx = 20.0 - sx
-		var sy = fposmod(warped.y, 20.0)
-		if sy > 10.0: sy = 20.0 - sy
-		if sx <= 1.0 or sy <= 1.0:
-			return true
-			
-	return false
+	return get_road_tile(wx, wy) != Vector2i(-1, -1)
 
 func is_sidewalk(wx: int, wy: int) -> bool:
-	if is_road(wx, wy): return false
-	# 도로에 바로 인접한 1타일은 보도블록/인도
+	if is_road(wx, wy):
+		return false
+	var block_x = int(floor(float(wx) / float(MAIN_ROAD_PITCH)))
+	var block_y = int(floor(float(wy) / float(MAIN_ROAD_PITCH)))
+	if not _get_block_info(block_x, block_y)["is_urban"]:
+		var dist = sqrt(float(wx * wx + wy * wy))
+		if dist > 142.0 or get_biome(wx, wy) == "forest":
+			return false
+	# 도심 도로 바로 바깥 1타일 보도블록
 	for dy in range(-1, 2):
 		for dx in range(-1, 2):
-			if dx == 0 and dy == 0: continue
+			if dx == 0 and dy == 0:
+				continue
 			if is_road(wx + dx, wy + dy):
 				return true
 	return false
@@ -103,9 +158,24 @@ func is_sidewalk(wx: int, wy: int) -> bool:
 # ==========================================================
 # 건물 필지(Lot) 및 프리셋 조회
 # ==========================================================
+static func is_point_in_building(b: Dictionary, wx: int, wy: int) -> bool:
+	if b.is_empty():
+		return false
+	var rel_x = wx - int(b["wx"])
+	var rel_y = wy - int(b["wy"])
+	var bw = int(b["width"])
+	var bh = int(b["height"])
+	if rel_x < 0 or rel_x >= bw or rel_y < 0 or rel_y >= bh:
+		return false
+	var preset: Dictionary = b.get("preset", {})
+	if preset.get("shape", "rect") == "l_shape":
+		if rel_x >= bw / 2 and rel_y < bh / 2:
+			return false
+	return true
+
 func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 	var lot_rng = RandomNumberGenerator.new()
-	var lot_seed = rng_seed ^ (lot_x * 73856093) ^ (lot_y * 19349663)
+	var lot_seed = int(rng_seed ^ (lot_x * 73856093) ^ (lot_y * 19349663))
 	lot_rng.seed = lot_seed
 	
 	var lot_origin_x = lot_x * LOT_SIZE
@@ -114,33 +184,46 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 	var center_wy = lot_origin_y + int(LOT_SIZE * 0.5)
 	
 	var biome = get_biome(center_wx, center_wy)
-	if biome == "forest" and lot_rng.randf() > 0.3:
-		return {} # 숲에는 건물 빈도 낮춤
-		
-	# 중심부가 도로인지 확인
-	if is_road(center_wx, center_wy):
-		return {}
+	if biome == "forest" and lot_rng.randf() > 0.25:
+		return {} # 숲 외곽은 건물 밀도 낮춤
 		
 	var preset = BuildingPresets.get_preset_for_biome(biome, lot_rng)
 	if preset.is_empty():
 		return {}
 		
-	# 건물 크기 및 배치 오프셋 (필지 내에서 여백 다양성)
-	var bw = preset["width"]
-	var bh = preset["height"]
-	var max_off_x = LOT_SIZE - bw - 8
-	var max_off_y = LOT_SIZE - bh - 8
-	if max_off_x < 0 or max_off_y < 0:
+	var bw = int(preset["width"])
+	var bh = int(preset["height"])
+	var has_yard = bool(preset.get("has_yard", false))
+	var yard_m = int(preset.get("yard_margin", 0)) if has_yard else 0
+	
+	# 필지 내 도로/보도블록(좌상단 0..5, 우하단 30..31)을 피한 순수 건축 가능 영역: [6 .. 29] (24x24)
+	var usable_min_x = lot_origin_x + 6
+	var usable_max_x = lot_origin_x + LOT_SIZE - 2 # 30 (exclusive upper bound)
+	var usable_min_y = lot_origin_y + 6
+	var usable_max_y = lot_origin_y + LOT_SIZE - 2
+	
+	var tot_w = bw + yard_m * 2
+	var tot_h = bh + yard_m * 2
+	if tot_w > (usable_max_x - usable_min_x) or tot_h > (usable_max_y - usable_min_y):
 		return {}
 		
-	var b_x = lot_origin_x + 4 + lot_rng.randi_range(0, max(0, max_off_x))
-	var b_y = lot_origin_y + 4 + lot_rng.randi_range(0, max(0, max_off_y))
+	var slack_x = (usable_max_x - usable_min_x) - tot_w
+	var slack_y = (usable_max_y - usable_min_y) - tot_h
+	var b_x = usable_min_x + yard_m + lot_rng.randi_range(0, max(0, slack_x))
+	# 남쪽 가로 도로를 마주하도록 필지 남측 전면부에 정렬 배치
+	var south_setback = lot_rng.randi_range(0, min(2, max(0, slack_y)))
+	var b_y = usable_max_y - yard_m - bh - south_setback
 	
-	# 건물이 도로와 겹치지 않는지 확인
-	for cy in range(b_y - 1, b_y + bh + 1):
-		for cx in range(b_x - 1, b_x + bw + 1):
+	# 월드 스폰 지점 (0,0) 광장 보호
+	var full_rect = Rect2i(b_x - yard_m - 1, b_y - yard_m - 1, tot_w + 2, tot_h + 2)
+	if full_rect.intersects(Rect2i(-7, -7, 14, 14)):
+		return {}
+		
+	# 도로(특히 숲 외곽 곡선 도로)와의 겹침 완전 배제
+	for cy in range(b_y - yard_m - 1, b_y + bh + yard_m + 1):
+		for cx in range(b_x - yard_m - 1, b_x + bw + yard_m + 1):
 			if is_road(cx, cy):
-				return {} # 도로와 겹치면 취소
+				return {}
 				
 	return {
 		"preset": preset,
@@ -159,35 +242,54 @@ func get_building_at(wx: int, wy: int) -> Dictionary:
 	for ly in range(lot_y - 1, lot_y + 2):
 		for lx in range(lot_x - 1, lot_x + 2):
 			var b = _get_lot_building(lx, ly)
-			if not b.is_empty():
-				var bx = b["wx"]
-				var by = b["wy"]
-				var bw = b["width"]
-				var bh = b["height"]
-				if wx >= bx and wx < bx + bw and wy >= by and wy < by + bh:
-					return b
+			if not b.is_empty() and is_point_in_building(b, wx, wy):
+				return b
 	return {}
 
+func _furniture_type_to_atlas(f_type: String) -> Vector2i:
+	match f_type:
+		"bed": return TileManager.OBJ_BED
+		"desk": return TileManager.OBJ_DESK
+		"shelf": return TileManager.OBJ_SHELF
+		"fridge": return TileManager.OBJ_FRIDGE
+		"barrel": return TileManager.OBJ_BARREL
+		_: return TileManager.OBJ_CRATE
+
 # ==========================================================
-# 청크 생성 (타일, 오브젝트, 지붕, 엔티티)
+# 다단계 청크 생성 파이프라인 (실내 잔디/나무 침범 및 통로 막힘 원천 차단)
 # ==========================================================
 func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
+	var total_cells = CHUNK_SIZE * CHUNK_SIZE
 	var tiles: Array[Vector2i] = []
 	var objects: Array[Vector2i] = []
 	var roofs: Array[Vector2i] = []
 	var entities: Array[Dictionary] = []
 	
-	tiles.resize(CHUNK_SIZE * CHUNK_SIZE)
-	objects.resize(CHUNK_SIZE * CHUNK_SIZE)
-	roofs.resize(CHUNK_SIZE * CHUNK_SIZE)
+	tiles.resize(total_cells)
+	objects.resize(total_cells)
+	roofs.resize(total_cells)
 	
-	for i in range(CHUNK_SIZE * CHUNK_SIZE):
+	var inside_building := PackedByteArray()
+	inside_building.resize(total_cells)
+	var protected_zone := PackedByteArray()
+	protected_zone.resize(total_cells)
+	var road_mask := PackedByteArray()
+	road_mask.resize(total_cells)
+	var sidewalk_mask := PackedByteArray()
+	sidewalk_mask.resize(total_cells)
+	
+	for i in range(total_cells):
+		objects[i] = Vector2i(-1, -1)
 		roofs[i] = Vector2i(-1, -1)
-	
+		inside_building[i] = 0
+		protected_zone[i] = 0
+		road_mask[i] = 0
+		sidewalk_mask[i] = 0
+		
 	var start_wx = chunk_pos.x * CHUNK_SIZE
 	var start_wy = chunk_pos.y * CHUNK_SIZE
 	
-	# 1. 주변 Lot에서 생성된 건물 리스트 수집
+	# 주변 필지의 활성 건물 수집
 	var min_lot_x = int(floor(float(start_wx - LOT_SIZE) / float(LOT_SIZE)))
 	var max_lot_x = int(floor(float(start_wx + CHUNK_SIZE + LOT_SIZE) / float(LOT_SIZE)))
 	var min_lot_y = int(floor(float(start_wy - LOT_SIZE) / float(LOT_SIZE)))
@@ -200,202 +302,220 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 			if not b.is_empty():
 				active_buildings.append(b)
 				
-	# 2. 청크 내 각 타일 순회 생성
 	var chunk_rng = RandomNumberGenerator.new()
-	chunk_rng.seed = rng_seed ^ (chunk_pos.x * 374761393) ^ (chunk_pos.y * 668265263)
+	chunk_rng.seed = int(rng_seed ^ (chunk_pos.x * 374761393) ^ (chunk_pos.y * 668265263))
 	
+	# [Pass 1] 기본 지형, 도로망, 인도 생성
 	for cy in range(CHUNK_SIZE):
 		for cx in range(CHUNK_SIZE):
 			var idx = cy * CHUNK_SIZE + cx
 			var wx = start_wx + cx
 			var wy = start_wy + cy
-			
 			var biome = get_biome(wx, wy)
-			var road = is_road(wx, wy)
-			var sidewalk = is_sidewalk(wx, wy)
-			
-			var tile_coords = TileManager.TILE_GRASS
-			var obj_coords = Vector2i(-1, -1)
-			var is_protected_zone = false # 문 앞 등 장애물 금지 구역
-			
-			# A. 기본 바닥 타일 결정
-			if road:
-				tile_coords = TileManager.TILE_ROAD
-				var warped = _get_warped_coords(wx, wy)
-				
-				# 중앙선 처리 (도로 중심에서 0.5 타일 이내일 때)
-				if biome == "forest":
-					var rx = fposmod(warped.x, 60.0)
-					if rx > 30.0: rx = 60.0 - rx
-					var ry = fposmod(warped.y, 60.0)
-					if ry > 30.0: ry = 60.0 - ry
-					if rx <= 0.5 or ry <= 0.5: tile_coords = TileManager.TILE_ROAD_LINE
-				else:
-					var rx = fposmod(warped.x, 40.0)
-					if rx > 20.0: rx = 40.0 - rx
-					var ry = fposmod(warped.y, 40.0)
-					if ry > 20.0: ry = 40.0 - ry
-					if rx <= 0.5 or ry <= 0.5: tile_coords = TileManager.TILE_ROAD_LINE
-					
-					if biome != "residential" and tile_coords != TileManager.TILE_ROAD_LINE:
-						var sx = fposmod(warped.x, 20.0)
-						if sx > 10.0: sx = 20.0 - sx
-						var sy = fposmod(warped.y, 20.0)
-						if sy > 10.0: sy = 20.0 - sy
-						if sx <= 0.5 or sy <= 0.5: tile_coords = TileManager.TILE_ROAD_LINE
-			elif sidewalk:
-				tile_coords = TileManager.TILE_CONCRETE
+			var r_tile = get_road_tile(wx, wy)
+			if r_tile != Vector2i(-1, -1):
+				tiles[idx] = r_tile
+				road_mask[idx] = 1
+			elif is_sidewalk(wx, wy):
+				tiles[idx] = TileManager.TILE_CONCRETE
+				sidewalk_mask[idx] = 1
 			else:
 				var n_val = noise.get_noise_2d(wx, wy)
-				if n_val > 0.2:
-					tile_coords = TileManager.TILE_DIRT
+				if n_val > 0.22:
+					tiles[idx] = TileManager.TILE_DIRT
 				elif biome == "military" or biome == "industrial":
-					tile_coords = TileManager.TILE_CONCRETE
-			
-			# B. 건물 및 마당/울타리/자갈길 체크
-			for b in active_buildings:
-				var b_x = b["wx"]
-				var b_y = b["wy"]
-				var bw = b["width"]
-				var bh = b["height"]
-				var preset = b["preset"]
-				var has_yard = preset.get("has_yard", false)
-				var yard_m = preset.get("yard_margin", 2)
-				var is_l_shape = preset.get("shape", "") == "l_shape"
-				
-				# 1) 건물 내부 영역 검사
-				var in_building = false
+					tiles[idx] = TileManager.TILE_CONCRETE
+				else:
+					tiles[idx] = TileManager.TILE_GRASS
+					
+	# [Pass 2] 건물 본체(바닥, 지붕, 외벽/문/창문, 내벽/방문/잠긴문, 벽면 정렬 가구) 배치 및 실내 마스크 고정
+	for b in active_buildings:
+		var b_x = int(b["wx"])
+		var b_y = int(b["wy"])
+		var bw = int(b["width"])
+		var bh = int(b["height"])
+		var preset: Dictionary = b["preset"]
+		var is_l_shape = preset.get("shape", "rect") == "l_shape"
+		var floor_tile: Vector2i = preset.get("floor_tile", TileManager.TILE_FLOOR_WOOD)
+		var ext_doors: Array = preset.get("doors", [])
+		var ext_windows: Array = preset.get("windows", [])
+		var inner_walls: Array = preset.get("inner_walls", [])
+		var inner_doors: Array = preset.get("inner_doors", [])
+		var locked_doors: Array = preset.get("locked_doors", [])
+		var furn_list: Array = preset.get("furniture", [])
+		
+		var ix0 = max(start_wx, b_x)
+		var ix1 = min(start_wx + CHUNK_SIZE, b_x + bw)
+		var iy0 = max(start_wy, b_y)
+		var iy1 = min(start_wy + CHUNK_SIZE, b_y + bh)
+		
+		for wy in range(iy0, iy1):
+			for wx in range(ix0, ix1):
+				if not is_point_in_building(b, wx, wy):
+					continue
+				var idx = (wy - start_wy) * CHUNK_SIZE + (wx - start_wx)
 				var rel_x = wx - b_x
 				var rel_y = wy - b_y
+				var pt = Vector2i(rel_x, rel_y)
 				
-				if rel_x >= 0 and rel_x < bw and rel_y >= 0 and rel_y < bh:
-					if is_l_shape:
-						# L자형: 우상단 빈 공간
-						if not (rel_x >= bw/2 and rel_y < bh/2):
-							in_building = true
-					else:
-						in_building = true
-						
-				if in_building:
-					tile_coords = preset.get("floor_tile", TileManager.TILE_FLOOR_WOOD)
-					roofs[idx] = TileManager.TILE_ROOF # 지붕 레이어에 지붕 타일 할당
-					
-					# 외벽 판정
-					var is_wall = false
+				inside_building[idx] = 1
+				protected_zone[idx] = 1
+				tiles[idx] = floor_tile
+				roofs[idx] = TileManager.TILE_ROOF
+				objects[idx] = Vector2i(-1, -1)
+				
+				var is_ext_wall = false
+				if is_l_shape:
+					if rel_x == 0 or rel_y == bh - 1:
+						is_ext_wall = true
+					elif rel_y == 0 and rel_x < bw / 2:
+						is_ext_wall = true
+					elif rel_x == bw - 1 and rel_y >= bh / 2:
+						is_ext_wall = true
+					elif rel_x == bw / 2 - 1 and rel_y <= bh / 2:
+						is_ext_wall = true
+					elif rel_y == bh / 2 and rel_x >= bw / 2 - 1:
+						is_ext_wall = true
+				else:
 					if rel_x == 0 or rel_x == bw - 1 or rel_y == 0 or rel_y == bh - 1:
-						is_wall = true
-					elif is_l_shape:
-						if (rel_x == bw/2 - 1 and rel_y < bh/2) or (rel_y == bh/2 and rel_x >= bw/2):
-							is_wall = true
-							
-					if is_wall:
-						var pt = Vector2i(rel_x, rel_y)
-						if pt in preset.get("doors", []):
-							obj_coords = TileManager.OBJ_DOOR_CLOSED # 닫힌 문
-						elif pt in preset.get("windows", []):
-							obj_coords = TileManager.OBJ_WINDOW # 창문
-						else:
-							obj_coords = TileManager.OBJ_WALL # 벽
+						is_ext_wall = true
+						
+				if is_ext_wall:
+					if pt in ext_doors:
+						objects[idx] = TileManager.OBJ_DOOR_CLOSED
+					elif pt in ext_windows:
+						objects[idx] = TileManager.OBJ_WINDOW
 					else:
-						# 실내 내부 가구 / 전리품 상자 배치
-						var furn_list = preset.get("furniture", [])
+						objects[idx] = TileManager.OBJ_WALL
+				else:
+					if pt in locked_doors:
+						objects[idx] = TileManager.OBJ_DOOR_LOCKED
+					elif pt in inner_doors:
+						objects[idx] = TileManager.OBJ_DOOR_OPEN
+					elif pt in inner_walls:
+						objects[idx] = TileManager.OBJ_WALL
+					else:
 						for f in furn_list:
-							if f.get("x") == rel_x and f.get("y") == rel_y:
-								var f_type = f.get("type", "crate")
-								if f_type == "fridge": obj_coords = TileManager.OBJ_FRIDGE
-								elif f_type == "barrel": obj_coords = TileManager.OBJ_BARREL
-								else: obj_coords = TileManager.OBJ_CRATE
+							if int(f.get("x", -1)) == rel_x and int(f.get("y", -1)) == rel_y:
+								objects[idx] = _furniture_type_to_atlas(String(f.get("type", "crate")))
 								break
 								
-						# 무작위 추가 가구/상자 스폰 (5% 확률)
-						if obj_coords == Vector2i(-1, -1) and chunk_rng.randf() < 0.05:
-							var r_roll = chunk_rng.randf()
-							if r_roll < 0.4: obj_coords = TileManager.OBJ_CRATE
-							elif r_roll < 0.7: obj_coords = TileManager.OBJ_BARREL
-							else: obj_coords = TileManager.OBJ_FRIDGE
-					continue
+	# [Pass 3] 마당, 울타리, 게이트 및 출입문 진입로 생성 (실내 마스크 및 도로 침범 절대 금지)
+	for b in active_buildings:
+		var b_x = int(b["wx"])
+		var b_y = int(b["wy"])
+		var bw = int(b["width"])
+		var bh = int(b["height"])
+		var preset: Dictionary = b["preset"]
+		var has_yard = bool(preset.get("has_yard", false))
+		var yard_m = int(preset.get("yard_margin", 0)) if has_yard else 0
+		var ext_doors: Array = preset.get("doors", [])
+		var path_tile = TileManager.TILE_GRAVEL if has_yard else TileManager.TILE_CONCRETE
+		
+		# 3-A. 마당 잔디 및 울타리
+		if has_yard and yard_m > 0:
+			var y_left = b_x - yard_m
+			var y_right = b_x + bw + yard_m - 1
+			var y_top = b_y - yard_m
+			var y_bottom = b_y + bh + yard_m - 1
+			
+			var yx0 = max(start_wx, y_left)
+			var yx1 = min(start_wx + CHUNK_SIZE, y_right + 1)
+			var yy0 = max(start_wy, y_top)
+			var yy1 = min(start_wy + CHUNK_SIZE, y_bottom + 1)
+			
+			for wy in range(yy0, yy1):
+				for wx in range(yx0, yx1):
+					var idx = (wy - start_wy) * CHUNK_SIZE + (wx - start_wx)
+					if inside_building[idx] == 1 or road_mask[idx] == 1:
+						continue
+					var on_fence = (wx == y_left or wx == y_right or wy == y_top or wy == y_bottom)
+					if on_fence:
+						var is_gate = false
+						for door_pos in ext_doors:
+							if wx == b_x + int(door_pos.x) and wy == y_bottom:
+								is_gate = true
+								break
+						if is_gate:
+							objects[idx] = TileManager.OBJ_GATE
+							tiles[idx] = path_tile
+							protected_zone[idx] = 1
+						elif protected_zone[idx] == 0 and objects[idx] == Vector2i(-1, -1) and sidewalk_mask[idx] == 0:
+							objects[idx] = TileManager.OBJ_FENCE
+					else:
+						if sidewalk_mask[idx] == 0 and protected_zone[idx] == 0:
+							tiles[idx] = TileManager.TILE_GRASS
+							
+		# 3-B. 출입문 앞 보호구역 및 도로/인도까지 이어지는 직선 진입로
+		for door_pos in ext_doors:
+			var door_wx = b_x + int(door_pos.x)
+			var door_wy = b_y + int(door_pos.y)
+			
+			for pwy in range(door_wy + 1, door_wy + yard_m + 8):
+				if is_road(door_wx, pwy):
+					break
+				for pwx in range(door_wx - 1, door_wx + 2):
+					if pwx >= start_wx and pwx < start_wx + CHUNK_SIZE and pwy >= start_wy and pwy < start_wy + CHUNK_SIZE:
+						var pidx = (pwy - start_wy) * CHUNK_SIZE + (pwx - start_wx)
+						if inside_building[pidx] == 1 or road_mask[pidx] == 1:
+							continue
+						protected_zone[pidx] = 1
+						if pwx == door_wx:
+							if sidewalk_mask[pidx] == 0:
+								tiles[pidx] = path_tile
+							if objects[pidx] != TileManager.OBJ_GATE:
+								objects[pidx] = Vector2i(-1, -1)
+						elif objects[pidx] != TileManager.OBJ_FENCE and objects[pidx] != TileManager.OBJ_GATE:
+							objects[pidx] = Vector2i(-1, -1)
+				if is_sidewalk(door_wx, pwy):
+					break
 					
-				# 2) 건물 출입구 앞 진입로 및 자갈길
-				for door_pos in preset.get("doors", []):
-					var door_wx = b_x + door_pos.x
-					var door_wy = b_y + door_pos.y
-					
-					# 문 앞 3x3 영역 보호
-					if abs(wx - door_wx) <= 1 and wy >= door_wy and wy <= door_wy + 2:
-						is_protected_zone = true
-						tile_coords = TileManager.TILE_GRAVEL
+	# [Pass 4] 야외 자연물(나무/바위) 및 폐차 스폰 (건물 내부·보호구역·인도 완전 제외)
+	for cy in range(CHUNK_SIZE):
+		for cx in range(CHUNK_SIZE):
+			var idx = cy * CHUNK_SIZE + cx
+			if inside_building[idx] == 1 or protected_zone[idx] == 1 or objects[idx] != Vector2i(-1, -1):
+				continue
+			var wx = start_wx + cx
+			var wy = start_wy + cy
+			
+			if road_mask[idx] == 1:
+				var rt = tiles[idx]
+				if rt == TileManager.TILE_ROAD and abs(wx) > 8 and abs(wy) > 8 and chunk_rng.randf() < 0.0035:
+					entities.append({
+						"type": "car",
+						"wx": wx,
+						"wy": wy,
+						"rotation": chunk_rng.randf_range(-0.18, 0.18)
+					})
+			elif sidewalk_mask[idx] == 0:
+				var biome = get_biome(wx, wy)
+				var spawn_roll = chunk_rng.randf()
+				var density = 0.09 if biome == "forest" else 0.035
+				if spawn_roll < density:
+					if spawn_roll < density * 0.60:
+						objects[idx] = TileManager.OBJ_TREE
+					elif spawn_roll < density * 0.82:
+						objects[idx] = TileManager.OBJ_ROCK
+					elif spawn_roll < density * 0.92:
+						objects[idx] = TileManager.OBJ_BARREL
+					else:
+						objects[idx] = TileManager.OBJ_CRATE
 						
-					# 문에서 남쪽/가장 가까운 도로까지 자갈길 연장
-					if wx == door_wx and wy > door_wy and wy <= door_wy + yard_m + 4:
-						tile_coords = TileManager.TILE_GRAVEL
-						is_protected_zone = true
-				
-				# 3) 마당 및 울타리/게이트 검사
-				if has_yard:
-					var y_left = b_x - yard_m
-					var y_right = b_x + bw + yard_m - 1
-					var y_top = b_y - yard_m
-					var y_bottom = b_y + bh + yard_m - 1
+	# [Pass 5] 스폰 중심지 (0,0) 장애물 안전 클리어 (도로/인도 및 건물 내부 보존)
+	for cy in range(CHUNK_SIZE):
+		for cx in range(CHUNK_SIZE):
+			var wx = start_wx + cx
+			var wy = start_wy + cy
+			if abs(wx) < 6 and abs(wy) < 6:
+				var idx = cy * CHUNK_SIZE + cx
+				if inside_building[idx] == 0:
+					objects[idx] = Vector2i(-1, -1)
 					
-					if wx >= y_left and wx <= y_right and wy >= y_top and wy <= y_bottom:
-						# 울타리 테두리
-						if wx == y_left or wx == y_right or wy == y_top or wy == y_bottom:
-							# 문 앞 게이트 위치 판정
-							var is_gate = false
-							for door_pos in preset.get("doors", []):
-								var door_wx = b_x + door_pos.x
-								if wx == door_wx and wy == y_bottom:
-									is_gate = true
-									break
-									
-							if is_gate:
-								obj_coords = TileManager.OBJ_GATE
-								tile_coords = TileManager.TILE_GRAVEL
-								is_protected_zone = true
-							elif obj_coords == Vector2i(-1, -1):
-								obj_coords = TileManager.OBJ_FENCE
-						else:
-							# 마당 내부 잔디
-							if tile_coords != TileManager.TILE_GRAVEL:
-								tile_coords = TileManager.TILE_GRASS
-			
-			# C. 야외 프랍 및 폐차 스폰 (오브젝트가 비어있을 때)
-			if obj_coords == Vector2i(-1, -1) and not is_protected_zone:
-				if road:
-					# 도로 위 버려진 차량
-					if chunk_rng.randf() < 0.004 and tile_coords != TileManager.TILE_ROAD_LINE:
-						var rot = chunk_rng.randf_range(-PI, PI)
-						entities.append({
-							"type": "car",
-							"wx": wx,
-							"wy": wy,
-							"rotation": rot
-						})
-				elif not sidewalk:
-					# 자연물 및 파밍 상자 스폰
-					var spawn_roll = chunk_rng.randf()
-					if spawn_roll < 0.07:
-						if spawn_roll < 0.04:
-							obj_coords = TileManager.OBJ_TREE
-						elif spawn_roll < 0.055:
-							obj_coords = TileManager.OBJ_ROCK
-						elif spawn_roll < 0.065:
-							obj_coords = TileManager.OBJ_BARREL
-						else:
-							obj_coords = TileManager.OBJ_CRATE
-			
-			# D. 중심부 스폰 안전지대 (0,0 근처)
-			if abs(wx) < 8 and abs(wy) < 8:
-				if not road and obj_coords != TileManager.OBJ_DOOR_CLOSED and obj_coords != TileManager.OBJ_WALL:
-					obj_coords = Vector2i(-1, -1)
-					tile_coords = TileManager.TILE_GRASS
-					
-			tiles[idx] = tile_coords
-			objects[idx] = obj_coords
-			
 	return {
 		"tiles": tiles,
 		"objects": objects,
 		"roofs": roofs,
+		"inside_mask": inside_building,
 		"entities": entities
 	}
