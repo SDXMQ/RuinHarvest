@@ -876,5 +876,109 @@ func _ready() -> void:
 	e_raider.free()
 	e_boss.free()
 
+	# Test 42: Night Stalker (EnemyType.NIGHT_STALKER) night check, flashlight cone evasion, and melee bio-infection
+	total_tests += 1
+	var t42_mw = preload("res://scenes/world/main_world.gd").new()
+	t42_mw.day_night_cycle_duration = 300.0
+	t42_mw.raid_total_time = 1800.0
+	t42_mw.raid_time_remaining = 1750.0 # elapsed 50s -> progress 0.166 (day)
+	var day_ok := not t42_mw.is_night_time()
+	t42_mw.raid_time_remaining = 1620.0 # elapsed 180s -> progress 0.60 (night)
+	var night_ok := t42_mw.is_night_time()
+	var t42_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t42_p)
+	t42_p.global_position = Vector2(100, 100)
+	t42_p.rotation = 0.0 # facing RIGHT (+X)
+	t42_p.set_flashlight(true)
+	t42_p.is_infected = false
+	var e_stalker = preload("res://scenes/entities/enemies/enemy.tscn").instantiate()
+	e_stalker.enemy_type = 6 # NIGHT_STALKER
+	add_child(e_stalker)
+	e_stalker.global_position = Vector2(240, 100) # directly in front of flashlight cone (140px)
+	e_stalker.target_player = t42_p
+	var exposed_on: bool = e_stalker.is_exposed_to_player_flashlight()
+	var evade_vel: Vector2 = e_stalker.compute_night_stalker_evade_velocity(t42_p.global_position)
+	var dir_to_p: Vector2 = e_stalker.global_position.direction_to(t42_p.global_position)
+	var evades_beam: bool = evade_vel.dot(dir_to_p) < 0.0 and abs(evade_vel.y) > 80.0
+	t42_p.set_flashlight(false)
+	var exposed_off: bool = e_stalker.is_exposed_to_player_flashlight()
+	e_stalker.attack_timer = 0.0
+	e_stalker._try_attack(t42_p)
+	var infected_hit: bool = t42_p.is_infected
+	if day_ok and night_ok and is_equal_approx(e_stalker.speed, 152.0) and exposed_on and not exposed_off and evades_beam and infected_hit:
+		print("[PASS] Test 42: Night Stalker spawns at night, flanks out of flashlight cone, and inflicts bio-infection on melee hit")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 42: Night Stalker check failed (day=%s, night=%s, exp_on=%s, exp_off=%s, evade=%s, inf=%s)" % [str(day_ok), str(night_ok), str(exposed_on), str(exposed_off), str(evades_beam), str(infected_hit)])
+	e_stalker.free()
+	t42_p.free()
+	t42_mw.free()
+
+	# Test 43: RadioWindow Emergency Supply Drone Drop (2,500 RUB) stocks tailored caliber ammo & medical gear
+	total_tests += 1
+	var t43_mw = preload("res://scenes/world/main_world.gd").new()
+	var t43_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t43_p)
+	t43_p.global_position = Vector2(320, 320)
+	t43_p.equipped_weapon_data = WeaponPartsDatabase.create_default_weapon("AK_리시버") # uses 7.62mm
+	GameManager.current_world_data = {"player": {"rubles": 6000}, "hideout": {"stash": []}}
+	var t43_radio = preload("res://scenes/ui/radio_window.tscn").instantiate()
+	add_child(t43_radio)
+	t43_radio.setup(t43_p, t43_mw)
+	var drop_ok: bool = t43_radio.request_emergency_supply_drop()
+	var rub_after_drop: int = int(GameManager.current_world_data["player"]["rubles"]) # 6000 - 2500 = 3500
+	var drop_tile := Vector2i(int(floor((320.0 + 64.0) / 32.0)), int(floor(320.0 / 32.0)))
+	var drop_inv: Inventory = t43_mw.container_inventories.get(drop_tile, null)
+	var has_ak_ammo: bool = drop_inv != null and drop_inv.get_item_count("7.62mm") >= 60 and drop_inv.get_item_count("고급 치료킷") >= 1
+	if drop_ok and rub_after_drop == 3500 and has_ak_ammo:
+		print("[PASS] Test 43: RadioWindow 2,500 RUB Emergency Drone Drop spawns tailored 7.62mm x60 & medical crate")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 43: Emergency drone supply drop failed (ok=%s, rub=%d, ammo_ok=%s)" % [str(drop_ok), rub_after_drop, str(has_ak_ammo)])
+	t43_radio.free()
+	t43_p.free()
+	t43_mw.free()
+
+	# Test 44: RadioWindow Fulton Extraction (2,000 RUB) transfers modded weapon to Hideout Stash preserving parts, ammo & durability
+	total_tests += 1
+	var t44_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t44_p)
+	t44_p.inventory_grid.resize_grid(6, 4)
+	var fulton_m4 = WeaponPartsDatabase.create_default_weapon("M4_리시버")
+	fulton_m4["parts"]["muzzle"] = "소음기"
+	fulton_m4["attachments"] = fulton_m4["parts"]
+	fulton_m4 = WeaponPartsDatabase.compute_weapon_from_dict(fulton_m4)
+	fulton_m4["current_magazine_ammo"] = 24
+	fulton_m4["durability"] = 77.0
+	t44_p.inventory_grid.auto_add_item("M4_리시버", 1, fulton_m4)
+	var m4_uid: String = String(t44_p.inventory_grid.items[0].get("uid", ""))
+	GameManager.current_world_data = {"player": {"rubles": 3500}, "hideout": {"stash": []}}
+	var t44_radio = preload("res://scenes/ui/radio_window.tscn").instantiate()
+	add_child(t44_radio)
+	t44_radio.setup(t44_p, null)
+	var fulton_ok: bool = t44_radio.request_fulton_extract_item(m4_uid)
+	var rub_after_fulton: int = int(GameManager.current_world_data["player"]["rubles"]) # 3500 - 2000 = 1500
+	var removed_from_bag: bool = t44_p.inventory_grid.items.is_empty()
+	var stash_arr: Array = GameManager.current_world_data["hideout"]["stash"]
+	var t44_stash_grid := InventoryGrid.new()
+	t44_stash_grid.grid_width = 10
+	t44_stash_grid.grid_height = 12
+	t44_stash_grid._init_grid_map()
+	t44_stash_grid.load_items(stash_arr)
+	var loaded_stash_m4: Dictionary = t44_stash_grid.items[0] if not t44_stash_grid.items.is_empty() else {}
+	var stash_preserved: bool = (
+		String(loaded_stash_m4.get("parts", {}).get("muzzle", "")) == "소음기"
+		and int(loaded_stash_m4.get("current_magazine_ammo", 0)) == 24
+		and is_equal_approx(float(loaded_stash_m4.get("durability", 0.0)), 77.0)
+	)
+	if fulton_ok and rub_after_fulton == 1500 and removed_from_bag and stash_preserved:
+		print("[PASS] Test 44: RadioWindow 2,000 RUB Fulton Extraction safely transfers modded M4 (suppressor, 24 ammo, 77 dur) into Hideout Stash")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 44: Fulton extraction failed (ok=%s, rub=%d, bag_empty=%s, stash_ok=%s)" % [str(fulton_ok), rub_after_fulton, str(removed_from_bag), str(stash_preserved)])
+	t44_stash_grid.free()
+	t44_radio.free()
+	t44_p.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

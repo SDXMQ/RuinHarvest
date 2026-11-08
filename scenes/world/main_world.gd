@@ -117,6 +117,8 @@ func _ready() -> void:
 		EventBus.event_logged.connect(_on_event_logged)
 	if EventBus.has_signal("random_world_event_triggered"):
 		EventBus.random_world_event_triggered.connect(_on_random_world_event_triggered)
+	if EventBus.has_signal("radio_scan_requested"):
+		EventBus.radio_scan_requested.connect(_on_radio_scan_requested)
 	
 	# 플레이어 인스턴스화 및 씬 트리 등록 (@onready 컴포넌트 초기화 선행)
 	player = PlayerScene.instantiate()
@@ -411,6 +413,13 @@ func _on_event_logged(msg: String) -> void:
 	tween.tween_property(panel, "modulate:a", 0.0, 1.0) # 1.0초간 부드럽게 페이드아웃
 	tween.tween_callback(panel.queue_free)
 
+func is_night_time() -> bool:
+	if day_night_cycle_duration <= 0.0:
+		return false
+	var time_elapsed = raid_total_time - raid_time_remaining
+	var progress = fposmod(time_elapsed, day_night_cycle_duration) / day_night_cycle_duration
+	return progress >= 0.5 and progress < 0.85
+
 func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	if not player: return
 	var angle = randf() * TAU
@@ -418,9 +427,11 @@ func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	
 	var enemy = EnemyScene.instantiate()
 	enemy.position = spawn_pos
-	# 무작위 적 타입 결정 (일반 좀비, 러너, 탱커, 무장 스캐브, 정예 레이더)
+	# 무작위 적 타입 결정 (야간에는 변이체 '야간 추격자' 스폰 확률 부여)
 	var r = randf()
-	if r < 0.08: enemy.enemy_type = 4 # RAIDER (정예 무장 용병)
+	if is_night_time() and r < 0.28:
+		enemy.enemy_type = 6 # NIGHT_STALKER (야간 추격자)
+	elif r < 0.08: enemy.enemy_type = 4 # RAIDER (정예 무장 용병)
 	elif r < 0.25: enemy.enemy_type = 3 # SCAV (무장 약탈자)
 	elif r < 0.43: enemy.enemy_type = 1 # RUNNER
 	elif r < 0.55: enemy.enemy_type = 2 # TANK
@@ -429,10 +440,12 @@ func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	entities_layer.add_child(enemy)
 
 const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
+const RadioWindowScene = preload("res://scenes/ui/radio_window.tscn")
 var current_crafting_window: Control = null
+var current_radio_window: Control = null
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current_inventory_window != null or current_crafting_window != null or current_map_window != null:
+	if current_inventory_window != null or current_crafting_window != null or current_map_window != null or current_radio_window != null:
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -464,11 +477,93 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("map") or (event is InputEventKey and event.physical_keycode == KEY_M and event.pressed):
 		_open_map_window()
 		get_viewport().set_input_as_handled()
+
+	# 전술 무전기 열기 (U 키 — 가방에 무전기 보유 시)
+	if event is InputEventKey and event.physical_keycode == KEY_U and event.pressed and not event.echo:
+		if player and player.inventory_grid and (player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("무전기", 1)):
+			open_radio_window()
+		else:
+			_on_event_logged("⚠️ 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
+		get_viewport().set_input_as_handled()
 		
 	# 크리에이티브 아이템 스포너 열기 (F1 키)
 	if event is InputEventKey and event.physical_keycode == KEY_F1 and event.pressed:
 		_open_item_spawner()
 		get_viewport().set_input_as_handled()
+
+func open_radio_window() -> Control:
+	if current_radio_window != null:
+		return current_radio_window
+	if is_inside_tree() and get_tree():
+		get_tree().paused = true
+	current_radio_window = RadioWindowScene.instantiate()
+	if has_node("UI"):
+		$UI.add_child(current_radio_window)
+	else:
+		add_child(current_radio_window)
+	if current_radio_window.has_method("setup"):
+		current_radio_window.setup(player, self)
+	current_radio_window.window_closed.connect(func():
+		current_radio_window = null
+		if is_inside_tree() and get_tree():
+			get_tree().paused = false
+		_on_player_stats_changed()
+	)
+	return current_radio_window
+
+func spawn_emergency_drone_crate(drop_pos: Vector2, primary_ammo: String = "5.56mm") -> Node2D:
+	var tile_pos := Vector2i(int(floor(drop_pos.x / 32.0)), int(floor(drop_pos.y / 32.0)))
+	var snapped_pos := Vector2(tile_pos) * 32.0 + Vector2(16.0, 16.0)
+	var crate := StaticBody2D.new()
+	crate.set_script(AirdropCrateScript)
+	crate.position = snapped_pos
+	if entities_layer:
+		entities_layer.add_child(crate)
+	else:
+		add_child(crate)
+	# 긴급 드론 투하는 신호탄 대기 시간을 단축하여 신속히 낙하(CHUTE_FALL)
+	crate.current_state = 1 # DropState.CHUTE_FALL
+	crate.state_timer = 1.6
+
+	var inv := Inventory.new()
+	inv.max_slots = 12
+	inv.clear()
+	add_child(inv)
+	inv.add_item(primary_ammo, 60)
+	if primary_ammo != "9mm":
+		inv.add_item("9mm", 30)
+	inv.add_item("고급 치료킷", 1)
+	inv.add_item("구급상자", 1)
+	inv.add_item("붕대", 2)
+	inv.add_item("생수", 1)
+	inv.set_meta("custom_title", "🚁 암시장 긴급 탄약·의료 드론 보급함")
+	container_inventories[tile_pos] = inv
+
+	airdrop_points_data.append({
+		"name": "긴급 드론 보급품",
+		"pos": snapped_pos
+	})
+	return crate
+
+func _on_radio_scan_requested(scan_type: String) -> void:
+	if not player:
+		return
+	if scan_type == "survivor":
+		var enemies_cnt := get_tree().get_nodes_in_group("enemies").size() if get_tree() else 0
+		_on_event_logged("📻 [주파수 스캔] 현재 반경 내 감지된 생체/적대 신호: %d개" % enemies_cnt)
+	elif scan_type == "supply":
+		if airdrop_points_data.is_empty():
+			_spawn_airdrop_crate()
+		else:
+			var nearest = airdrop_points_data.back()
+			var dist = player.global_position.distance_to(nearest["pos"])
+			_on_event_logged("📻 [보급 추적] 최근 보급 투하 지점까지 거리: %.0fm" % dist)
+	elif scan_type == "military":
+		if is_instance_valid(boss_entity):
+			var dist_b = player.global_position.distance_to(boss_entity.global_position)
+			_on_event_logged("📻 [군사 암호 감청] 지휘관 보스 신호 포착 — 거리 %.0fm" % dist_b)
+		else:
+			_on_event_logged("📻 [군사 암호 감청] 보스 생체 신호 소멸 확인.")
 
 func _open_item_spawner() -> void:
 	if current_spawner_window != null: return
@@ -1295,6 +1390,8 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		var inv: Inventory
 		if container_inventories.has(tile_pos):
 			inv = container_inventories[tile_pos]
+			if inv.has_meta("custom_title"):
+				loot_title = String(inv.get_meta("custom_title"))
 		else:
 			inv = Inventory.new()
 			inv.max_slots = slots

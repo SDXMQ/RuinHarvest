@@ -1,7 +1,7 @@
 # res://scenes/entities/enemies/enemy.gd
 extends CharacterBody2D
 
-enum EnemyType { ZOMBIE, RUNNER, TANK, SCAV, RAIDER, BOSS }
+enum EnemyType { ZOMBIE, RUNNER, TANK, SCAV, RAIDER, BOSS, NIGHT_STALKER }
 enum State { IDLE, WANDER, CHASE, ATTACK, INVESTIGATE, HURT, DEAD }
 
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
@@ -123,9 +123,44 @@ func _setup_stats_by_type() -> void:
 			attack_radius = 330.0
 			max_mag_ammo = 30
 			mag_ammo = 30
+		EnemyType.NIGHT_STALKER:
+			max_hp = 85.0
+			speed = 152.0
+			damage = 19.0
+			armor_tier = 1
+			armor_value = 18.0
+			attack_cooldown = 0.75
+			detection_radius = 380.0
+			attack_radius = 30.0
 	hp = max_hp
 	strafe_sign = 1.0 if randf() > 0.5 else -1.0
 	faction_scan_timer = randf_range(0.1, 0.5)
+
+func is_exposed_to_player_flashlight() -> bool:
+	if not is_instance_valid(target_player):
+		return false
+	var flashlight_on := false
+	if target_player.get("player_lighting") != null and target_player.player_lighting != null:
+		flashlight_on = bool(target_player.player_lighting.flashlight_enabled)
+	elif target_player.get("flashlight_enabled") != null:
+		flashlight_on = bool(target_player.flashlight_enabled)
+	if not flashlight_on:
+		return false
+	var dist = global_position.distance_to(target_player.global_position)
+	if dist > 320.0 or dist < 1.0:
+		return false
+	var p_forward = Vector2.RIGHT.rotated(target_player.rotation)
+	var dir_from_p = target_player.global_position.direction_to(global_position)
+	if p_forward.dot(dir_from_p) < 0.82:
+		return false
+	if is_inside_tree() and get_world_2d() != null:
+		return _has_line_of_sight(target_player.global_position)
+	return true
+
+func compute_night_stalker_evade_velocity(target_pos: Vector2) -> Vector2:
+	var dir_to_t = global_position.direction_to(target_pos)
+	var evade_dir = (-dir_to_t * 0.38 + dir_to_t.orthogonal() * strafe_sign).normalized()
+	return evade_dir * (speed * 1.18)
 
 func _on_noise_created(pos: Vector2, radius: float, source_type: String) -> void:
 	if hp <= 0:
@@ -331,9 +366,19 @@ func _physics_process(delta: float) -> void:
 								if SoundManager: SoundManager.play("hit_melee")
 								attack_timer = 1.0
 					
-					var steer_dir = _get_steered_direction(active_target.global_position)
-					rotation = lerp_angle(rotation, steer_dir.angle(), delta * 10.0)
-					velocity = steer_dir * speed
+					if enemy_type == EnemyType.NIGHT_STALKER and active_target == target_player and dist > 48.0 and is_exposed_to_player_flashlight():
+						var evade_vel = compute_night_stalker_evade_velocity(active_target.global_position)
+						rotation = lerp_angle(rotation, evade_vel.angle(), delta * 14.0)
+						velocity = evade_vel
+						if randf() < 0.18 and get_tree() and get_tree().current_scene:
+							var ps_ev = get_tree().current_scene.get_node_or_null("ParticleSystem")
+							if ps_ev:
+								ps_ev.emit("smoke", global_position.x, global_position.y, 1)
+					else:
+						var steer_dir = _get_steered_direction(active_target.global_position)
+						rotation = lerp_angle(rotation, steer_dir.angle(), delta * 10.0)
+						var spd_mult = 1.12 if (enemy_type == EnemyType.NIGHT_STALKER and dist <= 110.0) else 1.0
+						velocity = steer_dir * (speed * spd_mult)
 					
 		move_and_slide()
 		
@@ -388,6 +433,9 @@ func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> 
 
 		if in_nvg or in_flashlight_cone or in_close_touch:
 			target_alpha = 1.0
+		elif enemy_type == EnemyType.NIGHT_STALKER and dist <= 180.0 and dot_p >= 0.35:
+			# 야간 추격자는 어둠 속에서도 안광이 희미하게 번뜩임
+			target_alpha = 0.35
 		else:
 			target_alpha = 0.0
 	else:
@@ -469,7 +517,14 @@ func _try_attack(victim: Node2D = null) -> void:
 	else:
 		attack_timer = attack_cooldown
 		if target_node == target_player:
-			EventBus.player_damaged.emit(damage, "zombie")
+			EventBus.player_damaged.emit(damage, "night_stalker" if enemy_type == EnemyType.NIGHT_STALKER else "zombie")
+			if enemy_type == EnemyType.NIGHT_STALKER and "is_infected" in target_player:
+				if not bool(target_player.is_infected):
+					target_player.is_infected = true
+					if target_player.has_signal("stats_changed"):
+						target_player.stats_changed.emit()
+					if EventBus.has_signal("event_logged"):
+						EventBus.event_logged.emit("☣️ [경고] 야간 추격자의 발톱에 긁혀 변이 감염(Infection) 상태가 되었습니다!")
 			if EventBus.has_signal("player_hit_direction"):
 				EventBus.player_hit_direction.emit(global_position)
 		elif target_node.has_method("take_damage"):
@@ -586,6 +641,11 @@ func _die() -> void:
 			faction_str = "raider"
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("★ 💀 [보스 처치] 구역 지휘관 '강철의 보스'를 사살했습니다! 최고급 전리품을 확인하십시오!")
+		EnemyType.NIGHT_STALKER:
+			type_str = "night_stalker"
+			faction_str = "infected"
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("🌙 [변이체 처치] 어둠 속의 '야간 추격자'를 사살했습니다!")
 	EventBus.enemy_killed.emit(type_str, faction_str, global_position)
 	_spawn_loot_drop()
 	queue_free()
@@ -647,6 +707,15 @@ func _spawn_loot_drop() -> void:
 			drops.append(high_pool.pick_random())
 			if randf() < 0.28:
 				drops.append({"id": "보안 키카드" if randf() < 0.32 else "무기고 열쇠", "amount": 1})
+		EnemyType.NIGHT_STALKER:
+			var night_pool = [
+				{"id": "고급 치료킷", "amount": 1},
+				{"id": "암호화된 SSD", "amount": 1},
+				{"id": "금시계", "amount": 1}
+			]
+			drops.append(night_pool.pick_random())
+			if randf() < 0.35:
+				drops.append({"id": "보안 키카드" if randf() < 0.5 else "무기고 열쇠", "amount": 1})
 		EnemyType.BOSS:
 			var boss_parts = {
 				"barrel": "정밀_롱헤비_총열",
@@ -705,6 +774,7 @@ func _on_visuals_draw() -> void:
 	elif enemy_type == EnemyType.RUNNER: scale_f = 0.85
 	elif enemy_type == EnemyType.RAIDER: scale_f = 1.08
 	elif enemy_type == EnemyType.BOSS: scale_f = 1.28
+	elif enemy_type == EnemyType.NIGHT_STALKER: scale_f = 1.06
 	
 	# 색상 정의
 	var body_color = Color(0.3, 0.45, 0.3)
@@ -724,6 +794,9 @@ func _on_visuals_draw() -> void:
 	elif enemy_type == EnemyType.BOSS:
 		body_color = Color(0.78, 0.65, 0.52)
 		cloth_color = Color(0.16, 0.14, 0.18)
+	elif enemy_type == EnemyType.NIGHT_STALKER:
+		body_color = Color(0.08, 0.09, 0.14)
+		cloth_color = Color(0.05, 0.06, 0.10)
 		
 	# --- 1. 몸통 다각형 ---
 	var shoulder_width = 14.0 * scale_f
@@ -741,8 +814,13 @@ func _on_visuals_draw() -> void:
 	
 	var colors_outline = PackedColorArray()
 	var colors_cloth = PackedColorArray()
+	var outline_col := Color(0.1, 0.1, 0.1)
+	if enemy_type == EnemyType.BOSS:
+		outline_col = Color(0.95, 0.75, 0.15)
+	elif enemy_type == EnemyType.NIGHT_STALKER:
+		outline_col = Color(0.48, 0.16, 0.68)
 	for i in range(body_points.size()):
-		colors_outline.append(Color(0.95, 0.75, 0.15) if enemy_type == EnemyType.BOSS else Color(0.1, 0.1, 0.1))
+		colors_outline.append(outline_col)
 		colors_cloth.append(cloth_color)
 		
 	var outline_points = PackedVector2Array()
@@ -831,13 +909,20 @@ func _on_visuals_draw() -> void:
 			var laser_col = Color(1.0, 0.8, 0.15, 0.55) if enemy_type == EnemyType.BOSS else Color(1.0, 0.15, 0.15, 0.42)
 			visuals.draw_line(Vector2(6 + gun_len, 2), Vector2(135, 2), laser_col, 1.4)
 	else:
-		# 붉은 눈 (좀비 시선 방향)
-		visuals.draw_circle(eye_offset + Vector2(0, -3.5*scale_f), 1.5*scale_f, Color.RED)
-		visuals.draw_circle(eye_offset + Vector2(0, 3.5*scale_f), 1.5*scale_f, Color.RED)
+		# 안광 렌더링 (야간 추격자는 형광 청록/보라 안광, 일반 감염체는 붉은 눈)
+		if enemy_type == EnemyType.NIGHT_STALKER:
+			visuals.draw_circle(eye_offset + Vector2(0, -3.6*scale_f), 3.2*scale_f, Color(0.35, 0.95, 1.0, 0.35))
+			visuals.draw_circle(eye_offset + Vector2(0, 3.6*scale_f), 3.2*scale_f, Color(0.35, 0.95, 1.0, 0.35))
+			visuals.draw_circle(eye_offset + Vector2(0, -3.6*scale_f), 1.7*scale_f, Color(0.4, 1.0, 1.0))
+			visuals.draw_circle(eye_offset + Vector2(0, 3.6*scale_f), 1.7*scale_f, Color(0.4, 1.0, 1.0))
+		else:
+			visuals.draw_circle(eye_offset + Vector2(0, -3.5*scale_f), 1.5*scale_f, Color.RED)
+			visuals.draw_circle(eye_offset + Vector2(0, 3.5*scale_f), 1.5*scale_f, Color.RED)
 		
 		# --- 5. 양 팔 (추적 시 손을 뻗음) ---
 		var reach = 0.0
 		if current_state == State.CHASE: reach = 6.0 * scale_f
+		if enemy_type == EnemyType.NIGHT_STALKER: reach += 4.5 * scale_f
 		
 		var arm_y = shoulder_width * 0.8
 		var arm_len = 16.0 * scale_f + reach
@@ -852,7 +937,7 @@ func _on_visuals_draw() -> void:
 		])
 		
 		var arm_colors = PackedColorArray([body_color, body_color, body_color, body_color])
-		var arm_outlines = PackedColorArray([Color(0.1, 0.1, 0.1), Color(0.1, 0.1, 0.1), Color(0.1, 0.1, 0.1), Color(0.1, 0.1, 0.1)])
+		var arm_outlines = PackedColorArray([outline_col, outline_col, outline_col, outline_col])
 		
 		var arm_l_outline = PackedVector2Array()
 		for p in arm_l: arm_l_outline.append(p + (p - Vector2(arm_len/2, arm_y))*0.2)
@@ -864,7 +949,10 @@ func _on_visuals_draw() -> void:
 		visuals.draw_polygon(arm_r_outline, arm_outlines)
 		visuals.draw_polygon(arm_r, arm_colors)
 		
-		if enemy_type == EnemyType.RUNNER or current_state == State.CHASE:
+		if enemy_type == EnemyType.NIGHT_STALKER:
+			visuals.draw_circle(Vector2(arm_len, arm_y), 3.4*scale_f, Color(0.65, 0.15, 0.85))
+			visuals.draw_circle(Vector2(arm_len, -arm_y), 3.4*scale_f, Color(0.65, 0.15, 0.85))
+		elif enemy_type == EnemyType.RUNNER or current_state == State.CHASE:
 			visuals.draw_circle(Vector2(arm_len, arm_y), 3.0*scale_f, Color(0.6, 0, 0))
 			visuals.draw_circle(Vector2(arm_len, -arm_y), 3.0*scale_f, Color(0.6, 0, 0))
 		else:

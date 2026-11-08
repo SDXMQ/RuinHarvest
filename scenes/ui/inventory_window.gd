@@ -2136,6 +2136,15 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false)
 	var cat = idata.get("category", -1)
 	var equip_slot = ItemDatabase.get_item_equip_slot(id)
 	
+	# 0-B. 전술 무전기(장거리 무전기) 사용 시 인레이드 통신망 & 암시장 드론 호출 창 오픈
+	if id == "장거리 무전기" or id.contains("무전기"):
+		if player != null and is_inside_tree() and get_tree() != null:
+			var cur_scene = get_tree().current_scene
+			_on_close_pressed()
+			if cur_scene and cur_scene.has_method("open_radio_window"):
+				cur_scene.open_radio_window()
+			return
+
 	# 1. 음식/물/의약품이면 즉시 사용
 	if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or cat == ItemDatabase.ItemCategory.MEDICAL:
 		_use_consumable_item(item, idata)
