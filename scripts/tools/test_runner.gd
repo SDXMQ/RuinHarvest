@@ -418,5 +418,83 @@ func _ready() -> void:
 	partial_grid.free()
 	inv_win_partial.free()
 
+	# Test 24: InventoryGrid.auto_add_item preserves custom_data keys and damaged armor durability
+	total_tests += 1
+	var test24_grid = InventoryGrid.new()
+	test24_grid.resize_grid(6, 6)
+	var modded_gun_custom = {
+		"parts": {"optic": "4배율_ACOG", "muzzle": "소음기"},
+		"loaded_ammo": "5.56mm",
+		"current_magazine_ammo": 27,
+		"computed_stats": {"magazine_size": 30, "rpm": 650}
+	}
+	test24_grid.auto_add_item("M4_리시버", 1, modded_gun_custom)
+	var damaged_vest_custom = {
+		"durability": 35.0
+	}
+	test24_grid.auto_add_item("3레벨_방탄복", 1, damaged_vest_custom)
+	
+	var gun_item = test24_grid.items[0]
+	var vest_item = test24_grid.items[1]
+	var gun_ok = gun_item.has("parts") and gun_item["parts"].get("optic") == "4배율_ACOG" and gun_item.get("current_magazine_ammo") == 27
+	var vest_ok = vest_item.get("durability") == 35.0
+	if gun_ok and vest_ok:
+		print("[PASS] Test 24: InventoryGrid.auto_add_item preserves top-level parts/ammo and preserves damaged armor durability without resetting")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 24: custom_data keys lost or durability reset (GunOK: %s, VestDur: %s)" % [str(gun_ok), str(vest_item.get("durability"))])
+	test24_grid.free()
+
+	# Test 25: 1D Container Inventory.add_item preserves custom_data
+	total_tests += 1
+	var test25_inv = Inventory.new()
+	test25_inv.clear()
+	test25_inv.add_item("3레벨_방탄복", 1, {"durability": 42.0})
+	test25_inv.add_item("M4_리시버", 1, {"parts": {"optic": "4배율_ACOG"}, "loaded_ammo": "5.56mm", "current_magazine_ammo": 18})
+	var slot0 = test25_inv.items[0]
+	var slot1 = test25_inv.items[1]
+	var inv_vest_ok = slot0 != null and slot0.get("durability") == 42.0
+	var inv_gun_ok = slot1 != null and slot1.has("parts") and slot1.get("current_magazine_ammo") == 18
+	if inv_vest_ok and inv_gun_ok:
+		print("[PASS] Test 25: Inventory (1D container) preserves custom_data parts and damaged armor durability")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 25: Inventory custom_data preservation failed (VestOK: %s, GunOK: %s)" % [str(inv_vest_ok), str(inv_gun_ok)])
+	test25_inv.free()
+
+	# Test 26: Clamping weapon excess ammo returns surplus rounds to inventory grid
+	total_tests += 1
+	var test26_win = preload("res://scenes/ui/inventory_window.gd").new()
+	var test26_grid = InventoryGrid.new()
+	test26_grid.resize_grid(6, 6)
+	test26_win.inventory_grid = test26_grid
+	var test_wep = {
+		"id": "AK_리시버",
+		"computed_stats": {"magazine_size": 10},
+		"current_magazine_ammo": 30,
+		"loaded_ammo": "7.62mm"
+	}
+	test26_win._clamp_weapon_excess_ammo(test_wep)
+	var bag_ammo = test26_grid.get_item_count("7.62mm")
+	if test_wep["current_magazine_ammo"] == 10 and bag_ammo == 20:
+		print("[PASS] Test 26: _clamp_weapon_excess_ammo clamped magazine to 10 and refunded 20 rounds to inventory")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 26: Clamping failed (Mag: %d, Bag: %d)" % [test_wep["current_magazine_ammo"], bag_ammo])
+	test26_grid.free()
+	test26_win.free()
+
+	# Test 27: MapWindow zoom & pan state and EventBus random_world_event_triggered signal
+	total_tests += 1
+	var map_win = preload("res://scenes/ui/map_window.gd").new()
+	var has_event_sig = EventBus.has_signal("random_world_event_triggered")
+	var map_fields_ok = "scale_factor" in map_win and "map_pan_offset" in map_win
+	if has_event_sig and map_fields_ok:
+		print("[PASS] Test 27: MapWindow zoom/pan fields and EventBus.random_world_event_triggered verified")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 27: Signal or MapWindow fields missing (Sig: %s, Map: %s)" % [str(has_event_sig), str(map_fields_ok)])
+	map_win.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

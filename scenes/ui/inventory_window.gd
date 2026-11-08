@@ -441,6 +441,7 @@ func _handle_global_drop() -> void:
 				w_dict["parts"] = w_parts
 				w_dict["attachments"] = w_parts
 				equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+				_clamp_weapon_excess_ammo(equipment_data[w_slot])
 				_sync_weapon_to_player(w_slot)
 			_update_weapons_ui()
 			_drop_item_to_world(item)
@@ -589,6 +590,56 @@ func _show_context_menu(item: Dictionary) -> void:
 		)
 		vbox.add_child(btn_detach)
 
+	# 총기 탄약 비우기 (Unload)
+	var cur_mag_ammo = int(item.get("current_magazine_ammo", 0))
+	var loaded_ammo_type = item.get("loaded_ammo", "")
+	if cur_mag_ammo > 0 and loaded_ammo_type != "":
+		var btn_unload = Button.new()
+		btn_unload.text = "🔄 탄약 비우기 (%d발)" % cur_mag_ammo
+		btn_unload.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn_unload.custom_minimum_size = Vector2(130, 24)
+		btn_unload.pressed.connect(func():
+			_close_context_menu()
+			var rem = inventory_grid.auto_add_item(loaded_ammo_type, cur_mag_ammo) if inventory_grid else cur_mag_ammo
+			if rem > 0:
+				_spawn_ground_item(loaded_ammo_type, rem)
+			item["current_magazine_ammo"] = 0
+			if inventory_grid:
+				inventory_grid.grid_changed.emit()
+			if SoundManager: SoundManager.play("menu_select")
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("🔄 [%s] 탄약 %d발을 회수했습니다." % [item_name, cur_mag_ammo - rem])
+		)
+		vbox.add_child(btn_unload)
+
+	# 손상된 장비 수리 (Repair)
+	var max_dur = float(item.get("max_durability", idata.get("max_durability", 0.0)))
+	var cur_dur = float(item.get("durability", max_dur))
+	var missing_dur = max_dur - cur_dur
+	if max_dur > 0 and missing_dur > 0.5:
+		var repair_cost = int(ceil(missing_dur * 10))
+		var btn_repair = Button.new()
+		btn_repair.text = "🔧 수리하기 (%d RUB)" % repair_cost
+		btn_repair.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		btn_repair.custom_minimum_size = Vector2(130, 24)
+		var user_funds = _get_player_rubles()
+		if user_funds < repair_cost:
+			btn_repair.disabled = true
+			btn_repair.text += " (잔액 부족)"
+		btn_repair.pressed.connect(func():
+			_close_context_menu()
+			if _deduct_player_rubles(repair_cost):
+				item["durability"] = max_dur
+				if inventory_grid:
+					inventory_grid.grid_changed.emit()
+				_update_weapons_ui()
+				_update_equipment_ui()
+				if SoundManager: SoundManager.play("menu_select")
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("🔧 [%s] 내구도를 완전히 수리했습니다. (-%d RUB)" % [item_name, repair_cost])
+		)
+		vbox.add_child(btn_repair)
+
 	var btn_drop = Button.new()
 	btn_drop.text = "🗑️ 바닥에 버리기"
 	btn_drop.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -662,6 +713,43 @@ func _detach_all_item_parts(item: Dictionary) -> void:
 			EventBus.event_logged.emit("🔩 총기 부품 %d개를 가방에 넣고, 공간이 부족한 %d개는 바닥에 드랍했습니다." % [detached_count, dropped_count])
 		else:
 			EventBus.event_logged.emit("🔩 총기 부품 %d개를 모두 분리했습니다." % detached_count)
+
+func _clamp_weapon_excess_ammo(w_dict: Dictionary) -> void:
+	if w_dict.is_empty(): return
+	var max_mag = int(w_dict.get("computed_stats", {}).get("magazine_size", 10))
+	var cur_mag = int(w_dict.get("current_magazine_ammo", 0))
+	if cur_mag > max_mag:
+		var excess = cur_mag - max_mag
+		var l_ammo = w_dict.get("loaded_ammo", "")
+		if excess > 0 and l_ammo != "":
+			var rem = inventory_grid.auto_add_item(l_ammo, excess) if inventory_grid else excess
+			if rem > 0:
+				_spawn_ground_item(l_ammo, rem)
+		w_dict["current_magazine_ammo"] = max_mag
+
+func _get_player_rubles() -> int:
+	if GameManager and GameManager.current_world_data:
+		var p_data = GameManager.current_world_data.get("player", {})
+		if p_data.has("rubles"):
+			return int(p_data["rubles"])
+		if GameManager.current_world_data.has("rubles"):
+			return int(GameManager.current_world_data["rubles"])
+	return 0
+
+func _deduct_player_rubles(cost: int) -> bool:
+	if GameManager and GameManager.current_world_data:
+		var p_data = GameManager.current_world_data.get("player", {})
+		if p_data.has("rubles"):
+			var cur = int(p_data["rubles"])
+			if cur >= cost:
+				p_data["rubles"] = cur - cost
+				return true
+		elif GameManager.current_world_data.has("rubles"):
+			var cur = int(GameManager.current_world_data["rubles"])
+			if cur >= cost:
+				GameManager.current_world_data["rubles"] = cur - cost
+				return true
+	return false
 
 func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 	if not is_dragging: return
@@ -741,6 +829,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 							w_dict["parts"] = w_parts
 							w_dict["attachments"] = w_parts
 							equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+							_clamp_weapon_excess_ammo(equipment_data[w_slot])
 							_sync_weapon_to_player(w_slot)
 						_update_weapons_ui()
 				else:
@@ -823,6 +912,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 						w_dict["parts"] = w_parts
 						w_dict["attachments"] = w_parts
 						equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+						_clamp_weapon_excess_ammo(equipment_data[w_slot])
 						_sync_weapon_to_player(w_slot)
 					_update_weapons_ui()
 					
@@ -936,7 +1026,7 @@ func _loot_all_from_container() -> void:
 		var slot_item = target_inventory.items[i]
 		if slot_item != null and not slot_item.is_empty() and slot_item.get("id", "") != "":
 			var amt = int(slot_item.get("amount", 1))
-			var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item.get("custom_data", {}))
+			var rem = inventory_grid.auto_add_item(slot_item.get("id", ""), amt, slot_item)
 			var added = amt - rem
 			if added > 0:
 				target_inventory.remove_item_at(i, added)
@@ -956,7 +1046,7 @@ func _quick_transfer_grid_to_container(item: Dictionary) -> void:
 		return
 	var item_id = item.get("id", "")
 	var amt = int(item.get("amount", 1))
-	var rem = target_inventory.add_item(item_id, amt)
+	var rem = target_inventory.add_item(item_id, amt, item)
 	var added = amt - rem
 	if added > 0:
 		if rem <= 0:
@@ -981,7 +1071,7 @@ func _try_drop_on_container() -> void:
 	var item_id = item.get("id", "")
 	var amt = item.get("amount", 1)
 	
-	var rem = target_inventory.add_item(item_id, amt)
+	var rem = target_inventory.add_item(item_id, amt, item)
 	var added = amt - rem
 	
 	if added > 0:
@@ -1034,6 +1124,7 @@ func _try_drop_on_container() -> void:
 					w_dict["parts"] = w_parts
 					w_dict["attachments"] = w_parts
 					equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+					_clamp_weapon_excess_ammo(equipment_data[w_slot])
 					_sync_weapon_to_player(w_slot)
 				_update_weapons_ui()
 		elif src == "vicinity":
@@ -1365,9 +1456,37 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 		wep_btn.text = "장착된 무기 없음 (드래그하여 장착)"
 	else:
 		var d = ItemDatabase.get_item_data(weapon_dict.get("id", ""))
-		wep_btn.text = d.get("name", weapon_dict.get("id", ""))
+		var w_name = d.get("name", weapon_dict.get("id", ""))
+		var stats = weapon_dict.get("computed_stats", {})
+		var max_mag = int(stats.get("magazine_size", weapon_dict.get("magazine_size", 10)))
+		var cur_mag = int(weapon_dict.get("current_magazine_ammo", 0))
+		var l_ammo = weapon_dict.get("loaded_ammo", "")
+		var ammo_name = l_ammo.replace("_탄약", "").replace("탄약", "") if l_ammo != "" else "없음"
+		var info_str = ""
+		if max_mag > 0 or l_ammo != "":
+			info_str = " [%s | %d/%d발]" % [ammo_name, cur_mag, max_mag]
+		wep_btn.text = "%s%s" % [w_name, info_str]
 		if ItemIconManager: wep_btn.icon = ItemIconManager.get_icon(weapon_dict.get("id", ""))
 	top_hbox.add_child(wep_btn)
+	
+	if not weapon_dict.is_empty():
+		var d = ItemDatabase.get_item_data(weapon_dict.get("id", ""))
+		var max_dur = float(weapon_dict.get("max_durability", d.get("max_durability", 100.0)))
+		var cur_dur = float(weapon_dict.get("durability", max_dur))
+		if max_dur > 0:
+			var dur_bar = ProgressBar.new()
+			dur_bar.custom_minimum_size = Vector2(0, 4)
+			dur_bar.show_percentage = false
+			dur_bar.max_value = max_dur
+			dur_bar.value = cur_dur
+			var dur_style = StyleBoxFlat.new()
+			var ratio = cur_dur / max_dur
+			dur_style.bg_color = Color(0.2, 0.85, 0.3) if ratio > 0.5 else (Color(0.9, 0.7, 0.1) if ratio > 0.25 else Color(0.9, 0.2, 0.2))
+			dur_bar.add_theme_stylebox_override("fill", dur_style)
+			var bg_style = StyleBoxFlat.new()
+			bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.6)
+			dur_bar.add_theme_stylebox_override("background", bg_style)
+			vbox.add_child(dur_bar)
 	
 	wep_btn.mouse_entered.connect(func():
 		if not is_dragging and tooltip and not weapon_dict.is_empty():
@@ -1505,6 +1624,7 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 					w_dict["parts"] = w_parts
 					w_dict["attachments"] = w_parts
 					equipment_data[weapon_slot_key] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+					_clamp_weapon_excess_ammo(equipment_data[weapon_slot_key])
 					_sync_weapon_to_player(weapon_slot_key)
 					_update_weapons_ui()
 					if SoundManager: SoundManager.play("menu_select")
@@ -1746,6 +1866,7 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 			equipment_data[old_w_slot]["parts"] = old_parts
 			equipment_data[old_w_slot]["attachments"] = old_parts
 			equipment_data[old_w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[old_w_slot])
+			_clamp_weapon_excess_ammo(equipment_data[old_w_slot])
 			_sync_weapon_to_player(old_w_slot)
 		
 	if not equipment_data[weapon_slot_key].has("parts"):
@@ -1774,6 +1895,7 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 		
 	equipment_data[weapon_slot_key]["attachments"] = equipment_data[weapon_slot_key]["parts"]
 	equipment_data[weapon_slot_key] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[weapon_slot_key])
+	_clamp_weapon_excess_ammo(equipment_data[weapon_slot_key])
 	_sync_weapon_to_player(weapon_slot_key)
 	
 	if prev_part != "":

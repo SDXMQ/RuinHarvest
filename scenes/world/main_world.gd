@@ -115,6 +115,8 @@ func _ready() -> void:
 		
 	if EventBus.has_signal("event_logged"):
 		EventBus.event_logged.connect(_on_event_logged)
+	if EventBus.has_signal("random_world_event_triggered"):
+		EventBus.random_world_event_triggered.connect(_on_random_world_event_triggered)
 	
 	# 플레이어 인스턴스화 및 씬 트리 등록 (@onready 컴포넌트 초기화 선행)
 	player = PlayerScene.instantiate()
@@ -568,8 +570,17 @@ func _on_compass_draw() -> void:
 			var diamond = PackedVector2Array([
 				Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)
 			])
-			compass_bar.draw_colored_polygon(diamond, Color(0.2, 1.0, 0.3))
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.3, 1.0, 0.4))
+			var pt_type = int(pt.get("type", 0))
+			var pt_col = Color(0.2, 1.0, 0.3)
+			var txt_col = Color(0.3, 1.0, 0.4)
+			if pt_type == 1:
+				pt_col = Color(1.0, 0.82, 0.15)
+				txt_col = Color(1.0, 0.9, 0.3)
+			elif pt_type == 2:
+				pt_col = Color(0.2, 0.85, 1.0)
+				txt_col = Color(0.4, 0.9, 1.0)
+			compass_bar.draw_colored_polygon(diamond, pt_col)
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
 	# 항공 보급품 마커 (주황/붉은 다이아몬드)
 	for ad in airdrop_points_data:
@@ -643,7 +654,7 @@ func _spawn_landmark_boss() -> void:
 	# 랜드마크 현장 상호작용 퀘스트 오브젝트 3종 스폰 (군사 단말기 / 병원 생체 표본 채취기 / 상업 지구 무선 중계기)
 	field_objectives.clear()
 	var obj_Offsets = [
-		boss_pos + Vector2(-42, 28),
+		boss_pos + Vector2(-220, 140),
 		player.global_position + Vector2.RIGHT.rotated(angle + TAU / 3.0) * randf_range(560.0, 760.0),
 		player.global_position + Vector2.RIGHT.rotated(angle + 2.0 * TAU / 3.0) * randf_range(560.0, 760.0)
 	]
@@ -689,6 +700,14 @@ func _on_crosshair_draw() -> void:
 		crosshair_overlay.draw_line(p1, p2, shadow_col, 3.0)
 		crosshair_overlay.draw_line(p1, p2, col, 1.6)
 	crosshair_overlay.draw_circle(m_pos, 1.8, col)
+
+	# 총기 기능고장 (JAM) 발생 시 우하단 붉은색 점멸 라벨 표시
+	var w_handler = player.weapon_handler if player and "weapon_handler" in player else null
+	if w_handler and bool(w_handler.get("is_jammed")):
+		if (Time.get_ticks_msec() / 250) % 2 == 0:
+			var jam_pos = m_pos + Vector2(16, 16)
+			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.8))
+			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
 
 func _on_player_hit_direction(attacker_pos: Vector2) -> void:
 	if not player: return
@@ -839,7 +858,7 @@ func _process(delta: float) -> void:
 				if storm_lightning_timer <= 0.0:
 					storm_lightning_timer = randf_range(15.0, 25.0)
 					storm_lightning_active = true
-					storm_lightning_duration = 0.08
+					storm_lightning_duration = 0.35
 					storm_thunder_delay = 1.0
 					if day_night_modulate:
 						day_night_modulate.color = Color(1.6, 1.8, 2.2) # 번개 섬광
@@ -849,6 +868,12 @@ func _process(delta: float) -> void:
 					if storm_lightning_duration <= 0.0:
 						storm_lightning_active = false
 						_update_day_night_cycle()
+					elif day_night_modulate:
+						# 부드러운 잔광 (Afterglow) lerp 보간
+						var flash_color = Color(1.6, 1.8, 2.2)
+						var target_ambient = _get_current_ambient_color()
+						var t = clamp(storm_lightning_duration / 0.35, 0.0, 1.0)
+						day_night_modulate.color = target_ambient.lerp(flash_color, t)
 				else:
 					_update_day_night_cycle()
 				
@@ -886,33 +911,36 @@ func _process(delta: float) -> void:
 			var cy = floor(player.global_position.y / (16 * 32))
 			debug_label.text = "위치: (%.1f, %.1f) | 청크: (%d, %d)" % [player.global_position.x, player.global_position.y, cx, cy]
 
-func _update_day_night_cycle() -> void:
-	if not day_night_modulate or storm_lightning_active: return
-	
-	# 영구 주간 (duration < 0) 설정 시 항상 밝은 낮 유지
+func _get_current_ambient_color() -> Color:
 	if day_night_cycle_duration <= 0.0:
-		day_night_modulate.color = Color(1.0, 1.0, 1.0)
-		return
-		
+		return Color(1.0, 1.0, 1.0)
 	var time_elapsed = raid_total_time - raid_time_remaining
 	var cycle_pos = fposmod(time_elapsed, day_night_cycle_duration)
-	var progress = cycle_pos / day_night_cycle_duration # 0.0 ~ 1.0 순환 사이클
-	
-	# 낮 -> 황혼 -> 밤 -> 새벽 사이클
-	var target_color: Color
-	if progress < 0.3: # 낮 (0.0 ~ 0.3)
-		target_color = Color(1.0, 1.0, 1.0)
-	elif progress < 0.5: # 황혼 (0.3 ~ 0.5)
+	var progress = cycle_pos / day_night_cycle_duration
+	if progress < 0.3:
+		return Color(1.0, 1.0, 1.0)
+	elif progress < 0.5:
 		var t = (progress - 0.3) / 0.2
-		target_color = Color(1.0, 1.0, 1.0).lerp(Color(0.7, 0.45, 0.4), t)
-	elif progress < 0.8: # 심야 (0.5 ~ 0.8)
+		return Color(1.0, 1.0, 1.0).lerp(Color(0.7, 0.45, 0.4), t)
+	elif progress < 0.8:
 		var t = (progress - 0.5) / 0.3
-		target_color = Color(0.7, 0.45, 0.4).lerp(Color(0.12, 0.12, 0.22), t)
-	else: # 새벽/여명 (0.8 ~ 1.0)
+		return Color(0.7, 0.45, 0.4).lerp(Color(0.12, 0.12, 0.22), t)
+	else:
 		var t = (progress - 0.8) / 0.2
-		target_color = Color(0.12, 0.12, 0.22).lerp(Color(0.5, 0.5, 0.65), t)
-		
-	day_night_modulate.color = target_color
+		return Color(0.12, 0.12, 0.22).lerp(Color(0.5, 0.5, 0.65), t)
+
+func _update_day_night_cycle() -> void:
+	if not day_night_modulate or storm_lightning_active: return
+	day_night_modulate.color = _get_current_ambient_color()
+
+func _on_random_world_event_triggered(_event_id: String, event_data: Dictionary) -> void:
+	if not player: return
+	if event_data.has("enemy_count"):
+		var count = int(event_data.get("enemy_count", 8))
+		for i in range(count):
+			_spawn_enemy_near_player(randf_range(320.0, 520.0))
+	elif event_data.has("loot"):
+		_spawn_airdrop_crate()
 
 func _on_player_stats_changed() -> void:
 	if not player: return

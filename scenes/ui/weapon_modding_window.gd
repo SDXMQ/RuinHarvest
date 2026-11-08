@@ -16,6 +16,8 @@ const SLOT_NAMES_KR = {
 	"rail": "전술 레일 (Tactical Rail)"
 }
 
+const ShootingRangeScript = preload("res://scenes/ui/shooting_range_window.gd")
+
 var current_receiver_id: String = "M9_리시버"
 var current_weapon: Dictionary = {}
 var original_attached_parts: Dictionary = {}
@@ -240,11 +242,28 @@ func _build_ui() -> void:
 	disassemble_btn.pressed.connect(_on_disassemble_pressed)
 	footer.add_child(disassemble_btn)
 
+	var shooting_range_btn = Button.new()
+	shooting_range_btn.text = "🎯 사격장 테스트 (Shooting Range)"
+	shooting_range_btn.custom_minimum_size = Vector2(210, 40)
+	shooting_range_btn.pressed.connect(_on_open_shooting_range)
+	footer.add_child(shooting_range_btn)
+
 	var apply_btn = Button.new()
 	apply_btn.text = "개조 적용 및 장착 (Apply)"
 	apply_btn.custom_minimum_size = Vector2(210, 40)
 	apply_btn.pressed.connect(_on_assemble_pressed)
 	footer.add_child(apply_btn)
+
+func _on_open_shooting_range() -> void:
+	if ShootingRangeScript:
+		var sr = Control.new()
+		sr.set_script(ShootingRangeScript)
+		sr.setup(current_weapon)
+		sr.window_closed.connect(func():
+			sr.queue_free()
+		)
+		add_child(sr)
+		if SoundManager: SoundManager.play("menu_select")
 
 func _populate_receivers() -> void:
 	if not receiver_option_btn:
