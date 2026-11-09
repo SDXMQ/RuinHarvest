@@ -1220,5 +1220,93 @@ func _ready() -> void:
 	t48_p.free()
 	t48_mw.free()
 
+	# Test 49: Section 2 Area 5 (Flea Market 2.5x Daily Bounty, Power Switch -> Bunker & Locked Door unlock, Service Record & Dogtag & 30-kill Weapon Mastery +5% bonus)
+	total_tests += 1
+	# 1. Content 1: Flea Market Daily Bounty (2.5x market price instant buyout)
+	var bounties: Array = FleaMarket.get_daily_bounties(3)
+	var bounty_ok := false
+	if bounties.size() >= 2:
+		var b0: Dictionary = bounties[0]
+		var b_item_id: String = String(b0.get("item_id", "고철"))
+		var m_price: int = FleaMarket.get_current_price(b_item_id)
+		var expected_b_price: int = maxi(25, int(round(float(m_price) * 2.5)))
+		var t49_grid := InventoryGrid.new()
+		t49_grid.grid_width = 6
+		t49_grid.grid_height = 4
+		t49_grid.clear()
+		t49_grid.auto_add_item(b_item_id, 2)
+		var t49_wdata := {"player": {"rubles": 1000}}
+		var b_res: Dictionary = FleaMarket.fulfill_bounty_order(b_item_id, 2, t49_wdata, t49_grid, null)
+		bounty_ok = (
+			int(b0.get("bounty_price", 0)) == expected_b_price
+			and bool(b_res.get("success", false))
+			and int(b_res.get("earned", 0)) == expected_b_price * 2
+			and int(t49_wdata["player"]["rubles"]) == 1000 + expected_b_price * 2
+			and t49_grid.get_item_count(b_item_id) == 0
+		)
+		t49_grid.free()
+
+	# 2. Content 2: Power Switch (OBJ_LIGHT_SWITCH) restores power, unlocks electronic locked doors, and unlocks Bunker Extraction
+	GameManager.raid_landmark_completed = false
+	GameManager.raid_power_restored = false
+	GameManager.current_world_data = {"raid_power_restored": false, "player": {"field_objectives_completed": 0}}
+	var bunker_locked_before: bool = bool(MapWinScript.get_extraction_lock_info(2, []).get("locked", false))
+	var t49_mw = preload("res://scenes/world/main_world.gd").new()
+	var t49_cm = preload("res://scenes/world/chunk_manager.gd").new()
+	t49_cm.object_layer = TileMapLayer.new()
+	t49_cm.object_layer.tile_set = TileManager.get_tileset()
+	t49_cm.add_child(t49_cm.object_layer)
+	t49_mw.chunk_manager = t49_cm
+	var switch_pos := Vector2i(10, 10)
+	var elec_door_pos := Vector2i(13, 10)
+	t49_cm.object_layer.set_cell(switch_pos, 0, TileManager.OBJ_LIGHT_SWITCH)
+	t49_cm.object_layer.set_cell(elec_door_pos, 0, TileManager.OBJ_DOOR_LOCKED)
+	t49_mw._on_object_interacted(Vector2(320, 320), switch_pos, TileManager.OBJ_LIGHT_SWITCH)
+	var door_opened_by_power: bool = (t49_cm.object_layer.get_cell_atlas_coords(elec_door_pos) == TileManager.OBJ_DOOR_OPEN)
+	var bunker_unlocked_after: bool = not bool(MapWinScript.get_extraction_lock_info(2, []).get("locked", true))
+	var power_gimmick_ok: bool = (bunker_locked_before and t49_mw.raid_power_restored and GameManager.raid_power_restored and door_opened_by_power and bunker_unlocked_after)
+	t49_cm.free()
+	t49_mw.free()
+
+	# 3. Content 3: Dogtag ("Scav 인식표"), Service Record Archive, and 30-kill Weapon Mastery (+5% reload & recoil bonus)
+	var t49_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t49_p)
+	t49_p.inventory_grid.clear()
+	var dogtag_in_pouch_ok: bool = t49_p.inventory_grid.place_item({"id": "Scav 인식표", "amount": 3, "w": 1, "h": 1}, 0, 0, false)
+	GameManager.current_world_data = {
+		"player": {
+			"raids_survived": 7,
+			"kills_total": 42,
+			"human_kills": 18,
+			"boss_kills": 2,
+			"weapon_kills": {}
+		}
+	}
+	t49_p.equipment["primary1"] = WeaponPartsDatabase.create_default_weapon("M4_리시버")
+	t49_p.weapon_handler.equipment = t49_p.equipment
+	t49_p.weapon_handler.switch_weapon_slot("primary1")
+	var base_reload: float = t49_p.weapon_handler.get_effective_reload_speed()
+	var base_recoil: float = t49_p.weapon_handler.get_effective_recoil()
+	HideoutProgression.record_weapon_kill(GameManager.current_world_data, "M4_리시버", 30)
+	var mastered_reload: float = t49_p.weapon_handler.get_effective_reload_speed()
+	var mastered_recoil: float = t49_p.weapon_handler.get_effective_recoil()
+	var sr_data: Dictionary = HideoutProgression.get_service_record_data(GameManager.current_world_data, t49_p.inventory_grid, null)
+	var mastery_and_record_ok: bool = (
+		dogtag_in_pouch_ok
+		and is_equal_approx(mastered_reload, base_reload * 0.95)
+		and is_equal_approx(mastered_recoil, base_recoil * 0.95)
+		and int(sr_data.get("raids_survived", 0)) == 7
+		and int(sr_data.get("boss_kills", 0)) == 2
+		and int(sr_data.get("dogtag_count", 0)) == 3
+		and ("M4_리시버" in sr_data.get("mastered_weapons", []))
+	)
+	t49_p.free()
+
+	if bounty_ok and power_gimmick_ok and mastery_and_record_ok:
+		print("[PASS] Test 49: Area 5 New Contents verified (Flea Market 2.5x Daily Bounty, Power Switch -> Bunker & Locked Door unlock, Dogtag & Service Record & 30-kill Weapon Mastery +5% bonus)")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 49: Area 5 check failed (bounty=%s, power=%s, mastery=%s)" % [str(bounty_ok), str(power_gimmick_ok), str(mastery_and_record_ok)])
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

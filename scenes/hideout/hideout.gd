@@ -198,6 +198,7 @@ func _ready() -> void:
 		
 	tab_container.tab_changed.connect(_on_tab_changed)
 	progression_tab = HideoutProgression.setup_progression_tab(self, tab_container)
+	service_record_tab = HideoutProgression.setup_service_record_tab(self, tab_container)
 	
 	_load_data()
 	_check_last_raid_result()
@@ -208,6 +209,7 @@ func _ready() -> void:
 	_refresh_market_ui()
 	_refresh_workbench_ui()
 	HideoutProgression.refresh_progression_tab(self, progression_tab)
+	HideoutProgression.refresh_service_record_tab(self, service_record_tab)
 	
 	# 반응형 레이아웃 연결
 	if ResponsiveManager:
@@ -216,6 +218,7 @@ func _ready() -> void:
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
 
 var progression_tab: Control = null
+var service_record_tab: Control = null
 
 func _apply_stash_upgrade_size() -> void:
 	if not stash_grid_mgr or not GameManager: return
@@ -262,6 +265,8 @@ func _on_tab_changed(tab: int) -> void:
 		_refresh_workbench_ui()
 	elif tab == 4 and progression_tab:
 		HideoutProgression.refresh_progression_tab(self, progression_tab)
+	elif tab == 5 and service_record_tab:
+		HideoutProgression.refresh_service_record_tab(self, service_record_tab)
 
 func _on_grid_changed() -> void:
 	if player_grid_control: player_grid_control.queue_redraw()
@@ -269,6 +274,8 @@ func _on_grid_changed() -> void:
 	_refresh_trader_sell_ui()
 	if progression_tab and tab_container and tab_container.current_tab == 4:
 		HideoutProgression.refresh_progression_tab(self, progression_tab)
+	if service_record_tab and tab_container and tab_container.current_tab == 5:
+		HideoutProgression.refresh_service_record_tab(self, service_record_tab)
 	_sync_save_data()
 
 func _load_data() -> void:
@@ -936,6 +943,52 @@ func _refresh_market_ui() -> void:
 		child.queue_free()
 		
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+	var cur_day = int(GameManager.current_world_data.get("current_day", FleaMarket.current_day)) if GameManager else FleaMarket.current_day
+	var bounties = FleaMarket.get_daily_bounties(cur_day)
+	if not bounties.is_empty():
+		var bounty_panel = PanelContainer.new()
+		bounty_panel.name = "BountyOrderPanel"
+		var b_vbox = VBoxContainer.new()
+		b_vbox.add_theme_constant_override("separation", 6)
+		bounty_panel.add_child(b_vbox)
+		
+		var b_title = Label.new()
+		b_title.text = "🎯 암시장 특수 상인 — 금일의 긴급 수배 물품 (시세 2.5배 즉시 매입)"
+		b_title.add_theme_font_size_override("font_size", 14)
+		b_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25))
+		b_vbox.add_child(b_title)
+		
+		for b_entry in bounties:
+			var b_id = String(b_entry.get("item_id", ""))
+			var b_name = String(b_entry.get("name", b_id))
+			var b_price = int(b_entry.get("bounty_price", 0))
+			var m_price = int(b_entry.get("market_price", 0))
+			var owned_cnt = HideoutProgression.count_total_item(b_id, player_grid_mgr, stash_grid_mgr)
+			
+			var b_row = HBoxContainer.new()
+			b_row.add_theme_constant_override("separation", 12)
+			var b_lbl = Label.new()
+			b_lbl.text = "★ [%s]  일반 시세: %d RUB ➔ 수배 매입가: %d RUB (x2.5)  |  보유: %d개" % [b_name, m_price, b_price, owned_cnt]
+			b_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if owned_cnt > 0 else Color(0.85, 0.88, 0.92))
+			b_row.add_child(b_lbl)
+			
+			var sell_b_btn = Button.new()
+			sell_b_btn.text = "즉시 납품 (+%d RUB)" % b_price
+			sell_b_btn.disabled = (owned_cnt <= 0)
+			var cap_id = b_id
+			sell_b_btn.pressed.connect(func():
+				var res = FleaMarket.fulfill_bounty_order(cap_id, 1, GameManager.current_world_data, player_grid_mgr, stash_grid_mgr)
+				if bool(res.get("success", false)):
+					if SoundManager: SoundManager.play("level_up")
+					_update_money_label()
+					_refresh_stash_ui()
+					_refresh_market_ui()
+					_sync_save_data()
+			)
+			b_row.add_child(sell_b_btn)
+			b_vbox.add_child(b_row)
+		market_items_vbox.add_child(bounty_panel)
 	
 	for listing in FleaMarket.listings:
 		var item_id = listing["item_name"]

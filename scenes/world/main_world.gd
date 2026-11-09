@@ -115,6 +115,50 @@ const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분
 var raid_total_time: float = 1800.0
 var day_night_cycle_duration: float = 300.0 # 낮/밤 1주기 시간(초)
+var raid_power_restored: bool = false
+
+func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO) -> Dictionary:
+	raid_power_restored = true
+	if GameManager:
+		GameManager.raid_power_restored = true
+		if GameManager.current_world_data is Dictionary:
+			GameManager.current_world_data["raid_power_restored"] = true
+	if day_night_modulate:
+		day_night_modulate.color = day_night_modulate.color.lerp(Color(1.0, 1.0, 1.0), 0.35)
+	var unlocked_doors := 0
+	if chunk_manager and chunk_manager.object_layer:
+		var obj_layer: TileMapLayer = chunk_manager.object_layer
+		for dy in range(-14, 15):
+			for dx in range(-14, 15):
+				var check_t := tile_pos + Vector2i(dx, dy)
+				if obj_layer.get_cell_source_id(check_t) != -1 and obj_layer.get_cell_atlas_coords(check_t) == TileManager.OBJ_DOOR_LOCKED:
+					obj_layer.set_cell(check_t, 0, TileManager.OBJ_DOOR_OPEN)
+					unlocked_doors += 1
+					EventBus.door_toggled.emit(check_t, true)
+	if chunk_manager and chunk_manager.loaded_chunks is Dictionary:
+		for cpos in chunk_manager.loaded_chunks.keys():
+			var c_data = chunk_manager.loaded_chunks[cpos]
+			if c_data is Dictionary and c_data.get("objects") is Array:
+				var objs: Array = c_data["objects"]
+				for idx in range(objs.size()):
+					if objs[idx] == TileManager.OBJ_DOOR_LOCKED:
+						var lx := idx % 16
+						var ly := int(idx / 16)
+						var wx := int(cpos.x) * 16 + lx
+						var wy := int(cpos.y) * 16 + ly
+						if abs(wx - tile_pos.x) <= 14 and abs(wy - tile_pos.y) <= 14:
+							objs[idx] = TileManager.OBJ_DOOR_OPEN
+							unlocked_doors += 1
+	if SoundManager:
+		SoundManager.play("menu_select")
+	if world_pos != Vector2.ZERO:
+		EventBus.noise_created.emit(world_pos, 180.0, "generator")
+	EventBus.event_logged.emit("⚡ [주 발전기 가동] 건물 조명 및 전력이 복구되었습니다! 전자식 보안 잠금문 및 지하 벙커 탈출구가 개방됩니다!")
+	return {
+		"power_restored": true,
+		"unlocked_doors": unlocked_doors,
+		"bunker_unlocked": true
+	}
 
 const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
 
@@ -765,9 +809,11 @@ func _on_compass_draw() -> void:
 					pt_col = Color(1.0, 0.82, 0.15)
 					txt_col = Color(1.0, 0.9, 0.3)
 			elif pt_type == 2:
-				var bunker_unlocked = false
+				var bunker_unlocked = raid_power_restored
 				if GameManager:
-					if GameManager.raid_landmark_completed:
+					if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
+						bunker_unlocked = true
+					elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
 						bunker_unlocked = true
 					elif int(GameManager.current_world_data.get("player", {}).get("field_objectives_completed", 0)) >= 1:
 						bunker_unlocked = true
@@ -1410,10 +1456,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		loot_title = "🪂 군용 항공 보급품"
 		slots = 12
 	elif type == Vector2i(5, 2): # OBJ_LIGHT_SWITCH
-		if player and player.has_method("set_flashlight"):
-			player.set_flashlight(not player.flashlight_enabled)
-		if SoundManager: SoundManager.play("menu_select")
-		EventBus.event_logged.emit("💡 조명 스위치를 작동했습니다.")
+		activate_power_switch(tile_pos, world_pos)
 		return
 	elif type == Vector2i(3, 3): # OBJ_DOOR_LOCKED
 		var req_key = "무기고 열쇠"

@@ -50,7 +50,9 @@ func _on_body_entered(body: Node2D) -> void:
 		elif extraction_type == ExtractionType.BUNKER:
 			var obj_done = false
 			if GameManager:
-				if GameManager.raid_landmark_completed:
+				if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
+					obj_done = true
+				elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
 					obj_done = true
 				elif GameManager.current_world_data.has("player") and GameManager.current_world_data["player"].get("field_objectives_completed", 0) >= 1:
 					obj_done = true
@@ -89,7 +91,9 @@ func _trigger_extraction() -> void:
 	elif extraction_type == ExtractionType.BUNKER:
 		var obj_done = false
 		if GameManager:
-			if GameManager.raid_landmark_completed:
+			if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
+				obj_done = true
+			elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
 				obj_done = true
 			elif GameManager.current_world_data.has("player") and GameManager.current_world_data["player"].get("field_objectives_completed", 0) >= 1:
 				obj_done = true

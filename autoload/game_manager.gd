@@ -28,6 +28,7 @@ var time_elapsed_in_raid: float = 0.0
 
 var raid_kills_count: int = 0
 var raid_landmark_completed: bool = false
+var raid_power_restored: bool = false
 const LANDMARK_EXTRACTION_BONUS: int = 15000
 
 func _ready() -> void:
@@ -35,13 +36,26 @@ func _ready() -> void:
 	if EventBus.has_signal("enemy_killed"):
 		EventBus.enemy_killed.connect(_on_enemy_killed)
 
-func _on_enemy_killed(_enemy_type: String, faction: String, _pos: Vector2) -> void:
+func _on_enemy_killed(enemy_type: String, faction: String, _pos: Vector2) -> void:
 	raid_kills_count += 1
 	if not current_world_data.has("player"):
 		current_world_data["player"] = {}
 	current_world_data["player"]["kills_total"] = int(current_world_data["player"].get("kills_total", 0)) + 1
 	if faction in ["scav", "raider"]:
 		current_world_data["player"]["human_kills"] = int(current_world_data["player"].get("human_kills", 0)) + 1
+	if enemy_type == "boss":
+		current_world_data["player"]["boss_kills"] = int(current_world_data["player"].get("boss_kills", 0)) + 1
+	var active_wep_id := ""
+	var p_node = get_tree().get_first_node_in_group("player") if get_tree() else null
+	if p_node and "equipped_weapon_data" in p_node and p_node.equipped_weapon_data is Dictionary and not p_node.equipped_weapon_data.is_empty():
+		active_wep_id = String(p_node.equipped_weapon_data.get("id", p_node.equipped_weapon_data.get("receiver", "")))
+	elif current_world_data["player"].get("equipment") is Dictionary:
+		var eq: Dictionary = current_world_data["player"]["equipment"]
+		var p1: Dictionary = eq.get("primary1", {})
+		if not p1.is_empty():
+			active_wep_id = String(p1.get("id", ""))
+	if active_wep_id != "":
+		HideoutProgression.record_weapon_kill(current_world_data, active_wep_id, 1)
 
 func _process(delta: float) -> void:
 	if current_state == GameState.IN_GAME and not is_paused:
@@ -137,6 +151,9 @@ func start_raid() -> void:
 	time_elapsed_in_raid = 0.0
 	raid_kills_count = 0
 	raid_landmark_completed = false
+	raid_power_restored = false
+	if current_world_data is Dictionary:
+		current_world_data["raid_power_restored"] = false
 	change_state(GameState.RAID_LOADING)
 	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 1.0)
 	current_state = GameState.IN_GAME
@@ -177,6 +194,7 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		FleaMarket.advance_day()
 	
 	if result == "survived":
+		current_world_data["player"]["raids_survived"] = int(current_world_data["player"].get("raids_survived", 0)) + 1
 		if current_world_data.has("current_day"):
 			current_world_data["current_day"] += 1
 		else:

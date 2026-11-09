@@ -746,6 +746,7 @@ func _spawn_loot_drop() -> void:
 			]
 			drops.append(pool.pick_random())
 		EnemyType.SCAV:
+			drops.append({"id": "Scav 인식표", "amount": 1})
 			var ammo_pool = [
 				{"id": "9mm", "amount": randi_range(10, 20)},
 				{"id": ".45ACP", "amount": randi_range(8, 16)},
@@ -762,6 +763,7 @@ func _spawn_loot_drop() -> void:
 				]
 				drops.append(gear_pool.pick_random())
 		EnemyType.RAIDER:
+			drops.append({"id": "Scav 인식표", "amount": 1})
 			var ammo_pool = [
 				{"id": "5.56mm", "amount": randi_range(15, 30)},
 				{"id": "7.62mm", "amount": randi_range(15, 30)}
@@ -789,6 +791,7 @@ func _spawn_loot_drop() -> void:
 			if randf() < 0.35:
 				drops.append({"id": "보안 키카드" if randf() < 0.5 else "무기고 열쇠", "amount": 1})
 		EnemyType.BOSS:
+			drops.append({"id": "Scav 인식표", "amount": 2})
 			var boss_parts = {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "소음기",

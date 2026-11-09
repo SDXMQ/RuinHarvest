@@ -132,6 +132,20 @@ func _load_all_items():
 		items["고급 치료킷"]["effects"]["cures_infection"] = true
 		items["고급 치료킷"]["effects"]["cures_bleeding"] = true
 		items["고급 치료킷"]["effects"]["cures_fracture"] = true
+	if not items.has("Scav 인식표"):
+		items["Scav 인식표"] = {
+			"id": "Scav 인식표",
+			"name": "Scav 인식표 (Dogtag)",
+			"category": ItemCategory.QUEST,
+			"type": "dogtag",
+			"description": "사살한 무장 스캐브·레이더·보스에게서 회수한 금속 군번줄입니다. 은신처 전술 기록실 전적 집계 및 고가 납품에 사용됩니다. (안전 컨테이너 보관 가능)",
+			"stackable": true,
+			"max_stack": 10,
+			"weight": 0.05,
+			"rarity": 3,
+			"value": 4500,
+			"effects": {}
+		}
 
 # 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {
@@ -251,6 +265,9 @@ func resolve_item_id(id: String) -> String:
 	if id in ["기밀_SSD", "기밀 SSD", "암호화된_SSD", "암호화된 SSD"]:
 		if items.has("암호화된 SSD"):
 			return "암호화된 SSD"
+	if id in ["Scav 식별줄(Dogtag)", "Scav 인식표 (Dogtag)", "Scav_인식표", "Scav 인식표"]:
+		if items.has("Scav 인식표"):
+			return "Scav 인식표"
 	if items.has(id) or WeaponPartsDatabase.PARTS.has(id) or WeaponPartsDatabase.RECEIVERS.has(id):
 		return id
 	var id_space = id.replace("_", " ")

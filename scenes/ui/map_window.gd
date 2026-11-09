@@ -45,7 +45,9 @@ static func get_extraction_lock_info(z_type: int, objectives: Array = []) -> Dic
 	elif z_type == 2:
 		var obj_done = false
 		if GameManager:
-			if GameManager.raid_landmark_completed:
+			if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
+				obj_done = true
+			elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
 				obj_done = true
 			elif int(GameManager.current_world_data.get("player", {}).get("field_objectives_completed", 0)) >= 1:
 				obj_done = true

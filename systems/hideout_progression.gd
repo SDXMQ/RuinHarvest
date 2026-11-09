@@ -403,3 +403,206 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			vbox.add_child(comp_btn)
 			
 		q_list.add_child(card)
+
+const WEAPON_MASTERY_KILL_THRESHOLD: int = 30
+const TRACKED_MASTERY_WEAPONS: Array[String] = [
+	"M4_리시버", "AK_리시버", "SV98_리시버", "MP5_리시버", "레밍턴_리시버", "M9_리시버"
+]
+
+static func normalize_weapon_id(weapon_id: String) -> String:
+	if weapon_id == "권총":
+		return "M9_리시버"
+	elif weapon_id == "레버액션 소총":
+		return "SV98_리시버"
+	return weapon_id
+
+static func record_weapon_kill(world_data: Dictionary, weapon_id: String, count: int = 1) -> int:
+	if weapon_id == "" or weapon_id == "맨손":
+		return 0
+	var norm_id := normalize_weapon_id(weapon_id)
+	if not world_data.has("player"):
+		world_data["player"] = {}
+	if not (world_data["player"].get("weapon_kills") is Dictionary):
+		world_data["player"]["weapon_kills"] = {}
+	var w_kills: Dictionary = world_data["player"]["weapon_kills"]
+	var prev_cnt: int = int(w_kills.get(norm_id, 0))
+	var next_cnt: int = prev_cnt + maxi(1, count)
+	w_kills[norm_id] = next_cnt
+	if prev_cnt < WEAPON_MASTERY_KILL_THRESHOLD and next_cnt >= WEAPON_MASTERY_KILL_THRESHOLD:
+		if EventBus and EventBus.has_signal("event_logged"):
+			var w_data := ItemDatabase.get_item_data(norm_id) if ItemDatabase else {}
+			var w_name := String(w_data.get("name", norm_id))
+			EventBus.event_logged.emit("★ 🎖️ [총기 숙련도 마스터] %s 30킬 달성! 재장전 속도 및 반동 제어 +5%% 영구 보너스가 적용됩니다!" % w_name)
+	return next_cnt
+
+static func get_weapon_kill_count(world_data: Dictionary, weapon_id: String) -> int:
+	if weapon_id == "":
+		return 0
+	var norm_id := normalize_weapon_id(weapon_id)
+	var w_kills: Dictionary = world_data.get("player", {}).get("weapon_kills", {})
+	return int(w_kills.get(norm_id, w_kills.get(weapon_id, 0)))
+
+static func get_weapon_mastery_bonus(world_data: Dictionary, weapon_id: String) -> Dictionary:
+	var kills := get_weapon_kill_count(world_data, weapon_id)
+	var mastered := kills >= WEAPON_MASTERY_KILL_THRESHOLD
+	return {
+		"weapon_id": normalize_weapon_id(weapon_id),
+		"kills": kills,
+		"threshold": WEAPON_MASTERY_KILL_THRESHOLD,
+		"mastered": mastered,
+		"reload_speed_mult": 0.95 if mastered else 1.0,
+		"recoil_mult": 0.95 if mastered else 1.0,
+		"bonus_pct": 5 if mastered else 0
+	}
+
+static func get_service_record_data(world_data: Dictionary, player_grid: InventoryGrid = null, stash_grid: InventoryGrid = null) -> Dictionary:
+	var p_data: Dictionary = world_data.get("player", {})
+	var raids_survived := int(p_data.get("raids_survived", 0))
+	var kills_total := int(p_data.get("kills_total", 0))
+	var human_kills := int(p_data.get("human_kills", 0))
+	var boss_kills := int(p_data.get("boss_kills", 0))
+	var dogtag_count := count_total_item("Scav 인식표", player_grid, stash_grid)
+	var mastered: Array[String] = []
+	for w_id in TRACKED_MASTERY_WEAPONS:
+		if get_weapon_kill_count(world_data, w_id) >= WEAPON_MASTERY_KILL_THRESHOLD:
+			mastered.append(w_id)
+	return {
+		"raids_survived": raids_survived,
+		"kills_total": kills_total,
+		"human_kills": human_kills,
+		"boss_kills": boss_kills,
+		"dogtag_count": dogtag_count,
+		"weapon_kills": p_data.get("weapon_kills", {}).duplicate(true) if p_data.get("weapon_kills") is Dictionary else {},
+		"mastered_weapons": mastered
+	}
+
+static func setup_service_record_tab(_hideout: Control, tab_container: TabContainer) -> Control:
+	var tab_root := HBoxContainer.new()
+	tab_root.name = " 🎖️ 전술 기록실 "
+	tab_root.add_theme_constant_override("separation", 18)
+	tab_container.add_child(tab_root)
+
+	# 좌측: 레이드 전적 아카이브 & 인식표 휘장
+	var rec_panel := PanelContainer.new()
+	rec_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	rec_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var rec_vbox := VBoxContainer.new()
+	rec_vbox.name = "ServiceStatsVBox"
+	rec_vbox.add_theme_constant_override("separation", 10)
+	rec_panel.add_child(rec_vbox)
+	tab_root.add_child(rec_panel)
+
+	# 우측: 총기별 킬 카운트 & 총기 숙련도(Weapon Mastery)
+	var mas_panel := PanelContainer.new()
+	mas_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mas_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var mas_vbox_outer := VBoxContainer.new()
+	mas_vbox_outer.add_theme_constant_override("separation", 10)
+	mas_panel.add_child(mas_vbox_outer)
+
+	var mas_title := Label.new()
+	mas_title.text = "🔫 총기 숙련도 (Weapon Mastery — 30킬 달성 시 재장전/반동 +5%)"
+	mas_title.add_theme_font_size_override("font_size", 16)
+	mas_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	mas_vbox_outer.add_child(mas_title)
+
+	var mas_scroll := ScrollContainer.new()
+	mas_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	var mas_list := VBoxContainer.new()
+	mas_list.name = "WeaponMasteryList"
+	mas_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	mas_list.add_theme_constant_override("separation", 8)
+	mas_scroll.add_child(mas_list)
+	mas_vbox_outer.add_child(mas_scroll)
+	tab_root.add_child(mas_panel)
+
+	return tab_root
+
+static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> void:
+	if not tab_root or not GameManager:
+		return
+	var rec_vbox: VBoxContainer = tab_root.find_child("ServiceStatsVBox", true, false)
+	var mas_list: VBoxContainer = tab_root.find_child("WeaponMasteryList", true, false)
+	if not rec_vbox or not mas_list:
+		return
+	for c in rec_vbox.get_children():
+		c.queue_free()
+	for c in mas_list.get_children():
+		c.queue_free()
+
+	var w_data: Dictionary = GameManager.current_world_data
+	var p_grid: InventoryGrid = hideout.get("player_grid_mgr")
+	var s_grid: InventoryGrid = hideout.get("stash_grid_mgr")
+	var summary := get_service_record_data(w_data, p_grid, s_grid)
+
+	var title := Label.new()
+	title.text = "🎖️ 전술 기록실 (Service Record & Dogtag Archive)"
+	title.add_theme_font_size_override("font_size", 16)
+	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
+	rec_vbox.add_child(title)
+
+	var stat_lines := [
+		["🚁 누적 레이드 생환 횟수", "%d 회" % int(summary["raids_survived"]), Color(0.45, 1.0, 0.55)],
+		["⚔️ 누적 전체 적 사살 수", "%d 명" % int(summary["kills_total"]), Color(0.92, 0.94, 0.98)],
+		["🎯 무장 세력(Scav/Raider) 사살", "%d 명" % int(summary["human_kills"]), Color(1.0, 0.82, 0.4)],
+		["💀 구역 지휘관(Boss) 사살", "%d 회" % int(summary["boss_kills"]), Color(1.0, 0.45, 0.45)],
+		["🏷️ 보유 중인 Scav 인식표 (Dogtag)", "%d 개" % int(summary["dogtag_count"]), Color(0.4, 0.92, 1.0)],
+		["★ 마스터 달성 총기 수", "%d / %d 종" % [summary["mastered_weapons"].size(), TRACKED_MASTERY_WEAPONS.size()], Color(1.0, 0.88, 0.3)]
+	]
+
+	for row in stat_lines:
+		var card := PanelContainer.new()
+		var hbox := HBoxContainer.new()
+		card.add_child(hbox)
+		var k_lbl := Label.new()
+		k_lbl.text = String(row[0])
+		k_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		k_lbl.add_theme_font_size_override("font_size", 13)
+		hbox.add_child(k_lbl)
+		var v_lbl := Label.new()
+		v_lbl.text = String(row[1])
+		v_lbl.add_theme_font_size_override("font_size", 14)
+		v_lbl.add_theme_color_override("font_color", row[2])
+		hbox.add_child(v_lbl)
+		rec_vbox.add_child(card)
+
+	for w_id in TRACKED_MASTERY_WEAPONS:
+		var m_info := get_weapon_mastery_bonus(w_data, w_id)
+		var kills := int(m_info["kills"])
+		var mastered := bool(m_info["mastered"])
+		var idata := ItemDatabase.get_item_data(w_id) if ItemDatabase else {}
+		var w_name := String(idata.get("name", w_id))
+
+		var card := PanelContainer.new()
+		var vbox := VBoxContainer.new()
+		vbox.add_theme_constant_override("separation", 4)
+		card.add_child(vbox)
+
+		var header := Label.new()
+		header.text = "%s  —  처치: %d / %d 킬 %s" % [
+			w_name,
+			kills,
+			WEAPON_MASTERY_KILL_THRESHOLD,
+			" [★ MASTERY +5%]" if mastered else ""
+		]
+		header.add_theme_font_size_override("font_size", 13)
+		header.add_theme_color_override("font_color", Color(1.0, 0.88, 0.32) if mastered else Color(0.88, 0.9, 0.95))
+		vbox.add_child(header)
+
+		var bar := ProgressBar.new()
+		bar.max_value = float(WEAPON_MASTERY_KILL_THRESHOLD)
+		bar.value = float(min(kills, WEAPON_MASTERY_KILL_THRESHOLD))
+		bar.custom_minimum_size = Vector2(0, 14)
+		vbox.add_child(bar)
+
+		var bonus_lbl := Label.new()
+		if mastered:
+			bonus_lbl.text = "✅ 숙련도 보너스 활성화: 재장전 속도 +5% (x0.95) & 사격 반동 제어 +5% (x0.95)"
+			bonus_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+		else:
+			bonus_lbl.text = "목표: %d킬 달성 시 재장전 속도 +5%% 및 반동 제어 +5%% 영구 보너스 해금" % WEAPON_MASTERY_KILL_THRESHOLD
+			bonus_lbl.add_theme_color_override("font_color", Color(0.7, 0.74, 0.82))
+		bonus_lbl.add_theme_font_size_override("font_size", 11)
+		vbox.add_child(bonus_lbl)
+
+		mas_list.add_child(card)

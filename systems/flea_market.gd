@@ -7,6 +7,13 @@ var trends: Dictionary = {}
 var price_multipliers: Dictionary = {}
 var listings: Array = []
 var player_listings: Array = []
+var daily_bounties: Array[Dictionary] = []
+
+const BOUNTY_MULTIPLIER: float = 2.5
+const BOUNTY_CANDIDATE_POOL: Array[String] = [
+	"고철", "폐전선", "비상용 배터리", "CPU", "그래픽카드",
+	"라디오 부품", "기계 부품", "화약", "금시계", "은반지", "암호화된 SSD", "약초"
+]
 
 var next_listing_id: int = 1
 var next_player_listing_id: int = 1
@@ -22,6 +29,7 @@ func _initialize_market() -> void:
 	
 	update_market_prices(current_day)
 	refresh_listings(current_day)
+	refresh_daily_bounties(current_day)
 
 func advance_day(day_num: int = -1) -> void:
 	if day_num > 0:
@@ -32,6 +40,98 @@ func advance_day(day_num: int = -1) -> void:
 		current_day += 1
 	update_market_prices(current_day)
 	refresh_listings(current_day)
+	refresh_daily_bounties(current_day)
+
+func refresh_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
+	var target_day := in_game_day if in_game_day > 0 else current_day
+	var rng := RandomNumberGenerator.new()
+	rng.seed = target_day * 30013 + 777
+	daily_bounties.clear()
+	var pool: Array[String] = []
+	for cand in BOUNTY_CANDIDATE_POOL:
+		if ItemDatabase.items.has(cand):
+			pool.append(cand)
+	if pool.is_empty():
+		for k in ItemDatabase.items.keys():
+			if not (String(k) in ["Scav 식별줄(Dogtag)", "Scav 인식표"]):
+				pool.append(String(k))
+	var chosen: Array[String] = []
+	var count_to_pick: int = min(2, pool.size())
+	var attempts := 0
+	while chosen.size() < count_to_pick and attempts < 30:
+		attempts += 1
+		var pick := pool[rng.randi_range(0, pool.size() - 1)]
+		if not (pick in chosen):
+			chosen.append(pick)
+	for item_id in chosen:
+		var market_price: int = get_current_price(item_id)
+		var bounty_price: int = maxi(25, int(round(float(market_price) * BOUNTY_MULTIPLIER)))
+		var data: Dictionary = ItemDatabase.get_item_data(item_id)
+		daily_bounties.append({
+			"item_id": item_id,
+			"name": String(data.get("name", item_id)),
+			"market_price": market_price,
+			"bounty_price": bounty_price,
+			"multiplier": BOUNTY_MULTIPLIER,
+			"day": target_day
+		})
+	return daily_bounties
+
+func get_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
+	if in_game_day > 0 and (daily_bounties.is_empty() or int(daily_bounties[0].get("day", -1)) != in_game_day):
+		return refresh_daily_bounties(in_game_day)
+	if daily_bounties.is_empty():
+		return refresh_daily_bounties(current_day)
+	# 현재 시세와 2.5배 가격 동기화
+	for b in daily_bounties:
+		var m_price: int = get_current_price(String(b.get("item_id", "")))
+		b["market_price"] = m_price
+		b["bounty_price"] = maxi(25, int(round(float(m_price) * BOUNTY_MULTIPLIER)))
+	return daily_bounties
+
+func get_bounty_price(item_id: String) -> int:
+	var resolved: String = ItemDatabase.resolve_item_id(item_id) if ItemDatabase else item_id
+	for b in get_daily_bounties():
+		if String(b.get("item_id", "")) == resolved or String(b.get("item_id", "")) == item_id:
+			return int(b.get("bounty_price", int(round(float(get_current_price(resolved)) * BOUNTY_MULTIPLIER))))
+	return 0
+
+func is_bounty_item(item_id: String) -> bool:
+	return get_bounty_price(item_id) > 0
+
+func fulfill_bounty_order(item_id: String, amount: int, world_data: Dictionary, player_grid: InventoryGrid = null, stash_grid: InventoryGrid = null) -> Dictionary:
+	var resolved: String = ItemDatabase.resolve_item_id(item_id) if ItemDatabase else item_id
+	var unit_bounty: int = get_bounty_price(resolved)
+	if unit_bounty <= 0:
+		var m_price: int = get_current_price(resolved)
+		unit_bounty = maxi(25, int(round(float(m_price) * BOUNTY_MULTIPLIER)))
+	var sell_amt: int = maxi(1, amount)
+	if player_grid != null or stash_grid != null:
+		var owned: int = 0
+		if player_grid:
+			owned += player_grid.get_item_count(resolved)
+		if stash_grid:
+			owned += stash_grid.get_item_count(resolved)
+		if owned <= 0:
+			return {"success": false, "earned": 0, "sold": 0}
+		sell_amt = mini(sell_amt, owned)
+		var rem: int = sell_amt
+		if stash_grid:
+			rem = stash_grid.remove_item(resolved, rem)
+		if rem > 0 and player_grid:
+			player_grid.remove_item(resolved, rem)
+	var earned: int = unit_bounty * sell_amt
+	if not world_data.has("player"):
+		world_data["player"] = {}
+	world_data["player"]["rubles"] = int(world_data["player"].get("rubles", 0)) + earned
+	return {
+		"success": true,
+		"item_id": resolved,
+		"sold": sell_amt,
+		"unit_price": unit_bounty,
+		"market_price": get_current_price(resolved),
+		"earned": earned
+	}
 
 func get_current_price(item_name: String) -> int:
 	if not ItemDatabase.items.has(item_name):
@@ -81,7 +181,7 @@ func refresh_listings(in_game_day: int) -> void:
 		var data = ItemDatabase.items[item_name]
 		
 		# 예: 거래 불가 품목 필터
-		if item_name == "Scav 식별줄(Dogtag)":
+		if item_name in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
 			continue
 			
 		var current_price = get_current_price(item_name)
@@ -145,7 +245,7 @@ func process_player_sales(player_data: Dictionary) -> Dictionary:
 	return {"completed": completed, "failed": failed}
 
 func register_item(item_name: String, count: int, price: int) -> bool:
-	if item_name == "Scav 식별줄(Dogtag)":
+	if item_name in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
 		return false
 		
 	var entry = {

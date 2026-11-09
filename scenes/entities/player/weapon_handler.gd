@@ -183,7 +183,7 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	if player and player.has_signal("stats_changed"):
 		player.stats_changed.emit()
 	
-	var recoil_val = stats.get("recoil", 20.0)
+	var recoil_val = get_effective_recoil()
 	recoil_offset = recoil_val * 0.2
 	if player and player.player_camera and player.player_camera.has_method("apply_recoil_punch"):
 		player.player_camera.apply_recoil_punch(aim_dir, recoil_val)
@@ -399,11 +399,28 @@ func start_reload() -> void:
 		return
 		
 	is_reloading = true
-	reload_timer = stats.get("reload_speed", 1.8)
+	reload_timer = get_effective_reload_speed()
 	if player and player.has_method("show_floating_text"):
 		player.show_floating_text("[RELOADING...]", Color(0.4, 0.9, 1.0))
 	EventBus.event_logged.emit("🔄 재장전 중... (%.1f초)" % reload_timer)
 	if SoundManager: SoundManager.play("menu_select")
+
+func get_current_weapon_mastery() -> Dictionary:
+	var w_id := String(equipped_weapon_data.get("id", equipped_weapon_data.get("receiver", "")))
+	var w_data: Dictionary = GameManager.current_world_data if GameManager and GameManager.current_world_data is Dictionary else {}
+	return HideoutProgression.get_weapon_mastery_bonus(w_data, w_id)
+
+func get_effective_reload_speed() -> float:
+	var stats: Dictionary = equipped_weapon_data.get("computed_stats", {})
+	var base_reload := float(stats.get("reload_speed", 1.8))
+	var mastery := get_current_weapon_mastery()
+	return base_reload * float(mastery.get("reload_speed_mult", 1.0))
+
+func get_effective_recoil() -> float:
+	var stats: Dictionary = equipped_weapon_data.get("computed_stats", {})
+	var base_recoil := float(stats.get("recoil", 20.0))
+	var mastery := get_current_weapon_mastery()
+	return base_recoil * float(mastery.get("recoil_mult", 1.0))
 
 func _finish_reload() -> void:
 	is_reloading = false
