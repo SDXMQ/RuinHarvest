@@ -990,7 +990,17 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 			else:
 				if SoundManager: SoundManager.play("hit_melee")
 	else:
-		# 배치 실패 -> 원위치
+		# 배치 불가 사유 안내 (특히 2x2 세이프 파우치 구역)
+		if inventory_grid and inventory_grid.has_secure_container and cell_x < 2 and cell_y < 2:
+			if not inventory_grid.is_allowed_in_secure_container(item.get("id", "")):
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("🔒 [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
+			elif cell_x + place_w > 2 or cell_y + place_h > 2:
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("🔒 [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
+			else:
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 해당 슬롯에 이미 다른 아이템이 있습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		
 	_end_drag()

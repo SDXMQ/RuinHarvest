@@ -139,11 +139,21 @@ func _ready() -> void:
 		
 		var deposit_all_btn = Button.new()
 		deposit_all_btn.text = "⏩ 창고로 모두 보관"
+		deposit_all_btn.tooltip_text = "배낭의 전리품을 창고로 일괄 보관합니다. (2x2 안전 파우치 내 열쇠/키카드/귀중품은 안전하게 보호됩니다)"
 		deposit_all_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		deposit_all_btn.add_theme_font_size_override("font_size", 11)
 		deposit_all_btn.pressed.connect(func():
 			var copy_items = player_grid_mgr.items.duplicate(true)
 			for it in copy_items:
+				var ix = int(it.get("x", 99))
+				var iy = int(it.get("y", 99))
+				var is_rot = it.get("rotated", false)
+				var base_size = ItemDatabase.get_item_grid_size(it.get("id", ""))
+				var w = base_size.y if is_rot else base_size.x
+				var h = base_size.x if is_rot else base_size.y
+				# 2x2 안전 컨테이너 영역(Secure Pouch) 내 아이템은 창고 일괄 보관 대상에서 제외하여 안전 보존
+				if player_grid_mgr.has_secure_container and ix < 2 and iy < 2 and ix + w <= 2 and iy + h <= 2:
+					continue
 				var rem = stash_grid_mgr.auto_add_item(it.get("id", ""), it.get("amount", 1), it)
 				if rem <= 0:
 					player_grid_mgr.remove_item_by_uid(it.get("uid", ""), false)
@@ -618,23 +628,47 @@ func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: in
 	var ignore_uid = uid if (src == ("player_grid" if is_dest_player else "stash_grid")) else ""
 	
 	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", "")):
-		if dest_grid.place_item(item, cell_x, cell_y, is_rot):
-			# 배치 성공 시 이전 위치에서 안전하게 제거
+		if src == "player_grid" and is_dest_player:
+			# 가방 내부 이동: move_item으로 안전하게 좌표 변경
+			player_grid_mgr.move_item(uid, cell_x, cell_y, is_rot)
+			if SoundManager: SoundManager.play("menu_select")
+		elif src == "stash_grid" and not is_dest_player:
+			# 창고 내부 이동: move_item으로 안전하게 좌표 변경
+			stash_grid_mgr.move_item(uid, cell_x, cell_y, is_rot)
+			if SoundManager: SoundManager.play("menu_select")
+		else:
+			# 서로 다른 그리드/슬롯 간 교차 이동 (가방 <-> 창고 <-> 장비):
+			# 출발지(src)에서 원래 좌표 기준으로 먼저 제거하여 grid_map 유령 점유(Ghost Cell)를 원천 차단!
 			if src == "player_grid":
-				if not is_dest_player or dest_grid != player_grid_mgr:
-					player_grid_mgr.remove_item_by_uid(uid)
+				player_grid_mgr.remove_item_by_uid(uid)
 			elif src == "stash_grid":
-				if is_dest_player or dest_grid != stash_grid_mgr:
-					stash_grid_mgr.remove_item_by_uid(uid)
+				stash_grid_mgr.remove_item_by_uid(uid)
 			elif src == "equipment":
 				equipment_data[drag_data.get("slot_name", "")] = {}
 				_apply_backpack_grid_size()
 				_update_equipment_ui()
 				
-			if SoundManager: SoundManager.play("menu_select")
-		else:
-			if SoundManager: SoundManager.play("hit_melee")
+			if dest_grid.place_item(item, cell_x, cell_y, is_rot):
+				if SoundManager: SoundManager.play("menu_select")
+			else:
+				# 배치 실패 시 출발지로 안전하게 롤백
+				if src == "player_grid":
+					player_grid_mgr.auto_add_item(item.get("id", ""), item.get("amount", 1), item)
+				elif src == "stash_grid":
+					stash_grid_mgr.auto_add_item(item.get("id", ""), item.get("amount", 1), item)
+				if SoundManager: SoundManager.play("hit_melee")
 	else:
+		# 배치 불가 사유 안내 (특히 2x2 세이프 파우치 구역)
+		if dest_grid.has_secure_container and cell_x < 2 and cell_y < 2:
+			if not dest_grid.is_allowed_in_secure_container(item.get("id", "")):
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("🔒 [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
+			elif cell_x + place_w > 2 or cell_y + place_h > 2:
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("🔒 [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
+			else:
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 해당 슬롯에 이미 다른 아이템이 있습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		
 	_end_drag()

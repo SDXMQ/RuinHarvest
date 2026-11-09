@@ -409,9 +409,29 @@ func sort_items() -> void:
 		return
 	var backup_items = items.duplicate(true)
 	
-	# 1. 동일 아이템 스택 병합
+	# 안전 컨테이너(has_secure_container)가 활성화되어 있으면,
+	# 2x2 안전 파우치 구역 내부(x < 2, y < 2, x+w <= 2, y+h <= 2)에 있는 아이템은 정렬 대상에서 제외하고 위치를 보존
+	var pouch_items: Array[Dictionary] = []
+	var sortable_items: Array[Dictionary] = []
+	
+	if has_secure_container:
+		for it in backup_items:
+			var ix = int(it.get("x", 99))
+			var iy = int(it.get("y", 99))
+			var is_rot = it.get("rotated", false)
+			var base_size = ItemDatabase.get_item_grid_size(it.get("id", ""))
+			var w = base_size.y if is_rot else base_size.x
+			var h = base_size.x if is_rot else base_size.y
+			if ix < 2 and iy < 2 and ix + w <= 2 and iy + h <= 2:
+				pouch_items.append(it.duplicate(true))
+			else:
+				sortable_items.append(it.duplicate(true))
+	else:
+		sortable_items = backup_items.duplicate(true)
+	
+	# 1. 동일 아이템 스택 병합 (일반 가방 아이템 대상)
 	var merged: Array[Dictionary] = []
-	for raw_item in backup_items:
+	for raw_item in sortable_items:
 		var item = raw_item.duplicate(true)
 		var id = item.get("id", "")
 		var d = ItemDatabase.get_item_data(id)
@@ -453,9 +473,12 @@ func sort_items() -> void:
 		return String(a.get("id", "")) < String(b.get("id", ""))
 	)
 	
-	# 3. 좌상단부터 재배치
+	# 3. 파우치 아이템 먼저 원래 위치에 배치한 후, 남은 공간에 일반 아이템 자동 배치
 	items.clear()
 	_init_grid_map()
+	for it in pouch_items:
+		place_item(it, int(it["x"]), int(it["y"]), it.get("rotated", false))
+		
 	var all_placed = true
 	for it in merged:
 		var bw = int(it.get("w", 1))

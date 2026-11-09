@@ -188,8 +188,7 @@ func _generate_procedural_tileset() -> void:
 			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE, OBJ_SHELF]:
 				var occluder = OccluderPolygon2D.new()
 				occluder.polygon = full_poly
-				tile_data.add_occluder_polygon(0)
-				tile_data.set_occluder_polygon(0, 0, occluder)
+				tile_data.set_occluder(0, occluder)
 
 # ==========================================================
 # 이미지 드로잉 헬퍼

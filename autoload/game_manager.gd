@@ -46,9 +46,13 @@ func _on_enemy_killed(_enemy_type: String, faction: String, _pos: Vector2) -> vo
 func _process(delta: float) -> void:
 	if current_state == GameState.IN_GAME and not is_paused:
 		time_elapsed_in_raid += delta
-		# 레이드 시간 초과 시 MIA(Missing In Action) 처리
+		# 레이드 시간 초과 시 MIA(Missing In Action) 처리 (안전 컨테이너 아이템 보존)
 		if time_elapsed_in_raid >= raid_duration_minutes * 60.0:
-			end_raid("mia")
+			var cur_items: Array = []
+			var p_node = get_tree().get_first_node_in_group("player") if get_tree() else null
+			if p_node and "inventory_grid" in p_node and p_node.inventory_grid:
+				cur_items = p_node.inventory_grid.items.duplicate(true)
+			end_raid("mia", cur_items)
 
 # ============================================================
 # 씬 전환 및 플로우 제어

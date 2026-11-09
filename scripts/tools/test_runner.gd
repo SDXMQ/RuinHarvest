@@ -980,5 +980,62 @@ func _ready() -> void:
 	t44_radio.free()
 	t44_p.free()
 
+	# Test 45: Secure Container (Safe Pouch) sorting retention & cross-grid transfer without ghost cells
+	total_tests += 1
+	var t45_pgrid := InventoryGrid.new()
+	t45_pgrid.grid_width = 6
+	t45_pgrid.grid_height = 4
+	t45_pgrid.has_secure_container = true
+	t45_pgrid._init_grid_map()
+
+	var t45_sgrid := InventoryGrid.new()
+	t45_sgrid.grid_width = 10
+	t45_sgrid.grid_height = 12
+	t45_sgrid.has_secure_container = false
+	t45_sgrid._init_grid_map()
+
+	# 1. Place a key at (0,0) inside Safe Pouch and large loot outside at (2,0)
+	var key_item := {"uid": "pouch_key", "id": "무기고 열쇠", "w": 1, "h": 1, "x": 0, "y": 0, "amount": 1}
+	var loot_item := {"uid": "backpack_loot", "id": "구급상자", "w": 2, "h": 2, "x": 2, "y": 0, "amount": 1}
+	t45_pgrid.place_item(key_item, 0, 0)
+	t45_pgrid.place_item(loot_item, 2, 0)
+
+	# 2. Test sort_items: key at (0,0) MUST NOT be moved or displaced by large loot
+	t45_pgrid.sort_items()
+	var key_after_sort = t45_pgrid.get_item_by_uid("pouch_key")
+	var sort_preserved = (not key_after_sort.is_empty() and int(key_after_sort.get("x", -1)) == 0 and int(key_after_sort.get("y", -1)) == 0)
+
+	# 3. Simulate hideout transfer to stash: remove from source first, place in dest
+	var item_to_move = t45_pgrid.get_item_by_uid("pouch_key")
+	t45_pgrid.remove_item_by_uid("pouch_key")
+	t45_sgrid.place_item(item_to_move, 3, 3)
+
+	# 4. Verify (0,0) in pgrid is 100% free with NO ghost cells
+	var can_place_new = t45_pgrid.can_place_item(1, 1, 0, 0, "", "보안 키카드")
+
+	# 5. Verify deposit_all logic preserves items inside 2x2 secure container
+	t45_pgrid.place_item({"uid": "keycard_pouch", "id": "보안 키카드", "w": 1, "h": 1, "x": 0, "y": 0, "amount": 1}, 0, 0)
+	var copy_p = t45_pgrid.items.duplicate(true)
+	for it in copy_p:
+		var ix = int(it.get("x", 99))
+		var iy = int(it.get("y", 99))
+		var is_r = it.get("rotated", false)
+		var bs = ItemDatabase.get_item_grid_size(it.get("id", ""))
+		var pw = bs.y if is_r else bs.x
+		var ph = bs.x if is_r else bs.y
+		if t45_pgrid.has_secure_container and ix < 2 and iy < 2 and ix + pw <= 2 and iy + ph <= 2:
+			continue
+		t45_sgrid.auto_add_item(it.get("id", ""), it.get("amount", 1), it)
+		t45_pgrid.remove_item_by_uid(it.get("uid", ""), false)
+
+	var pouch_remains = (t45_pgrid.items.size() == 1 and t45_pgrid.items[0].get("id", "") == "보안 키카드")
+	if sort_preserved and can_place_new and pouch_remains:
+		print("[PASS] Test 45: Safe Pouch sort immunity, 0 ghost cells on stash transfer, and deposit-all protection verified")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 45: Safe pouch check failed (sort_ok=%s, can_place=%s, pouch_kept=%s)" % [str(sort_preserved), str(can_place_new), str(pouch_remains)])
+	t45_pgrid.free()
+	t45_sgrid.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)
