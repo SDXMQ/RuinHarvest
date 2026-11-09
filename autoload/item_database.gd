@@ -110,6 +110,28 @@ func _load_all_items():
 		}
 	else:
 		items["보안 키카드"]["max_durability"] = 3
+	if not items.has("항생제"):
+		items["항생제"] = {
+			"id": "항생제",
+			"name": "광범위 항생제",
+			"category": ItemCategory.MEDICAL,
+			"description": "변이체 및 야간 추격자에게 피격되어 발생한 생체 감염(최대 스태미나 감소 및 지속 피해)을 완치하는 특수 항생제입니다.",
+			"stackable": true,
+			"max_stack": 3,
+			"weight": 0.15,
+			"rarity": 2,
+			"value": 3200,
+			"effects": {
+				"hp": 15,
+				"cures_infection": true
+			}
+		}
+	if items.has("고급 치료킷"):
+		if not (items["고급 치료킷"].get("effects") is Dictionary):
+			items["고급 치료킷"]["effects"] = {}
+		items["고급 치료킷"]["effects"]["cures_infection"] = true
+		items["고급 치료킷"]["effects"]["cures_bleeding"] = true
+		items["고급 치료킷"]["effects"]["cures_fracture"] = true
 
 # 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {

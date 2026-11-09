@@ -4,8 +4,15 @@ extends ColorRect
 var target_tint: Color = Color(1, 1, 1, 1)
 var current_tint: Color = Color(1, 1, 1, 1)
 var hp_pulse_time: float = 0.0
+var infection_pulse_time: float = 0.0
+var current_infection_pulse: float = 0.0
 var lightning_timer: float = 14.0
 var lightning_flash_val: float = 0.0
+
+static func compute_infection_vignette_strength(infected: bool, pulse_time: float = 0.0) -> float:
+	if not infected:
+		return 0.0
+	return 0.45 + 0.25 * (sin(pulse_time) * 0.5 + 0.5)
 
 func _ready() -> void:
 	# 시간대/날씨에 따른 틴트 조절
@@ -40,6 +47,15 @@ func _process(delta: float) -> void:
 			hp_pulse_time = 0.0
 			if material:
 				material.set_shader_parameter("low_hp_pulse", 0.0)
+				
+	if player and "is_infected" in player and bool(player.is_infected):
+		infection_pulse_time += delta * 3.0
+		current_infection_pulse = compute_infection_vignette_strength(true, infection_pulse_time)
+	else:
+		infection_pulse_time = 0.0
+		current_infection_pulse = 0.0
+	if material:
+		material.set_shader_parameter("infection_pulse", current_infection_pulse)
 				
 	# 3. 낮/밤 환경광 기반 비네팅 자동 제어 (낮에는 0.0, 밤이나 실내에서만 부드럽게 점진적 증가)
 	var current_scene = get_tree().current_scene

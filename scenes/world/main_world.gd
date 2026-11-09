@@ -76,6 +76,40 @@ var storm_lightning_timer: float = 18.0
 var storm_lightning_active: bool = false
 var storm_lightning_duration: float = 0.0
 var storm_thunder_delay: float = -1.0
+var last_fulton_balloon: Node2D = null
+
+func spawn_fulton_balloon_effect(start_pos: Vector2, item_name: String = "") -> Node2D:
+	var balloon := Node2D.new()
+	balloon.name = "FultonRecoveryBalloon"
+	balloon.global_position = start_pos
+	balloon.z_index = 65
+	balloon.set_meta("start_y", start_pos.y)
+	balloon.set_meta("target_y", start_pos.y - 400.0)
+	balloon.set_meta("duration", 1.2)
+	balloon.set_meta("item_name", item_name)
+	balloon.draw.connect(func():
+		# 회수 화물 상자 및 로프
+		balloon.draw_line(Vector2(-5, -6), Vector2(-9, -24), Color(0.85, 0.85, 0.8, 0.9), 1.4)
+		balloon.draw_line(Vector2(5, -6), Vector2(9, -24), Color(0.85, 0.85, 0.8, 0.9), 1.4)
+		balloon.draw_rect(Rect2(Vector2(-7, -6), Vector2(14, 12)), Color(0.24, 0.34, 0.22, 0.95))
+		balloon.draw_rect(Rect2(Vector2(-7, -6), Vector2(14, 12)), Color(0.75, 0.85, 0.45, 0.95), false, 1.4)
+		# 고고도 풀턴 회수 기구(풍선)
+		balloon.draw_circle(Vector2(0, -32), 12.0, Color(1.0, 0.50, 0.12, 0.95))
+		balloon.draw_circle(Vector2(-4, -35), 4.0, Color(1.0, 0.82, 0.45, 0.75))
+	)
+	if entities_layer:
+		entities_layer.add_child(balloon)
+	else:
+		add_child(balloon)
+	last_fulton_balloon = balloon
+	if balloon.is_inside_tree():
+		var tw := balloon.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(balloon, "global_position:y", start_pos.y - 400.0, 1.2).set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_IN)
+		tw.tween_property(balloon, "scale", Vector2(0.45, 0.45), 1.2)
+		tw.tween_property(balloon, "modulate:a", 0.0, 1.2)
+		tw.chain().tween_callback(balloon.queue_free)
+	return balloon
 
 const ExtractionZoneScene = preload("res://scenes/world/extraction_zone.tscn")
 var raid_time_remaining: float = 1800.0 # 30분

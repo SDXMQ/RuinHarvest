@@ -1169,5 +1169,56 @@ func _ready() -> void:
 	t47_cm.free()
 	t47_mw.free()
 
+	# Test 48: Section 2 Area 3 & 4 (Night Stalker stealth alpha & smoke evade, Fulton ascent balloon Y-400 effect, Infection max stamina reduction & green vignette & Antibiotics cure)
+	total_tests += 1
+	var t48_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t48_p)
+	t48_p.global_position = Vector2(200, 200)
+	t48_p.rotation = 0.0
+	t48_p.set_flashlight(false)
+	var t48_ns = preload("res://scenes/entities/enemies/enemy.tscn").instantiate()
+	t48_ns.enemy_type = 6
+	add_child(t48_ns)
+	t48_ns.global_position = Vector2(320, 200)
+	t48_ns.target_player = t48_p
+	var ns_stealth_alpha: float = t48_ns.get_night_stalker_body_alpha()
+	t48_p.set_flashlight(true)
+	var ns_exposed_alpha: float = t48_ns.get_night_stalker_body_alpha()
+	t48_ns.trigger_night_stalker_smoke_evade()
+	var ns_visual_ok: bool = (is_equal_approx(ns_stealth_alpha, 0.30) and is_equal_approx(ns_exposed_alpha, 0.92) and t48_ns.stalker_smoke_burst_count >= 1)
+
+	# Fulton balloon ascent effect (Y - 400 over 1.2s)
+	var t48_mw = preload("res://scenes/world/main_world.gd").new()
+	t48_p.inventory_grid.auto_add_item("금시계", 1)
+	var watch_uid := String(t48_p.inventory_grid.items[0].get("uid", ""))
+	GameManager.current_world_data = {"player": {"rubles": 4000}, "hideout": {"stash": []}}
+	var t48_radio = preload("res://scenes/ui/radio_window.tscn").instantiate()
+	add_child(t48_radio)
+	t48_radio.setup(t48_p, t48_mw)
+	var fulton_res: bool = t48_radio.request_fulton_extract_item(watch_uid)
+	var balloon_node: Node2D = t48_mw.last_fulton_balloon
+	var fulton_fx_ok: bool = (fulton_res and balloon_node != null and is_equal_approx(float(balloon_node.get_meta("target_y", 0.0)), 200.0 - 400.0) and is_equal_approx(float(balloon_node.get_meta("duration", 0.0)), 1.2))
+
+	# Infection compound debuff (max stamina 100 -> 65, green biohazard vignette, Antibiotics cure)
+	var PPControllerScript = preload("res://graphics/post_process_controller.gd")
+	t48_p.stamina = 100.0
+	t48_p.is_infected = true
+	var inf_max_stam: float = t48_p.get_effective_max_stamina()
+	var inf_cur_stam: float = t48_p.stamina
+	var inf_vig: float = PPControllerScript.compute_infection_vignette_strength(true, 1.0)
+	var cured_by_antibiotics: bool = t48_p.apply_medical_effects("항생제")
+	var cured_max_stam: float = t48_p.get_effective_max_stamina()
+	var inf_debuff_ok: bool = (is_equal_approx(inf_max_stam, 65.0) and is_equal_approx(inf_cur_stam, 65.0) and inf_vig >= 0.45 and cured_by_antibiotics and not t48_p.is_infected and is_equal_approx(cured_max_stam, 100.0))
+
+	if ns_visual_ok and fulton_fx_ok and inf_debuff_ok:
+		print("[PASS] Test 48: Area 3 & 4 verified (Night Stalker stealth alpha/smoke evade, Fulton Y-400 balloon ascent, Infection -35% stamina cap & green vignette & Antibiotics cure)")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 48: Area 3 & 4 check failed (ns=%s, fulton_fx=%s, inf=%s)" % [str(ns_visual_ok), str(fulton_fx_ok), str(inf_debuff_ok)])
+	t48_radio.free()
+	t48_ns.free()
+	t48_p.free()
+	t48_mw.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

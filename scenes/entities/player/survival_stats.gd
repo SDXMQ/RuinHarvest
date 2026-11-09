@@ -13,10 +13,20 @@ var hunger: float = 100.0
 var thirst: float = 100.0
 
 var is_bleeding: bool = false
-var is_infected: bool = false
+var _is_infected: bool = false
+var is_infected: bool:
+	get:
+		return _is_infected
+	set(v):
+		_is_infected = v
+		if _is_infected:
+			stamina = min(stamina, get_effective_max_stamina())
 var is_fractured: bool = false
 var is_exhausted: bool = false
 var is_god_mode: bool = false
+
+func get_effective_max_stamina() -> float:
+	return max_stamina * 0.65 if _is_infected else max_stamina
 
 var base_armor_defense: float = 0.0
 var armor_defense: float:
@@ -63,13 +73,16 @@ func _process(delta: float) -> void:
 	thirst -= 0.25 * delta
 	
 	if is_bleeding: hp -= 1.0 * delta
-	if is_infected: hp -= 0.5 * delta
+	if _is_infected:
+		hp -= 0.5 * delta
+		stamina = min(stamina, get_effective_max_stamina())
 	if hunger <= 0: hp -= 0.5 * delta
 	if thirst <= 0: hp -= 1.0 * delta
 	
 	hunger = clamp(hunger, 0.0, max_hunger)
 	thirst = clamp(thirst, 0.0, max_thirst)
 	hp = clamp(hp, 0.0, max_hp)
+	stamina = clamp(stamina, 0.0, get_effective_max_stamina())
 	
 	if hp <= 0:
 		stats_changed.emit()
@@ -82,9 +95,10 @@ func _process(delta: float) -> void:
 		stats_changed.emit()
 
 func regen_stamina(delta: float, multiplier: float) -> void:
+	var eff_max := get_effective_max_stamina()
 	if hunger > 20.0 and thirst > 20.0:
 		stamina += 10.0 * multiplier * delta
-	stamina = clamp(stamina, 0.0, max_stamina)
+	stamina = clamp(stamina, 0.0, eff_max)
 	if is_exhausted and stamina >= 25.0:
 		is_exhausted = false
 

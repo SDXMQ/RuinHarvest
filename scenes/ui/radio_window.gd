@@ -293,6 +293,8 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 
 	var idata = ItemDatabase.get_item_data(String(stash_entry.get("id", "")))
 	var disp_name = String(stash_entry.get("name", idata.get("name", stash_entry.get("id", ""))))
+	if main_world != null and main_world.has_method("spawn_fulton_balloon_effect") and player != null:
+		main_world.spawn_fulton_balloon_effect(player.global_position, disp_name)
 	if SoundManager:
 		SoundManager.play("craft_complete")
 	if EventBus.has_signal("event_logged"):

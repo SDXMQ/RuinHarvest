@@ -44,6 +44,22 @@ var hit_flash_tween: Tween
 var last_hit_floating_text: String = ""
 var last_hit_floating_color: Color = Color.WHITE
 var _hit_feedback_already_shown: bool = false
+var _was_flashlight_exposed: bool = false
+var stalker_smoke_burst_count: int = 0
+
+func get_night_stalker_body_alpha() -> float:
+	if enemy_type != EnemyType.NIGHT_STALKER:
+		return 1.0
+	if is_exposed_to_player_flashlight():
+		return 0.92
+	return 0.30
+
+func trigger_night_stalker_smoke_evade() -> void:
+	stalker_smoke_burst_count += 1
+	if is_inside_tree() and get_tree() and get_tree().current_scene:
+		var ps_ev = get_tree().current_scene.get_node_or_null("ParticleSystem")
+		if ps_ev:
+			ps_ev.emit("smoke", global_position.x, global_position.y, 6)
 
 static func format_hit_feedback(dmg: float, armor_mult: float = 1.0) -> Dictionary:
 	var dmg_int: int = max(1, int(round(dmg)))
@@ -414,14 +430,19 @@ func _physics_process(delta: float) -> void:
 								if SoundManager: SoundManager.play("hit_melee")
 								attack_timer = 1.0
 					
-					if enemy_type == EnemyType.NIGHT_STALKER and active_target == target_player and dist > 48.0 and is_exposed_to_player_flashlight():
+					var exposed_now := (enemy_type == EnemyType.NIGHT_STALKER and active_target == target_player and is_exposed_to_player_flashlight())
+					if enemy_type == EnemyType.NIGHT_STALKER:
+						if exposed_now and not _was_flashlight_exposed:
+							trigger_night_stalker_smoke_evade()
+						_was_flashlight_exposed = exposed_now
+					if exposed_now and dist > 48.0:
 						var evade_vel = compute_night_stalker_evade_velocity(active_target.global_position)
 						rotation = lerp_angle(rotation, evade_vel.angle(), delta * 14.0)
 						velocity = evade_vel
-						if randf() < 0.18 and get_tree() and get_tree().current_scene:
+						if randf() < 0.25 and get_tree() and get_tree().current_scene:
 							var ps_ev = get_tree().current_scene.get_node_or_null("ParticleSystem")
 							if ps_ev:
-								ps_ev.emit("smoke", global_position.x, global_position.y, 1)
+								ps_ev.emit("smoke", global_position.x, global_position.y, 2)
 					else:
 						var steer_dir = _get_steered_direction(active_target.global_position)
 						rotation = lerp_angle(rotation, steer_dir.angle(), delta * 10.0)
@@ -846,8 +867,11 @@ func _on_visuals_draw() -> void:
 		body_color = Color(0.78, 0.65, 0.52)
 		cloth_color = Color(0.16, 0.14, 0.18)
 	elif enemy_type == EnemyType.NIGHT_STALKER:
-		body_color = Color(0.08, 0.09, 0.14)
-		cloth_color = Color(0.05, 0.06, 0.10)
+		var ns_alpha := get_night_stalker_body_alpha()
+		body_color = Color(0.08, 0.09, 0.14, ns_alpha)
+		cloth_color = Color(0.05, 0.06, 0.10, ns_alpha)
+		if ns_alpha < 0.5:
+			visuals.draw_circle(Vector2.ZERO, 17.0 * scale_f, Color(0.05, 0.04, 0.10, 0.22))
 		
 	# --- 1. 몸통 다각형 ---
 	var shoulder_width = 14.0 * scale_f
@@ -869,7 +893,7 @@ func _on_visuals_draw() -> void:
 	if enemy_type == EnemyType.BOSS:
 		outline_col = Color(0.95, 0.75, 0.15)
 	elif enemy_type == EnemyType.NIGHT_STALKER:
-		outline_col = Color(0.48, 0.16, 0.68)
+		outline_col = Color(0.48, 0.16, 0.68, get_night_stalker_body_alpha())
 	for i in range(body_points.size()):
 		colors_outline.append(outline_col)
 		colors_cloth.append(cloth_color)

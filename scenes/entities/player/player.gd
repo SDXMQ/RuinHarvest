@@ -271,6 +271,29 @@ func _unhandled_input(event: InputEvent) -> void:
 				if EventBus.has_signal("event_logged"):
 					EventBus.event_logged.emit("🥽 야간투시경(NVG): %s" % ("ON" if l.nvg_enabled else "OFF"))
 
+func get_effective_max_stamina() -> float:
+	var s = _stats()
+	return s.get_effective_max_stamina() if (s and s.has_method("get_effective_max_stamina")) else max_stamina
+
+func apply_medical_effects(item_id: String) -> bool:
+	var d := ItemDatabase.get_item_data(item_id)
+	var effects: Dictionary = d.get("effects", {})
+	var cured := false
+	if effects.has("hp"):
+		hp = min(max_hp, hp + float(effects["hp"]))
+		cured = true
+	if effects.get("cures_bleeding", false) and is_bleeding:
+		is_bleeding = false
+		cured = true
+	if effects.get("cures_fracture", false) and is_fractured:
+		is_fractured = false
+		cured = true
+	if (effects.get("cures_infection", false) or int(effects.get("infection", 0)) < 0 or item_id in ["항생제", "고급 치료킷", "수술 키트"]) and is_infected:
+		is_infected = false
+		cured = true
+	stats_changed.emit()
+	return cured
+
 func static_get_channeling_duration(item_id: String, item_data: Dictionary = {}) -> float:
 	return get_channeling_duration_for(item_id, item_data)
 

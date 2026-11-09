@@ -7,6 +7,7 @@ uniform sampler2D screen_texture : hint_screen_texture, filter_linear_mipmap;
 uniform float vignette_intensity : hint_range(0.0, 1.0) = 0.0;
 uniform vec4 tint_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float low_hp_pulse : hint_range(0.0, 1.0) = 0.0;
+uniform float infection_pulse : hint_range(0.0, 1.0) = 0.0;
 uniform float grain_strength : hint_range(0.0, 0.5) = 0.03;
 uniform float nvg_active : hint_range(0.0, 1.0) = 0.0;
 uniform float lightning_flash : hint_range(0.0, 1.0) = 0.0;
@@ -49,6 +50,12 @@ void fragment() {
 	if (low_hp_pulse > 0.0) {
 		float pulse = smoothstep(0.4, 0.8, distance(uv, vec2(0.5, 0.5))) * low_hp_pulse;
 		color = mix(color, vec3(0.8, 0.0, 0.0), pulse * 0.7);
+	}
+	
+	// 3-B. 생체 감염 비네팅 (Infection Biohazard Vignette) - 감염 시 가장자리 독성 녹색 맥동
+	if (infection_pulse > 0.001) {
+		float inf_v = smoothstep(0.38, 0.82, distance(uv, vec2(0.5, 0.5))) * infection_pulse;
+		color = mix(color, vec3(0.12, 0.75, 0.22), inf_v * 0.65);
 	}
 	
 	// 4. 필름 그레인 (Film Grain - NVG 가동 시 증폭)
