@@ -19,7 +19,23 @@ static func is_same_item_id(a: String, b: String) -> bool:
 		return true
 	if (na == "기밀 SSD" or na == "암호화된 SSD") and (nb == "기밀 SSD" or nb == "암호화된 SSD"):
 		return true
+	if na in ["무전기", "군용 무전기", "장거리 무전기"] and nb in ["무전기", "군용 무전기", "장거리 무전기"]:
+		return true
 	return false
+
+static func sanitize_custom_data(raw_data: Dictionary) -> Dictionary:
+	if raw_data.is_empty():
+		return {}
+	var clean: Dictionary = raw_data.duplicate(true)
+	while clean.get("custom_data") is Dictionary:
+		var inner: Dictionary = clean["custom_data"]
+		clean.erase("custom_data")
+		for k in inner.keys():
+			if not clean.has(k):
+				clean[k] = inner[k]
+	for k in ["uid", "x", "y", "w", "h", "rotated", "id", "amount", "custom_data"]:
+		clean.erase(k)
+	return clean
 
 func is_allowed_in_secure_container(item_id: String) -> bool:
 	if item_id == "":
@@ -150,12 +166,14 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 	# 기존 아이템 목록에 있으면 제거 후 재배치
 	remove_item_by_uid(uid, false)
 	
-	# custom_data 내부 핵심 속성을 최상위로 승격 (기존 최상위 값이 있으면 보존)
+	# custom_data 내부 핵심 속성을 최상위로 승격 및 재귀 중첩 제거 (기존 최상위 값이 있으면 보존)
 	var cdata = item.get("custom_data", {})
 	if cdata is Dictionary and not cdata.is_empty():
+		var clean_c := sanitize_custom_data(cdata)
 		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
-			if not item.has(k) and cdata.has(k):
-				item[k] = cdata[k]
+			if not item.has(k) and clean_c.has(k):
+				item[k] = clean_c[k]
+		item["custom_data"] = clean_c
 	if not item.has("durability") and item_data.has("max_durability"):
 		item["durability"] = item_data["max_durability"]
 	
@@ -297,6 +315,7 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 					return 0
 					
 	# 2. 남은 수량을 빈 공간에 Auto-Fit
+	var clean_custom := sanitize_custom_data(custom_data)
 	var base_size = ItemDatabase.get_item_grid_size(resolved_id)
 	while remaining > 0:
 		var fit = find_first_fit(base_size.x, base_size.y, resolved_id)
@@ -313,11 +332,11 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 			"h": base_size.y,
 			"rotated": fit["rotated"]
 		}
-		if not custom_data.is_empty():
+		if not clean_custom.is_empty():
 			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
-				if custom_data.has(k):
-					new_item[k] = custom_data[k]
-			new_item["custom_data"] = custom_data
+				if clean_custom.has(k):
+					new_item[k] = clean_custom[k]
+			new_item["custom_data"] = clean_custom.duplicate(true)
 		if not new_item.has("durability") and item_data.has("max_durability"):
 			new_item["durability"] = item_data["max_durability"]
 			

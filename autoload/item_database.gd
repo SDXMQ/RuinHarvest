@@ -238,6 +238,8 @@ func get_item_data(id: String) -> Dictionary:
 		return _cached_item_data[id]
 		
 	var target_id = resolve_item_id(id)
+	if target_id in ["무전기", "군용 무전기"] and items.has("장거리 무전기"):
+		target_id = "장거리 무전기"
 	if not items.has(target_id) and not WeaponPartsDatabase.PARTS.has(target_id) and not WeaponPartsDatabase.RECEIVERS.has(target_id):
 		var id_space = id.replace("_", " ")
 		var id_under = id.replace(" ", "_")

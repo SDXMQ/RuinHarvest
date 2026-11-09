@@ -45,9 +45,10 @@ func add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
 	
 	var max_stack = item_data.get("max_stack", 1)
 	var remaining = amount
+	var clean_custom := InventoryGrid.sanitize_custom_data(custom_data)
 	
-	# 1. 기존 스택 채우기 (커스텀 데이터가 없을 때만 스택 병합)
-	if max_stack > 1 and custom_data.is_empty():
+	# 1. 기존 스택 채우기 (스택형 아이템은 custom_data 유무와 무관하게 동일 ID 스택에 우선 병합)
+	if max_stack > 1:
 		for i in range(max_slots):
 			var slot = items[i]
 			if slot != null and slot["id"] == id and slot["amount"] < max_stack:
@@ -64,11 +65,11 @@ func add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
 		if items[i] == null:
 			var to_add = min(max_stack, remaining)
 			var item_dict = {"id": id, "amount": to_add}
-			if not custom_data.is_empty():
+			if not clean_custom.is_empty():
 				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
-					if custom_data.has(k):
-						item_dict[k] = custom_data[k]
-				item_dict["custom_data"] = custom_data
+					if clean_custom.has(k):
+						item_dict[k] = clean_custom[k]
+				item_dict["custom_data"] = clean_custom.duplicate(true)
 			if not item_dict.has("durability") and item_data.has("max_durability"):
 				item_dict["durability"] = item_data["max_durability"]
 			items[i] = item_dict

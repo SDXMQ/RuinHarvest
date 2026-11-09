@@ -1037,5 +1037,78 @@ func _ready() -> void:
 	t45_pgrid.free()
 	t45_sgrid.free()
 
+	# Test 46: Section 1.1 5 Logic Bugs Verification (Field repair max_durability UI, Container stack merge, Vicinity tooltip & non-nested custom_data, Radio quick-use, Drone crate obstacle avoidance)
+	total_tests += 1
+	# 46-1: Tooltip & HUD max_durability after field repair (90/90 instead of 90/100)
+	var t46_tt = preload("res://scenes/ui/item_tooltip.tscn").instantiate()
+	add_child(t46_tt)
+	var rep_vest := {"id": "3레벨_방탄복", "durability": 90.0, "max_durability": 90.0}
+	t46_tt.display_item(rep_vest, ItemDatabase.get_item_data("3레벨_방탄복"))
+	var bug1_tt_ok: bool = is_equal_approx(t46_tt.durability_bar.max_value, 90.0) and t46_tt.durability_label.text.contains("90 / 90")
+
+	# 46-2: Container stack merging when custom_data (grid item dict) is non-empty
+	var t46_cont := Inventory.new()
+	t46_cont.max_slots = 8
+	t46_cont.clear()
+	t46_cont.add_item("9mm", 15, {"id": "9mm", "amount": 15, "uid": "u1", "x": 0, "y": 0})
+	t46_cont.add_item("9mm", 10, {"id": "9mm", "amount": 10, "uid": "u2", "x": 1, "y": 0})
+	var bug2_merge_ok: bool = (t46_cont.items[0] != null and int(t46_cont.items[0].get("amount", 0)) == 25 and t46_cont.items[1] == null)
+
+	# 46-3: Vicinity tooltip reads custom_data parts/durability & multi-hop transfer prevents recursive custom_data nesting
+	var g_custom := {"durability": 64.0, "max_durability": 90.0, "parts": {"muzzle": "소음기"}}
+	t46_tt.display_item({"id": "M4_리시버", "amount": 1, "custom_data": g_custom}, ItemDatabase.get_item_data("M4_리시버"))
+	var bug3_vic_tt_ok: bool = is_equal_approx(t46_tt.durability_bar.value, 64.0) and is_equal_approx(t46_tt.durability_bar.max_value, 90.0)
+	var t46_grid := InventoryGrid.new()
+	t46_grid.grid_width = 6
+	t46_grid.grid_height = 4
+	t46_grid._init_grid_map()
+	t46_grid.auto_add_item("M4_리시버", 1, g_custom)
+	var hop1: Dictionary = t46_grid.items[0]
+	t46_cont.add_item("M4_리시버", 1, hop1)
+	var hop2: Dictionary = t46_cont.items[1]
+	t46_grid.clear()
+	t46_grid.auto_add_item("M4_리시버", 1, hop2)
+	var hop3: Dictionary = t46_grid.items[0]
+	var bug3_no_recursion: bool = not hop3.get("custom_data", {}).has("custom_data") and is_equal_approx(float(hop3.get("durability", 0.0)), 64.0)
+
+	# 46-4: Radio quick action in InventoryWindow closes inventory and opens RadioWindow
+	var t46_mw = preload("res://scenes/world/main_world.gd").new()
+	var t46_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t46_p)
+	t46_mw.player = t46_p
+	var t46_inv_win = preload("res://scenes/ui/inventory_window.tscn").instantiate()
+	add_child(t46_inv_win)
+	t46_inv_win.set_meta("main_world", t46_mw)
+	t46_inv_win.player = t46_p
+	t46_inv_win.inventory_grid = t46_p.inventory_grid
+	t46_inv_win._handle_item_quick_action({"id": "군용 무전기", "amount": 1}, true)
+	var bug4_radio_ok: bool = (t46_mw.current_radio_window != null)
+
+	# 46-5: Emergency drone crate avoids walls/trees at player + (64, 0)
+	var t46_cm = preload("res://scenes/world/chunk_manager.gd").new()
+	t46_cm.object_layer = TileMapLayer.new()
+	t46_cm.object_layer.tile_set = TileManager.get_tileset()
+	t46_cm.add_child(t46_cm.object_layer)
+	t46_mw.chunk_manager = t46_cm
+	t46_p.global_position = Vector2(320.0, 320.0) # tile (10, 10)
+	var blocked_tile := Vector2i(12, 10) # player + (64, 0)
+	t46_cm.object_layer.set_cell(blocked_tile, 0, TileManager.OBJ_WALL)
+	var crate_node := t46_mw.spawn_emergency_drone_crate(t46_p.global_position + Vector2(64.0, 0.0), "5.56mm")
+	var spawned_tile := Vector2i(int(floor(crate_node.position.x / 32.0)), int(floor(crate_node.position.y / 32.0)))
+	var bug5_avoid_ok: bool = (spawned_tile != blocked_tile and t46_cm.object_layer.get_cell_source_id(spawned_tile) == -1 and t46_mw.container_inventories.has(spawned_tile))
+
+	if bug1_tt_ok and bug2_merge_ok and bug3_vic_tt_ok and bug3_no_recursion and bug4_radio_ok and bug5_avoid_ok:
+		print("[PASS] Test 46: All 5 Section 1.1 logic bugs verified fixed (max_dur UI, stack merge, vicinity/custom_data, radio use, drone obstacle avoidance)")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 46: Section 1.1 bug check failed (b1=%s, b2=%s, b3_tt=%s, b3_rec=%s, b4=%s, b5=%s)" % [str(bug1_tt_ok), str(bug2_merge_ok), str(bug3_vic_tt_ok), str(bug3_no_recursion), str(bug4_radio_ok), str(bug5_avoid_ok)])
+	t46_tt.free()
+	t46_cont.free()
+	t46_grid.free()
+	t46_inv_win.free()
+	t46_p.free()
+	t46_cm.free()
+	t46_mw.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

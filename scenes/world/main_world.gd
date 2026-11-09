@@ -480,7 +480,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# 전술 무전기 열기 (U 키 — 가방에 무전기 보유 시)
 	if event is InputEventKey and event.physical_keycode == KEY_U and event.pressed and not event.echo:
-		if player and player.inventory_grid and (player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("무전기", 1)):
+		if player_has_radio():
 			open_radio_window()
 		else:
 			_on_event_logged("⚠️ 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
@@ -490,6 +490,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.physical_keycode == KEY_F1 and event.pressed:
 		_open_item_spawner()
 		get_viewport().set_input_as_handled()
+
+func player_has_radio() -> bool:
+	if not player or not player.inventory_grid:
+		return false
+	if player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("군용 무전기", 1) or player.inventory_grid.has_item("무전기", 1):
+		return true
+	for it in player.inventory_grid.items:
+		if String(it.get("id", "")).contains("무전기"):
+			return true
+	return false
 
 func open_radio_window() -> Control:
 	if current_radio_window != null:
@@ -511,8 +521,48 @@ func open_radio_window() -> Control:
 	)
 	return current_radio_window
 
+func _is_tile_in_locked_room(tile_pos: Vector2i) -> bool:
+	if not chunk_manager or not chunk_manager.generator:
+		return false
+	var b_at = chunk_manager.generator.get_building_at(tile_pos.x, tile_pos.y)
+	if b_at.is_empty():
+		return false
+	var b_preset: Dictionary = b_at.get("preset", {})
+	if not b_preset.has("locked_rect"):
+		return false
+	var l_rect: Rect2i = b_preset["locked_rect"]
+	var rel_pt := Vector2i(tile_pos.x - int(b_at["wx"]), tile_pos.y - int(b_at["wy"]))
+	return l_rect.has_point(rel_pt)
+
+func _is_valid_drone_drop_tile(t_pos: Vector2i, origin_tile: Vector2i) -> bool:
+	if t_pos == origin_tile:
+		return false
+	if container_inventories.has(t_pos):
+		return false
+	if _is_tile_in_locked_room(t_pos):
+		return false
+	if chunk_manager and chunk_manager.object_layer:
+		if chunk_manager.object_layer.get_cell_source_id(t_pos) != -1:
+			return false
+	return true
+
+func find_valid_drone_drop_tile(origin_tile: Vector2i, preferred_tile: Vector2i) -> Vector2i:
+	if _is_valid_drone_drop_tile(preferred_tile, origin_tile):
+		return preferred_tile
+	for radius in range(1, 4):
+		for dy in range(-radius, radius + 1):
+			for dx in range(-radius, radius + 1):
+				if abs(dx) != radius and abs(dy) != radius:
+					continue
+				var cand := origin_tile + Vector2i(dx, dy)
+				if _is_valid_drone_drop_tile(cand, origin_tile):
+					return cand
+	return preferred_tile
+
 func spawn_emergency_drone_crate(drop_pos: Vector2, primary_ammo: String = "5.56mm") -> Node2D:
-	var tile_pos := Vector2i(int(floor(drop_pos.x / 32.0)), int(floor(drop_pos.y / 32.0)))
+	var preferred_tile := Vector2i(int(floor(drop_pos.x / 32.0)), int(floor(drop_pos.y / 32.0)))
+	var origin_tile := Vector2i(int(floor(player.global_position.x / 32.0)), int(floor(player.global_position.y / 32.0))) if (player != null and is_instance_valid(player)) else (preferred_tile - Vector2i(2, 0))
+	var tile_pos := find_valid_drone_drop_tile(origin_tile, preferred_tile)
 	var snapped_pos := Vector2(tile_pos) * 32.0 + Vector2(16.0, 16.0)
 	var crate := StaticBody2D.new()
 	crate.set_script(AirdropCrateScript)
@@ -1132,8 +1182,8 @@ func _on_player_stats_changed() -> void:
 				
 		# 무기 내구도 바
 		if weapon_durability_bar:
-			var max_dur = wep_data.get("max_durability", 100.0)
-			var cur_dur = player.equipped_weapon_data.get("durability", max_dur)
+			var max_dur = float(player.equipped_weapon_data.get("max_durability", wep_data.get("max_durability", 100.0)))
+			var cur_dur = float(player.equipped_weapon_data.get("durability", max_dur))
 			weapon_durability_bar.max_value = max_dur
 			weapon_durability_bar.value = cur_dur
 			

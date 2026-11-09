@@ -22,10 +22,18 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hide()
 
-func display_item(item: Dictionary, data: Dictionary = {}) -> void:
-	if item.is_empty() and data.is_empty():
+func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
+	if raw_item.is_empty() and data.is_empty():
 		hide()
 		return
+		
+	var item: Dictionary = raw_item.duplicate(false)
+	var cdata = item.get("custom_data", {})
+	if cdata is Dictionary and not cdata.is_empty():
+		var clean_cd := InventoryGrid.sanitize_custom_data(cdata)
+		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+			if not item.has(k) and clean_cd.has(k):
+				item[k] = clean_cd[k]
 		
 	var item_id: String = str(item.get("id", data.get("id", "")))
 	if data.is_empty() and item_id != "" and ItemDatabase:
@@ -115,7 +123,7 @@ func display_item(item: Dictionary, data: Dictionary = {}) -> void:
 		_display_general_item_details(item, data)
 		
 	# 6. 내구도 바
-	var max_dur = float(data.get("max_durability", 0))
+	var max_dur = float(item.get("max_durability", data.get("max_durability", 0)))
 	if max_dur > 0:
 		durability_container.show()
 		var cur_dur = float(item.get("durability", max_dur))

@@ -1084,19 +1084,17 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
 			elif event.button_index == MOUSE_BUTTON_LEFT:
 				var base_size = ItemDatabase.get_item_grid_size(slot_item.get("id", ""))
+				var clean_slot_cd := InventoryGrid.sanitize_custom_data(slot_item)
 				var item_dict = {
 					"id": slot_item.get("id", ""),
 					"amount": amt,
 					"w": base_size.x,
 					"h": base_size.y,
-					"custom_data": slot_item.duplicate(true)
+					"custom_data": clean_slot_cd.duplicate(true)
 				}
-				var slot_cdata = slot_item.get("custom_data", {})
 				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
-					if slot_item.has(k):
-						item_dict[k] = slot_item[k]
-					elif slot_cdata is Dictionary and slot_cdata.has(k):
-						item_dict[k] = slot_cdata[k]
+					if clean_slot_cd.has(k):
+						item_dict[k] = clean_slot_cd[k]
 				_start_drag("container", item_dict, Vector2i(index, 0))
 				drag_data["origin_index"] = index
 	)
@@ -1292,11 +1290,15 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	# 툴팁 표시
 	btn.mouse_entered.connect(func():
 		if not is_dragging and tooltip:
+			var clean_cd := InventoryGrid.sanitize_custom_data(g_item.custom_data if g_item.custom_data is Dictionary else {})
 			var item_dict = {
 				"id": g_item.item_id,
 				"amount": g_item.amount,
-				"custom_data": g_item.custom_data
+				"custom_data": clean_cd.duplicate(true)
 			}
+			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+				if clean_cd.has(k):
+					item_dict[k] = clean_cd[k]
 			tooltip.display_item(item_dict, d)
 			tooltip.update_position(get_global_mouse_position())
 	)
@@ -1321,17 +1323,17 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 						EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
 			elif event.button_index == MOUSE_BUTTON_LEFT:
 				var base_size = ItemDatabase.get_item_grid_size(g_item.item_id)
+				var clean_cd := InventoryGrid.sanitize_custom_data(g_item.custom_data if g_item.custom_data is Dictionary else {})
 				var item_dict = {
 					"id": g_item.item_id,
 					"amount": g_item.amount,
 					"w": base_size.x,
 					"h": base_size.y,
-					"custom_data": g_item.custom_data.duplicate(true) if g_item.custom_data is Dictionary else {}
+					"custom_data": clean_cd.duplicate(true)
 				}
-				if g_item.custom_data is Dictionary:
-					for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
-						if g_item.custom_data.has(k):
-							item_dict[k] = g_item.custom_data[k]
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+					if clean_cd.has(k):
+						item_dict[k] = clean_cd[k]
 				_start_drag("vicinity", item_dict, Vector2i.ZERO, "", g_item)
 	)
 	
@@ -1356,9 +1358,7 @@ func _drop_item_to_world(item: Dictionary) -> void:
 		g_item.free()
 		return
 	
-	var drop_data: Dictionary = item.duplicate(true)
-	for transient_k in ["uid", "x", "y", "rotated", "w", "h"]:
-		drop_data.erase(transient_k)
+	var drop_data: Dictionary = InventoryGrid.sanitize_custom_data(item)
 	g_item.setup(item.get("id", ""), item.get("amount", 1), drop_data)
 	
 	if SoundManager: SoundManager.play("menu_select")
@@ -2146,14 +2146,13 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false)
 	var cat = idata.get("category", -1)
 	var equip_slot = ItemDatabase.get_item_equip_slot(id)
 	
-	# 0-B. 전술 무전기(장거리 무전기) 사용 시 인레이드 통신망 & 암시장 드론 호출 창 오픈
-	if id == "장거리 무전기" or id.contains("무전기"):
-		if player != null and is_inside_tree() and get_tree() != null:
-			var cur_scene = get_tree().current_scene
-			_on_close_pressed()
-			if cur_scene and cur_scene.has_method("open_radio_window"):
-				cur_scene.open_radio_window()
-			return
+	# 0-B. 전술 무전기(장거리 무전기 / 군용 무전기 / 무전기) 사용 시 인레이드 통신망 & 암시장 드론 호출 창 오픈
+	if id in ["장거리 무전기", "군용 무전기", "무전기"] or id.contains("무전기") or String(idata.get("name", "")).contains("무전기"):
+		var mw = _find_main_world_node()
+		_on_close_pressed()
+		if mw and mw.has_method("open_radio_window"):
+			mw.open_radio_window()
+		return
 
 	# 1. 음식/물/의약품이면 즉시 사용
 	if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or cat == ItemDatabase.ItemCategory.MEDICAL:
@@ -2394,12 +2393,40 @@ func _update_weight_ui() -> void:
 		weight_label.text = "%.1f / 50.0 kg" % cur_w
 		weight_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
 
+func _find_main_world_node() -> Node:
+	if has_meta("main_world") and is_instance_valid(get_meta("main_world")):
+		return get_meta("main_world")
+	if player != null and player.has_meta("main_world") and is_instance_valid(player.get_meta("main_world")):
+		return player.get_meta("main_world")
+	if is_inside_tree() and get_tree() and get_tree().current_scene and get_tree().current_scene.has_method("open_radio_window"):
+		return get_tree().current_scene
+	var p: Node = get_parent()
+	while p != null:
+		if p.has_method("open_radio_window"):
+			return p
+		p = p.get_parent()
+	if player != null:
+		var pp: Node = player.get_parent()
+		while pp != null:
+			if pp.has_method("open_radio_window"):
+				return pp
+			pp = pp.get_parent()
+	if is_inside_tree() and get_tree() and get_tree().root:
+		for ch in get_tree().root.get_children():
+			if ch.has_method("open_radio_window"):
+				return ch
+			for sub in ch.get_children():
+				if sub.has_method("open_radio_window"):
+					return sub
+	return null
+
 func _on_close_pressed() -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	if player and player.has_method("refresh_equipped_weapon"):
 		player.refresh_equipped_weapon(false)
 	elif player and player.has_method("switch_weapon_slot"):
 		player.switch_weapon_slot(player.active_weapon_slot)
-	get_tree().paused = false
+	if is_inside_tree() and get_tree():
+		get_tree().paused = false
 	queue_free()
 	window_closed.emit()
