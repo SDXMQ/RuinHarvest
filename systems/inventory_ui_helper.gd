@@ -279,4 +279,3 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 			dur_bar.visible = true
 		elif dur_bar:
 			dur_bar.visible = false
-

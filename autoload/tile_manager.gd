@@ -515,4 +515,3 @@ func _draw_door_locked(img: Image, x: int, y: int) -> void:
 				if ix >= TILE_SIZE - 8 and ix <= TILE_SIZE - 7 and iy >= 15 and iy <= 16:
 					c = Color(1.0, 0.15, 0.15) # 적색 LOCKED LED
 			img.set_pixel(x + ix, y + iy, c)
-

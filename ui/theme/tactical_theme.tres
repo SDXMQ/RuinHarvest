@@ -1,9 +1,4 @@
-[gd_resource type="Theme" load_steps=24 format=3 uid="uid://tactical_theme_v1"]
-
-[sub_resource type="SystemFont" id="SystemFont_tactical"]
-font_names = PackedStringArray("Segoe UI", "Malgun Gothic", "Noto Sans KR", "Apple SD Gothic Neo", "Roboto", "Consolas", "sans-serif")
-font_weight = 500
-subpixel_positioning = 1
+[gd_resource type="Theme" format=3 uid="uid://c4ne6cow3b2ew"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_btn_disabled"]
 content_margin_left = 12.0
@@ -66,38 +61,6 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.96, 0.74, 0.28, 1)
-corner_radius_top_left = 2
-corner_radius_top_right = 2
-corner_radius_bottom_right = 2
-corner_radius_bottom_left = 2
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_primary_hover"]
-content_margin_left = 14.0
-content_margin_top = 6.0
-content_margin_right = 14.0
-content_margin_bottom = 6.0
-bg_color = Color(0.28, 0.21, 0.1, 0.98)
-border_width_left = 3
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(1, 0.78, 0.3, 1)
-corner_radius_top_left = 2
-corner_radius_top_right = 2
-corner_radius_bottom_right = 2
-corner_radius_bottom_left = 2
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_primary_normal"]
-content_margin_left = 14.0
-content_margin_top = 6.0
-content_margin_right = 14.0
-content_margin_bottom = 6.0
-bg_color = Color(0.2, 0.15, 0.08, 0.96)
-border_width_left = 3
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.88, 0.62, 0.2, 0.95)
 corner_radius_top_left = 2
 corner_radius_top_right = 2
 corner_radius_bottom_right = 2
@@ -167,40 +130,6 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
-content_margin_left = 10.0
-content_margin_top = 8.0
-content_margin_right = 10.0
-content_margin_bottom = 8.0
-bg_color = Color(0.08, 0.095, 0.12, 0.96)
-border_width_left = 1
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.2, 0.24, 0.3, 0.9)
-corner_radius_top_left = 2
-corner_radius_top_right = 2
-corner_radius_bottom_right = 2
-corner_radius_bottom_left = 2
-shadow_color = Color(0, 0, 0, 0.45)
-shadow_size = 6
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_header_panel"]
-content_margin_left = 10.0
-content_margin_top = 5.0
-content_margin_right = 10.0
-content_margin_bottom = 5.0
-bg_color = Color(0.11, 0.135, 0.175, 0.98)
-border_width_left = 3
-border_width_top = 1
-border_width_right = 1
-border_width_bottom = 1
-border_color = Color(0.9, 0.65, 0.22, 0.95)
-corner_radius_top_left = 2
-corner_radius_top_right = 2
-corner_radius_bottom_right = 2
-corner_radius_bottom_left = 2
-
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_grid_surface"]
 content_margin_left = 6.0
 content_margin_top = 6.0
@@ -219,7 +148,22 @@ corner_radius_bottom_left = 2
 
 [sub_resource type="StyleBoxLine" id="StyleBoxLine_separator"]
 color = Color(0.22, 0.27, 0.34, 0.8)
-thickness = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_header_panel"]
+content_margin_left = 10.0
+content_margin_top = 5.0
+content_margin_right = 10.0
+content_margin_bottom = 5.0
+bg_color = Color(0.11, 0.135, 0.175, 0.98)
+border_width_left = 3
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.9, 0.65, 0.22, 0.95)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_line_edit"]
 content_margin_left = 8.0
@@ -232,6 +176,56 @@ border_width_top = 1
 border_width_right = 1
 border_width_bottom = 1
 border_color = Color(0.24, 0.29, 0.36, 0.9)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_panel"]
+content_margin_left = 10.0
+content_margin_top = 8.0
+content_margin_right = 10.0
+content_margin_bottom = 8.0
+bg_color = Color(0.08, 0.095, 0.12, 0.96)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.2, 0.24, 0.3, 0.9)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+shadow_color = Color(0, 0, 0, 0.45)
+shadow_size = 6
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_primary_hover"]
+content_margin_left = 14.0
+content_margin_top = 6.0
+content_margin_right = 14.0
+content_margin_bottom = 6.0
+bg_color = Color(0.28, 0.21, 0.1, 0.98)
+border_width_left = 3
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(1, 0.78, 0.3, 1)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_primary_normal"]
+content_margin_left = 14.0
+content_margin_top = 6.0
+content_margin_right = 14.0
+content_margin_bottom = 6.0
+bg_color = Color(0.2, 0.15, 0.08, 0.96)
+border_width_left = 3
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.88, 0.62, 0.2, 0.95)
 corner_radius_top_left = 2
 corner_radius_top_right = 2
 corner_radius_bottom_right = 2
@@ -274,6 +268,13 @@ bg_color = Color(0.08, 0.095, 0.12, 0.9)
 border_width_bottom = 1
 border_color = Color(0.18, 0.22, 0.28, 0.8)
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_scroll_grabber"]
+bg_color = Color(0.26, 0.31, 0.39, 0.85)
+corner_radius_top_left = 2
+corner_radius_top_right = 2
+corner_radius_bottom_right = 2
+corner_radius_bottom_left = 2
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_scroll_bg"]
 content_margin_left = 4.0
 content_margin_right = 4.0
@@ -283,12 +284,9 @@ corner_radius_top_right = 2
 corner_radius_bottom_right = 2
 corner_radius_bottom_left = 2
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_scroll_grabber"]
-bg_color = Color(0.26, 0.31, 0.39, 0.85)
-corner_radius_top_left = 2
-corner_radius_top_right = 2
-corner_radius_bottom_right = 2
-corner_radius_bottom_left = 2
+[sub_resource type="SystemFont" id="SystemFont_tactical"]
+font_names = PackedStringArray("Segoe UI", "Malgun Gothic", "Noto Sans KR", "Apple SD Gothic Neo", "Roboto", "Consolas", "sans-serif")
+font_weight = 500
 
 [resource]
 default_font = SubResource("SystemFont_tactical")
