@@ -7,6 +7,16 @@ extends Node2D
 const MAX_PARTICLES: int = 500
 var quality: float = 1.0 # 0.0=끄기, 0.3=저, 0.7=중, 1.0=고
 var particles: Array = []
+var _pool: Array = []
+
+func _acquire_particle() -> P:
+	if not _pool.is_empty():
+		return _pool.pop_back()
+	return P.new()
+
+func _release_particle(p: P) -> void:
+	if p and _pool.size() < MAX_PARTICLES:
+		_pool.append(p)
 
 # 색상 상수
 const C_BLOOD = Color(0.71, 0.10, 0.10)
@@ -69,17 +79,25 @@ func add_decal(x: float, y: float, sz: float, col: Color, is_shell: bool = false
 	})
 
 func _process(delta: float) -> void:
-	var i = particles.size() - 1
+	var i: int = particles.size() - 1
 	while i >= 0:
-		if not particles[i].update(delta):
-			particles.remove_at(i)
+		var p: P = particles[i]
+		if not p.update(delta):
+			_release_particle(p)
+			var last_idx: int = particles.size() - 1
+			if i != last_idx:
+				particles[i] = particles[last_idx]
+			particles.pop_back()
 		i -= 1
 		
-	var di = decals.size() - 1
+	var di: int = decals.size() - 1
 	while di >= 0:
 		decals[di]["life"] -= delta
 		if decals[di]["life"] <= 0.0:
-			decals.remove_at(di)
+			var last_d: int = decals.size() - 1
+			if di != last_d:
+				decals[di] = decals[last_d]
+			decals.pop_back()
 		di -= 1
 	
 	if particles.size() > 0 or decals.size() > 0:
@@ -131,7 +149,7 @@ func emit(preset: String, x: float, y: float, count: int = 1, angle: float = 0.0
 	queue_redraw()
 
 func _create_particle(preset: String, x: float, y: float, angle: float, extra: Dictionary) -> P:
-	var p = P.new()
+	var p: P = _acquire_particle()
 	p.fade = true
 	p.shrink = true
 	p.glow = false
@@ -283,10 +301,13 @@ func _create_particle(preset: String, x: float, y: float, angle: float, extra: D
 			p.gravity = 0.0; p.friction = 0.85; p.glow = true
 		
 		_:
+			_release_particle(p)
 			return null
 	
 	return p
 
 func clear() -> void:
+	for p in particles:
+		_release_particle(p)
 	particles.clear()
 	queue_redraw()

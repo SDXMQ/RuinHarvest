@@ -1308,5 +1308,50 @@ func _ready() -> void:
 	else:
 		printerr("[FAIL] Test 49: Area 5 check failed (bounty=%s, power=%s, mastery=%s)" % [str(bounty_ok), str(power_gimmick_ok), str(mastery_and_record_ok)])
 
+	# Test 50: 5 Performance & Memory Optimizations (Lot memoization & chunk guard, Particle pooling & swap-and-pop, MapWindow 16x16 texture cache, custom_data key strip, single-pass HUD & monotonic UID counter)
+	total_tests += 1
+	# 1. WorldGenerator _lot_cache memoization & ChunkManager tile/chunk guard
+	var t50_gen := WorldGenerator.new(12345)
+	for _iter in range(25):
+		t50_gen.get_building_at(10, 10)
+	var lot_memo_ok: bool = (t50_gen.lot_calc_count == 9 and t50_gen._lot_cache.size() == 9)
+
+	# 2. ParticleSystem object pooling & swap-and-pop
+	var t50_ps = preload("res://systems/particle_system.gd").new()
+	add_child(t50_ps)
+	t50_ps.emit("spark", 100.0, 100.0, 15)
+	t50_ps._process(2.0) # All spark particles expire (life 0.2~0.5)
+	var pool_after_expire: int = t50_ps._pool.size()
+	t50_ps.emit("spark", 100.0, 100.0, 10)
+	var pool_after_reuse: int = t50_ps._pool.size()
+	var particle_pool_ok: bool = (pool_after_expire == 15 and pool_after_reuse == 5 and t50_ps.particles.size() == 10)
+	t50_ps.free()
+
+	# 3. MapWindow 16x16 ImageTexture baking cache
+	var t50_map = preload("res://scenes/ui/map_window.tscn").instantiate()
+	add_child(t50_map)
+	var t50_chunk_data := t50_gen.generate_chunk(Vector2i(0, 0))
+	t50_map.setup(Vector2.ZERO, 0.0, [], "주거지", null, [], [], {Vector2i(0, 0): t50_chunk_data})
+	var baked_tex: ImageTexture = t50_map.chunk_minimap_textures.get(Vector2i(0, 0), null)
+	var map_tex_cache_ok: bool = (baked_tex != null and baked_tex.get_width() == 16 and baked_tex.get_height() == 16)
+	t50_map.free()
+
+	# 4. custom_data sanitization strips uid/x/y/custom_data
+	var dirty_custom := {"uid": "old_uid", "x": 3, "y": 2, "w": 2, "h": 4, "durability": 72.0, "custom_data": {"parts": {"muzzle": "소음기"}, "custom_data": {"x": 1}}}
+	var sanitized_c: Dictionary = InventoryGrid.sanitize_custom_data(dirty_custom)
+	var sanitize_keys_ok: bool = (not sanitized_c.has("uid") and not sanitized_c.has("x") and not sanitized_c.has("y") and not sanitized_c.has("custom_data") and is_equal_approx(float(sanitized_c.get("durability", 0.0)), 72.0))
+
+	# 5. Monotonic UID counter (0 collisions across 300 rapid generations)
+	var uid_set: Dictionary = {}
+	for _u in range(300):
+		uid_set[InventoryGrid.next_uid()] = true
+	var uid_counter_ok: bool = (uid_set.size() == 300)
+
+	if lot_memo_ok and particle_pool_ok and map_tex_cache_ok and sanitize_keys_ok and uid_counter_ok:
+		print("[PASS] Test 50: All 5 performance optimizations verified (Lot cache=9, Particle pool reuse, Map 16x16 ImageTexture cache, custom_data key strip, 0-collision monotonic UID)")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 50: Performance check failed (lot=%s, pool=%s, map=%s, san=%s, uid=%s)" % [str(lot_memo_ok), str(particle_pool_ok), str(map_tex_cache_ok), str(sanitize_keys_ok), str(uid_counter_ok)])
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

@@ -25,7 +25,10 @@ func load_items(item_list: Array) -> void:
 	items.resize(max_slots)
 	for i in range(max_slots):
 		if i < item_list.size() and item_list[i] != null:
-			items[i] = item_list[i].duplicate()
+			var dup = item_list[i].duplicate(true)
+			if dup is Dictionary and dup.get("custom_data") is Dictionary:
+				dup["custom_data"] = InventoryGrid.sanitize_custom_data(dup["custom_data"])
+			items[i] = dup
 		else:
 			items[i] = null
 	inventory_changed.emit()

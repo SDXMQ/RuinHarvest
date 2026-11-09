@@ -153,58 +153,53 @@ static func update_quickslot_bar(quickslot_hbox: HBoxContainer, player: Node) ->
 			has_t and amt4 > 0
 		)
 
-	# Slot 5 (Bleed / Bandage)
-	var slot5: Button = quickslot_hbox.get_node_or_null("Slot5")
-	if slot5:
-		var count5 = 0
-		var name5 = "붕대"
-		var icon5 = "붕대"
-		if player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var id = String(it.get("id", ""))
-				var d = ItemDatabase.get_item_data(id)
-				var cat = d.get("category", -1)
-				var eff = d.get("effects", {})
-				if cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("cures_bleeding", false) or id.contains("붕대") or id.contains("지혈")):
-					count5 += int(it.get("amount", 1))
+	# Slot 5 (Bleed), Slot 6 (Heal), Slot 7 (Ration), Slot U (Radio) — 단일 패스(Single-pass) 인벤토리 순회
+	var count5: int = 0
+	var name5: String = "붕대"
+	var icon5: String = "붕대"
+	var count6: int = 0
+	var name6: String = "구급상자"
+	var icon6: String = "구급상자"
+	var count7: int = 0
+	var name7: String = "식량/생수"
+	var icon7: String = "식량통조림"
+	var has_radio: bool = false
+
+	if player.inventory_grid:
+		for it in player.inventory_grid.items:
+			var id: String = String(it.get("id", ""))
+			if id == "":
+				continue
+			var amt: int = int(it.get("amount", 1))
+			if id in ["장거리 무전기", "군용 무전기", "무전기"] or id.contains("무전기"):
+				has_radio = true
+			var d: Dictionary = ItemDatabase.get_item_data(id)
+			var cat: int = int(d.get("category", -1))
+			var eff: Dictionary = d.get("effects", {}) if d.get("effects") is Dictionary else {}
+			if cat == ItemDatabase.ItemCategory.MEDICAL:
+				if eff.get("cures_bleeding", false) or id.contains("붕대") or id.contains("지혈"):
+					count5 += amt
 					name5 = String(d.get("name", id))
 					icon5 = id
-		style_quickslot_button(slot5, "5", icon5, "x%d" % count5, "[5] %s (%d)" % [name5, count5], false, count5 > 0)
-
-	# Slot 6 (Heal / Medkit)
-	var slot6: Button = quickslot_hbox.get_node_or_null("Slot6")
-	if slot6:
-		var count6 = 0
-		var name6 = "구급상자"
-		var icon6 = "구급상자"
-		if player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var id = String(it.get("id", ""))
-				var d = ItemDatabase.get_item_data(id)
-				var cat = d.get("category", -1)
-				var eff = d.get("effects", {})
-				if cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("hp", 0) > 0 or eff.get("cures_fracture", false) or eff.get("cures_infection", false) or id.contains("구급") or id.contains("키트") or id.contains("부목")):
-					count6 += int(it.get("amount", 1))
+				if eff.get("hp", 0) > 0 or eff.get("cures_fracture", false) or eff.get("cures_infection", false) or id.contains("구급") or id.contains("키트") or id.contains("부목"):
+					count6 += amt
 					name6 = String(d.get("name", id))
 					icon6 = id
+			if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or eff.has("hunger") or eff.has("thirst"):
+				count7 += amt
+				name7 = String(d.get("name", id))
+				icon7 = id
+
+	var slot5: Button = quickslot_hbox.get_node_or_null("Slot5")
+	if slot5:
+		style_quickslot_button(slot5, "5", icon5, "x%d" % count5, "[5] %s (%d)" % [name5, count5], false, count5 > 0)
+
+	var slot6: Button = quickslot_hbox.get_node_or_null("Slot6")
+	if slot6:
 		style_quickslot_button(slot6, "6", icon6, "x%d" % count6, "[6] %s (%d)" % [name6, count6], false, count6 > 0)
 
-	# Slot 7 (Ration / Food / Water)
 	var slot7: Button = quickslot_hbox.get_node_or_null("Slot7")
 	if slot7:
-		var count7 = 0
-		var name7 = "식량/생수"
-		var icon7 = "식량통조림"
-		if player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var id = String(it.get("id", ""))
-				var d = ItemDatabase.get_item_data(id)
-				var cat = d.get("category", -1)
-				var eff = d.get("effects", {})
-				if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or eff.has("hunger") or eff.has("thirst"):
-					count7 += int(it.get("amount", 1))
-					name7 = String(d.get("name", id))
-					icon7 = id
 		style_quickslot_button(slot7, "7", icon7, "x%d" % count7, "[7] %s (%d)" % [name7, count7], false, count7 > 0)
 
 	# Slot N (NVG)
@@ -228,15 +223,6 @@ static func update_quickslot_bar(quickslot_hbox: HBoxContainer, player: Node) ->
 		slotU = Button.new()
 		slotU.name = "SlotU"
 		quickslot_hbox.add_child(slotU)
-	var has_radio := false
-	if player.inventory_grid:
-		if player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("군용 무전기", 1) or player.inventory_grid.has_item("무전기", 1):
-			has_radio = true
-		else:
-			for it in player.inventory_grid.items:
-				if String(it.get("id", "")).contains("무전기"):
-					has_radio = true
-					break
 	style_quickslot_button(
 		slotU,
 		"U",

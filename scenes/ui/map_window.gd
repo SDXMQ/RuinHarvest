@@ -13,11 +13,39 @@ var boss_entity: Node2D = null
 var airdrop_points: Array = []
 var field_objectives_list: Array = []
 var loaded_chunks: Dictionary = {}
+var chunk_minimap_textures: Dictionary = {}
 var scale_factor: float = 0.085
 var map_pan_offset: Vector2 = Vector2.ZERO
 var is_panning: bool = false
 
 signal window_closed
+
+func get_or_bake_chunk_texture(cpos: Vector2i, c_data: Dictionary) -> ImageTexture:
+	if chunk_minimap_textures.has(cpos):
+		return chunk_minimap_textures[cpos]
+	var img: Image = Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	var base_col := Color(0.13, 0.17, 0.12, 0.5)
+	var wall_col := Color(0.38, 0.44, 0.52, 0.9)
+	var road_col := Color(0.26, 0.28, 0.30, 0.85)
+	var water_col := Color(0.15, 0.30, 0.48, 0.8)
+	var tiles: Array = c_data.get("tiles", [])
+	var objects: Array = c_data.get("objects", [])
+	for ly in range(16):
+		for lx in range(16):
+			var idx: int = ly * 16 + lx
+			var tile_coords: Vector2i = tiles[idx] if idx < tiles.size() else Vector2i(-1, -1)
+			var obj_coords: Vector2i = objects[idx] if idx < objects.size() else Vector2i(-1, -1)
+			var px_col := base_col
+			if obj_coords == TileManager.OBJ_WALL or obj_coords == TileManager.OBJ_DOOR_CLOSED or obj_coords == TileManager.OBJ_DOOR_OPEN or obj_coords == TileManager.OBJ_DOOR_LOCKED:
+				px_col = wall_col
+			elif tile_coords == TileManager.TILE_ROAD or tile_coords == TileManager.TILE_ROAD_LINE or tile_coords == TileManager.TILE_ROAD_LINE_H or tile_coords == TileManager.TILE_CROSSWALK or tile_coords == TileManager.TILE_CONCRETE:
+				px_col = road_col
+			elif tile_coords == TileManager.TILE_WATER:
+				px_col = water_col
+			img.set_pixel(lx, ly, px_col)
+	var tex: ImageTexture = ImageTexture.create_from_image(img)
+	chunk_minimap_textures[cpos] = tex
+	return tex
 
 func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_node: Node2D = null, airdrops: Array = [], objectives: Array = [], loaded_chunks_dict: Dictionary = {}) -> void:
 	player_pos = pos
@@ -28,6 +56,11 @@ func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_nod
 	airdrop_points = airdrops
 	field_objectives_list = objectives
 	loaded_chunks = loaded_chunks_dict
+	chunk_minimap_textures.clear()
+	for cpos in loaded_chunks.keys():
+		var c_data = loaded_chunks[cpos]
+		if c_data is Dictionary:
+			get_or_bake_chunk_texture(cpos, c_data)
 	
 	if info_label:
 		info_label.text = "현재 위치: (%.1f, %.1f) | 작전 구역: %s | 로드 청크: %d개" % [player_pos.x, player_pos.y, current_biome, loaded_chunks.size()]
@@ -99,6 +132,7 @@ func _ready() -> void:
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
 	if map_canvas:
+		map_canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		map_canvas.draw.connect(_on_map_draw)
 		map_canvas.gui_input.connect(_on_map_canvas_gui_input)
 
@@ -148,29 +182,13 @@ func _on_map_draw() -> void:
 		if c_scr.x + chunk_px_size < 0 or c_scr.x > w or c_scr.y + chunk_px_size < 0 or c_scr.y > h:
 			continue
 			
-		# 청크 기본 바닥 영역
-		map_canvas.draw_rect(Rect2(c_scr, Vector2(chunk_px_size, chunk_px_size)), Color(0.13, 0.17, 0.12, 0.5))
-		map_canvas.draw_rect(Rect2(c_scr, Vector2(chunk_px_size, chunk_px_size)), Color(0.22, 0.32, 0.22, 0.2), false, 1.0)
-		
-		var tiles = c_data.get("tiles", [])
-		var objects = c_data.get("objects", [])
-		var cell_w = 32.0 * scale_factor
-		
-		# 도로 및 건물 타일 전술 개요도 렌더링
-		for ly in range(16):
-			for lx in range(16):
-				var idx = ly * 16 + lx
-				var tile_coords = tiles[idx] if idx < tiles.size() else Vector2i(-1, -1)
-				var obj_coords = objects[idx] if idx < objects.size() else Vector2i(-1, -1)
-				var t_scr = c_scr + Vector2(lx * cell_w, ly * cell_w)
-				var t_sz = Vector2(cell_w + 0.3, cell_w + 0.3)
-				
-				if obj_coords == TileManager.OBJ_WALL or obj_coords == TileManager.OBJ_DOOR_CLOSED or obj_coords == TileManager.OBJ_DOOR_OPEN or obj_coords == TileManager.OBJ_DOOR_LOCKED:
-					map_canvas.draw_rect(Rect2(t_scr, t_sz), Color(0.38, 0.44, 0.52, 0.9)) # 건물 구조체
-				elif tile_coords == TileManager.TILE_ROAD or tile_coords == TileManager.TILE_ROAD_LINE or tile_coords == TileManager.TILE_ROAD_LINE_H or tile_coords == TileManager.TILE_CROSSWALK or tile_coords == TileManager.TILE_CONCRETE:
-					map_canvas.draw_rect(Rect2(t_scr, t_sz), Color(0.26, 0.28, 0.30, 0.85)) # 도로/아스팔트
-				elif tile_coords == TileManager.TILE_WATER:
-					map_canvas.draw_rect(Rect2(t_scr, t_sz), Color(0.15, 0.30, 0.48, 0.8)) # 수역
+		# 16x16 캐싱된 미니맵 텍스처 1회 드로우 (256 타일 개별 draw_rect 루프 대체)
+		var chunk_rect := Rect2(c_scr, Vector2(chunk_px_size, chunk_px_size))
+		if c_data is Dictionary:
+			var chunk_tex: ImageTexture = get_or_bake_chunk_texture(cpos, c_data)
+			if chunk_tex:
+				map_canvas.draw_texture_rect(chunk_tex, chunk_rect, false)
+		map_canvas.draw_rect(chunk_rect, Color(0.22, 0.32, 0.22, 0.2), false, 1.0)
 	
 	# 3. 은신처(0,0) 및 동심원 거리계
 	map_canvas.draw_circle(map_origin, 4.0, Color(0.85, 0.85, 0.2))

@@ -23,6 +23,8 @@ var chunk_entities: Dictionary = {} # chunk_pos (Vector2i) -> Array[Node]
 # 현재 플레이어가 들어가 있는 건물 정보
 var current_inside_building: Dictionary = {}
 var hidden_roof_cells: Array[Vector2i] = []
+var _last_player_tile: Vector2i = Vector2i(999999, 999999)
+var _last_player_chunk: Vector2i = Vector2i(999999, 999999)
 
 signal chunk_loaded(chunk_pos: Vector2i, data: Dictionary)
 signal chunk_unloaded(chunk_pos: Vector2i)
@@ -91,15 +93,22 @@ func _process(_delta: float) -> void:
 			load_chunk(next_pos)
 			processed += 1
 
-func update_chunks(player_pos: Vector2) -> void:
-	var player_tile_x = int(floor(player_pos.x / TILE_SIZE))
-	var player_tile_y = int(floor(player_pos.y / TILE_SIZE))
+func update_chunks(player_pos: Vector2, force: bool = false) -> void:
+	var player_tile_x: int = int(floor(player_pos.x / TILE_SIZE))
+	var player_tile_y: int = int(floor(player_pos.y / TILE_SIZE))
+	var cur_tile := Vector2i(player_tile_x, player_tile_y)
 	
-	_update_roof_visibility(player_tile_x, player_tile_y)
+	if force or cur_tile != _last_player_tile:
+		_last_player_tile = cur_tile
+		_update_roof_visibility(player_tile_x, player_tile_y)
 	
-	var center_chunk_x: int = floor(player_pos.x / (CHUNK_SIZE * TILE_SIZE))
-	var center_chunk_y: int = floor(player_pos.y / (CHUNK_SIZE * TILE_SIZE))
-	var center_chunk = Vector2i(center_chunk_x, center_chunk_y)
+	var center_chunk_x: int = int(floor(player_pos.x / (CHUNK_SIZE * TILE_SIZE)))
+	var center_chunk_y: int = int(floor(player_pos.y / (CHUNK_SIZE * TILE_SIZE)))
+	var center_chunk := Vector2i(center_chunk_x, center_chunk_y)
+	
+	if not force and not loaded_chunks.is_empty() and center_chunk == _last_player_chunk:
+		return
+	_last_player_chunk = center_chunk
 	
 	var new_active_chunks: Array[Vector2i] = []
 	var is_initial_load = loaded_chunks.is_empty()

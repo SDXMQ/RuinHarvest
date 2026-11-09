@@ -10,6 +10,12 @@ signal grid_changed
 @export var grid_height: int = 4
 @export var has_secure_container: bool = false
 
+static var _uid_counter: int = 0
+
+static func next_uid() -> String:
+	_uid_counter += 1
+	return "item_%d" % _uid_counter
+
 static func is_same_item_id(a: String, b: String) -> bool:
 	if a == b:
 		return true
@@ -91,8 +97,10 @@ func load_items(saved_items: Array) -> void:
 		var cur_h = base_size.x if is_rot else base_size.y
 		item["w"] = base_size.x
 		item["h"] = base_size.y
-		if not item.has("uid"):
-			item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+		if item.get("custom_data") is Dictionary:
+			item["custom_data"] = sanitize_custom_data(item["custom_data"])
+		if not item.has("uid") or String(item["uid"]) == "":
+			item["uid"] = next_uid()
 		
 		# 원래 좌표에 배치 가능하면 그대로 배치
 		if ix >= 0 and iy >= 0 and can_place_item(cur_w, cur_h, ix, iy, "", item["id"]):
@@ -157,7 +165,7 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 	
 	var uid = item.get("uid", "")
 	if uid == "":
-		uid = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+		uid = next_uid()
 		item["uid"] = uid
 		
 	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id):
@@ -325,7 +333,7 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 			
 		var to_add = min(max_stack, remaining)
 		var new_item = {
-			"uid": "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000],
+			"uid": next_uid(),
 			"id": resolved_id,
 			"amount": to_add,
 			"w": base_size.x,
@@ -472,7 +480,7 @@ func sort_items() -> void:
 			while rem > 0:
 				var chunk = min(max_stack, rem)
 				var new_entry = item.duplicate(true)
-				new_entry["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 100000]
+				new_entry["uid"] = next_uid()
 				new_entry["amount"] = chunk
 				merged.append(new_entry)
 				rem -= chunk

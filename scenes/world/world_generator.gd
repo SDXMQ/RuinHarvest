@@ -12,9 +12,17 @@ var noise: FastNoiseLite
 var biome_noise: FastNoiseLite
 var road_warp_noise: FastNoiseLite
 var rng_seed: int
+var _lot_cache: Dictionary = {}
+var lot_calc_count: int = 0
+
+func clear_cache() -> void:
+	_lot_cache.clear()
+	lot_calc_count = 0
 
 func _init(seed_value: int) -> void:
 	rng_seed = seed_value
+	_lot_cache.clear()
+	lot_calc_count = 0
 	
 	noise = FastNoiseLite.new()
 	noise.seed = seed_value
@@ -174,6 +182,10 @@ static func is_point_in_building(b: Dictionary, wx: int, wy: int) -> bool:
 	return true
 
 func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
+	var lot_key := Vector2i(lot_x, lot_y)
+	if _lot_cache.has(lot_key):
+		return _lot_cache[lot_key]
+	lot_calc_count += 1
 	var lot_rng = RandomNumberGenerator.new()
 	var lot_seed = int(rng_seed ^ (lot_x * 73856093) ^ (lot_y * 19349663))
 	lot_rng.seed = lot_seed
@@ -185,10 +197,12 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 	
 	var biome = get_biome(center_wx, center_wy)
 	if biome == "forest" and lot_rng.randf() > 0.25:
+		_lot_cache[lot_key] = {}
 		return {} # 숲 외곽은 건물 밀도 낮춤
 		
 	var preset = BuildingPresets.get_preset_for_biome(biome, lot_rng)
 	if preset.is_empty():
+		_lot_cache[lot_key] = {}
 		return {}
 		
 	var bw = int(preset["width"])
@@ -205,6 +219,7 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 	var tot_w = bw + yard_m * 2
 	var tot_h = bh + yard_m * 2
 	if tot_w > (usable_max_x - usable_min_x) or tot_h > (usable_max_y - usable_min_y):
+		_lot_cache[lot_key] = {}
 		return {}
 		
 	var slack_x = (usable_max_x - usable_min_x) - tot_w
@@ -217,15 +232,17 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 	# 월드 스폰 지점 (0,0) 광장 보호
 	var full_rect = Rect2i(b_x - yard_m - 1, b_y - yard_m - 1, tot_w + 2, tot_h + 2)
 	if full_rect.intersects(Rect2i(-7, -7, 14, 14)):
+		_lot_cache[lot_key] = {}
 		return {}
 		
 	# 도로(특히 숲 외곽 곡선 도로)와의 겹침 완전 배제
 	for cy in range(b_y - yard_m - 1, b_y + bh + yard_m + 1):
 		for cx in range(b_x - yard_m - 1, b_x + bw + yard_m + 1):
 			if is_road(cx, cy):
+				_lot_cache[lot_key] = {}
 				return {}
 				
-	return {
+	var result := {
 		"preset": preset,
 		"wx": b_x,
 		"wy": b_y,
@@ -234,6 +251,8 @@ func _get_lot_building(lot_x: int, lot_y: int) -> Dictionary:
 		"biome": biome,
 		"seed": lot_seed
 	}
+	_lot_cache[lot_key] = result
+	return result
 
 func get_building_at(wx: int, wy: int) -> Dictionary:
 	var lot_x = int(floor(float(wx) / float(LOT_SIZE)))
