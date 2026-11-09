@@ -1110,5 +1110,64 @@ func _ready() -> void:
 	t46_cm.free()
 	t46_mw.free()
 
+	# Test 47: Section 2 Area 1 & 2 (Floating damage & armor absorption feedback, HUD [U] RADIO badge, Key/Keycard durability uses, Tactical Map locked vault markers)
+	total_tests += 1
+	var EnemyScript = preload("res://scenes/entities/enemies/enemy.gd")
+	var fb_full: Dictionary = EnemyScript.format_hit_feedback(35.0, 1.0)
+	var fb_absorb: Dictionary = EnemyScript.format_hit_feedback(18.0, 0.60)
+	var area1_dmg_ok: bool = (not bool(fb_full["absorbed"]) and String(fb_full["text"]) == "-35" and bool(fb_absorb["absorbed"]) and String(fb_absorb["text"]).contains("방탄 흡수 -40%"))
+
+	var t47_p = preload("res://scenes/entities/player/player.tscn").instantiate()
+	add_child(t47_p)
+	var t47_hbox := HBoxContainer.new()
+	add_child(t47_hbox)
+	HudTacticalHelper.update_quickslot_bar(t47_hbox, t47_p)
+	var slot_u_btn: Button = t47_hbox.get_node_or_null("SlotU") as Button
+	var u_off_ok: bool = (slot_u_btn != null and slot_u_btn.get_node("CountBadge").text == "OFF")
+	t47_p.inventory_grid.auto_add_item("장거리 무전기", 1)
+	HudTacticalHelper.update_quickslot_bar(t47_hbox, t47_p)
+	var u_on_ok: bool = (slot_u_btn != null and slot_u_btn.get_node("CountBadge").text == "RADIO" and slot_u_btn.tooltip_text.contains("무전 호출 가능"))
+
+	# Keycard max_durability == 3 -> 3 uses consumes the keycard
+	var key_max_ok: bool = (int(ItemDatabase.get_item_data("무기고 열쇠").get("max_durability", 0)) == 5 and int(ItemDatabase.get_item_data("보안 키카드").get("max_durability", 0)) == 3)
+	var t47_mw = preload("res://scenes/world/main_world.gd").new()
+	var t47_cm = preload("res://scenes/world/chunk_manager.gd").new()
+	t47_cm.object_layer = TileMapLayer.new()
+	t47_cm.object_layer.tile_set = TileManager.get_tileset()
+	t47_cm.add_child(t47_cm.object_layer)
+	t47_mw.chunk_manager = t47_cm
+	t47_mw.player = t47_p
+	t47_p.inventory_grid.clear()
+	t47_p.inventory_grid.place_item({"id": "보안 키카드", "amount": 1, "w": 1, "h": 1}, 0, 0, false)
+	for use_i in range(3):
+		var d_pos := Vector2i(50 + use_i, 50)
+		t47_cm.object_layer.set_cell(d_pos, 0, TileManager.OBJ_DOOR_LOCKED)
+		t47_mw._on_object_interacted(Vector2.ZERO, d_pos, TileManager.OBJ_DOOR_LOCKED)
+	var key_consumed_ok: bool = not t47_p.inventory_grid.has_item("보안 키카드", 1)
+
+	# Tactical Map locked vault markers
+	var mock_objs: Array = []
+	mock_objs.resize(256)
+	for mi in range(256):
+		mock_objs[mi] = Vector2i(-1, -1)
+	mock_objs[4 * 16 + 7] = TileManager.OBJ_DOOR_LOCKED
+	var mock_chunks := {Vector2i(1, 2): {"objects": mock_objs, "tiles": []}}
+	GameManager.current_world_data = {"raid_radio_scanned": false, "hideout": {"facilities": {"intel_center": 0}}}
+	var vault_locked_before: bool = not MapWinScript.is_vault_intel_unlocked()
+	GameManager.current_world_data["raid_radio_scanned"] = true
+	var vault_unlocked_after: bool = MapWinScript.is_vault_intel_unlocked()
+	var vault_markers: Array = MapWinScript.extract_locked_vault_markers(mock_chunks)
+	var map_marker_ok: bool = (vault_locked_before and vault_unlocked_after and vault_markers.size() == 1 and String(vault_markers[0].get("icon", "")) == "🔒")
+
+	if area1_dmg_ok and u_off_ok and u_on_ok and key_max_ok and key_consumed_ok and map_marker_ok:
+		print("[PASS] Test 47: Area 1 & 2 verified (Armor absorption floating text, [U] RADIO HUD badge, Key 5/3 durability consumption, Tactical Map 🔒 markers)")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 47: Area 1 & 2 check failed (dmg=%s, u_off=%s, u_on=%s, k_max=%s, k_cons=%s, map=%s)" % [str(area1_dmg_ok), str(u_off_ok), str(u_on_ok), str(key_max_ok), str(key_consumed_ok), str(map_marker_ok)])
+	t47_hbox.free()
+	t47_p.free()
+	t47_cm.free()
+	t47_mw.free()
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)

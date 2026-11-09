@@ -222,6 +222,32 @@ static func update_quickslot_bar(quickslot_hbox: HBoxContainer, player: Node) ->
 			Color(0.25, 1.0, 0.4)
 		)
 
+	# Slot U (Radio)
+	var slotU: Button = quickslot_hbox.get_node_or_null("SlotU")
+	if not slotU:
+		slotU = Button.new()
+		slotU.name = "SlotU"
+		quickslot_hbox.add_child(slotU)
+	var has_radio := false
+	if player.inventory_grid:
+		if player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("군용 무전기", 1) or player.inventory_grid.has_item("무전기", 1):
+			has_radio = true
+		else:
+			for it in player.inventory_grid.items:
+				if String(it.get("id", "")).contains("무전기"):
+					has_radio = true
+					break
+	style_quickslot_button(
+		slotU,
+		"U",
+		"장거리 무전기",
+		"RADIO" if has_radio else "OFF",
+		"[U] 무전 호출 가능 (드론 보급/풀턴 회수/스캔)" if has_radio else "[U] 전술 무전기 미보유",
+		has_radio,
+		has_radio,
+		Color(0.3, 0.9, 1.0)
+	)
+
 static func update_channeling_sweep(quickslot_hbox: HBoxContainer, slot_key: String, ratio: float) -> void:
 	if not quickslot_hbox:
 		return

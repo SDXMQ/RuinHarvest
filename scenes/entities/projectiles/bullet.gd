@@ -86,6 +86,8 @@ func _on_body_entered(body: Node2D) -> void:
 			var ps = get_tree().current_scene.get_node_or_null("ParticleSystem") if get_tree() and get_tree().current_scene else null
 			if ps: ps.emit("spark", global_position.x, global_position.y, 5)
 			if SoundManager: SoundManager.play("armor_ricochet", 0.7)
+		if body.has_method("show_hit_feedback"):
+			body.show_hit_feedback(eff_dmg, armor_mult)
 		body.take_damage(eff_dmg, direction)
 		# 고관통 대구경 탄환(관통력 30 이상: 7.62mm, 12게이지 슬러그 등)은 장갑을 완전 관통했을 때 후방 적 1기 추가 타격
 		if penetration >= 30 and float(penetration) >= target_armor_val and pierce_count < 1:

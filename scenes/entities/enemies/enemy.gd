@@ -41,6 +41,54 @@ var wander_dir: Vector2 = Vector2.ZERO
 var wander_timer: float = 0.0
 var knockback_velocity: Vector2 = Vector2.ZERO
 var hit_flash_tween: Tween
+var last_hit_floating_text: String = ""
+var last_hit_floating_color: Color = Color.WHITE
+var _hit_feedback_already_shown: bool = false
+
+static func format_hit_feedback(dmg: float, armor_mult: float = 1.0) -> Dictionary:
+	var dmg_int: int = max(1, int(round(dmg)))
+	if armor_mult < 0.85:
+		var absorb_pct: int = int(round((1.0 - armor_mult) * 100.0))
+		return {
+			"text": "-%d [방탄 흡수 -%d%%]" % [dmg_int, absorb_pct],
+			"color": Color(0.55, 0.78, 0.98),
+			"absorbed": true
+		}
+	elif armor_mult < 0.999:
+		var absorb_pct2: int = int(round((1.0 - armor_mult) * 100.0))
+		return {
+			"text": "-%d [방탄 -%d%%]" % [dmg_int, absorb_pct2],
+			"color": Color(0.75, 0.82, 0.92),
+			"absorbed": true
+		}
+	else:
+		return {
+			"text": "-%d" % dmg_int,
+			"color": Color(1.0, 0.92, 0.32) if dmg >= 30.0 else Color(1.0, 0.98, 0.92),
+			"absorbed": false
+		}
+
+func show_hit_feedback(dmg: float, armor_mult: float = 1.0) -> Dictionary:
+	var fb := format_hit_feedback(dmg, armor_mult)
+	last_hit_floating_text = String(fb["text"])
+	last_hit_floating_color = fb["color"]
+	_hit_feedback_already_shown = true
+	if is_inside_tree() and get_parent() != null:
+		var lbl := Label.new()
+		lbl.text = last_hit_floating_text
+		lbl.add_theme_font_size_override("font_size", 11 if bool(fb["absorbed"]) else 13)
+		lbl.add_theme_color_override("font_color", last_hit_floating_color)
+		lbl.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08, 0.95))
+		lbl.add_theme_constant_override("outline_size", 3)
+		lbl.z_index = 45
+		lbl.global_position = global_position + Vector2(randf_range(-14.0, 14.0), -28.0)
+		get_parent().add_child(lbl)
+		var tw := lbl.create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(lbl, "global_position:y", lbl.global_position.y - 26.0, 0.65)
+		tw.tween_property(lbl, "modulate:a", 0.0, 0.65)
+		tw.chain().tween_callback(lbl.queue_free)
+	return fb
 
 # 소음 및 느낌표 시스템
 var target_noise_pos: Vector2 = Vector2.ZERO
@@ -589,6 +637,9 @@ func _detonate_boss_grenade(g_info: Dictionary) -> void:
 			EventBus.player_hit_direction.emit(g_pos)
 
 func take_damage(amount: float, hit_dir: Vector2) -> void:
+	if not _hit_feedback_already_shown:
+		show_hit_feedback(amount, 1.0)
+	_hit_feedback_already_shown = false
 	hp -= amount
 	current_state = State.CHASE # 피격 시 즉시 추적 모드
 	knockback_velocity = hit_dir.normalized() * (65.0 if enemy_type == EnemyType.BOSS else (110.0 if is_ranged_human else 180.0))

@@ -596,6 +596,8 @@ func spawn_emergency_drone_crate(drop_pos: Vector2, primary_ammo: String = "5.56
 	return crate
 
 func _on_radio_scan_requested(scan_type: String) -> void:
+	if GameManager and GameManager.current_world_data is Dictionary:
+		GameManager.current_world_data["raid_radio_scanned"] = true
 	if not player:
 		return
 	if scan_type == "survivor":
@@ -1151,6 +1153,16 @@ func _on_player_stats_changed() -> void:
 		
 	# 좌하단 무기 상태 패널 갱신
 	if weapon_panel:
+		var radio_badge: Label = weapon_panel.get_node_or_null("RadioHudBadge") as Label
+		if not radio_badge:
+			radio_badge = Label.new()
+			radio_badge.name = "RadioHudBadge"
+			radio_badge.text = "📡 [U] 무전 호출 가능"
+			radio_badge.add_theme_font_size_override("font_size", 11)
+			radio_badge.add_theme_color_override("font_color", Color(0.35, 0.95, 1.0))
+			radio_badge.position = Vector2(6, -20)
+			weapon_panel.add_child(radio_badge)
+		radio_badge.visible = player_has_radio()
 		var eq_wep = player.equipped_weapon
 		var wep_data = ItemDatabase.get_item_data(player.equipped_weapon_data.get("id", eq_wep))
 		var slot_disp = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
@@ -1274,9 +1286,18 @@ func _on_quickslot_N_pressed() -> void:
 			EventBus.event_logged.emit("🥽 야간투시경(NVG): %s" % ("ON" if player.player_lighting.nvg_enabled else "OFF"))
 		_update_quickslot_bar()
 
+func _on_quickslot_U_pressed() -> void:
+	if player_has_radio():
+		open_radio_window()
+	else:
+		_on_event_logged("⚠️ 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
+
 func _update_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
 	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
+	var slotU = quickslot_hbox.get_node_or_null("SlotU")
+	if slotU and slotU is Button and not slotU.pressed.is_connected(_on_quickslot_U_pressed):
+		slotU.pressed.connect(_on_quickslot_U_pressed)
 
 func _on_player_channel_started(duration: float, item_name: String) -> void:
 	if channeling_bar:
@@ -1368,21 +1389,51 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 				req_key = String(b_info.get("preset", {}).get("locked_key", "무기고 열쇠"))
 		var has_valid_key = false
 		var used_key_name = req_key
+		var key_item_ref: Dictionary = {}
 		if player and player.inventory_grid:
-			if player.inventory_grid.has_item(req_key, 1):
-				has_valid_key = true
-			elif req_key == "무기고 열쇠" and player.inventory_grid.has_item("보안 키카드", 1):
-				has_valid_key = true
-				used_key_name = "보안 키카드"
+			for it in player.inventory_grid.items:
+				var it_id := String(it.get("id", ""))
+				if InventoryGrid.is_same_item_id(it_id, req_key):
+					has_valid_key = true
+					used_key_name = req_key
+					key_item_ref = it
+					break
+			if not has_valid_key and req_key == "무기고 열쇠":
+				for it in player.inventory_grid.items:
+					var it_id := String(it.get("id", ""))
+					if InventoryGrid.is_same_item_id(it_id, "보안 키카드"):
+						has_valid_key = true
+						used_key_name = "보안 키카드"
+						key_item_ref = it
+						break
 		if not has_valid_key:
 			if SoundManager: SoundManager.play("hit_melee")
 			EventBus.event_logged.emit("🔒 잠겨 있습니다! [%s]가 가방 또는 안전 컨테이너에 필요합니다." % req_key)
 			return
+		var key_destroyed := false
+		var rem_uses := 0
+		var max_uses := 5 if used_key_name == "무기고 열쇠" else 3
+		if not key_item_ref.is_empty() and player and player.inventory_grid:
+			var k_data := ItemDatabase.get_item_data(used_key_name)
+			max_uses = int(key_item_ref.get("max_durability", k_data.get("max_durability", max_uses)))
+			var cur_uses := int(round(float(key_item_ref.get("durability", max_uses))))
+			cur_uses -= 1
+			rem_uses = max(0, cur_uses)
+			key_item_ref["durability"] = float(rem_uses)
+			key_item_ref["max_durability"] = float(max_uses)
+			if rem_uses <= 0:
+				key_destroyed = true
+				player.inventory_grid.remove_item_by_uid(String(key_item_ref.get("uid", "")))
+			else:
+				player.inventory_grid.grid_changed.emit()
 		if chunk_manager and chunk_manager.object_layer:
 			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
 		EventBus.noise_created.emit(world_pos, 140.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
-		EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다!" % used_key_name)
+		if key_destroyed:
+			EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다! (열쇠 내구도 소진으로 파손됨)" % used_key_name)
+		else:
+			EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다! (남은 사용 횟수: %d/%d)" % [used_key_name, rem_uses, max_uses])
 		if SoundManager: SoundManager.play("item_pickup")
 		return
 	elif type == Vector2i(6, 1): # OBJ_DOOR_CLOSED

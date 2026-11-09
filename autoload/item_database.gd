@@ -75,35 +75,41 @@ func _load_all_items():
 						d["ammo"] = res.ammo
 					items[res.id] = d
 			fname = dir.get_next()
-	# 잠긴 특수 방(무기고/원장실) 개방용 열쇠 및 보안 키카드 내장 등록
+	# 잠긴 특수 방(무기고/원장실) 개방용 열쇠 및 보안 키카드 내장 등록 (내구도/사용 횟수 적용)
 	if not items.has("무기고 열쇠"):
 		items["무기고 열쇠"] = {
 			"id": "무기고 열쇠",
 			"name": "무기고 열쇠",
 			"category": ItemCategory.QUEST,
 			"type": "key",
-			"description": "경찰서 및 군사 시설의 잠긴 무기고 보안문을 여는 강철 열쇠입니다. (안전 컨테이너 보관 가능)",
+			"description": "경찰서 및 군사 시설의 잠긴 무기고 보안문을 여는 강철 열쇠입니다. (최대 5회 사용, 안전 컨테이너 보관 가능)",
 			"stackable": false,
 			"max_stack": 1,
+			"max_durability": 5,
 			"weight": 0.05,
 			"rarity": 3,
 			"value": 18000,
 			"effects": {}
 		}
+	else:
+		items["무기고 열쇠"]["max_durability"] = 5
 	if not items.has("보안 키카드"):
 		items["보안 키카드"] = {
 			"id": "보안 키카드",
 			"name": "보안 키카드",
 			"category": ItemCategory.QUEST,
 			"type": "keycard",
-			"description": "병원 원장실 및 특수 보안 구역의 전자 잠금장치를 해제하는 마그네틱 키카드입니다. (안전 컨테이너 보관 가능)",
+			"description": "병원 원장실 및 특수 보안 구역의 전자 잠금장치를 해제하는 마그네틱 키카드입니다. (최대 3회 사용, 안전 컨테이너 보관 가능)",
 			"stackable": false,
 			"max_stack": 1,
+			"max_durability": 3,
 			"weight": 0.05,
 			"rarity": 4,
 			"value": 28000,
 			"effects": {}
 		}
+	else:
+		items["보안 키카드"]["max_durability"] = 3
 
 # 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {

@@ -57,6 +57,42 @@ static func get_extraction_lock_info(z_type: int, objectives: Array = []) -> Dic
 			return {"locked": true, "reason": "잠김: 단말기 미해킹"}
 	return {"locked": false, "reason": ""}
 
+static func is_vault_intel_unlocked() -> bool:
+	if not GameManager or not (GameManager.current_world_data is Dictionary):
+		return false
+	var w_data: Dictionary = GameManager.current_world_data
+	if bool(w_data.get("raid_radio_scanned", false)):
+		return true
+	var hideout_fac: Dictionary = w_data.get("hideout", {}).get("facilities", {})
+	if int(hideout_fac.get("intel_center", 0)) >= 1:
+		return true
+	var top_fac: Dictionary = w_data.get("facilities", {})
+	if int(top_fac.get("intel_center", 0)) >= 1:
+		return true
+	return false
+
+static func extract_locked_vault_markers(chunks_dict: Dictionary) -> Array[Dictionary]:
+	var markers: Array[Dictionary] = []
+	for cpos in chunks_dict.keys():
+		var c_data = chunks_dict[cpos]
+		if not (c_data is Dictionary):
+			continue
+		var objects: Array = c_data.get("objects", [])
+		for ly in range(16):
+			for lx in range(16):
+				var idx := ly * 16 + lx
+				if idx < objects.size() and objects[idx] == TileManager.OBJ_DOOR_LOCKED:
+					var wx: int = int(cpos.x) * 16 + lx
+					var wy: int = int(cpos.y) * 16 + ly
+					var wpos := Vector2(float(wx) * 32.0 + 16.0, float(wy) * 32.0 + 16.0)
+					markers.append({
+						"tile": Vector2i(wx, wy),
+						"pos": wpos,
+						"icon": "🔒",
+						"label": "🔒 보안 구역 (무기고/금고)"
+					})
+	return markers
+
 func _ready() -> void:
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
@@ -169,6 +205,17 @@ func _on_map_draw() -> void:
 			map_canvas.draw_rect(Rect2(a_pos - Vector2(5, 5), Vector2(10, 10)), Color(1.0, 0.65, 0.15))
 			map_canvas.draw_arc(a_pos, 8.5, 0, TAU, 12, Color(1.0, 0.85, 0.3), 1.5)
 			map_canvas.draw_string(ThemeDB.fallback_font, a_pos + Vector2(11, 4), "🪂 %s (%.0fm)" % [a_pt.get("name", "보급품"), dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.75, 0.25))
+
+	# 5-B. 잠긴 특수 건물(경찰서 무기고·병원 금고·군사 벙커) 자물쇠(🔒) 마커 (무전 스캔 또는 정보 센터 보유 시)
+	if is_vault_intel_unlocked():
+		var vault_markers := extract_locked_vault_markers(loaded_chunks)
+		for vm in vault_markers:
+			var v_pos: Vector2 = map_origin + vm["pos"] * scale_factor
+			if v_pos.x >= -40 and v_pos.x <= w + 40 and v_pos.y >= -40 and v_pos.y <= h + 40:
+				var v_dist := player_pos.distance_to(vm["pos"])
+				map_canvas.draw_circle(v_pos, 5.5, Color(0.98, 0.78, 0.18, 0.92))
+				map_canvas.draw_arc(v_pos, 8.5, 0, TAU, 14, Color(1.0, 0.9, 0.35), 1.4)
+				map_canvas.draw_string(ThemeDB.fallback_font, v_pos + Vector2(10, 4), "%s (%.0fm)" % [vm["label"], v_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.32))
 
 	# 6. 랜드마크 보스 마커
 	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:

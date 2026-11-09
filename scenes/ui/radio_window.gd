@@ -304,6 +304,8 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 	return true
 
 func _scan_target(type: String) -> void:
+	if GameManager and GameManager.current_world_data is Dictionary:
+		GameManager.current_world_data["raid_radio_scanned"] = true
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("radio_scan_requested"):
 		EventBus.radio_scan_requested.emit(type)
