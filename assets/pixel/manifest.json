@@ -1,0 +1,34 @@
+{
+  "atlases": {
+    "tiles/world_tileset": {
+      "diffuse": "res://assets/pixel/tiles/world_tileset_d.png",
+      "normal": "res://assets/pixel/tiles/world_tileset_n.png",
+      "width": 256,
+      "height": 192
+    },
+    "entities/player_parts": {
+      "diffuse": "res://assets/pixel/entities/player_parts_d.png",
+      "normal": "res://assets/pixel/entities/player_parts_n.png",
+      "width": 256,
+      "height": 128
+    },
+    "weapons/weapon_parts": {
+      "diffuse": "res://assets/pixel/weapons/weapon_parts_d.png",
+      "normal": "res://assets/pixel/weapons/weapon_parts_n.png",
+      "width": 256,
+      "height": 128
+    },
+    "entities/enemies": {
+      "diffuse": "res://assets/pixel/entities/enemies_d.png",
+      "normal": "res://assets/pixel/entities/enemies_n.png",
+      "width": 384,
+      "height": 96
+    },
+    "props/world_props": {
+      "diffuse": "res://assets/pixel/props/world_props_d.png",
+      "normal": "res://assets/pixel/props/world_props_n.png",
+      "width": 256,
+      "height": 192
+    }
+  }
+}

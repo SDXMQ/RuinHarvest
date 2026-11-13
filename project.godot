@@ -25,6 +25,7 @@ ItemDatabase="*res://autoload/item_database.gd"
 SoundManager="*res://autoload/sound_manager.gd"
 SaveManager="*res://autoload/save_manager.gd"
 GameManager="*res://autoload/game_manager.gd"
+PixelAssetManager="*res://autoload/pixel_asset_manager.gd"
 TileManager="*res://autoload/tile_manager.gd"
 WeatherSystem="*res://systems/weather_system.gd"
 EventSystem="*res://systems/event_system.gd"
@@ -138,3 +139,5 @@ reload={
 [rendering]
 
 textures/canvas_textures/default_texture_filter=0
+2d/snap/snap_2d_transforms_to_pixel=true
+2d/snap/snap_2d_vertices_to_pixel=true
