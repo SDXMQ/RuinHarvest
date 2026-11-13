@@ -190,9 +190,9 @@ class Canvas:
         for lx, ly in to_outline:
             self.set_px(ox + lx, oy + ly, col, 0.05)
 
-    def _compute_region_normals(self, norm: np.ndarray, eff_h: np.ndarray, ox: int, oy: int, cw: int, ch: int, strength: float) -> None:
+    def _compute_region_normals(self, norm: np.ndarray, eff_h: np.ndarray, ox: int, oy: int, cw: int, ch: int, strength: float, wrap: bool = False) -> None:
         sub = eff_h[oy:oy + ch, ox:ox + cw]
-        padded = np.pad(sub, 1, mode="edge")
+        padded = np.pad(sub, 1, mode="wrap" if wrap else "edge")
         gx = (
             (padded[:-2, 2:] + 2.0 * padded[1:-1, 2:] + padded[2:, 2:])
             - (padded[:-2, :-2] + 2.0 * padded[1:-1, :-2] + padded[2:, :-2])
@@ -216,7 +216,7 @@ class Canvas:
         norm[oy:oy + ch, ox:ox + cw, 2] = np.clip((nz * 0.5 + 0.5) * 255.0, 0, 255).astype(np.uint8)
         norm[oy:oy + ch, ox:ox + cw, 3] = 255
 
-    def build_normal_map(self, cell_w: int, cell_h: int, strength: float = 2.6) -> np.ndarray:
+    def build_normal_map(self, cell_w: int, cell_h: int, strength: float = 2.6, wrap_cells: set = None, flat_cells: set = None) -> np.ndarray:
         """
         Generates cell-clamped OpenGL normal map from scalar heightmap + alpha silhouette.
         """
@@ -233,7 +233,10 @@ class Canvas:
         rows = self.h // cell_h
         for ry in range(rows):
             for rx in range(cols):
-                self._compute_region_normals(norm, eff_h, rx * cell_w, ry * cell_h, cell_w, cell_h, strength)
+                if flat_cells is not None and (rx, ry) in flat_cells:
+                    continue
+                is_wrap = (wrap_cells is not None) and ((rx, ry) in wrap_cells)
+                self._compute_region_normals(norm, eff_h, rx * cell_w, ry * cell_h, cell_w, cell_h, strength, wrap=is_wrap)
         return norm
 
     def build_normal_map_regions(self, regions: list, strength: float = 2.6) -> np.ndarray:
@@ -251,11 +254,11 @@ class Canvas:
             self._compute_region_normals(norm, eff_h, ox, oy, cw, ch, strength)
         return norm
 
-    def save_pair(self, rel_base: str, cell_w: int, cell_h: int, strength: float = 2.6):
+    def save_pair(self, rel_base: str, cell_w: int, cell_h: int, strength: float = 2.6, wrap_cells: set = None, flat_cells: set = None):
         d_path = os.path.join(OUT_DIR, f"{rel_base}_d.png")
         n_path = os.path.join(OUT_DIR, f"{rel_base}_n.png")
         Image.fromarray(self.rgba, "RGBA").save(d_path)
-        norm = self.build_normal_map(cell_w, cell_h, strength)
+        norm = self.build_normal_map(cell_w, cell_h, strength, wrap_cells=wrap_cells, flat_cells=flat_cells)
         Image.fromarray(norm, "RGBA").save(n_path)
         return d_path, n_path
 
@@ -286,39 +289,40 @@ def bake_world_tileset():
                 + math.sin((x + y) * math.tau / TS) * 0.30
             ) * 0.5 + 0.5
             col = PAL["GRASS_MID"]
-            h = 0.25 + r * 0.08
+            h = 0.25 + patch * 0.03 + r * 0.02
             if patch < 0.36 or r < 0.20:
                 col = PAL["GRASS_DARK"]
-                h -= 0.04
+                h -= 0.015
             elif r > 0.85:
                 col = PAL["GRASS_LIGHT"]
-                h += 0.08
+                h += 0.02
             c.set_px(ox + x, oy + y, col, h)
     # Grass blade tufts
     tufts = [(4, 6), (18, 4), (25, 13), (9, 20), (21, 26), (13, 12)]
     for tx, ty in tufts:
-        c.set_px(ox + tx, oy + ty, PAL["GRASS_LIGHT"], 0.42)
-        c.set_px(ox + tx + 1, oy + ty - 1, PAL["GRASS_HIGH"], 0.48)
-        c.set_px(ox + tx - 1, oy + ty - 1, PAL["GRASS_LIGHT"], 0.44)
-        c.set_px(ox + tx, oy + ty + 1, PAL["GRASS_DARK"], 0.18)
+        c.set_px(ox + tx, oy + ty, PAL["GRASS_LIGHT"], 0.31)
+        c.set_px(ox + tx + 1, oy + ty - 1, PAL["GRASS_HIGH"], 0.33)
+        c.set_px(ox + tx - 1, oy + ty - 1, PAL["GRASS_LIGHT"], 0.31)
+        c.set_px(ox + tx, oy + ty + 1, PAL["GRASS_DARK"], 0.23)
 
     # --- (1, 0) TILE_DIRT: Packed damp earth & small stones ---
     ox, oy = 1 * TS, 0 * TS
     for y in range(TS):
         for x in range(TS):
             r = cell_hash(x, y, 202)
+            undul = (math.sin(x * math.tau / TS) + math.cos(y * math.tau / TS)) * 0.015
             col = PAL["DIRT_MID"]
-            h = 0.22 + r * 0.10
+            h = 0.24 + undul + r * 0.025
             if r < 0.28:
                 col = PAL["DIRT_DARK"]
-                h -= 0.06
+                h -= 0.015
             elif r > 0.82:
                 col = PAL["DIRT_LIGHT"]
-                h += 0.07
+                h += 0.018
             c.set_px(ox + x, oy + y, col, h)
     for px, py in [(6, 8), (19, 5), (12, 23), (27, 17), (3, 27)]:
-        c.set_px(ox + px, oy + py, PAL["SLATE_MID"], 0.42)
-        c.set_px(ox + px + 1, oy + py, PAL["DIRT_DARK"], 0.16)
+        c.set_px(ox + px, oy + py, PAL["SLATE_MID"], 0.31)
+        c.set_px(ox + px + 1, oy + py, PAL["DIRT_DARK"], 0.22)
 
     # --- (2, 0) TILE_ROAD: Dark weathered asphalt + aggregate & cracks ---
     def draw_asphalt_base(tx_off: int, ty_off: int, seed: int):
@@ -326,25 +330,25 @@ def bake_world_tileset():
             for x in range(TS):
                 r = cell_hash(x, y, seed)
                 col = PAL["ASPHALT_MID"]
-                h = 0.25 + r * 0.06
+                h = 0.25 + r * 0.015
                 if r < 0.20:
                     col = PAL["ASPHALT_DARK"]
-                    h -= 0.03
+                    h -= 0.01
                 elif r > 0.88:
                     col = PAL["ASPHALT_LIGHT"]
-                    h += 0.04
+                    h += 0.01
                 c.set_px(tx_off + x, ty_off + y, col, h)
         # Subtle hairline tarmac crack
         cx, cy = 7, 10
         for step in range(9):
-            c.set_px(tx_off + cx, ty_off + cy, PAL["SHADOW_DARK"], 0.10)
+            c.set_px(tx_off + cx, ty_off + cy, PAL["SHADOW_DARK"], 0.20)
             cx += 1
             if step % 3 == 1:
                 cy += 1
 
     draw_asphalt_base(2 * TS, 0 * TS, 303)
 
-    # --- (3, 0) TILE_CONCRETE: Sidewalk paving slabs with bevel seams ---
+    # --- (3, 0) TILE_CONCRETE: Sidewalk paving slabs with subtle bevel seams ---
     ox, oy = 3 * TS, 0 * TS
     for y in range(TS):
         for x in range(TS):
@@ -352,15 +356,15 @@ def bake_world_tileset():
             is_seam = (x == 0 or y == 0 or x == 16 or y == 16)
             is_hi = (x == 1 or y == 1 or x == 17 or y == 17)
             if is_seam:
-                c.set_px(ox + x, oy + y, PAL["SLATE_DARK"], 0.10)
+                c.set_px(ox + x, oy + y, PAL["SLATE_DARK"], 0.24)
             elif is_hi:
-                c.set_px(ox + x, oy + y, PAL["STEEL_BRIGHT"] if r > 0.4 else PAL["SLATE_LIGHT"], 0.36)
+                c.set_px(ox + x, oy + y, PAL["STEEL_BRIGHT"] if r > 0.4 else PAL["SLATE_LIGHT"], 0.295)
             else:
                 col = PAL["SLATE_LIGHT"] if r > 0.25 else PAL["SLATE_MID"]
-                c.set_px(ox + x, oy + y, col, 0.30 + r * 0.04)
+                c.set_px(ox + x, oy + y, col, 0.28 + r * 0.01)
     # Grime chip
     for gx, gy in [(8, 7), (9, 7), (22, 24), (23, 25)]:
-        c.set_px(ox + gx, oy + gy, PAL["SLATE_DARK"], 0.14)
+        c.set_px(ox + gx, oy + gy, PAL["SLATE_DARK"], 0.23)
 
     # --- (4, 0) TILE_FLOOR_WOOD: Staggered hardwood floorboards + nails ---
     ox, oy = 4 * TS, 0 * TS
@@ -370,9 +374,9 @@ def bake_world_tileset():
         for x in range(TS):
             r = cell_hash(x, y, 505 + plank_idx)
             if y % 8 == 0 or x == joint_x:
-                c.set_px(ox + x, oy + y, PAL["WOOD_DARK"], 0.12)
+                c.set_px(ox + x, oy + y, PAL["WOOD_DARK"], 0.24)
             elif y % 8 == 1:
-                c.set_px(ox + x, oy + y, PAL["WOOD_LIGHT"], 0.34)
+                c.set_px(ox + x, oy + y, PAL["WOOD_LIGHT"], 0.295)
             else:
                 grain = math.sin(x * math.tau * 2.0 / TS + plank_idx * 1.7)
                 col = PAL["WOOD_MID"]
@@ -380,10 +384,10 @@ def bake_world_tileset():
                     col = PAL["WOOD_LIGHT"]
                 elif r < 0.15:
                     col = PAL["WOOD_DARK"]
-                c.set_px(ox + x, oy + y, col, 0.28 + r * 0.04)
+                c.set_px(ox + x, oy + y, col, 0.28 + r * 0.01)
         # Plank nails near joints
-        c.set_px(ox + (joint_x + 2) % TS, oy + plank_idx * 8 + 3, PAL["SLATE_DARK"], 0.36)
-        c.set_px(ox + (joint_x + 2) % TS, oy + plank_idx * 8 + 6, PAL["SLATE_DARK"], 0.36)
+        c.set_px(ox + (joint_x + 2) % TS, oy + plank_idx * 8 + 3, PAL["SLATE_DARK"], 0.30)
+        c.set_px(ox + (joint_x + 2) % TS, oy + plank_idx * 8 + 6, PAL["SLATE_DARK"], 0.30)
 
     # --- (5, 0) TILE_FLOOR_TILE: Cracked tactical ceramic tiles ---
     ox, oy = 5 * TS, 0 * TS
@@ -391,17 +395,17 @@ def bake_world_tileset():
         for x in range(TS):
             r = cell_hash(x, y, 606)
             if x % 16 == 0 or y % 16 == 0:
-                c.set_px(ox + x, oy + y, PAL["SLATE_DARK"], 0.12)
+                c.set_px(ox + x, oy + y, PAL["SLATE_DARK"], 0.25)
             elif x % 16 == 1 or y % 16 == 1:
-                c.set_px(ox + x, oy + y, PAL["WHITE_MUTED"], 0.36)
+                c.set_px(ox + x, oy + y, PAL["WHITE_MUTED"], 0.295)
             else:
                 col = lerp_rgba(PAL["SLATE_LIGHT"], PAL["WHITE_MUTED"], 0.42 if ((x // 16 + y // 16) % 2 == 0) else 0.22)
                 if r < 0.14:
                     col = PAL["SLATE_MID"]
-                c.set_px(ox + x, oy + y, col, 0.30 + r * 0.03)
+                c.set_px(ox + x, oy + y, col, 0.285 + r * 0.008)
     # Crack across one corner
     for k in range(6):
-        c.set_px(ox + 20 + k, oy + 20 + (k // 2), PAL["CHARCOAL"], 0.10)
+        c.set_px(ox + 20 + k, oy + 20 + (k // 2), PAL["CHARCOAL"], 0.24)
 
     # --- (6, 0) TILE_ROAD_LINE (vertical yellow centerline on right) ---
     draw_asphalt_base(6 * TS, 0 * TS, 707)
@@ -411,11 +415,11 @@ def bake_world_tileset():
             r = cell_hash(x, y, 708)
             if r > 0.16:
                 col = PAL["ROAD_YELLOW"] if x < TS - 1 else PAL["ROAD_YELLOW_DIM"]
-                c.set_px(ox + x, oy + y, col, 0.30)
+                c.set_px(ox + x, oy + y, col, 0.265)
 
     # --- (7, 0) TILE_GRAVEL: Faceted crushed rock quarry surface ---
     ox, oy = 7 * TS, 0 * TS
-    c.fill_rect(ox, oy, TS, TS, PAL["DIRT_DARK"], 0.15)
+    c.fill_rect(ox, oy, TS, TS, PAL["DIRT_DARK"], 0.22)
     for gy in range(0, TS, 4):
         for gx in range(0, TS, 4):
             r = cell_hash(gx, gy, 808)
@@ -425,19 +429,23 @@ def bake_world_tileset():
             for sy in range(sh):
                 for sx in range(sw):
                     hi = (sx == 0 and sy == 0)
-                    c.set_px(ox + gx + sx, oy + gy + sy, lerp_rgba(stone_col, PAL["WHITE_MUTED"], 0.22) if hi else stone_col, 0.42 if hi else 0.30)
+                    c.set_px(ox + gx + sx, oy + gy + sy, lerp_rgba(stone_col, PAL["WHITE_MUTED"], 0.22) if hi else stone_col, 0.29 if hi else 0.25)
 
-    # --- (0, 1) OBJ_TREE: Multi-cluster dark pine/woodland canopy ---
+    # --- (0, 1) OBJ_TREE: Rich multi-lobe woodland canopy contrasting cleanly above grass ---
     ox, oy = 0 * TS, 1 * TS
+    CANOPY_HIGHLIGHT = hex_rgba("#67884C")
     # Trunk base peeking underneath
-    c.draw_circle(ox + 16, oy + 16, 4.0, PAL["WOOD_MID"], 0.40)
+    c.draw_circle(ox + 16, oy + 21, 3.8, PAL["WOOD_MID"], 0.35)
+    c.set_px(ox + 15, oy + 20, PAL["WOOD_LIGHT"], 0.40)
     clusters = [
-        (16, 16, 12.5, PAL["GRASS_DARK"], 0.50),
-        (12, 13, 8.0, PAL["GRASS_MID"], 0.65),
-        (20, 14, 7.5, PAL["GRASS_MID"], 0.65),
-        (15, 20, 7.5, PAL["GRASS_DARK"], 0.60),
-        (15, 12, 6.2, PAL["GRASS_LIGHT"], 0.80),
-        (13, 10, 3.8, PAL["GRASS_HIGH"], 0.92),
+        (16, 16, 12.6, PAL["GRASS_MID"], 0.52),
+        (18, 19, 8.8, PAL["GRASS_DARK"], 0.46),
+        (12, 13, 8.8, PAL["GRASS_LIGHT"], 0.68),
+        (20, 14, 7.6, PAL["GRASS_LIGHT"], 0.64),
+        (15, 19, 7.4, PAL["GRASS_MID"], 0.60),
+        (14, 11, 6.8, PAL["GRASS_HIGH"], 0.82),
+        (12, 9, 4.4, CANOPY_HIGHLIGHT, 0.94),
+        (18, 11, 3.6, PAL["GRASS_HIGH"], 0.86),
     ]
     for cx, cy, cr, col, hv in clusters:
         for y in range(TS):
@@ -445,10 +453,14 @@ def bake_world_tileset():
                 dx = (ox + x) - (ox + cx)
                 dy = (oy + y) - (oy + cy)
                 d = math.sqrt(dx * dx + dy * dy)
-                jitter = (cell_hash(x, y, 901) - 0.5) * 1.8
+                jitter = (cell_hash(x, y, 901) - 0.5) * 1.9
                 if d + jitter <= cr:
-                    local_h = hv + max(0.0, (cr - d) / max(1.0, cr)) * 0.25
-                    c.set_px(ox + x, oy + y, col, local_h)
+                    local_h = hv + max(0.0, (cr - d) / max(1.0, cr)) * 0.22
+                    # Subtle leaf dapple inside lobes without turning canopy black
+                    if col == CANOPY_HIGHLIGHT and cell_hash(x, y, 907) < 0.22:
+                        c.set_px(ox + x, oy + y, PAL["GRASS_HIGH"], local_h - 0.05)
+                    else:
+                        c.set_px(ox + x, oy + y, col, local_h)
     c.add_outline_cell(ox, oy, TS, TS)
 
     # --- (1, 1) OBJ_ROCK: Faceted dark slate boulder ---
@@ -657,25 +669,25 @@ def bake_world_tileset():
         for x in range(TS):
             r = cell_hash(x, y, 1402)
             if y % 8 == 0 or (x + shift) % 16 == 0:
-                c.set_px(ox + x, oy + y, PAL["OUTLINE"], 0.25)
+                c.set_px(ox + x, oy + y, PAL["OUTLINE"], 0.42)
             elif y % 8 == 1:
-                c.set_px(ox + x, oy + y, PAL["SLATE_MID"], 0.62)
+                c.set_px(ox + x, oy + y, PAL["SLATE_MID"], 0.56)
             else:
                 col = PAL["CHARCOAL"] if r < 0.35 else PAL["SLATE_DARK"]
-                c.set_px(ox + x, oy + y, col, 0.50 - (y % 8) * 0.025)
+                c.set_px(ox + x, oy + y, col, 0.50 - (y % 8) * 0.01)
 
     # --- (7, 2) TILE_WATER: Murky pond water base ---
     ox, oy = 7 * TS, 2 * TS
     for y in range(TS):
         for x in range(TS):
             r = cell_hash(x, y, 1502)
-            wave = math.sin(x * 0.3 + y * 0.2)
+            wave = math.sin(x * math.tau * 2.0 / TS + y * math.tau / TS)
             col = PAL["WATER_DEEP"]
             if wave > 0.35 or r > 0.85:
                 col = PAL["WATER_LIGHT"]
             elif wave > -0.25:
                 col = PAL["WATER_MID"]
-            c.set_px(ox + x, oy + y, col, 0.16 + wave * 0.04)
+            c.set_px(ox + x, oy + y, col, 0.24 + wave * 0.015)
 
     # --- (0, 3) OBJ_BED: Survivalist cot + navy/olive blanket & pillow ---
     ox, oy = 0 * TS, 3 * TS
@@ -734,7 +746,7 @@ def bake_world_tileset():
             r = cell_hash(x, y, 1604)
             if r > 0.16:
                 col = PAL["ROAD_YELLOW"] if y < TS - 1 else PAL["ROAD_YELLOW_DIM"]
-                c.set_px(ox + x, oy + y, col, 0.30)
+                c.set_px(ox + x, oy + y, col, 0.265)
 
     # --- (5, 3) TILE_CROSSWALK: Weathered zebra stripes ---
     draw_asphalt_base(5 * TS, 3 * TS, 1703)
@@ -744,7 +756,7 @@ def bake_world_tileset():
             for dx in range(4):
                 r = cell_hash(sx + dx, y, 1704)
                 if sx + dx < TS - 2 and r > 0.14:
-                    c.set_px(ox + sx + dx, oy + y, PAL["WHITE_MUTED"] if r > 0.35 else PAL["SLATE_LIGHT"], 0.31)
+                    c.set_px(ox + sx + dx, oy + y, PAL["WHITE_MUTED"] if r > 0.35 else PAL["SLATE_LIGHT"], 0.265)
 
     # --- Rows y = 4..5: Transparent Shadows & Environmental Deco Overlays ---
     # (0, 4) SE Corner Drop Shadow (bottom-right triangular dither)
@@ -847,7 +859,12 @@ def bake_world_tileset():
         c.fill_rect(ox + x, oy + 12, 1, 8, PAL["OUTLINE"], 0.20)
     c.add_outline_cell(ox, oy, TS, TS)
 
-    return c.save_pair("tiles/world_tileset", TS, TS, strength=2.6)
+    wrap_floor_cells = {
+        (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0),
+        (6, 2), (7, 2), (4, 3), (5, 3),
+    }
+    flat_shadow_cells = {(0, 4), (1, 4), (2, 4), (3, 4)}
+    return c.save_pair("tiles/world_tileset", TS, TS, strength=2.4, wrap_cells=wrap_floor_cells, flat_cells=flat_shadow_cells)
 
 
 # ==============================================================================

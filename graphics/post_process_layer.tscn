@@ -14,7 +14,7 @@ shader_parameter/nvg_active = 0.0
 shader_parameter/lightning_flash = 0.0
 shader_parameter/chromatic_aberration = 0.0
 shader_parameter/rain_intensity = 0.0
-shader_parameter/shadow_tint_strength = 0.35
+shader_parameter/shadow_tint_strength = 0.16
 
 [node name="PostProcessLayer" type="CanvasLayer"]
 layer = 0

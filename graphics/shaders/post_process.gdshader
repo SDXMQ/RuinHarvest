@@ -15,7 +15,7 @@ uniform float lightning_flash : hint_range(0.0, 1.0) = 0.0;
 // 신규 전술 픽셀 후처리 파라미터
 uniform float chromatic_aberration : hint_range(0.0, 1.0) = 0.0;
 uniform float rain_intensity : hint_range(0.0, 1.0) = 0.0;
-uniform float shadow_tint_strength : hint_range(0.0, 1.0) = 0.35;
+uniform float shadow_tint_strength : hint_range(0.0, 1.0) = 0.16;
 
 // 난수 생성 함수 (필름 그레인 및 빗방울 시드용)
 float random(vec2 uv) {

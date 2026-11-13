@@ -4,7 +4,9 @@ extends Node2D
 ## 건물 내부 씬 (외부 월드와 동일한 전술 HUD/채널링/퀵슬롯/피격 아크/조준원/장비 동기화 지원)
 
 @onready var floor_layer: TileMapLayer = $TileMapLayer
+@onready var shadow_layer: TileMapLayer = get_node_or_null("ShadowLayer")
 @onready var object_layer: TileMapLayer = $ObjectsLayer
+@onready var emergency_lights_node: Node2D = get_node_or_null("EmergencyLights")
 @onready var entities_layer: Node2D = $Entities
 @onready var pause_menu: Control = $UI/PauseMenu
 @onready var resume_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ResumeBtn
@@ -49,10 +51,13 @@ var current_inventory_window: Control = null
 var current_crafting_window: Control = null
 var current_modding_window: Control = null
 var container_inventories: Dictionary = {}
+var container_titles: Dictionary = {}
 var exit_tile_pos: Vector2i = Vector2i(7, 10)
 var raid_time_remaining: float = 300.0
 var building_data: Dictionary = {}
 var particle_system: Node2D
+var _flicker_lights: Array = []
+var _lights_enabled: bool = true
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -85,6 +90,8 @@ func _ready() -> void:
 	var ts = TileManager.get_tileset()
 	floor_layer.tile_set = ts
 	object_layer.tile_set = ts
+	if shadow_layer:
+		shadow_layer.tile_set = ts
 	
 	# 건물 데이터 로드 및 생성
 	var b_type = "house"
@@ -100,6 +107,7 @@ func _ready() -> void:
 	var type_names = {
 		"house": "🏠 폐가 내부",
 		"shop": "🏪 상점 내부",
+		"store": "🏪 상점 내부",
 		"hospital": "🏥 폐병원 내부",
 		"military": "🪖 군사시설 내부"
 	}
@@ -107,10 +115,11 @@ func _ready() -> void:
 		building_title_label.text = type_names.get(b_type, "🏢 버려진 건물 내부")
 		
 	var gen_script = load("res://world/interior/building_interior.gd")
-	building_data = gen_script.generate(b_type, b_seed)
-	exit_tile_pos = building_data["exit"]
+	building_data = gen_script.generate_interior(b_type, b_seed)
+	exit_tile_pos = building_data.get("exit_pos", building_data.get("exit", Vector2i(7, 10)))
 	
-	_render_interior()
+	_render_interior(b_type)
+	_spawn_emergency_lights(b_type)
 	_spawn_entities()
 	
 	# 동적 조준원(Dynamic Crosshair) 및 피격 방향 아크(Hit Arc) 오버레이
@@ -275,28 +284,167 @@ func _on_responsive_window_resized(vp_size: Vector2) -> void:
 func _apply_responsive_layout(_bp: ResponsiveManager.Breakpoint, _vp_size: Vector2) -> void:
 	pass
 
-func _render_interior() -> void:
-	var w = building_data["width"]
-	var h = building_data["height"]
-	var tiles = building_data["tiles"]
-	
+func _render_interior(b_type: String = "house") -> void:
+	var w: int = int(building_data.get("width", 24))
+	var h: int = int(building_data.get("height", 18))
+	var tiles: Array = building_data.get("tiles", [])
+	var floor_tile := TileManager.TILE_FLOOR_WOOD
+	if b_type in ["hospital", "store", "shop"]:
+		floor_tile = TileManager.TILE_FLOOR_TILE
+	elif b_type == "military":
+		floor_tile = TileManager.TILE_CONCRETE
+
+	var wall_grid := []
+	wall_grid.resize(w * h)
+	wall_grid.fill(false)
+
+	var is_2d: bool = tiles.size() > 0 and tiles[0] is Array
 	for y in range(h):
 		for x in range(w):
 			var pos = Vector2i(x, y)
-			var t = tiles[y][x]
-			
-			floor_layer.set_cell(pos, 0, TileManager.TILE_FLOOR_WOOD)
-			
-			if t == 1:
-				object_layer.set_cell(pos, 0, TileManager.WALL_BRICK)
-			elif t == 2:
-				object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_CLOSED)
-			elif t == 3:
-				object_layer.set_cell(pos, 0, TileManager.OBJ_CRATE)
-			elif t == 4:
-				object_layer.set_cell(pos, 0, TileManager.OBJ_FURNITURE)
-			elif t == 5:
-				object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_OPEN)
+			floor_layer.set_cell(pos, 0, floor_tile)
+			var t: int = int(tiles[y][x]) if is_2d else int(tiles[y * w + x])
+			if is_2d:
+				if t == 1:
+					object_layer.set_cell(pos, 0, TileManager.WALL_BRICK)
+					wall_grid[y * w + x] = true
+				elif t == 2:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_CLOSED)
+					wall_grid[y * w + x] = true
+				elif t == 3:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_CRATE)
+				elif t == 4:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_FURNITURE)
+				elif t == 5:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_OPEN)
+			else:
+				if t == 0:
+					object_layer.set_cell(pos, 0, TileManager.WALL_BRICK)
+					wall_grid[y * w + x] = true
+				elif t == 2:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_CLOSED)
+					wall_grid[y * w + x] = true
+				elif t == 3:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_WINDOW)
+					wall_grid[y * w + x] = true
+				elif t == 4:
+					object_layer.set_cell(pos, 0, TileManager.OBJ_LIGHT_SWITCH)
+
+	# 가구 타일 배치
+	for f_info in building_data.get("furnitures", []):
+		var f_pos: Vector2i = f_info.get("pos", Vector2i.ZERO)
+		var f_type: String = String(f_info.get("type", "선반"))
+		var f_tile := TileManager.OBJ_SHELF
+		if f_type == "냉장고":
+			f_tile = TileManager.OBJ_FRIDGE
+		elif f_type == "무기함":
+			f_tile = TileManager.OBJ_CRATE
+		elif f_type == "금고":
+			f_tile = TileManager.OBJ_DESK
+		object_layer.set_cell(f_pos, 0, f_tile)
+
+	# 실내 벽체 드롭 섀도우 (ShadowLayer)
+	if shadow_layer:
+		for y in range(h):
+			for x in range(w):
+				if not wall_grid[y * w + x]:
+					continue
+				if y + 1 < h and not wall_grid[(y + 1) * w + x]:
+					shadow_layer.set_cell(Vector2i(x, y + 1), 0, TileManager.SHADOW_SOUTH)
+				if x + 1 < w and not wall_grid[y * w + x + 1]:
+					shadow_layer.set_cell(Vector2i(x + 1, y), 0, TileManager.SHADOW_EAST)
+				if x + 1 < w and y + 1 < h and not wall_grid[(y + 1) * w + x] and not wall_grid[y * w + x + 1] and not wall_grid[(y + 1) * w + x + 1]:
+					shadow_layer.set_cell(Vector2i(x + 1, y + 1), 0, TileManager.SHADOW_SE)
+
+func _spawn_emergency_lights(b_type: String = "house") -> void:
+	if not emergency_lights_node:
+		return
+	for ch in emergency_lights_node.get_children():
+		ch.queue_free()
+	_flicker_lights.clear()
+
+	var w: int = int(building_data.get("width", 24))
+	var h: int = int(building_data.get("height", 18))
+
+	var grad := GradientTexture2D.new()
+	grad.width = 128
+	grad.height = 128
+	grad.fill = GradientTexture2D.FILL_RADIAL
+	grad.fill_from = Vector2(0.5, 0.5)
+	grad.fill_to = Vector2(0.5, 0.0)
+	var g := Gradient.new()
+	g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(0.58, 0.58, 0.58, 0.55), Color(0, 0, 0, 0)])
+	g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	grad.gradient = g
+
+	var room_col := Color(1.0, 0.68, 0.30)
+	if b_type == "hospital":
+		room_col = Color(0.56, 0.96, 0.90)
+	elif b_type == "military":
+		room_col = Color(1.0, 0.34, 0.24)
+
+	var light_specs := [
+		{
+			"pos": Vector2((exit_tile_pos.x + 0.5) * 32.0, (exit_tile_pos.y - 1.5) * 32.0),
+			"color": Color(1.0, 0.42, 0.26),
+			"energy": 1.35,
+			"scale": 3.0,
+			"flicker": 0.25,
+			"seed": 1.1
+		},
+		{
+			"pos": Vector2(w * 0.25 * 32.0, h * 0.25 * 32.0),
+			"color": Color(0.78, 0.90, 1.0),
+			"energy": 1.30,
+			"scale": 3.4,
+			"flicker": 0.85,
+			"seed": 3.7
+		},
+		{
+			"pos": Vector2(w * 0.75 * 32.0, h * 0.30 * 32.0),
+			"color": room_col,
+			"energy": 1.45,
+			"scale": 3.6,
+			"flicker": 0.65,
+			"seed": 6.4
+		},
+		{
+			"pos": Vector2(w * 0.72 * 32.0, h * 0.72 * 32.0),
+			"color": Color(1.0, 0.75, 0.38),
+			"energy": 1.25,
+			"scale": 3.1,
+			"flicker": 0.45,
+			"seed": 9.2
+		}
+	]
+
+	for spec in light_specs:
+		var pl := PointLight2D.new()
+		pl.position = spec["pos"]
+		pl.texture = grad
+		pl.texture_scale = spec["scale"]
+		pl.color = spec["color"]
+		pl.energy = spec["energy"]
+		pl.height = 68.0
+		pl.shadow_enabled = true
+		pl.shadow_filter = Light2D.SHADOW_FILTER_NONE
+		emergency_lights_node.add_child(pl)
+
+		# 천장 HDR 비상등 도트 마커 (Bloom 연동)
+		var bulb := ColorRect.new()
+		bulb.size = Vector2(4, 4)
+		bulb.position = Vector2(-2, -2)
+		var c: Color = spec["color"]
+		bulb.color = Color(c.r * 2.2, c.g * 2.2, c.b * 2.2, 0.95)
+		pl.add_child(bulb)
+
+		_flicker_lights.append({
+			"light": pl,
+			"bulb": bulb,
+			"base_energy": float(spec["energy"]),
+			"flicker": float(spec["flicker"]),
+			"seed": float(spec["seed"])
+		})
 
 func _spawn_entities() -> void:
 	player = PlayerScene.instantiate()
@@ -356,14 +504,28 @@ func _spawn_entities() -> void:
 	_setup_quickslot_bar()
 	_on_player_stats_changed()
 	
-	# 내부 좀비 스폰
-	for z_info in building_data.get("zombies", []):
+	# 내부 좀비 스폰 (BuildingInterior 'enemies' 및 레거시 'zombies' 모두 지원)
+	for z_info in building_data.get("enemies", building_data.get("zombies", [])):
 		var enemy = EnemyScene.instantiate()
-		enemy.position = Vector2(z_info["x"] * 32 + 16, z_info["y"] * 32 + 16)
+		if z_info.has("pos"):
+			var ep: Vector2i = z_info["pos"]
+			enemy.position = Vector2(ep.x * 32 + 16, ep.y * 32 + 16)
+		else:
+			enemy.position = Vector2(z_info["x"] * 32 + 16, z_info["y"] * 32 + 16)
 		enemy.enemy_type = z_info.get("type", 0)
 		entities_layer.add_child(enemy)
 		
-	# 루팅 상자 인벤토리 구성
+	# 루팅 가구/상자 인벤토리 구성 (BuildingInterior 'furnitures' 및 레거시 'containers' 모두 지원)
+	for f_info in building_data.get("furnitures", []):
+		var f_pos: Vector2i = f_info.get("pos", Vector2i.ZERO)
+		var inv = Inventory.new()
+		inv.max_slots = 8
+		add_child(inv)
+		for it in f_info.get("loot", []):
+			inv.add_item(it["id"], it["amount"])
+		container_inventories[f_pos] = inv
+		container_titles[f_pos] = String(f_info.get("type", "수납함"))
+
 	for c_info in building_data.get("containers", []):
 		var c_pos = Vector2i(c_info["x"], c_info["y"])
 		var inv = Inventory.new()
@@ -374,6 +536,28 @@ func _spawn_entities() -> void:
 		container_inventories[c_pos] = inv
 
 func _process(delta: float) -> void:
+	# 실내 비상등/형광등 미세 깜빡임 연출
+	var now_s := Time.get_ticks_msec() * 0.001
+	for item in _flicker_lights:
+		var pl: PointLight2D = item["light"]
+		var bulb: ColorRect = item["bulb"]
+		if not is_instance_valid(pl):
+			continue
+		if not _lights_enabled:
+			pl.energy = 0.0
+			if is_instance_valid(bulb):
+				bulb.visible = false
+			continue
+		if is_instance_valid(bulb):
+			bulb.visible = true
+		var s: float = item["seed"]
+		var wave := sin(now_s * 5.2 + s * 3.1) * 0.5 + sin(now_s * 17.3 + s * 7.7) * 0.5
+		var sputter := 1.0
+		if fposmod(now_s * 1.1 + s, 4.3) < 0.16 and item["flicker"] > 0.5:
+			sputter = 0.22
+		var e: float = item["base_energy"] * (1.0 + wave * 0.14 * item["flicker"]) * sputter
+		pl.energy = maxf(0.08, e)
+
 	if player:
 		if crosshair_overlay:
 			var w_stats = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
@@ -728,6 +912,13 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		_exit_interior()
 		return
 		
+	if type == TileManager.OBJ_LIGHT_SWITCH:
+		_lights_enabled = not _lights_enabled
+		if SoundManager: SoundManager.play("menu_select")
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("💡 실내 비상등 전원: %s" % ("ON" if _lights_enabled else "OFF"))
+		return
+
 	if type == TileManager.OBJ_DOOR_CLOSED:
 		object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
 		EventBus.noise_created.emit(world_pos, 100.0, "door")
@@ -738,10 +929,11 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		EventBus.noise_created.emit(world_pos, 100.0, "door")
 		if SoundManager: SoundManager.play("menu_select")
 		return
-		
+
 	if container_inventories.has(tile_pos):
 		var inv = container_inventories[tile_pos]
-		var title = "수납함" if type == TileManager.OBJ_FURNITURE else "보급 상자"
+		var fallback_title = "수납함" if type == TileManager.OBJ_FURNITURE else "보급 상자"
+		var title = String(container_titles.get(tile_pos, fallback_title))
 		_open_loot_window(inv, title)
 
 func _exit_interior() -> void:

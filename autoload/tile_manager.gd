@@ -48,6 +48,24 @@ const OBJ_DOOR_LOCKED = Vector2i(3, 3)   # 잠긴 보안 문 (열쇠/키카드 �
 const TILE_ROAD_LINE_H = Vector2i(4, 3)  # 가로 방향 차선 아스팔트
 const TILE_CROSSWALK = Vector2i(5, 3)    # 교차로 횡단보도 아스팔트
 
+# 호환성 별칭 (건물 내부 씬 등에서 참조)
+const WALL_BRICK = OBJ_WALL
+const OBJ_FURNITURE = OBJ_DESK
+
+# 드롭 섀도우 & 환경 데코 오버레이 타일 (y=4, y=5)
+const SHADOW_SE = Vector2i(0, 4)
+const SHADOW_SOUTH = Vector2i(1, 4)
+const SHADOW_EAST = Vector2i(2, 4)
+const SHADOW_OVAL = Vector2i(3, 4)
+const DECO_WEEDS = Vector2i(4, 4)
+const DECO_CRACKS = Vector2i(5, 4)
+const DECO_MANHOLE = Vector2i(6, 4)
+const DECO_PUDDLE = Vector2i(7, 4)
+const DECO_LEAVES = Vector2i(0, 5)
+const DECO_RUBBLE = Vector2i(1, 5)
+const DECO_STAIN = Vector2i(2, 5)
+const DECO_DRAIN = Vector2i(3, 5)
+
 func get_tileset() -> TileSet:
 	if not tileset:
 		_generate_procedural_tileset()
@@ -57,79 +75,79 @@ func _ready() -> void:
 	_generate_procedural_tileset()
 
 func _generate_procedural_tileset() -> void:
-	# 8x4 타일 아틀라스 이미지 생성
-	var img = Image.create_empty(8 * TILE_SIZE, 4 * TILE_SIZE, false, Image.FORMAT_RGBA8)
-	
-	# 색상 정의
-	var colors = {
-		TILE_GRASS: Color(0.25, 0.5, 0.2),
-		TILE_DIRT: Color(0.55, 0.45, 0.3),
-		TILE_ROAD: Color(0.24, 0.25, 0.29),
-		TILE_CONCRETE: Color(0.6, 0.6, 0.65),
-		TILE_FLOOR_WOOD: Color(0.6, 0.45, 0.3),
-		TILE_FLOOR_TILE: Color(0.7, 0.7, 0.7)
-	}
-	
-	# 바닥 타일 그리기 (y=0)
-	for coords in colors.keys():
-		_fill_rect_noisy(img, coords.x * TILE_SIZE, coords.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, colors[coords])
-	
-	# 정밀 도로 차선 및 횡단보도 그리기
-	_draw_road_line(img, TILE_ROAD_LINE.x * TILE_SIZE, TILE_ROAD_LINE.y * TILE_SIZE, true)
-	_draw_road_line(img, TILE_ROAD_LINE_H.x * TILE_SIZE, TILE_ROAD_LINE_H.y * TILE_SIZE, false)
-	_draw_crosswalk(img, TILE_CROSSWALK.x * TILE_SIZE, TILE_CROSSWALK.y * TILE_SIZE)
-	
-	# 자갈길 및 수역 그리기
-	_draw_gravel(img, TILE_GRAVEL.x * TILE_SIZE, TILE_GRAVEL.y * TILE_SIZE)
-	_fill_rect_noisy(img, TILE_WATER.x * TILE_SIZE, TILE_WATER.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.15, 0.35, 0.55))
-		
-	# 오브젝트 타일 그리기 (y=1)
-	_draw_tree(img, OBJ_TREE.x * TILE_SIZE, OBJ_TREE.y * TILE_SIZE)
-	_draw_rock(img, OBJ_ROCK.x * TILE_SIZE, OBJ_ROCK.y * TILE_SIZE)
-	_fill_rect_noisy(img, OBJ_WALL.x * TILE_SIZE, OBJ_WALL.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.4, 0.3, 0.25)) # 벽
-	_draw_crate(img, OBJ_CRATE.x * TILE_SIZE, OBJ_CRATE.y * TILE_SIZE)
-	_draw_barrel(img, OBJ_BARREL.x * TILE_SIZE, OBJ_BARREL.y * TILE_SIZE)
-	_draw_debris(img, OBJ_DEBRIS.x * TILE_SIZE, OBJ_DEBRIS.y * TILE_SIZE)
-	_draw_door_closed(img, OBJ_DOOR_CLOSED.x * TILE_SIZE, OBJ_DOOR_CLOSED.y * TILE_SIZE)
-	_draw_door_open(img, OBJ_DOOR_OPEN.x * TILE_SIZE, OBJ_DOOR_OPEN.y * TILE_SIZE)
-	
-	# 특수 타일 그리기 (y=2)
-	_draw_fridge(img, OBJ_FRIDGE.x * TILE_SIZE, OBJ_FRIDGE.y * TILE_SIZE)
-	_draw_window(img, OBJ_WINDOW.x * TILE_SIZE, OBJ_WINDOW.y * TILE_SIZE)
-	_draw_broken_window(img, OBJ_WINDOW_BROKEN.x * TILE_SIZE, OBJ_WINDOW_BROKEN.y * TILE_SIZE)
-	_draw_fence(img, OBJ_FENCE.x * TILE_SIZE, OBJ_FENCE.y * TILE_SIZE)
-	_draw_gate(img, OBJ_GATE.x * TILE_SIZE, OBJ_GATE.y * TILE_SIZE)
-	_draw_light_switch(img, OBJ_LIGHT_SWITCH.x * TILE_SIZE, OBJ_LIGHT_SWITCH.y * TILE_SIZE)
-	_draw_roof(img, TILE_ROOF.x * TILE_SIZE, TILE_ROOF.y * TILE_SIZE)
-	
-	# 신규 가구 및 보안 잠금문 타일 그리기 (y=3)
-	_draw_bed(img, OBJ_BED.x * TILE_SIZE, OBJ_BED.y * TILE_SIZE)
-	_draw_desk(img, OBJ_DESK.x * TILE_SIZE, OBJ_DESK.y * TILE_SIZE)
-	_draw_shelf(img, OBJ_SHELF.x * TILE_SIZE, OBJ_SHELF.y * TILE_SIZE)
-	_draw_door_locked(img, OBJ_DOOR_LOCKED.x * TILE_SIZE, OBJ_DOOR_LOCKED.y * TILE_SIZE)
-	
-	var texture = ImageTexture.create_from_image(img)
-	
+	var texture: Texture2D = null
+	var pam = get_node_or_null("/root/PixelAssetManager")
+	if pam and pam.has_method("get_canvas_texture"):
+		texture = pam.get_canvas_texture("tiles/world_tileset")
+
+	if texture == null:
+		# 폴백: 8x6 절차적 픽셀 타일 아틀라스 이미지 + 자동 노멀맵 생성
+		var img = Image.create_empty(8 * TILE_SIZE, 6 * TILE_SIZE, false, Image.FORMAT_RGBA8)
+		var colors = {
+			TILE_GRASS: Color(0.25, 0.5, 0.2),
+			TILE_DIRT: Color(0.55, 0.45, 0.3),
+			TILE_ROAD: Color(0.24, 0.25, 0.29),
+			TILE_CONCRETE: Color(0.6, 0.6, 0.65),
+			TILE_FLOOR_WOOD: Color(0.6, 0.45, 0.3),
+			TILE_FLOOR_TILE: Color(0.7, 0.7, 0.7)
+		}
+		for coords in colors.keys():
+			_fill_rect_noisy(img, coords.x * TILE_SIZE, coords.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, colors[coords])
+		_draw_road_line(img, TILE_ROAD_LINE.x * TILE_SIZE, TILE_ROAD_LINE.y * TILE_SIZE, true)
+		_draw_road_line(img, TILE_ROAD_LINE_H.x * TILE_SIZE, TILE_ROAD_LINE_H.y * TILE_SIZE, false)
+		_draw_crosswalk(img, TILE_CROSSWALK.x * TILE_SIZE, TILE_CROSSWALK.y * TILE_SIZE)
+		_draw_gravel(img, TILE_GRAVEL.x * TILE_SIZE, TILE_GRAVEL.y * TILE_SIZE)
+		_fill_rect_noisy(img, TILE_WATER.x * TILE_SIZE, TILE_WATER.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.15, 0.35, 0.55))
+		_draw_tree(img, OBJ_TREE.x * TILE_SIZE, OBJ_TREE.y * TILE_SIZE)
+		_draw_rock(img, OBJ_ROCK.x * TILE_SIZE, OBJ_ROCK.y * TILE_SIZE)
+		_fill_rect_noisy(img, OBJ_WALL.x * TILE_SIZE, OBJ_WALL.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, Color(0.4, 0.3, 0.25))
+		_draw_crate(img, OBJ_CRATE.x * TILE_SIZE, OBJ_CRATE.y * TILE_SIZE)
+		_draw_barrel(img, OBJ_BARREL.x * TILE_SIZE, OBJ_BARREL.y * TILE_SIZE)
+		_draw_debris(img, OBJ_DEBRIS.x * TILE_SIZE, OBJ_DEBRIS.y * TILE_SIZE)
+		_draw_door_closed(img, OBJ_DOOR_CLOSED.x * TILE_SIZE, OBJ_DOOR_CLOSED.y * TILE_SIZE)
+		_draw_door_open(img, OBJ_DOOR_OPEN.x * TILE_SIZE, OBJ_DOOR_OPEN.y * TILE_SIZE)
+		_draw_fridge(img, OBJ_FRIDGE.x * TILE_SIZE, OBJ_FRIDGE.y * TILE_SIZE)
+		_draw_window(img, OBJ_WINDOW.x * TILE_SIZE, OBJ_WINDOW.y * TILE_SIZE)
+		_draw_broken_window(img, OBJ_WINDOW_BROKEN.x * TILE_SIZE, OBJ_WINDOW_BROKEN.y * TILE_SIZE)
+		_draw_fence(img, OBJ_FENCE.x * TILE_SIZE, OBJ_FENCE.y * TILE_SIZE)
+		_draw_gate(img, OBJ_GATE.x * TILE_SIZE, OBJ_GATE.y * TILE_SIZE)
+		_draw_light_switch(img, OBJ_LIGHT_SWITCH.x * TILE_SIZE, OBJ_LIGHT_SWITCH.y * TILE_SIZE)
+		_draw_roof(img, TILE_ROOF.x * TILE_SIZE, TILE_ROOF.y * TILE_SIZE)
+		_draw_bed(img, OBJ_BED.x * TILE_SIZE, OBJ_BED.y * TILE_SIZE)
+		_draw_desk(img, OBJ_DESK.x * TILE_SIZE, OBJ_DESK.y * TILE_SIZE)
+		_draw_shelf(img, OBJ_SHELF.x * TILE_SIZE, OBJ_SHELF.y * TILE_SIZE)
+		_draw_door_locked(img, OBJ_DOOR_LOCKED.x * TILE_SIZE, OBJ_DOOR_LOCKED.y * TILE_SIZE)
+		_draw_fallback_shadows_decos(img)
+		if pam and pam.has_method("generate_normal_map_from_image") and pam.has_method("create_canvas_texture_from_images"):
+			var norm_img: Image = pam.generate_normal_map_from_image(img, 2.4)
+			texture = pam.create_canvas_texture_from_images(img, norm_img)
+		else:
+			texture = ImageTexture.create_from_image(img)
+
 	# TileSet 및 Source 생성
 	tileset = TileSet.new()
 	tileset.tile_size = Vector2i(TILE_SIZE, TILE_SIZE)
-	
+
 	# 물리 레이어 추가 (충돌체용)
 	tileset.add_physics_layer(0)
-	
+
 	# 빛 차폐(Occlusion) 레이어 추가
 	tileset.add_occlusion_layer(0)
-	
+
 	var source = TileSetAtlasSource.new()
 	source.texture = texture
 	source.texture_region_size = Vector2i(TILE_SIZE, TILE_SIZE)
-	
+
 	# 바닥 타일 등록
 	for coords in [TILE_GRASS, TILE_DIRT, TILE_ROAD, TILE_CONCRETE, TILE_FLOOR_WOOD, TILE_FLOOR_TILE, TILE_ROAD_LINE, TILE_ROAD_LINE_H, TILE_CROSSWALK, TILE_GRAVEL, TILE_WATER]:
 		source.create_tile(coords)
-		
+
+	# 드롭 섀도우 & 환경 데코 타일 등록 (충돌/차폐 없음)
+	for coords in [SHADOW_SE, SHADOW_SOUTH, SHADOW_EAST, SHADOW_OVAL, DECO_WEEDS, DECO_CRACKS, DECO_MANHOLE, DECO_PUDDLE, DECO_LEAVES, DECO_RUBBLE, DECO_STAIN, DECO_DRAIN]:
+		source.create_tile(coords)
+
 	tileset.add_source(source, 0)
-		
+
 	# 오브젝트 타일 등록 및 충돌체/차폐체 설정
 	var all_objects = [
 		OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS,
@@ -137,7 +155,7 @@ func _generate_procedural_tileset() -> void:
 		OBJ_WINDOW, OBJ_WINDOW_BROKEN, OBJ_FENCE, OBJ_GATE, OBJ_LIGHT_SWITCH, TILE_ROOF,
 		OBJ_BED, OBJ_DESK, OBJ_SHELF, OBJ_DOOR_LOCKED
 	]
-	
+
 	for coords in all_objects:
 		source.create_tile(coords)
 		var tile_data = source.get_tile_data(coords, 0)
@@ -149,11 +167,11 @@ func _generate_procedural_tileset() -> void:
 				Vector2(TILE_SIZE/2.0, TILE_SIZE/2.0),
 				Vector2(-TILE_SIZE/2.0, TILE_SIZE/2.0)
 			])
-			
+
 			# 충돌체 설정
 			var has_collision = false
 			var col_poly = full_poly
-			
+
 			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_FRIDGE]:
 				has_collision = true
 				col_poly = full_poly
@@ -178,17 +196,47 @@ func _generate_procedural_tileset() -> void:
 				has_collision = true
 				col_poly = full_poly
 			# OBJ_DOOR_OPEN, OBJ_WINDOW_BROKEN, OBJ_GATE, OBJ_LIGHT_SWITCH는 충돌 없음 (통과 가능)
-			
+
 			if has_collision:
 				tile_data.add_collision_polygon(0)
 				tile_data.set_collision_polygon_points(0, 0, col_poly)
-				
+
 			# 빛 차폐(Occluder) 등록 (빛을 막는 벽, 닫힌/잠긴 문, 상자, 바위, 냉장고, 높은 선반장 등)
 			# 창문, 깨진 창문, 울타리, 게이트, 열린 문, 낮은 가구(침대/책상)는 빛을 통과시킴!
 			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE, OBJ_SHELF]:
 				var occluder = OccluderPolygon2D.new()
 				occluder.polygon = full_poly
 				tile_data.set_occluder(0, occluder)
+
+			# OBJ_TREE 대체 타일(alt=1): ObjectLayer에서는 투명 처리하되 충돌체는 100% 보존하여 FoliageFxLayer 바람 셰이더와 이중 렌더링 방지
+			if coords == OBJ_TREE:
+				var alt_id: int = source.create_alternative_tile(OBJ_TREE, 1)
+				var alt_data: TileData = source.get_tile_data(OBJ_TREE, alt_id)
+				if alt_data:
+					alt_data.modulate = Color(1.0, 1.0, 1.0, 0.0)
+					if has_collision:
+						alt_data.add_collision_polygon(0)
+						alt_data.set_collision_polygon_points(0, 0, col_poly)
+
+func _draw_fallback_shadows_decos(img: Image) -> void:
+	for y in range(14):
+		var a := int(130.0 * (1.0 - float(y) / 14.0))
+		for x in range(TILE_SIZE):
+			img.set_pixel(SHADOW_SOUTH.x * TILE_SIZE + x, SHADOW_SOUTH.y * TILE_SIZE + y, Color8(8, 10, 14, a))
+	for x in range(14):
+		var a := int(120.0 * (1.0 - float(x) / 14.0))
+		for y in range(TILE_SIZE):
+			img.set_pixel(SHADOW_EAST.x * TILE_SIZE + x, SHADOW_EAST.y * TILE_SIZE + y, Color8(8, 10, 14, a))
+	for y in range(16):
+		for x in range(16 - y):
+			img.set_pixel(SHADOW_SE.x * TILE_SIZE + x, SHADOW_SE.y * TILE_SIZE + y, Color8(8, 10, 14, 105))
+	for y in range(TILE_SIZE):
+		for x in range(TILE_SIZE):
+			var dx := (float(x) - 15.5) / 13.0
+			var dy := (float(y) - 16.5) / 11.0
+			var d := dx * dx + dy * dy
+			if d <= 1.0:
+				img.set_pixel(SHADOW_OVAL.x * TILE_SIZE + x, SHADOW_OVAL.y * TILE_SIZE + y, Color8(8, 10, 14, int(115.0 * (1.0 - d))))
 
 # ==========================================================
 # 이미지 드로잉 헬퍼

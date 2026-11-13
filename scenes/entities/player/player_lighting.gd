@@ -22,9 +22,10 @@ func _ready() -> void:
 
 	ambient_light = PointLight2D.new()
 	ambient_light.texture = _cached_ambient_tex
-	ambient_light.texture_scale = 1.75
-	ambient_light.color = Color(1.0, 0.95, 0.8)
+	ambient_light.texture_scale = 1.9
+	ambient_light.color = Color(1.0, 0.95, 0.85)
 	ambient_light.energy = 0.85
+	ambient_light.height = 64.0
 	add_child(ambient_light)
 	
 	flashlight = PointLight2D.new()
@@ -32,7 +33,8 @@ func _ready() -> void:
 	flashlight.texture_scale = 2.0
 	flashlight.offset = Vector2(180, 0)
 	flashlight.color = Color(1.0, 0.98, 0.9)
-	flashlight.energy = 1.6
+	flashlight.energy = 1.7
+	flashlight.height = 46.0
 	flashlight.shadow_enabled = true
 	flashlight.shadow_filter = PointLight2D.SHADOW_FILTER_PCF5
 	add_child(flashlight)
@@ -43,6 +45,7 @@ func _ready() -> void:
 	muzzle_light.offset = Vector2(120, 0)
 	muzzle_light.color = Color(1.0, 0.85, 0.4)
 	muzzle_light.energy = 0.0
+	muzzle_light.height = 38.0
 	muzzle_light.enabled = false
 	add_child(muzzle_light)
 	

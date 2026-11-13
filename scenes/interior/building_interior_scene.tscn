@@ -1,16 +1,56 @@
-[gd_scene load_steps=2 format=3 uid="uid://interior0000"]
+[gd_scene load_steps=3 format=3 uid="uid://interior0000"]
 
 [ext_resource type="Script" path="res://scenes/interior/building_interior_scene.gd" id="1_intr"]
+
+[sub_resource type="Environment" id="Environment_interior"]
+background_mode = 3
+tonemap_mode = 0
+tonemap_exposure = 1.0
+glow_enabled = true
+glow_normalized = false
+glow_intensity = 0.65
+glow_strength = 0.85
+glow_bloom = 0.08
+glow_blend_mode = 1
+glow_hdr_threshold = 1.02
+glow_hdr_scale = 1.4
+glow_hdr_luminance_cap = 6.0
 
 [node name="BuildingInteriorScene" type="Node2D"]
 process_mode = 3
 script = ExtResource("1_intr")
 
+[node name="VoidBackdropLayer" type="CanvasLayer" parent="."]
+layer = -10
+
+[node name="VoidRect" type="ColorRect" parent="VoidBackdropLayer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.015, 0.018, 0.025, 1)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_interior")
+
+[node name="DayNightModulate" type="CanvasModulate" parent="."]
+color = Color(0.32, 0.32, 0.38, 1)
+
 [node name="TileMapLayer" type="TileMapLayer" parent="."]
 z_index = -10
 
+[node name="ShadowLayer" type="TileMapLayer" parent="."]
+z_index = -5
+collision_enabled = false
+occlusion_enabled = false
+
 [node name="ObjectsLayer" type="TileMapLayer" parent="."]
 y_sort_enabled = true
+
+[node name="EmergencyLights" type="Node2D" parent="."]
+z_index = 2
 
 [node name="Entities" type="Node2D" parent="."]
 y_sort_enabled = true

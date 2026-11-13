@@ -1,12 +1,29 @@
-[gd_scene load_steps=4 format=3 uid="uid://world00000"]
+[gd_scene load_steps=5 format=3 uid="uid://world00000"]
 
 [ext_resource type="Script" path="res://scenes/world/main_world.gd" id="1_wrld"]
 [ext_resource type="Script" path="res://scenes/world/chunk_manager.gd" id="2_cmgr"]
 [ext_resource type="Script" path="res://scenes/world/world_renderer.gd" id="3_wren"]
 
+[sub_resource type="Environment" id="Environment_tactical"]
+background_mode = 3
+tonemap_mode = 0
+tonemap_exposure = 1.0
+glow_enabled = true
+glow_normalized = false
+glow_intensity = 0.65
+glow_strength = 0.85
+glow_bloom = 0.08
+glow_blend_mode = 1
+glow_hdr_threshold = 1.02
+glow_hdr_scale = 1.4
+glow_hdr_luminance_cap = 6.0
+
 [node name="MainWorld" type="Node2D"]
 process_mode = 3
 script = ExtResource("1_wrld")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_tactical")
 
 [node name="DayNightModulate" type="CanvasModulate" parent="."]
 color = Color(1, 1, 1, 1)
