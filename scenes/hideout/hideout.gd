@@ -73,22 +73,36 @@ func _ready() -> void:
 	menu_button.pressed.connect(_on_menu_pressed)
 	result_close_btn.pressed.connect(_on_result_close_pressed)
 	
-	# 상단 바에 장비 보험 버튼 및 샌드박스 도구 버튼 추가
+	# 상단 바에 장비 보험 버튼, 샌드박스 도구, 사격장 버튼을 중앙 HBoxContainer로 정렬 배치 (DayLabel 겹침 방지)
 	if has_node("TopBar"):
+		var top_tools := HBoxContainer.new()
+		top_tools.name = "TopToolBar"
+		top_tools.set_anchors_preset(Control.PRESET_TOP_WIDE)
+		top_tools.offset_left = 240.0
+		top_tools.offset_top = 12.0
+		top_tools.offset_right = -260.0
+		top_tools.offset_bottom = 48.0
+		top_tools.alignment = BoxContainer.ALIGNMENT_CENTER
+		top_tools.add_theme_constant_override("separation", 10)
+		$TopBar.add_child(top_tools)
+		
 		insurance_btn = Button.new()
 		insurance_btn.name = "InsuranceBtn"
+		insurance_btn.custom_minimum_size = Vector2(0, 32)
 		insurance_btn.pressed.connect(_on_insurance_pressed)
-		$TopBar.add_child(insurance_btn)
+		top_tools.add_child(insurance_btn)
 		
 		var tool_btn = Button.new()
 		tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
+		tool_btn.custom_minimum_size = Vector2(0, 32)
 		tool_btn.pressed.connect(_open_item_spawner)
-		$TopBar.add_child(tool_btn)
+		top_tools.add_child(tool_btn)
 		
 		var range_btn = Button.new()
 		range_btn.text = "🎯 사격장 (F2)"
+		range_btn.custom_minimum_size = Vector2(0, 32)
 		range_btn.pressed.connect(_open_shooting_range)
-		$TopBar.add_child(range_btn)
+		top_tools.add_child(range_btn)
 	
 	# 상인 버튼 연결
 	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
@@ -185,7 +199,6 @@ func _ready() -> void:
 	
 	# 작업대 탭 연결
 	if workbench:
-		workbench.setup(player_grid_mgr, stash_grid_mgr, equipment_data)
 		workbench.weapon_saved.connect(func(_w, _s):
 			_update_equipment_ui()
 			_refresh_stash_ui()
@@ -201,6 +214,8 @@ func _ready() -> void:
 	service_record_tab = HideoutProgression.setup_service_record_tab(self, tab_container)
 	
 	_load_data()
+	if workbench:
+		workbench.setup(player_grid_mgr, stash_grid_mgr, equipment_data)
 	_check_last_raid_result()
 	_apply_backpack_grid_size()
 	_update_equipment_ui()
@@ -219,6 +234,7 @@ func _ready() -> void:
 
 var progression_tab: Control = null
 var service_record_tab: Control = null
+var _is_loading_data: bool = false
 
 func _apply_stash_upgrade_size() -> void:
 	if not stash_grid_mgr or not GameManager: return
@@ -280,24 +296,40 @@ func _on_grid_changed() -> void:
 
 func _load_data() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
+		_is_loading_data = true
 		var w_data = GameManager.current_world_data
 		var day = w_data.get("current_day", 1)
 		day_label.text = "생존 %d일차 (DAY %d)" % [day, day]
 		_update_money_label()
 		
-		# 장비 데이터 로드
+		# resize_grid()가 grid_changed 시그널을 방출하기 전에 원본 인벤토리/창고 데이터를 미리 복제 보관
 		var p_data = w_data.get("player", {})
+		var p_items: Array = p_data.get("inventory", []).duplicate(true)
+		var stash_items: Array = w_data.get("hideout", {}).get("stash", []).duplicate(true)
+		
+		# 장비 데이터 로드 (초기 시작 총기는 기본 조립 파츠 및 탄약 완비 상태로 생성)
 		if p_data.has("equipment") and not p_data["equipment"].is_empty():
 			equipment_data = p_data["equipment"].duplicate(true)
 		else:
+			var starter_m4 = WeaponPartsDatabase.compute_weapon_from_dict({
+				"id": "M4_리시버",
+				"type": "assembled_weapon",
+				"name": WeaponPartsDatabase.RECEIVERS["M4_리시버"].get("name", "M4A1 카빈 리시버"),
+				"receiver": "M4_리시버",
+				"loaded_ammo": "5.56mm",
+				"parts": {"barrel": "짧은_총열", "optic": "기본_아이언사이트", "magazine": "표준_탄창"},
+				"durability": 100.0
+			})
+			starter_m4["current_magazine_ammo"] = int(starter_m4.get("computed_stats", {}).get("magazine_size", 30))
+			var starter_m9 = WeaponPartsDatabase.create_default_weapon("M9_리시버")
 			equipment_data = {
 				"helmet": {"id": "1레벨_헬멧", "name": "1레벨 오토바이 헬멧"},
 				"vest": {"id": "1레벨_방탄복", "name": "1레벨 경찰 조끼"},
 				"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
 				"bottom": {"id": "운동화", "name": "운동화"},
-				"primary1": {"id": "M4_리시버", "name": "M4A1 소총", "attachments": {}},
+				"primary1": starter_m4,
 				"primary2": {},
-				"sidearm": {"id": "M9_리시버", "name": "M9 베레타", "attachments": {}},
+				"sidearm": starter_m9,
 				"throwable": {"id": "수류탄", "amount": 2}
 			}
 		
@@ -305,8 +337,7 @@ func _load_data() -> void:
 		_apply_backpack_grid_size()
 		_apply_stash_upgrade_size()
 		
-		# 배낭 2D 데이터 로드
-		var p_items = p_data.get("inventory", [])
+		# 배낭 2D 데이터 로드 (2x2 세이프 파우치 포함)
 		if player_grid_mgr.has_method("load_items"):
 			player_grid_mgr.load_items(p_items)
 		else:
@@ -316,7 +347,6 @@ func _load_data() -> void:
 					player_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
 				
 		# 창고 2D 데이터 로드
-		var stash_items = w_data.get("hideout", {}).get("stash", [])
 		if stash_grid_mgr.has_method("load_items"):
 			stash_grid_mgr.load_items(stash_items)
 		else:
@@ -324,6 +354,9 @@ func _load_data() -> void:
 			for it in stash_items:
 				if it is Dictionary and it.has("id"):
 					stash_grid_mgr.auto_add_item(it["id"], it.get("amount", 1), it)
+					
+		_is_loading_data = false
+		_sync_save_data()
 
 func _update_money_label() -> void:
 	if GameManager and not GameManager.current_world_data.is_empty():
@@ -358,6 +391,8 @@ func _on_insurance_pressed() -> void:
 	_sync_save_data()
 
 func _sync_save_data() -> void:
+	if _is_loading_data:
+		return
 	if GameManager and not GameManager.current_world_data.is_empty():
 		if not GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"] = {}
@@ -421,9 +456,10 @@ func _on_stash_grid_gui_input(event: InputEvent) -> void:
 	_handle_grid_input(event, stash_grid_control, stash_grid_mgr, false)
 
 func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGrid, is_player_grid: bool) -> void:
-	var local_pos = ctrl.get_local_mouse_position()
-	var cell_x = int(local_pos.x / CELL_SIZE)
-	var cell_y = int(local_pos.y / CELL_SIZE)
+	var m_global: Vector2 = (event as InputEventMouse).global_position if event is InputEventMouse else get_global_mouse_position()
+	var local_pos: Vector2 = m_global - ctrl.get_global_rect().position
+	var cell_x = int(floor(local_pos.x / CELL_SIZE))
+	var cell_y = int(floor(local_pos.y / CELL_SIZE))
 	
 	if event is InputEventMouseMotion:
 		if cell_x >= 0 and cell_x < grid_mgr.grid_width and cell_y >= 0 and cell_y < grid_mgr.grid_height:
@@ -438,7 +474,7 @@ func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGri
 			if not hovered_item.is_empty():
 				var idata = ItemDatabase.get_item_data(hovered_item.get("id", ""))
 				tooltip.display_item(hovered_item, idata)
-				tooltip.update_position(get_global_mouse_position())
+				tooltip.update_position(m_global)
 			else:
 				tooltip.hide()
 		ctrl.queue_redraw()
@@ -509,20 +545,20 @@ func _input(event: InputEvent) -> void:
 			return
 			
 	if is_dragging and event is InputEventMouseMotion:
-		var m_pos = get_global_mouse_position()
+		var m_pos = event.global_position
 		if drag_preview_node:
 			drag_preview_node.global_position = m_pos - Vector2(22, 22)
 			
 		if player_grid_control:
-			var p_m = player_grid_control.get_local_mouse_position()
-			var p_x = int(p_m.x / CELL_SIZE)
-			var p_y = int(p_m.y / CELL_SIZE)
+			var p_m = m_pos - player_grid_control.get_global_rect().position
+			var p_x = int(floor(p_m.x / CELL_SIZE))
+			var p_y = int(floor(p_m.y / CELL_SIZE))
 			hovered_player_cell = Vector2i(p_x, p_y) if (p_x >= 0 and p_x < player_grid_mgr.grid_width and p_y >= 0 and p_y < player_grid_mgr.grid_height) else Vector2i(-1, -1)
 			player_grid_control.queue_redraw()
 		if stash_grid_control:
-			var s_m = stash_grid_control.get_local_mouse_position()
-			var s_x = int(s_m.x / CELL_SIZE)
-			var s_y = int(s_m.y / CELL_SIZE)
+			var s_m = m_pos - stash_grid_control.get_global_rect().position
+			var s_x = int(floor(s_m.x / CELL_SIZE))
+			var s_y = int(floor(s_m.y / CELL_SIZE))
 			hovered_stash_cell = Vector2i(s_x, s_y) if (s_x >= 0 and s_x < stash_grid_mgr.grid_width and s_y >= 0 and s_y < stash_grid_mgr.grid_height) else Vector2i(-1, -1)
 			stash_grid_control.queue_redraw()
 			
@@ -536,7 +572,7 @@ func _input(event: InputEvent) -> void:
 		_highlight_compatible_slots(drag_data.get("item", {}), hovered_target_ctrl)
 			
 	if is_dragging and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_handle_hideout_global_drop()
+		_handle_hideout_global_drop(event.global_position)
 		get_viewport().set_input_as_handled()
 
 func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, slot_key: String = "") -> void:
@@ -589,24 +625,24 @@ func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null)
 func _clear_slot_highlights() -> void:
 	InventoryUIHelper.clear_slot_highlights(drop_targets)
 
-func _handle_hideout_global_drop() -> void:
+func _handle_hideout_global_drop(drop_pos: Vector2 = Vector2.INF) -> void:
 	if not is_dragging: return
 	
-	var m_pos = get_global_mouse_position()
+	var m_pos = drop_pos if drop_pos != Vector2.INF else get_global_mouse_position()
 	
 	# 1. 플레이어 배낭 2D 그리드 위인지 검사
 	if player_grid_control.get_global_rect().has_point(m_pos):
-		var l_pos = player_grid_control.get_local_mouse_position()
-		var cx = int(l_pos.x / CELL_SIZE)
-		var cy = int(l_pos.y / CELL_SIZE)
+		var l_pos = m_pos - player_grid_control.get_global_rect().position
+		var cx = int(floor(l_pos.x / CELL_SIZE))
+		var cy = int(floor(l_pos.y / CELL_SIZE))
 		_try_drop_on_hideout_grid(player_grid_mgr, cx, cy, true)
 		return
 		
 	# 2. 은신처 창고 2D 그리드 위인지 검사
 	if stash_grid_control.get_global_rect().has_point(m_pos):
-		var l_pos = stash_grid_control.get_local_mouse_position()
-		var cx = int(l_pos.x / CELL_SIZE)
-		var cy = int(l_pos.y / CELL_SIZE)
+		var l_pos = m_pos - stash_grid_control.get_global_rect().position
+		var cx = int(floor(l_pos.x / CELL_SIZE))
+		var cy = int(floor(l_pos.y / CELL_SIZE))
 		_try_drop_on_hideout_grid(stash_grid_mgr, cx, cy, false)
 		return
 		

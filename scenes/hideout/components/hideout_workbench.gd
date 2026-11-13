@@ -315,6 +315,9 @@ func _populate_workbench_weapon_list() -> void:
 		
 		var btn = Button.new()
 		btn.text = "%s %s" % [prefix, w_name]
+		btn.tooltip_text = btn.text
+		btn.clip_text = true
+		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		btn.custom_minimum_size = Vector2(0, 36)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		if ItemIconManager:

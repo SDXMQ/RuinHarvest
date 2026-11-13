@@ -168,7 +168,7 @@ anchor_top = 1.0
 anchor_bottom = 1.0
 offset_left = 20.0
 offset_top = -100.0
-offset_right = 260.0
+offset_right = 310.0
 offset_bottom = -20.0
 grow_vertical = 0
 
@@ -202,6 +202,8 @@ layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.9, 0.4, 1)
 theme_override_font_sizes/font_size = 14
 text = "권총 (9mm)"
+clip_text = true
+text_overrun_behavior = 3
 
 [node name="AmmoLabel" type="Label" parent="UI/HUD/WeaponPanel/HBox/VBox"]
 layout_mode = 2
@@ -233,9 +235,9 @@ anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
 offset_left = -300.0
-offset_top = 20.0
+offset_top = 52.0
 offset_right = -20.0
-offset_bottom = 100.0
+offset_bottom = 132.0
 grow_horizontal = 0
 theme_override_font_sizes/font_size = 12
 text = "위치: (0, 0) | 청크: (0, 0)

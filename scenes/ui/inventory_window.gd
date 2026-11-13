@@ -119,7 +119,9 @@ func _ready() -> void:
 		var loot_all_btn = Button.new()
 		loot_all_btn.name = "LootAllBtn"
 		loot_all_btn.theme_type_variation = &"PrimaryButton"
-		loot_all_btn.text = "모두 획득 [F]   (Ctrl+클릭: 빠른 이동)"
+		loot_all_btn.text = "모두 획득 [F] (Ctrl+클릭: 이동)"
+		loot_all_btn.tooltip_text = "모두 획득 [F]   (Ctrl+클릭: 빠른 이동)"
+		loot_all_btn.clip_text = true
 		loot_all_btn.custom_minimum_size = Vector2(0, 30)
 		loot_all_btn.add_theme_font_size_override("font_size", 11)
 		loot_all_btn.pressed.connect(_loot_all_from_container)
@@ -272,7 +274,7 @@ func _update_grid_ui_size() -> void:
 	var total_h = inventory_grid.grid_height * CELL_SIZE
 	grid_control.custom_minimum_size = Vector2(total_w, total_h)
 	if grid_title_label:
-		grid_title_label.text = "BACKPACK // 가방 (%d×%d, %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
+		grid_title_label.text = "BACKPACK (%d×%d, %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
 
 func _on_grid_draw() -> void:
 	InventoryUIHelper.draw_2d_grid(grid_control, inventory_grid, hovered_grid_cell, true, is_dragging, drag_data, CELL_SIZE)
@@ -1521,6 +1523,7 @@ func _update_weapons_ui() -> void:
 
 func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionary) -> void:
 	var panel = PanelContainer.new()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style = StyleBoxFlat.new()
 	style.bg_color = Color(0.1, 0.12, 0.16, 0.9)
 	style.border_width_left = 3
@@ -1532,6 +1535,7 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	panel.add_theme_stylebox_override("panel", style)
 	
 	var vbox = VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_child(vbox)
 	
 	# 상단 헤더 & 메인 무기 버튼
@@ -1548,25 +1552,40 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	wep_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	wep_btn.custom_minimum_size = Vector2(0, 32)
 	wep_btn.focus_mode = Control.FOCUS_NONE
+	wep_btn.clip_text = true
 	
+	var is_throwable = false
 	if weapon_dict.is_empty():
 		wep_btn.text = "장착된 무기 없음 (드래그하여 장착)"
 	else:
-		var d = ItemDatabase.get_item_data(weapon_dict.get("id", ""))
-		var w_name = d.get("name", weapon_dict.get("id", ""))
-		var stats = weapon_dict.get("computed_stats", {})
-		var max_mag = int(stats.get("magazine_size", weapon_dict.get("magazine_size", 10)))
-		var cur_mag = int(weapon_dict.get("current_magazine_ammo", 0))
-		var l_ammo = weapon_dict.get("loaded_ammo", "")
-		var ammo_name = l_ammo.replace("_탄약", "").replace("탄약", "") if l_ammo != "" else "없음"
-		var info_str = ""
-		if max_mag > 0 or l_ammo != "":
-			info_str = " [%s | %d/%d발]" % [ammo_name, cur_mag, max_mag]
-		wep_btn.text = "%s%s" % [w_name, info_str]
-		if ItemIconManager: wep_btn.icon = ItemIconManager.get_icon(weapon_dict.get("id", ""))
+		var w_id = str(weapon_dict.get("id", ""))
+		var d = ItemDatabase.get_item_data(w_id)
+		var w_name = str(weapon_dict.get("name", ""))
+		if w_name == "" or w_name == w_id:
+			var d_name = str(d.get("name", w_id))
+			if d_name == w_id and WeaponPartsDatabase.RECEIVERS.has(w_id):
+				d_name = str(WeaponPartsDatabase.RECEIVERS[w_id].get("name", w_id))
+			w_name = d_name
+		is_throwable = slot_key == "throwable" or str(weapon_dict.get("type", "")) == "throwable" or str(d.get("type", "")) == "throwable"
+		var is_melee = str(d.get("type", "")) == "melee" or w_id in ["나이프", "파이프", "도끼", "야구방망이"]
+		if is_throwable:
+			wep_btn.text = "%s (x%d개)" % [w_name, int(weapon_dict.get("amount", 1))]
+		elif is_melee:
+			wep_btn.text = "%s [근접]" % w_name
+		else:
+			var stats = weapon_dict.get("computed_stats", {})
+			var max_mag = int(stats.get("magazine_size", weapon_dict.get("magazine_size", 10)))
+			var cur_mag = int(weapon_dict.get("current_magazine_ammo", 0))
+			var l_ammo = weapon_dict.get("loaded_ammo", "")
+			var ammo_name = l_ammo.replace("_탄약", "").replace("탄약", "") if l_ammo != "" else "없음"
+			var info_str = ""
+			if max_mag > 0 or l_ammo != "":
+				info_str = " [%s | %d/%d발]" % [ammo_name, cur_mag, max_mag]
+			wep_btn.text = "%s%s" % [w_name, info_str]
+		if ItemIconManager: wep_btn.icon = ItemIconManager.get_icon(w_id)
 	top_hbox.add_child(wep_btn)
 	
-	if not weapon_dict.is_empty():
+	if not weapon_dict.is_empty() and not is_throwable:
 		var d = ItemDatabase.get_item_data(weapon_dict.get("id", ""))
 		var max_dur = float(weapon_dict.get("max_durability", d.get("max_durability", 100.0)))
 		var cur_dur = float(weapon_dict.get("durability", max_dur))
@@ -1622,16 +1641,18 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 						if SoundManager: SoundManager.play("menu_select")
 	)
 	
-	# 총기일 경우 부착물 서브 슬롯 노출 (주무기 및 보조무기 sidearm 지원, barrel 및 rail 포함)
+	# 총기일 경우 부착물 서브 슬롯 노출 (HFlowContainer로 1280px에서도 가로 넘침 없이 자동 줄바꿈)
 	if not weapon_dict.is_empty() and (slot_key.begins_with("primary") or slot_key == "sidearm"):
 		var raw_id = weapon_dict.get("receiver", weapon_dict.get("id", ""))
 		var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
 		var receiver_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
 		var allowed_slots = receiver_data.get("slots", {})
 		
-		var attach_hbox = HBoxContainer.new()
-		attach_hbox.add_theme_constant_override("separation", 4)
-		vbox.add_child(attach_hbox)
+		var attach_flow = HFlowContainer.new()
+		attach_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		attach_flow.add_theme_constant_override("h_separation", 4)
+		attach_flow.add_theme_constant_override("v_separation", 4)
+		vbox.add_child(attach_flow)
 		
 		var attach_dict = weapon_dict.get("parts", weapon_dict.get("attachments", {}))
 		for a_type in ["barrel", "optic", "muzzle", "grip", "magazine", "stock", "rail"]:
@@ -1643,17 +1664,17 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 				var cur_rail_arr: Array = cur_p if (cur_p is Array) else ([String(cur_p)] if String(cur_p) != "" else [])
 				for r_i in range(rail_slots_count):
 					var r_part_id = cur_rail_arr[r_i] if r_i < cur_rail_arr.size() else ""
-					_create_attachment_sub_slot(attach_hbox, slot_key, "rail", r_part_id, r_i)
+					_create_attachment_sub_slot(attach_flow, slot_key, "rail", r_part_id, r_i)
 			else:
 				var cur_p_str = String(cur_p[0]) if (cur_p is Array and not cur_p.is_empty()) else String(cur_p)
-				_create_attachment_sub_slot(attach_hbox, slot_key, a_type, cur_p_str, -1)
+				_create_attachment_sub_slot(attach_flow, slot_key, a_type, cur_p_str, -1)
 			
 	weapons_vbox.add_child(panel)
 
-func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String, attach_type: String, current_part_id: String, rail_index: int = -1) -> void:
+func _create_attachment_sub_slot(parent: Container, weapon_slot_key: String, attach_type: String, current_part_id: String, rail_index: int = -1) -> void:
 	var btn = Button.new()
-	btn.custom_minimum_size = Vector2(58, 28)
-	btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn.custom_minimum_size = Vector2(78, 26)
+	btn.clip_text = true
 	btn.focus_mode = Control.FOCUS_NONE
 	
 	var slot_labels = {
@@ -1670,6 +1691,7 @@ func _create_attachment_sub_slot(parent: HBoxContainer, weapon_slot_key: String,
 	else:
 		var p_data = WeaponPartsDatabase.PARTS.get(current_part_id, {})
 		btn.text = p_data.get("name", current_part_id)
+		btn.tooltip_text = btn.text
 		btn.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 		btn.add_theme_font_size_override("font_size", 10)
 		

@@ -32,7 +32,7 @@ var special_tags_lbl: Label = null
 var slots_container: VBoxContainer = null
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
 
@@ -95,17 +95,16 @@ func _return_part_to_inventories(part_id: String) -> void:
 func _build_ui() -> void:
 	var bg = ColorRect.new()
 	bg.color = Color(0.04, 0.05, 0.08, 0.88)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(bg)
+
+	var center = CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	add_child(center)
 
 	var main_panel = PanelContainer.new()
 	main_panel.custom_minimum_size = Vector2(920, 580)
-	main_panel.set_anchors_preset(Control.PRESET_CENTER)
-	main_panel.offset_left = -460
-	main_panel.offset_top = -290
-	main_panel.offset_right = 460
-	main_panel.offset_bottom = 290
-	add_child(main_panel)
+	center.add_child(main_panel)
 
 	var root_vbox = VBoxContainer.new()
 	root_vbox.add_theme_constant_override("separation", 12)
@@ -264,11 +263,11 @@ func _on_open_shooting_range() -> void:
 	if ShootingRangeScript:
 		var sr = Control.new()
 		sr.set_script(ShootingRangeScript)
-		sr.setup(current_weapon.duplicate(true))
 		sr.window_closed.connect(func():
 			sr.queue_free()
 		)
 		add_child(sr)
+		sr.setup(current_weapon.duplicate(true))
 		if SoundManager: SoundManager.play("menu_select")
 
 func _populate_receivers() -> void:

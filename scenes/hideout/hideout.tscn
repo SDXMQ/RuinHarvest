@@ -87,7 +87,6 @@ layout_mode = 2
 metadata/_tab_index = 0
 
 [node name="HBox" type="HBoxContainer" parent="CenterArea/TabContainer/StashTab" unique_id=1675818242]
-visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -408,7 +407,7 @@ size_flags_vertical = 3
 theme_override_constants/separation = 12
 
 [node name="WeaponListPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox" unique_id=1928532909]
-custom_minimum_size = Vector2(210, 0)
+custom_minimum_size = Vector2(280, 0)
 layout_mode = 2
 
 [node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/WeaponListPanel" unique_id=345788167]

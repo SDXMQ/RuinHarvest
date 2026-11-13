@@ -129,7 +129,9 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		# 총기류 탄약 표기 (우하단: cur/max, 잔탄 0: 적색, 잔탄 보유: 연녹색)
 		var item_id_str = str(item.get("id", ""))
 		var cat = d.get("category", -1)
-		var is_gun = (cat == ItemDatabase.ItemCategory.WEAPON and d.get("type", "") != "melee" and not item_id_str in ["나이프", "파이프", "도끼", "야구방망이"]) or item.has("parts") or d.get("type", "") == "receiver" or item_id_str.contains("리시버") or item_id_str.contains("소총") or item_id_str.contains("권총") or item_id_str.contains("M4") or item_id_str.contains("AK") or item_id_str.contains("산탄총") or item_id_str.contains("SV98") or item.has("current_magazine_ammo")
+		var item_type_str = str(d.get("type", item.get("type", "")))
+		var is_non_gun = d.get("stackable", false) or item_type_str in ["melee", "ammo", "throwable", "part"] or item_id_str in ["나이프", "파이프", "도끼", "야구방망이", "탄약", "수류탄", "연막탄", "화염병"] or WeaponPartsDatabase.AMMO_TYPES.has(item_id_str) or WeaponPartsDatabase.PARTS.has(item_id_str)
+		var is_gun = not is_non_gun and (WeaponPartsDatabase.is_modifiable_weapon(item) or item.has("parts") or item_type_str in ["receiver", "assembled_weapon", "ranged"] or item.has("current_magazine_ammo"))
 		if is_gun:
 			var max_ammo = 30
 			if item.has("computed_stats") and item["computed_stats"].has("magazine_size"):
@@ -149,7 +151,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			ctrl.draw_string(font, item_rect.position + Vector2(item_rect.size.x - text_w - 4, item_rect.size.y - 4), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, font_sz, ammo_col)
 
 		# 방어구/헬멧 내구도 바 표기 (셀 하단)
-		var is_armor = (cat == ItemDatabase.ItemCategory.EQUIPMENT and (d.get("equip_slot") in ["vest", "helmet"] or item_id_str.contains("방탄") or item_id_str.contains("헬멧") or item_id_str.contains("조끼") or item_id_str.contains("방독면"))) or (not is_gun and (item.has("durability") or d.has("max_durability")))
+		var is_armor = cat == ItemDatabase.ItemCategory.EQUIPMENT and (d.get("equip_slot") in ["vest", "helmet"] or item_id_str.contains("방탄") or item_id_str.contains("헬멧") or item_id_str.contains("조끼") or item_id_str.contains("방독면"))
 		if is_armor:
 			var max_dur = float(item.get("max_durability", d.get("max_durability", 100.0)))
 			if max_dur > 0.0:
@@ -243,9 +245,15 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 		if dur_bar:
 			dur_bar.visible = false
 	else:
-		var item_id = equipped.get("id", "")
+		var item_id = str(equipped.get("id", ""))
 		var d = ItemDatabase.get_item_data(item_id)
-		btn.text = d.get("name", item_id)
+		var disp_name = str(equipped.get("name", ""))
+		if disp_name == "" or disp_name == item_id:
+			var d_name = str(d.get("name", item_id))
+			if d_name == item_id and WeaponPartsDatabase.RECEIVERS.has(item_id):
+				d_name = str(WeaponPartsDatabase.RECEIVERS[item_id].get("name", item_id))
+			disp_name = d_name
+		btn.text = disp_name
 		if ItemIconManager:
 			btn.icon = ItemIconManager.get_icon(item_id)
 			btn.expand_icon = true

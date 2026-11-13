@@ -120,10 +120,10 @@ func start_new_game(world_settings: Dictionary = {}) -> void:
 			"stamina": 100.0,
 			"rubles": int(world_settings.get("starting_money", 5000)),
 			"inventory": [
-				{"id": "권총", "amount": 1},
-				{"id": "탄약", "amount": 30},
-				{"id": "붕대", "amount": 2},
-				{"id": "생수", "amount": 1}
+				{"id": "5.56mm", "amount": 30, "x": 0, "y": 0},
+				{"id": "9mm", "amount": 30, "x": 1, "y": 0},
+				{"id": "붕대", "amount": 2, "x": 0, "y": 1},
+				{"id": "생수", "amount": 1, "x": 2, "y": 0}
 			],
 			"equipment": {}
 		},

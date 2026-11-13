@@ -34,7 +34,7 @@ var ammo_label: Label = null
 var infinite_ammo_chk: CheckBox = null
 
 func _ready() -> void:
-	set_anchors_preset(Control.PRESET_FULL_RECT)
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
 
@@ -56,12 +56,12 @@ func setup(w_data: Dictionary = {}) -> void:
 func _build_ui() -> void:
 	# 배경 암전 패널
 	var bg = ColorRect.new()
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	bg.color = Color(0.06, 0.08, 0.07, 0.98)
 	add_child(bg)
 	
 	var main_vbox = VBoxContainer.new()
-	main_vbox.set_anchors_preset(Control.PRESET_FULL_RECT)
+	main_vbox.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	main_vbox.offset_left = 24.0
 	main_vbox.offset_top = 16.0
 	main_vbox.offset_right = -24.0

@@ -45,6 +45,7 @@ text = "🗺️ 전술 작전 지도 (Tactical Map)"
 horizontal_alignment = 1
 
 [node name="MapCanvas" type="Control" parent="Center/Panel"]
+clip_contents = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0

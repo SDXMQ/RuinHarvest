@@ -69,7 +69,7 @@ grow_vertical = 2
 theme_override_constants/separation = 14
 
 [node name="VicinityCol" type="VBoxContainer" parent="MainLayout"]
-custom_minimum_size = Vector2(240, 0)
+custom_minimum_size = Vector2(220, 0)
 layout_mode = 2
 theme_override_constants/separation = 8
 
@@ -140,7 +140,7 @@ text = "주변에 아이템이 없습니다."
 horizontal_alignment = 1
 
 [node name="InventoryCol" type="VBoxContainer" parent="MainLayout"]
-custom_minimum_size = Vector2(380, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 theme_override_constants/separation = 8
 
@@ -159,6 +159,7 @@ size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.45, 0.82, 0.98, 1)
 theme_override_font_sizes/font_size = 12
 text = "BACKPACK // 전술 배낭"
+clip_text = true
 
 [node name="WeightLabel" type="Label" parent="MainLayout/InventoryCol/Header/HBox"]
 layout_mode = 2
@@ -177,11 +178,11 @@ size_flags_vertical = 3
 theme_type_variation = &"GridSurfacePanel"
 
 [node name="GridControl" type="Control" parent="MainLayout/InventoryCol/GridScroll/GridContainerPanel"]
-custom_minimum_size = Vector2(360, 480)
+custom_minimum_size = Vector2(264, 176)
 layout_mode = 2
 
 [node name="CharacterCol" type="VBoxContainer" parent="MainLayout"]
-custom_minimum_size = Vector2(230, 0)
+custom_minimum_size = Vector2(215, 0)
 layout_mode = 2
 theme_override_constants/separation = 8
 
@@ -211,7 +212,7 @@ layout_mode = 2
 alignment = 1
 
 [node name="HelmetSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/TopRow"]
-custom_minimum_size = Vector2(92, 82)
+custom_minimum_size = Vector2(90, 82)
 layout_mode = 2
 theme_type_variation = &"EquipSlotButton"
 text = "HEAD
@@ -219,18 +220,18 @@ text = "HEAD
 
 [node name="MidRow" type="HBoxContainer" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer"]
 layout_mode = 2
-theme_override_constants/separation = 20
+theme_override_constants/separation = 12
 alignment = 1
 
 [node name="VestSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/MidRow"]
-custom_minimum_size = Vector2(92, 92)
+custom_minimum_size = Vector2(90, 92)
 layout_mode = 2
 theme_type_variation = &"EquipSlotButton"
 text = "RIG
 방탄복"
 
 [node name="BackpackSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/MidRow"]
-custom_minimum_size = Vector2(92, 92)
+custom_minimum_size = Vector2(90, 92)
 layout_mode = 2
 theme_type_variation = &"EquipSlotButton"
 text = "PACK
@@ -241,13 +242,14 @@ layout_mode = 2
 alignment = 1
 
 [node name="BottomSlot" type="Button" parent="MainLayout/CharacterCol/SilhouetteArea/SlotsContainer/BotRow"]
-custom_minimum_size = Vector2(92, 74)
+custom_minimum_size = Vector2(90, 74)
 layout_mode = 2
 theme_type_variation = &"EquipSlotButton"
 text = "BOOTS
 전술화"
 
 [node name="WeaponsCol" type="VBoxContainer" parent="MainLayout"]
+custom_minimum_size = Vector2(360, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8

@@ -47,6 +47,7 @@ const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
 var player: CharacterBody2D
 var current_inventory_window: Control = null
 var current_crafting_window: Control = null
+var current_modding_window: Control = null
 var container_inventories: Dictionary = {}
 var exit_tile_pos: Vector2i = Vector2i(7, 10)
 var raid_time_remaining: float = 300.0
@@ -188,7 +189,7 @@ func _ensure_tactical_hud_widgets() -> void:
 		weapon_panel.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
 		weapon_panel.offset_left = 20.0
 		weapon_panel.offset_top = -100.0
-		weapon_panel.offset_right = 260.0
+		weapon_panel.offset_right = 310.0
 		weapon_panel.offset_bottom = -20.0
 		var wp_hbox = HBoxContainer.new()
 		wp_hbox.name = "HBox"
@@ -212,6 +213,8 @@ func _ensure_tactical_hud_widgets() -> void:
 		wp_hbox.add_child(wp_vbox)
 		weapon_name_label = Label.new()
 		weapon_name_label.name = "WeaponNameLabel"
+		weapon_name_label.clip_text = true
+		weapon_name_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 		weapon_name_label.add_theme_font_size_override("font_size", 14)
 		weapon_name_label.add_theme_color_override("font_color", Color(1, 0.9, 0.4))
 		wp_vbox.add_child(weapon_name_label)
@@ -474,7 +477,7 @@ func _on_hit_arc_draw() -> void:
 		hit_arc_overlay.draw_colored_polygon(PackedVector2Array([tip_pos, p_left, p_right]), col)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current_inventory_window != null or current_crafting_window != null:
+	if current_inventory_window != null or current_crafting_window != null or current_modding_window != null:
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -500,15 +503,20 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func _open_weapon_modding_window() -> void:
+	if current_modding_window != null: return
 	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")
 	if modding_script:
 		get_tree().paused = true
 		var win = modding_script.new()
+		current_modding_window = win
 		$UI.add_child(win)
 		var cur_w = player.equipped_weapon_data if player else {}
 		var inv_target = player.inventory_grid if player else null
 		win.setup(inv_target, null, cur_w)
-		win.window_closed.connect(func(): _on_player_stats_changed())
+		win.window_closed.connect(func():
+			current_modding_window = null
+			_on_player_stats_changed()
+		)
 
 func _open_crafting_window() -> void:
 	get_tree().paused = true
@@ -570,8 +578,9 @@ func _on_player_stats_changed() -> void:
 		var eq_wep = player.equipped_weapon
 		var wep_data = ItemDatabase.get_item_data(player.equipped_weapon_data.get("id", eq_wep))
 		var slot_disp = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
+		var disp_name = str(player.equipped_weapon_data.get("name", eq_wep))
 		if weapon_name_label:
-			weapon_name_label.text = "[%s] %s" % [slot_disp, eq_wep]
+			weapon_name_label.text = "[%s] %s" % [slot_disp, disp_name]
 		if weapon_icon and ItemIconManager:
 			weapon_icon.texture = ItemIconManager.get_icon(player.equipped_weapon_data.get("id", eq_wep))
 		if ammo_label:

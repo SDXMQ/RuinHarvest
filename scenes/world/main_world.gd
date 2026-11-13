@@ -333,7 +333,8 @@ func _ready() -> void:
 	GameManager.current_state = GameManager.GameState.IN_GAME
 	
 	# 작전 개시 및 초기 상태 안내 로그 출력
-	_on_event_logged("★ [작전 개시] 30분 생존 레이드가 시작되었습니다.")
+	var raid_mins = int(round(raid_total_time / 60.0))
+	_on_event_logged("★ [작전 개시] %d분 생존 레이드가 시작되었습니다." % raid_mins)
 	if WeatherSystem:
 		_on_event_logged("🌦️ 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
 		
@@ -521,9 +522,10 @@ const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 const RadioWindowScene = preload("res://scenes/ui/radio_window.tscn")
 var current_crafting_window: Control = null
 var current_radio_window: Control = null
+var current_modding_window: Control = null
 
 func _unhandled_input(event: InputEvent) -> void:
-	if current_inventory_window != null or current_crafting_window != null or current_map_window != null or current_radio_window != null:
+	if current_inventory_window != null or current_crafting_window != null or current_map_window != null or current_radio_window != null or current_modding_window != null:
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -706,15 +708,20 @@ func _open_item_spawner() -> void:
 	)
 
 func _open_weapon_modding_window() -> void:
+	if current_modding_window != null: return
 	var modding_script = load("res://scenes/ui/weapon_modding_window.gd")
 	if modding_script:
 		get_tree().paused = true
 		var win = modding_script.new()
+		current_modding_window = win
 		$UI.add_child(win)
 		var cur_w = player.equipped_weapon_data if player else {}
 		var inv_target = player.inventory_grid if player else null
 		win.setup(inv_target, null, cur_w)
-		win.window_closed.connect(func(): _on_player_stats_changed())
+		win.window_closed.connect(func():
+			current_modding_window = null
+			_on_player_stats_changed()
+		)
 
 func _open_crafting_window() -> void:
 	get_tree().paused = true
@@ -1246,8 +1253,9 @@ func _on_player_stats_changed() -> void:
 		var eq_wep = player.equipped_weapon
 		var wep_data = ItemDatabase.get_item_data(player.equipped_weapon_data.get("id", eq_wep))
 		var slot_disp = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
+		var disp_name = str(player.equipped_weapon_data.get("name", eq_wep))
 		if weapon_name_label:
-			weapon_name_label.text = "[%s] %s" % [slot_disp, eq_wep]
+			weapon_name_label.text = "[%s] %s" % [slot_disp, disp_name]
 		if weapon_icon and ItemIconManager:
 			weapon_icon.texture = ItemIconManager.get_icon(player.equipped_weapon_data.get("id", eq_wep))
 			

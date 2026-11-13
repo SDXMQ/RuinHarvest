@@ -64,11 +64,16 @@ func switch_weapon_slot(slot_name: String) -> void:
 			weapon_dict["parts"] = weapon_dict.get("attachments", {}).duplicate(true)
 		weapon_dict["attachments"] = weapon_dict["parts"]
 		equipped_weapon_data = WeaponPartsDatabase.compute_weapon_from_dict(weapon_dict)
-		var w_name = weapon_dict.get("name", "")
-		if w_name == "":
-			var idata = ItemDatabase.get_item_data(rec_id)
-			w_name = idata.get("name", rec_id)
+		var w_name = str(weapon_dict.get("name", ""))
+		if w_name == "" or w_name == rec_id:
+			var resolved_rec = WeaponPartsDatabase.resolve_receiver_id(rec_id)
+			if WeaponPartsDatabase.RECEIVERS.has(resolved_rec):
+				w_name = str(WeaponPartsDatabase.RECEIVERS[resolved_rec].get("name", rec_id))
+			else:
+				var idata = ItemDatabase.get_item_data(rec_id)
+				w_name = str(idata.get("name", rec_id))
 		equipped_weapon = w_name
+		equipped_weapon_data["name"] = w_name
 		if weapon_dict.has("current_magazine_ammo"):
 			equipped_weapon_data["current_magazine_ammo"] = weapon_dict["current_magazine_ammo"]
 		if weapon_dict.has("durability"):
