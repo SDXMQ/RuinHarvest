@@ -1,10 +1,10 @@
-[gd_scene load_steps=4 format=3 uid="uid://oa1t7v4cfeqp"]
+[gd_scene format=3 uid="uid://oa1t7v4cfeqp"]
 
-[ext_resource type="Script" path="res://scenes/main_menu/main_menu.gd" id="1_mmenu"]
-[ext_resource type="Theme" uid="uid://tactical_theme_v1" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
-[ext_resource type="Script" path="res://scenes/main_menu/live_pixel_backdrop.gd" id="3_backdrop"]
+[ext_resource type="Script" uid="uid://cotxfydfn5nql" path="res://scenes/main_menu/main_menu.gd" id="1_mmenu"]
+[ext_resource type="Theme" uid="uid://c4ne6cow3b2ew" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
+[ext_resource type="Script" uid="uid://b3ynxa4gd5wva" path="res://scenes/main_menu/live_pixel_backdrop.gd" id="3_backdrop"]
 
-[node name="MainMenu" type="Control"]
+[node name="MainMenu" type="Control" unique_id=2123522679]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -14,7 +14,7 @@ grow_vertical = 2
 theme = ExtResource("2_theme")
 script = ExtResource("1_mmenu")
 
-[node name="ColorRect" type="ColorRect" parent="."]
+[node name="ColorRect" type="ColorRect" parent="." unique_id=958744787]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -23,7 +23,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.04, 0.05, 0.065, 1)
 
-[node name="LivePixelBackdrop" type="Control" parent="."]
+[node name="LivePixelBackdrop" type="Control" parent="." unique_id=656418536]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -33,7 +33,7 @@ grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("3_backdrop")
 
-[node name="TopAccentBar" type="ColorRect" parent="."]
+[node name="TopAccentBar" type="ColorRect" parent="." unique_id=939531759]
 layout_mode = 1
 anchors_preset = 10
 anchor_right = 1.0
@@ -41,7 +41,7 @@ offset_bottom = 3.0
 grow_horizontal = 2
 color = Color(0.88, 0.62, 0.2, 0.85)
 
-[node name="MenuFrame" type="PanelContainer" parent="."]
+[node name="MenuFrame" type="PanelContainer" parent="." unique_id=1412831029]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -55,7 +55,7 @@ offset_bottom = 225.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TaglineLabel" type="Label" parent="."]
+[node name="TaglineLabel" type="Label" parent="." unique_id=42663200]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -73,7 +73,7 @@ theme_override_font_sizes/font_size = 11
 text = "// TACTICAL SURVIVAL & EXTRACTION //"
 horizontal_alignment = 1
 
-[node name="Title" type="Label" parent="."]
+[node name="Title" type="Label" parent="." unique_id=933154215]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -91,7 +91,7 @@ theme_override_font_sizes/font_size = 54
 text = "RuinHarvest"
 horizontal_alignment = 1
 
-[node name="Subtitle" type="Label" parent="."]
+[node name="Subtitle" type="Label" parent="." unique_id=1617301148]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -109,7 +109,7 @@ theme_override_font_sizes/font_size = 13
 text = "Hardcore Singleplayer Extraction Shooter"
 horizontal_alignment = 1
 
-[node name="Divider" type="HSeparator" parent="."]
+[node name="Divider" type="HSeparator" parent="." unique_id=391720125]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -123,7 +123,7 @@ offset_bottom = -26.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="."]
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=86182800]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
@@ -138,29 +138,29 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 12
 
-[node name="StartButton" type="Button" parent="VBoxContainer"]
+[node name="StartButton" type="Button" parent="VBoxContainer" unique_id=1500640282]
 custom_minimum_size = Vector2(0, 42)
 layout_mode = 2
 theme_type_variation = &"PrimaryButton"
 text = "새 레이드 시작 (New Raid)"
 
-[node name="LoadButton" type="Button" parent="VBoxContainer"]
+[node name="LoadButton" type="Button" parent="VBoxContainer" unique_id=1330825761]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "은신처 이어하기 (Continue)"
 
-[node name="SandboxButton" type="Button" parent="VBoxContainer"]
+[node name="SandboxButton" type="Button" parent="VBoxContainer" unique_id=1589390654]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 text = "전술 샌드박스 (Sandbox)"
 
-[node name="QuitButton" type="Button" parent="VBoxContainer"]
+[node name="QuitButton" type="Button" parent="VBoxContainer" unique_id=799791364]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
 theme_type_variation = &"DangerButton"
 text = "작전 종료 (Quit)"
 
-[node name="FooterLabel" type="Label" parent="."]
+[node name="FooterLabel" type="Label" parent="." unique_id=244617066]
 layout_mode = 1
 anchors_preset = 12
 anchor_top = 1.0
