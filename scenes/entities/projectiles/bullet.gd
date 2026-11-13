@@ -37,17 +37,17 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 
 func _get_effective_damage() -> float:
-	var falloff_start = max_range * 0.7
+	var falloff_start: float = max_range * 0.7
 	if traveled_dist <= falloff_start:
 		return damage
-	var t = clamp((traveled_dist - falloff_start) / max(1.0, max_range - falloff_start), 0.0, 1.0)
-	return damage * lerp(1.0, 0.55, t)
+	var t := clampf((traveled_dist - falloff_start) / maxf(1.0, max_range - falloff_start), 0.0, 1.0)
+	return damage * lerpf(1.0, 0.55, t)
 
 static func compute_armor_damage_multiplier(pen: float, target_armor_val: float) -> float:
 	if target_armor_val <= 0.0 or pen >= target_armor_val:
 		return 1.0
-	var deficit_ratio = clamp((target_armor_val - pen) / target_armor_val, 0.0, 1.0)
-	return clamp(1.0 - deficit_ratio * 0.60, 0.40, 1.0)
+	var deficit_ratio := clampf((target_armor_val - pen) / target_armor_val, 0.0, 1.0)
+	return clampf(1.0 - deficit_ratio * 0.60, 0.40, 1.0)
 
 func _on_body_entered(body: Node2D) -> void:
 	if body in hit_targets:
@@ -120,11 +120,17 @@ func _on_body_entered(body: Node2D) -> void:
 
 func _draw() -> void:
 	if shooter_group == "enemies":
-		# 적군 사격 예광탄 (주황/붉은색)
-		draw_line(Vector2(-10, 0), Vector2(6, 0), Color(1.0, 0.35, 0.15, 0.9), 2.5)
-		draw_circle(Vector2(6, 0), 2.0, Color(1.0, 0.8, 0.6))
+		# 적군 사격 예광탄 (HDR 주황/적색 픽셀 궤적 + 코어 탄두)
+		draw_rect(Rect2(-12.0, -1.5, 16.0, 3.0), Color(2.2, 0.42, 0.16, 0.44))
+		draw_rect(Rect2(-8.0, -1.0, 14.0, 2.0), Color(2.4, 0.6, 0.25, 0.96))
+		draw_rect(Rect2(4.0, -1.0, 3.0, 2.0), Color(2.8, 1.8, 1.1, 1.0))
 	else:
-		# 아군 예광탄 (노란색 일반탄 / 청백색 고관통탄 구분)
-		var trail_col = Color(0.6, 0.9, 1.0, 0.95) if penetration >= 25 else Color(1.0, 0.9, 0.3, 0.95)
-		draw_line(Vector2(-12, 0), Vector2(6, 0), trail_col, 2.5)
-		draw_circle(Vector2(6, 0), 2.0, Color.WHITE)
+		# 아군 예광탄 (일반탄 HDR 골드 vs 고관통탄 >= 25 HDR 청백)
+		if penetration >= 25:
+			draw_rect(Rect2(-15.0, -1.5, 20.0, 3.0), Color(0.65, 1.8, 2.4, 0.42))
+			draw_rect(Rect2(-11.0, -1.0, 17.0, 2.0), Color(0.8, 2.0, 2.6, 0.96))
+			draw_rect(Rect2(4.0, -1.0, 3.0, 2.0), Color(2.4, 2.6, 2.8, 1.0))
+		else:
+			draw_rect(Rect2(-13.0, -1.5, 18.0, 3.0), Color(2.0, 1.4, 0.35, 0.42))
+			draw_rect(Rect2(-9.0, -1.0, 15.0, 2.0), Color(2.2, 1.8, 0.5, 0.96))
+			draw_rect(Rect2(4.0, -1.0, 3.0, 2.0), Color(2.6, 2.4, 1.8, 1.0))

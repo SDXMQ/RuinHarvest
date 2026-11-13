@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://oa1t7v4cfeqp"]
+[gd_scene load_steps=4 format=3 uid="uid://oa1t7v4cfeqp"]
 
 [ext_resource type="Script" path="res://scenes/main_menu/main_menu.gd" id="1_mmenu"]
 [ext_resource type="Theme" uid="uid://tactical_theme_v1" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
+[ext_resource type="Script" path="res://scenes/main_menu/live_pixel_backdrop.gd" id="3_backdrop"]
 
 [node name="MainMenu" type="Control"]
 layout_mode = 3
@@ -21,6 +22,16 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 color = Color(0.04, 0.05, 0.065, 1)
+
+[node name="LivePixelBackdrop" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_backdrop")
 
 [node name="TopAccentBar" type="ColorRect" parent="."]
 layout_mode = 1
