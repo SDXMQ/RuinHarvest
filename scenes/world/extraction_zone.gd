@@ -16,12 +16,113 @@ var pulse_timer: float = 0.0
 signal extract_progress(current: float, max_time: float)
 signal extract_cancelled
 
+var _primary_spr: Sprite2D = null
+var _barricade_l: Sprite2D = null
+var _barricade_r: Sprite2D = null
+var _zone_light: PointLight2D = null
+var _last_synced_type: int = -1
+
 func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	body_exited.connect(_on_body_exited)
+	_setup_pixel_visuals()
+
+func _setup_pixel_visuals() -> void:
+	var props_tex: CanvasTexture = PixelAssetManager.get_canvas_texture("props/world_props") if PixelAssetManager else null
+
+	_primary_spr = Sprite2D.new()
+	_primary_spr.name = "ExtractPrimarySprite"
+	_primary_spr.centered = true
+	_primary_spr.region_enabled = true
+	_primary_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	if props_tex:
+		_primary_spr.texture = props_tex
+	if PixelAssetManager:
+		_primary_spr.material = PixelAssetManager.create_pixel_entity_material(0.22)
+	add_child(_primary_spr)
+
+	_barricade_l = Sprite2D.new()
+	_barricade_l.name = "BarricadeLeft"
+	_barricade_l.centered = true
+	_barricade_l.region_enabled = true
+	_barricade_l.region_rect = Rect2(208, 96, 48, 48)
+	_barricade_l.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_barricade_l.position = Vector2(-44, 18)
+	_barricade_l.z_index = -3
+	_barricade_l.visible = false
+	if props_tex:
+		_barricade_l.texture = props_tex
+	if PixelAssetManager:
+		_barricade_l.material = PixelAssetManager.create_pixel_entity_material(0.20)
+	add_child(_barricade_l)
+
+	_barricade_r = Sprite2D.new()
+	_barricade_r.name = "BarricadeRight"
+	_barricade_r.centered = true
+	_barricade_r.region_enabled = true
+	_barricade_r.region_rect = Rect2(208, 96, 48, 48)
+	_barricade_r.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_barricade_r.position = Vector2(44, 18)
+	_barricade_r.z_index = -3
+	_barricade_r.visible = false
+	if props_tex:
+		_barricade_r.texture = props_tex
+	if PixelAssetManager:
+		_barricade_r.material = PixelAssetManager.create_pixel_entity_material(0.20)
+	add_child(_barricade_r)
+
+	_zone_light = PointLight2D.new()
+	_zone_light.name = "ZoneLight"
+	_zone_light.height = 42.0
+	_zone_light.energy = 0.9
+	_zone_light.texture_scale = 2.4
+	if PixelAssetManager:
+		_zone_light.texture = PixelAssetManager.get_radial_light_texture()
+	add_child(_zone_light)
+
+	_sync_zone_visuals()
+
+func _get_zone_color() -> Color:
+	if extraction_type == ExtractionType.VEHICLE:
+		return Color(1.0, 0.82, 0.15)
+	elif extraction_type == ExtractionType.BUNKER:
+		return Color(0.2, 0.85, 1.0)
+	return Color(0.2, 1.0, 0.35)
+
+func _sync_zone_visuals() -> void:
+	_last_synced_type = extraction_type
+	if _zone_light:
+		_zone_light.color = _get_zone_color()
+	if not _primary_spr:
+		return
+
+	_barricade_l.visible = false
+	_barricade_r.visible = false
+	match extraction_type:
+		ExtractionType.VEHICLE:
+			_primary_spr.region_rect = Rect2(192, 0, 48, 96)
+			_primary_spr.position = Vector2(0, -14)
+			_primary_spr.scale = Vector2.ONE
+			_primary_spr.z_index = -3
+			_barricade_l.visible = true
+			_barricade_r.visible = true
+		ExtractionType.BUNKER:
+			_primary_spr.region_rect = Rect2(192, 144, 48, 48)
+			_primary_spr.position = Vector2.ZERO
+			_primary_spr.scale = Vector2(1.5, 1.5)
+			_primary_spr.z_index = -4
+		_:
+			_primary_spr.region_rect = Rect2(144, 144, 48, 48)
+			_primary_spr.position = Vector2.ZERO
+			_primary_spr.scale = Vector2(2.0, 2.0)
+			_primary_spr.z_index = -5
 
 func _process(delta: float) -> void:
 	pulse_timer += delta
+	if _last_synced_type != extraction_type:
+		_sync_zone_visuals()
+	if _zone_light:
+		_zone_light.energy = 0.72 + 0.25 * sin(pulse_timer * 3.5)
 	queue_redraw()
 	
 	if player_inside and not get_tree().paused:
@@ -128,31 +229,14 @@ func _trigger_extraction() -> void:
 
 func _draw() -> void:
 	var radius = 64.0
-	var col = Color(0.2, 1.0, 0.3) # DEFAULT (헬기/녹색)
-	if extraction_type == ExtractionType.VEHICLE:
-		col = Color(1.0, 0.82, 0.15) # VEHICLE (차량/호박색)
-	elif extraction_type == ExtractionType.BUNKER:
-		col = Color(0.2, 0.85, 1.0) # BUNKER (벙커/시안색)
-
+	var col := _get_zone_color()
+	var hdr_col := Color(col.r * 1.45, col.g * 1.45, col.b * 1.45, 0.90)
 	var pulse = 0.8 + 0.2 * sin(pulse_timer * 3.5)
-	draw_circle(Vector2.ZERO, radius, Color(col.r, col.g, col.b, 0.18 * pulse))
-	draw_arc(Vector2.ZERO, radius, 0, TAU, 36, Color(col.r, col.g, col.b, 0.85), 2.5)
-	
-	# 중앙 상징 글리프
-	if extraction_type == ExtractionType.VEHICLE:
-		# 다이아몬드 (차량)
-		var d = 11.0
-		var pts = PackedVector2Array([Vector2(0, -d), Vector2(d, 0), Vector2(0, d), Vector2(-d, 0)])
-		draw_colored_polygon(pts, col)
-		draw_arc(Vector2.ZERO, 16.0, 0, TAU, 16, col, 1.5)
-	elif extraction_type == ExtractionType.BUNKER:
-		# 육각형 (벙커)
-		var pts = PackedVector2Array()
-		for i in range(6):
-			pts.append(Vector2.RIGHT.rotated(i * TAU / 6.0) * 11.0)
-		draw_colored_polygon(pts, col)
-		draw_arc(Vector2.ZERO, 17.0, 0, TAU, 18, col, 1.5)
-	else:
-		# 원형 (헬기장)
-		draw_circle(Vector2.ZERO, 7.0, col)
-		draw_arc(Vector2.ZERO, 15.0, 0, TAU, 20, col, 1.5)
+
+	draw_circle(Vector2.ZERO, radius, Color(col.r, col.g, col.b, 0.10 * pulse))
+	draw_arc(Vector2.ZERO, radius, 0, TAU, 36, hdr_col, 2.2)
+
+	var cycle: float = fmod(pulse_timer * 0.45, 1.0)
+	var inner_r: float = lerpf(24.0, radius, cycle)
+	var inner_a: float = (1.0 - cycle) * 0.45
+	draw_arc(Vector2.ZERO, inner_r, 0, TAU, 28, Color(col.r * 1.3, col.g * 1.3, col.b * 1.3, inner_a), 1.4)

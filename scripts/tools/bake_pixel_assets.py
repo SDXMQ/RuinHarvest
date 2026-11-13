@@ -1286,25 +1286,26 @@ def bake_enemies():
     c.fill_rect(cx + 6, cy - 4, 4, 8, PAL["NVG_GREEN"], 0.95)
     c.add_outline_cell(ox, oy, ES, ES)
 
-    # (5, 0) BOSS (Juggernaut black/crimson armor, gold trim, Altyn helmet + LMG)
+    # (5, 0) BOSS (Juggernaut steel/crimson heavy armor, gold trim, Altyn helmet + LMG)
     ox, oy = 5 * ES, 0
     cx, cy = ox + 21, oy + 24
-    c.fill_rect(cx - 11, cy - 15, 20, 30, PAL["CHARCOAL"], 0.86)
-    c.fill_rect(cx - 8, cy - 12, 15, 24, PAL["BLOOD_DARK"], 0.90)
+    c.fill_rect(cx - 11, cy - 15, 20, 30, PAL["SLATE_MID"], 0.86)
+    c.fill_rect(cx - 8, cy - 12, 15, 24, PAL["BLOOD_MID"], 0.90)
+    c.fill_rect(cx - 5, cy - 8, 9, 16, PAL["CHARCOAL"], 0.88)
     c.draw_circle(cx - 1, cy - 13, 4.5, PAL["BRASS"], 0.94, True)
     c.draw_circle(cx - 1, cy + 13, 4.5, PAL["BRASS"], 0.94, True)
     # Heavy arms + Drum LMG
-    c.fill_rect(cx + 3, cy + 6, 13, 5, PAL["CHARCOAL"], 0.76)
-    c.fill_rect(cx + 4, cy - 9, 14, 5, PAL["CHARCOAL"], 0.76)
-    c.fill_rect(cx + 7, cy - 2, 23, 5, PAL["SLATE_MID"], 0.90)
+    c.fill_rect(cx + 3, cy + 6, 13, 5, PAL["SLATE_MID"], 0.78)
+    c.fill_rect(cx + 4, cy - 9, 14, 5, PAL["SLATE_MID"], 0.78)
+    c.fill_rect(cx + 7, cy - 2, 23, 5, PAL["SLATE_LIGHT"], 0.90)
     c.draw_circle(cx + 15, cy + 4, 3.8, PAL["CHARCOAL"], 0.92, True)
     # Heavy Helmet + Visor
-    c.draw_circle(cx + 3, cy, 8.6, PAL["SLATE_DARK"], 0.94, True)
+    c.draw_circle(cx + 3, cy, 8.6, PAL["SLATE_MID"], 0.94, True)
     c.fill_rect(ox + 26, oy + 19, 5, 10, PAL["RED_LED"], 0.96)
     c.add_outline_cell(ox, oy, ES, ES)
 
-    # (6, 0) NIGHT_STALKER (Obsidian chitin + elongated claws + cyan dorsal nodes)
-    draw_infected_body(6, PAL["CHARCOAL"], PAL["SHADOW_DARK"], PAL["SHADOW_DARK"], PAL["OUTLINE"], 1.06, 6, obsidian=True)
+    # (6, 0) NIGHT_STALKER (Dark slate-indigo chitin + elongated claws + cyan dorsal nodes)
+    draw_infected_body(6, PAL["WATER_LIGHT"], PAL["WATER_DEEP"], PAL["SLATE_DARK"], PAL["CHARCOAL"], 1.06, 6, obsidian=True)
 
     # (7, 0) Blood Wound Overlay (overlays when hp < 0.7)
     ox, oy = 7 * ES, 0
@@ -1447,10 +1448,12 @@ def bake_world_props():
 
     # (1, 3) 48x48 at x=48, y=144: Hospital Biosampler
     ox, oy = 48, 144
-    c.fill_rect(ox + 9, oy + 10, 30, 28, PAL["WHITE_MUTED"], 0.78)
-    c.fill_rect(ox + 12, oy + 13, 24, 22, PAL["SLATE_MID"], 0.84)
-    c.draw_circle(ox + 24, oy + 24, 7.0, PAL["NVG_GREEN"], 0.92, True)
-    c.fill_rect(ox + 12, oy + 32, 24, 3, PAL["ROAD_YELLOW"], 0.86)
+    c.fill_rect(ox + 9, oy + 10, 30, 28, PAL["SLATE_MID"], 0.78)
+    c.fill_rect(ox + 11, oy + 12, 26, 24, PAL["SLATE_DARK"], 0.82)
+    c.fill_rect(ox + 14, oy + 14, 20, 17, PAL["CHARCOAL"], 0.86)
+    c.draw_circle(ox + 24, oy + 22, 6.0, PAL["WATER_LIGHT"], 0.90, True)
+    c.draw_circle(ox + 24, oy + 22, 4.0, PAL["NVG_GREEN"], 0.94)
+    c.fill_rect(ox + 12, oy + 32, 24, 3, PAL["ROAD_YELLOW_DIM"], 0.86)
     c.add_outline_cell(ox, oy, 48, 48)
 
     # (2, 3) 48x48 at x=96, y=144: Commercial Radio Relay

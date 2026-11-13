@@ -20,6 +20,10 @@ const IMPACT_DURATION: float = 0.25
 var fall_altitude: float = -450.0
 var chute_sway: float = 0.0
 
+var _chute_spr: Sprite2D = null
+var _crate_spr: Sprite2D = null
+var _flare_light: PointLight2D = null
+
 func _ready() -> void:
 	collision_layer = 0
 	collision_mask = 0
@@ -29,6 +33,8 @@ func _ready() -> void:
 	col.shape = rect
 	col.disabled = true
 	add_child(col)
+
+	_setup_pixel_visuals()
 
 	current_state = DropState.FLARE_PHASE
 	state_timer = 0.0
@@ -40,6 +46,49 @@ func _ready() -> void:
 	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
 	if ps:
 		ps.emit("smoke", global_position.x, global_position.y, 10)
+
+func _setup_pixel_visuals() -> void:
+	var props_tex: CanvasTexture = PixelAssetManager.get_canvas_texture("props/world_props") if PixelAssetManager else null
+	var mat_chute: ShaderMaterial = PixelAssetManager.create_pixel_entity_material(0.20) if PixelAssetManager else null
+	var mat_crate: ShaderMaterial = PixelAssetManager.create_pixel_entity_material(0.26) if PixelAssetManager else null
+
+	_chute_spr = Sprite2D.new()
+	_chute_spr.name = "ChutePixelSprite"
+	_chute_spr.centered = true
+	_chute_spr.region_enabled = true
+	_chute_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_chute_spr.z_index = 1
+	_chute_spr.visible = false
+	if props_tex:
+		_chute_spr.texture = props_tex
+	if mat_chute:
+		_chute_spr.material = mat_chute
+	add_child(_chute_spr)
+
+	_crate_spr = Sprite2D.new()
+	_crate_spr.name = "CratePixelSprite"
+	_crate_spr.centered = true
+	_crate_spr.region_enabled = true
+	_crate_spr.region_rect = Rect2(0, 96, 48, 48)
+	_crate_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_crate_spr.z_index = 2
+	_crate_spr.visible = false
+	if props_tex:
+		_crate_spr.texture = props_tex
+	if mat_crate:
+		_crate_spr.material = mat_crate
+	add_child(_crate_spr)
+
+	_flare_light = PointLight2D.new()
+	_flare_light.name = "FlareLight"
+	_flare_light.position = Vector2(22, 14)
+	_flare_light.color = Color(1.0, 0.24, 0.14)
+	_flare_light.energy = 1.4
+	_flare_light.height = 28.0
+	_flare_light.texture_scale = 2.6
+	if PixelAssetManager:
+		_flare_light.texture = PixelAssetManager.get_radial_light_texture()
+	add_child(_flare_light)
 
 func _process(delta: float) -> void:
 	flare_timer += delta
@@ -82,7 +131,36 @@ func _process(delta: float) -> void:
 		DropState.LOOTABLE:
 			pass
 
+	_sync_pixel_sprites()
 	queue_redraw()
+
+func _sync_pixel_sprites() -> void:
+	if _flare_light:
+		_flare_light.energy = 1.15 + 0.55 * sin(flare_timer * 7.5)
+	if not _crate_spr or not _chute_spr:
+		return
+
+	match current_state:
+		DropState.FLARE_PHASE:
+			_crate_spr.visible = false
+			_chute_spr.visible = false
+		DropState.CHUTE_FALL:
+			var crate_center := Vector2(chute_sway, fall_altitude)
+			_crate_spr.visible = true
+			_crate_spr.position = crate_center
+			_chute_spr.visible = true
+			_chute_spr.region_rect = Rect2(48, 96, 96, 48)
+			_chute_spr.position = crate_center + Vector2(0, -64)
+			_chute_spr.z_index = 3
+			_chute_spr.modulate.a = 0.96
+		DropState.LANDED_IMPACT, DropState.LOOTABLE:
+			_crate_spr.visible = true
+			_crate_spr.position = Vector2.ZERO
+			_chute_spr.visible = true
+			_chute_spr.region_rect = Rect2(144, 96, 64, 48)
+			_chute_spr.position = Vector2(-10, -28)
+			_chute_spr.z_index = 1
+			_chute_spr.modulate.a = 0.90
 
 func _draw() -> void:
 	var flare_pos = Vector2(22, 14)
@@ -90,90 +168,41 @@ func _draw() -> void:
 
 	match current_state:
 		DropState.FLARE_PHASE:
-			# 1단계: 지면 착지 지점 적색 신호탄 표식 및 연막
-			draw_line(Vector2(-14, 0), Vector2(14, 0), Color(0.9, 0.2, 0.1, 0.7), 1.5)
-			draw_line(Vector2(0, -14), Vector2(0, 14), Color(0.9, 0.2, 0.1, 0.7), 1.5)
-			draw_arc(Vector2.ZERO, 18.0, 0, TAU, 16, Color(1.0, 0.25, 0.15, 0.45), 1.2)
+			# 1단계: 지면 착지 지점 적색 신호탄 표식 및 HDR 경고 링
+			draw_line(Vector2(-14, 0), Vector2(14, 0), Color(1.6, 0.3, 0.2, 0.78), 1.5)
+			draw_line(Vector2(0, -14), Vector2(0, 14), Color(1.6, 0.3, 0.2, 0.78), 1.5)
+			draw_arc(Vector2.ZERO, 18.0, 0, TAU, 20, Color(1.8, 0.35, 0.2, 0.55), 1.2)
 
 		DropState.CHUTE_FALL:
-			# 2단계: 지면 원형 그림자 확대 및 상공 Y:-450px 낙하산 전개 강하
+			# 2단계: 지면 원형 그림자 확대 및 낙하산 현수줄
 			var t = clamp(state_timer / FALL_DURATION, 0.0, 1.0)
 			var shadow_radius = lerp(4.0, 24.0, t)
-			var shadow_alpha = lerp(0.2, 0.6, t)
-			draw_circle(Vector2.ZERO, shadow_radius, Color(0, 0, 0, shadow_alpha))
+			var shadow_alpha = lerp(0.22, 0.58, t)
+			draw_circle(Vector2.ZERO, shadow_radius, Color(0.02, 0.03, 0.04, shadow_alpha))
 
-			var crate_center = Vector2(chute_sway, fall_altitude)
+			var crate_center := Vector2(chute_sway, fall_altitude)
+			var chute_apex := crate_center + Vector2(0, -64)
+			draw_line(crate_center + Vector2(-15, -16), chute_apex + Vector2(-36, 12), Color(0.78, 0.80, 0.72, 0.78), 1.0)
+			draw_line(crate_center + Vector2(15, -16), chute_apex + Vector2(36, 12), Color(0.78, 0.80, 0.72, 0.78), 1.0)
+			draw_line(crate_center + Vector2(-7, -16), chute_apex + Vector2(-12, 12), Color(0.78, 0.80, 0.72, 0.72), 1.0)
+			draw_line(crate_center + Vector2(7, -16), chute_apex + Vector2(12, 12), Color(0.78, 0.80, 0.72, 0.72), 1.0)
 
-			# 낙하산 줄
-			var chute_apex = crate_center + Vector2(0, -60)
-			draw_line(crate_center + Vector2(-16, -16), chute_apex + Vector2(-36, 12), Color(0.8, 0.8, 0.75, 0.7), 1.2)
-			draw_line(crate_center + Vector2(16, -16), chute_apex + Vector2(36, 12), Color(0.8, 0.8, 0.75, 0.7), 1.2)
-			draw_line(crate_center + Vector2(-8, -16), chute_apex + Vector2(-12, 10), Color(0.8, 0.8, 0.75, 0.7), 1.0)
-			draw_line(crate_center + Vector2(8, -16), chute_apex + Vector2(12, 10), Color(0.8, 0.8, 0.75, 0.7), 1.0)
-
-			# 전개된 낙하산 돔
-			var dome_pts = PackedVector2Array([
-				chute_apex + Vector2(-42, 12),
-				chute_apex + Vector2(-34, -16),
-				chute_apex + Vector2(-16, -30),
-				chute_apex + Vector2(16, -30),
-				chute_apex + Vector2(34, -16),
-				chute_apex + Vector2(42, 12),
-				chute_apex + Vector2(24, 6),
-				chute_apex + Vector2(0, 8),
-				chute_apex + Vector2(-24, 6)
-			])
-			draw_colored_polygon(dome_pts, Color(0.32, 0.38, 0.26, 0.95))
-			draw_line(chute_apex + Vector2(-16, -30), chute_apex + Vector2(-12, 10), Color(0.45, 0.52, 0.36), 2.0)
-			draw_line(chute_apex + Vector2(16, -30), chute_apex + Vector2(12, 10), Color(0.45, 0.52, 0.36), 2.0)
-
-			_draw_crate_body(crate_center)
-
-		DropState.LANDED_IMPACT:
-			# 3단계: 지면 충돌 순간
-			draw_rect(Rect2(-24, -20, 48, 40), Color(0, 0, 0, 0.6))
-			var impact_chute = PackedVector2Array([
-				Vector2(-18, -14), Vector2(-36, -24), Vector2(-12, -32),
-				Vector2(14, -28), Vector2(32, -18), Vector2(18, -14)
-			])
-			draw_colored_polygon(impact_chute, Color(0.32, 0.38, 0.26, 0.9))
-			_draw_crate_body(Vector2.ZERO)
-
-		DropState.LOOTABLE:
-			# 4단계: 낙하산 쓰러짐, 지면 박스 루팅 가능
-			var chute_pts = PackedVector2Array([
-				Vector2(-18, -14), Vector2(-36, -34), Vector2(-12, -42),
-				Vector2(14, -38), Vector2(32, -26), Vector2(18, -14)
-			])
-			draw_colored_polygon(chute_pts, Color(0.32, 0.38, 0.26, 0.85))
-			draw_line(Vector2(-14, -14), Vector2(-28, -32), Color(0.7, 0.7, 0.6, 0.6), 1.0)
-			draw_line(Vector2(14, -14), Vector2(24, -26), Color(0.7, 0.7, 0.6, 0.6), 1.0)
-
-			# 지면 그림자
-			draw_rect(Rect2(-20, -16, 40, 36), Color(0, 0, 0, 0.5))
-
-			_draw_crate_body(Vector2.ZERO)
-
-func _draw_crate_body(offset: Vector2) -> void:
-	# 군용 컨테이너 본체
-	draw_rect(Rect2(offset.x - 18, offset.y - 18, 36, 36), Color(0.12, 0.14, 0.10))
-	draw_rect(Rect2(offset.x - 16, offset.y - 16, 32, 32), Color(0.24, 0.32, 0.20))
-
-	# 철제 보강 프레임 및 노란색 UN/군수 마킹
-	draw_rect(Rect2(offset.x - 16, offset.y - 4, 32, 8), Color(0.18, 0.22, 0.15))
-	draw_rect(Rect2(offset.x - 4, offset.y - 16, 8, 32), Color(0.18, 0.22, 0.15))
-	draw_rect(Rect2(offset.x - 8, offset.y - 8, 16, 16), Color(0.85, 0.68, 0.15), false, 2.0)
+		DropState.LANDED_IMPACT, DropState.LOOTABLE:
+			# 3~4단계: 지면 박스 드롭 섀도우 & 낙하산 끈
+			draw_rect(Rect2(-15, -15, 42, 42), Color(0.02, 0.03, 0.05, 0.48))
+			draw_line(Vector2(-12, -14), Vector2(-24, -28), Color(0.7, 0.72, 0.64, 0.6), 1.0)
+			draw_line(Vector2(10, -14), Vector2(-2, -26), Color(0.7, 0.72, 0.64, 0.6), 1.0)
 
 func _draw_flare_and_smoke(flare_pos: Vector2) -> void:
-	# 붉은색 신호탄 플레어 및 연기 애니메이션
-	var pulse = 0.6 + 0.4 * sin(flare_timer * 6.0)
-	draw_circle(flare_pos, 4.0, Color(0.9, 0.2, 0.1))
-	draw_circle(flare_pos, 10.0 * pulse, Color(1.0, 0.25, 0.15, 0.45 * pulse))
-	draw_circle(flare_pos, 20.0 * pulse, Color(1.0, 0.15, 0.1, 0.2 * pulse))
+	# 붉은색 신호탄 HDR 플레어 코어 및 도트 연막
+	var pulse = 0.65 + 0.35 * sin(flare_timer * 6.5)
+	draw_circle(flare_pos, 16.0 * pulse, Color(1.4, 0.22, 0.12, 0.20 * pulse))
+	draw_circle(flare_pos, 8.0 * pulse, Color(1.8, 0.32, 0.16, 0.45 * pulse))
+	draw_rect(Rect2(flare_pos - Vector2(2, 2), Vector2(4, 4)), Color(2.4, 0.45, 0.22, 0.98))
 
-	# 피어오르는 붉은 연막 원들
-	for i in range(3):
-		var t = fmod(flare_timer * 0.8 + float(i) * 0.33, 1.0)
-		var smoke_pos = flare_pos + Vector2(sin(flare_timer * 2.0 + i) * 8.0 * t, -t * 32.0)
-		var smoke_alpha = (1.0 - t) * 0.45
-		draw_circle(smoke_pos, 5.0 + t * 10.0, Color(0.95, 0.25, 0.2, smoke_alpha))
+	for i in range(4):
+		var t: float = fmod(flare_timer * 0.75 + float(i) * 0.25, 1.0)
+		var sp: Vector2 = flare_pos + Vector2(sin(flare_timer * 2.2 + float(i) * 1.4) * 7.0 * t, -t * 30.0)
+		var smoke_sz: float = floorf(4.0 + t * 8.0)
+		var smoke_alpha: float = (1.0 - t) * 0.48
+		draw_rect(Rect2(Vector2(floorf(sp.x - smoke_sz * 0.5), floorf(sp.y - smoke_sz * 0.5)), Vector2(smoke_sz, smoke_sz)), Color(0.95, 0.28, 0.22, smoke_alpha))

@@ -1,7 +1,7 @@
 [gd_scene load_steps=11 format=3 uid="uid://player00000"]
 
 [ext_resource type="Script" path="res://scenes/entities/player/player.gd" id="1_plr"]
-[ext_resource type="Shader" path="res://graphics/shaders/hit_flash.gdshader" id="2_flash"]
+[ext_resource type="Shader" path="res://graphics/shaders/pixel_entity.gdshader" id="2_flash"]
 [ext_resource type="Script" path="res://scenes/entities/player/survival_stats.gd" id="surv_st"]
 [ext_resource type="Script" path="res://scenes/entities/player/weapon_handler.gd" id="weap_hnd"]
 [ext_resource type="Script" path="res://scenes/entities/player/interaction_detector.gd" id="int_det"]
@@ -13,6 +13,9 @@
 shader = ExtResource("2_flash")
 shader_parameter/flash_modifier = 0.0
 shader_parameter/flash_color = Color(1, 1, 1, 1)
+shader_parameter/stealth_dissolve = 0.0
+shader_parameter/outline_color = Color(0.05, 0.06, 0.08, 0.95)
+shader_parameter/rim_strength = 0.26
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_p1"]
 radius = 14.0

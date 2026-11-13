@@ -47,6 +47,18 @@ var _hit_feedback_already_shown: bool = false
 var _was_flashlight_exposed: bool = false
 var stalker_smoke_burst_count: int = 0
 
+var _enemy_sprites_ready: bool = false
+var _last_synced_type: int = -1
+var _walk_phase: float = 0.0
+var _enemies_tex: CanvasTexture = null
+var _shadow_spr: Sprite2D = null
+var _boot_left_spr: Sprite2D = null
+var _boot_right_spr: Sprite2D = null
+var _body_spr: Sprite2D = null
+var _blood_spr: Sprite2D = null
+var _glow_overlay: Node2D = null
+var _hud_overlay: Node2D = null
+
 func get_night_stalker_body_alpha() -> float:
 	if enemy_type != EnemyType.NIGHT_STALKER:
 		return 1.0
@@ -451,13 +463,223 @@ func _physics_process(delta: float) -> void:
 					
 		move_and_slide()
 		
-		# 걷기 애니메이션 (몸 흔들림) 및 전술 시야(LoS/FoV) 가시성 마스킹
+		# 걷기 애니메이션 (몸 흔들림 + 부츠 교차 보행) 및 전술 시야(LoS/FoV) 가시성 마스킹
 		if has_node("Visuals"):
 			var visuals = get_node("Visuals")
+			_sync_enemy_pixel_layers(visuals)
+			var scale_f := _get_type_scale()
 			if velocity.length() > 5.0:
-				var bob = sin(Time.get_ticks_msec() * 0.01 * (speed / 70.0)) * 2.0
+				_walk_phase += delta * (speed / 70.0) * 11.0
+				var bob := sin(_walk_phase * 2.0) * 1.4
 				visuals.position.y = bob
+				var stride := sin(_walk_phase) * 4.5 * scale_f
+				if _boot_left_spr and _boot_right_spr:
+					_boot_left_spr.position = Vector2(stride, -5.0 * scale_f)
+					_boot_right_spr.position = Vector2(-stride, 5.0 * scale_f)
+			else:
+				visuals.position.y = lerp(visuals.position.y, 0.0, clampf(delta * 10.0, 0.0, 1.0))
+				if _boot_left_spr and _boot_right_spr:
+					_boot_left_spr.position = _boot_left_spr.position.lerp(Vector2(0.0, -5.0 * scale_f), clampf(delta * 10.0, 0.0, 1.0))
+					_boot_right_spr.position = _boot_right_spr.position.lerp(Vector2(0.0, 5.0 * scale_f), clampf(delta * 10.0, 0.0, 1.0))
+			if _shadow_spr:
+				_shadow_spr.position = Vector2(1.0, 2.0 - visuals.position.y)
 			_update_tactical_visibility(delta, player_dist, visuals)
+			if _glow_overlay:
+				_glow_overlay.visible = visuals.modulate.a >= 0.05
+				if _glow_overlay.visible:
+					_glow_overlay.queue_redraw()
+
+func _get_type_scale() -> float:
+	match enemy_type:
+		EnemyType.TANK:
+			return 1.25
+		EnemyType.RUNNER:
+			return 0.88
+		EnemyType.RAIDER:
+			return 1.06
+		EnemyType.BOSS:
+			return 1.24
+		EnemyType.NIGHT_STALKER:
+			return 1.06
+		_:
+			return 1.0
+
+func _setup_enemy_pixel_layers(visuals: Node2D) -> void:
+	if _enemy_sprites_ready or not visuals:
+		return
+	_enemy_sprites_ready = true
+	if PixelAssetManager:
+		_enemies_tex = PixelAssetManager.get_canvas_texture("entities/enemies")
+	var parts_tex: CanvasTexture = PixelAssetManager.get_canvas_texture("entities/player_parts") if PixelAssetManager else null
+
+	_shadow_spr = Sprite2D.new()
+	_shadow_spr.name = "ContactShadow"
+	_shadow_spr.centered = true
+	_shadow_spr.region_enabled = true
+	_shadow_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_shadow_spr.use_parent_material = false
+	_shadow_spr.z_index = -2
+	if parts_tex:
+		_shadow_spr.texture = parts_tex
+	_shadow_spr.region_rect = Rect2(0, 0, 32, 32)
+	_shadow_spr.modulate = Color(1.0, 1.0, 1.0, 0.72)
+	visuals.add_child(_shadow_spr)
+
+	_boot_left_spr = Sprite2D.new()
+	_boot_left_spr.name = "BootLeft"
+	_boot_left_spr.centered = true
+	_boot_left_spr.region_enabled = true
+	_boot_left_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_boot_left_spr.use_parent_material = true
+	_boot_left_spr.z_index = -1
+	if _enemies_tex:
+		_boot_left_spr.texture = _enemies_tex
+	_boot_left_spr.region_rect = Rect2(0, 48, 48, 48)
+	visuals.add_child(_boot_left_spr)
+
+	_boot_right_spr = Sprite2D.new()
+	_boot_right_spr.name = "BootRight"
+	_boot_right_spr.centered = true
+	_boot_right_spr.region_enabled = true
+	_boot_right_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_boot_right_spr.use_parent_material = true
+	_boot_right_spr.z_index = -1
+	if _enemies_tex:
+		_boot_right_spr.texture = _enemies_tex
+	_boot_right_spr.region_rect = Rect2(0, 48, 48, 48)
+	visuals.add_child(_boot_right_spr)
+
+	_body_spr = Sprite2D.new()
+	_body_spr.name = "BodySprite"
+	_body_spr.centered = true
+	_body_spr.region_enabled = true
+	_body_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_body_spr.use_parent_material = true
+	_body_spr.z_index = 0
+	if _enemies_tex:
+		_body_spr.texture = _enemies_tex
+	visuals.add_child(_body_spr)
+
+	_blood_spr = Sprite2D.new()
+	_blood_spr.name = "BloodOverlay"
+	_blood_spr.centered = true
+	_blood_spr.region_enabled = true
+	_blood_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_blood_spr.use_parent_material = true
+	_blood_spr.z_index = 1
+	if _enemies_tex:
+		_blood_spr.texture = _enemies_tex
+	_blood_spr.region_rect = Rect2(7 * 48, 0, 48, 48)
+	_blood_spr.visible = false
+	visuals.add_child(_blood_spr)
+
+	_glow_overlay = Node2D.new()
+	_glow_overlay.name = "GlowOverlay"
+	_glow_overlay.z_index = 2
+	var unshaded := CanvasItemMaterial.new()
+	unshaded.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
+	_glow_overlay.material = unshaded
+	_glow_overlay.draw.connect(_on_glow_overlay_draw)
+	visuals.add_child(_glow_overlay)
+
+	_hud_overlay = Node2D.new()
+	_hud_overlay.name = "HudOverlay"
+	_hud_overlay.z_index = 5
+	_hud_overlay.use_parent_material = false
+	_hud_overlay.draw.connect(_on_hud_overlay_draw)
+	visuals.add_child(_hud_overlay)
+
+	_sync_enemy_pixel_layers(visuals)
+
+func _sync_enemy_pixel_layers(visuals: Node2D) -> void:
+	if not _enemy_sprites_ready:
+		_setup_enemy_pixel_layers(visuals)
+	var scale_f := _get_type_scale()
+	if _last_synced_type != int(enemy_type):
+		_last_synced_type = int(enemy_type)
+		var col_idx := clampi(int(enemy_type), 0, 6)
+		if _body_spr:
+			_body_spr.region_rect = Rect2(col_idx * 48, 0, 48, 48)
+		if _shadow_spr:
+			_shadow_spr.scale = Vector2(scale_f * 1.05, scale_f * 1.15)
+		if _boot_left_spr and _boot_right_spr:
+			var bscale := Vector2(scale_f * 0.9, scale_f * 0.9)
+			_boot_left_spr.scale = bscale
+			_boot_right_spr.scale = bscale
+			_boot_left_spr.position = Vector2(0.0, -5.0 * scale_f)
+			_boot_right_spr.position = Vector2(0.0, 5.0 * scale_f)
+		if visuals and visuals.material:
+			var oc := Color(0.05, 0.06, 0.08, 0.95)
+			if enemy_type == EnemyType.BOSS:
+				oc = Color(0.95, 0.75, 0.15, 0.98)
+			elif enemy_type == EnemyType.NIGHT_STALKER:
+				oc = Color(0.45, 0.22, 0.75, 0.92)
+			visuals.material.set_shader_parameter("outline_color", oc)
+
+	if _blood_spr:
+		var hp_ratio: float = hp / maxf(max_hp, 1.0)
+		_blood_spr.visible = hp_ratio < 0.7
+		if _blood_spr.visible:
+			_blood_spr.modulate.a = 0.95 if hp_ratio < 0.4 else 0.72
+			_blood_spr.scale = Vector2(scale_f, scale_f)
+
+	if visuals and visuals.material:
+		if enemy_type == EnemyType.NIGHT_STALKER:
+			var ns_alpha := get_night_stalker_body_alpha()
+			visuals.material.set_shader_parameter("stealth_dissolve", clampf(1.0 - ns_alpha, 0.0, 0.72))
+		else:
+			visuals.material.set_shader_parameter("stealth_dissolve", 0.0)
+
+func _on_glow_overlay_draw() -> void:
+	if not _glow_overlay:
+		return
+	for g_info in active_boss_grenades:
+		var local_g := _glow_overlay.to_local(g_info["pos"])
+		var g_rad := float(g_info.get("radius", 120.0))
+		var g_ratio := 1.0 - clampf(float(g_info.get("timer", 0.0)) / float(g_info.get("max_time", 1.8)), 0.0, 1.0)
+		_glow_overlay.draw_circle(local_g, g_rad, Color(0.95, 0.15, 0.15, 0.14 + 0.18 * g_ratio))
+		_glow_overlay.draw_arc(local_g, g_rad, 0, TAU, 32, Color(1.6, 0.3, 0.2, 0.88), 2.0)
+		if _enemies_tex:
+			_glow_overlay.draw_texture_rect_region(_enemies_tex, Rect2(local_g - Vector2(24, 24), Vector2(48, 48)), Rect2(3 * 48, 48, 48, 48))
+		else:
+			_glow_overlay.draw_circle(local_g, 5.0, Color(0.2, 0.25, 0.2, 0.95))
+
+	var visuals := get_node_or_null("Visuals")
+	if visuals and visuals.modulate.a < 0.05:
+		return
+
+	if is_ranged_human:
+		if enemy_type == EnemyType.BOSS:
+			_glow_overlay.draw_rect(Rect2(2.5, -4.5, 4.0, 9.0), Color(2.2, 0.28, 0.22, 0.92))
+		elif enemy_type == EnemyType.RAIDER:
+			_glow_overlay.draw_rect(Rect2(4.0, -3.5, 3.0, 2.5), Color(0.28, 2.0, 0.50, 0.88))
+			_glow_overlay.draw_rect(Rect2(4.0, 1.0, 3.0, 2.5), Color(0.28, 2.0, 0.50, 0.88))
+
+		if (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) and current_state == State.CHASE and reload_timer <= 0:
+			var laser_col := Color(2.2, 1.5, 0.22, 0.62) if enemy_type == EnemyType.BOSS else Color(2.2, 0.24, 0.24, 0.52)
+			var muzzle_start := Vector2(28.0, 1.0)
+			var laser_end := Vector2(145.0, 1.0)
+			if is_inside_tree():
+				var world_2d: World2D = get_world_2d()
+				if world_2d != null:
+					var q := PhysicsRayQueryParameters2D.create(to_global(muzzle_start), to_global(laser_end), 1, [self])
+					var hit: Dictionary = world_2d.direct_space_state.intersect_ray(q)
+					if not hit.is_empty():
+						laser_end = to_local(hit["position"])
+			_glow_overlay.draw_line(muzzle_start, laser_end, laser_col, 1.2)
+	else:
+		if enemy_type == EnemyType.NIGHT_STALKER:
+			var ns_alpha := get_night_stalker_body_alpha()
+			var aura_a := 0.28 if ns_alpha < 0.5 else 0.14
+			_glow_overlay.draw_circle(Vector2(5.5, -2.5), 3.2, Color(0.35, 1.6, 2.0, aura_a))
+			_glow_overlay.draw_circle(Vector2(5.5, 2.5), 3.2, Color(0.35, 1.6, 2.0, aura_a))
+			_glow_overlay.draw_rect(Rect2(4.5, -3.5, 2.0, 2.0), Color(0.5, 2.4, 2.6, 0.98))
+			_glow_overlay.draw_rect(Rect2(4.5, 1.5, 2.0, 2.0), Color(0.5, 2.4, 2.6, 0.98))
+		else:
+			var eye_x := 6.0 if enemy_type == EnemyType.TANK else 4.0
+			var eye_y := 3.2 if enemy_type == EnemyType.TANK else 2.4
+			_glow_overlay.draw_rect(Rect2(eye_x, -eye_y - 1.0, 2.0, 2.0), Color(2.2, 0.22, 0.22, 0.95))
+			_glow_overlay.draw_rect(Rect2(eye_x, eye_y - 1.0, 2.0, 2.0), Color(2.2, 0.22, 0.22, 0.95))
 
 func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> void:
 	if not is_instance_valid(target_player):
@@ -666,7 +888,9 @@ func take_damage(amount: float, hit_dir: Vector2) -> void:
 	knockback_velocity = hit_dir.normalized() * (65.0 if enemy_type == EnemyType.BOSS else (110.0 if is_ranged_human else 180.0))
 	
 	if has_node("Visuals"):
-		get_node("Visuals").queue_redraw()
+		var visuals = get_node("Visuals")
+		_sync_enemy_pixel_layers(visuals)
+		visuals.queue_redraw()
 		_play_hit_flash()
 	else:
 		queue_redraw()
@@ -832,241 +1056,58 @@ func _spawn_loot_drop() -> void:
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
-	for g_info in active_boss_grenades:
-		var local_g = visuals.to_local(g_info["pos"])
-		var g_rad = float(g_info.get("radius", 120.0))
-		var g_ratio = 1.0 - clamp(float(g_info.get("timer", 0.0)) / float(g_info.get("max_time", 1.8)), 0.0, 1.0)
-		visuals.draw_circle(local_g, g_rad, Color(0.95, 0.15, 0.15, 0.14 + 0.18 * g_ratio))
-		visuals.draw_arc(local_g, g_rad, 0, TAU, 32, Color(1.0, 0.25, 0.15, 0.85), 2.0)
-		visuals.draw_circle(local_g, 5.0, Color(0.2, 0.25, 0.2, 0.95))
-	# 은폐 상태(modulate.a < 0.05)일 때 머리 위 느낌표, HP 바, 레이저 포인터까지 일괄 숨김 처리
+	_sync_enemy_pixel_layers(visuals)
+	if _hud_overlay:
+		_hud_overlay.queue_redraw()
+
+func _on_hud_overlay_draw() -> void:
+	if not _hud_overlay:
+		return
+	var visuals := get_node_or_null("Visuals")
+	if not visuals:
+		return
+
+	# 은폐 상태(modulate.a < 0.05)일 때 머리 위 느낌표, HP 바까지 일괄 숨김 처리
 	if visuals.modulate.a < 0.05:
 		return
-	
-	# 기본 크기 비례
-	var scale_f = 1.0
-	if enemy_type == EnemyType.TANK: scale_f = 1.4
-	elif enemy_type == EnemyType.RUNNER: scale_f = 0.85
-	elif enemy_type == EnemyType.RAIDER: scale_f = 1.08
-	elif enemy_type == EnemyType.BOSS: scale_f = 1.28
-	elif enemy_type == EnemyType.NIGHT_STALKER: scale_f = 1.06
-	
-	# 색상 정의
-	var body_color = Color(0.3, 0.45, 0.3)
-	var cloth_color = Color(0.35, 0.35, 0.4)
-	if enemy_type == EnemyType.RUNNER: 
-		body_color = Color(0.4, 0.3, 0.3)
-		cloth_color = Color(0.4, 0.2, 0.2)
-	elif enemy_type == EnemyType.TANK: 
-		body_color = Color(0.2, 0.35, 0.25)
-		cloth_color = Color(0.2, 0.3, 0.4)
-	elif enemy_type == EnemyType.SCAV:
-		body_color = Color(0.82, 0.68, 0.55)
-		cloth_color = Color(0.45, 0.36, 0.26)
-	elif enemy_type == EnemyType.RAIDER:
-		body_color = Color(0.78, 0.65, 0.52)
-		cloth_color = Color(0.22, 0.28, 0.22)
-	elif enemy_type == EnemyType.BOSS:
-		body_color = Color(0.78, 0.65, 0.52)
-		cloth_color = Color(0.16, 0.14, 0.18)
-	elif enemy_type == EnemyType.NIGHT_STALKER:
-		var ns_alpha := get_night_stalker_body_alpha()
-		body_color = Color(0.08, 0.09, 0.14, ns_alpha)
-		cloth_color = Color(0.05, 0.06, 0.10, ns_alpha)
-		if ns_alpha < 0.5:
-			visuals.draw_circle(Vector2.ZERO, 17.0 * scale_f, Color(0.05, 0.04, 0.10, 0.22))
-		
-	# --- 1. 몸통 다각형 ---
-	var shoulder_width = 14.0 * scale_f
-	var body_length = 10.0 * scale_f
-	var chest_width = 12.0 * scale_f
-	
-	var body_points = PackedVector2Array([
-		Vector2(-body_length, -chest_width),  # 등 좌측
-		Vector2(-body_length, chest_width),   # 등 우측
-		Vector2(0, shoulder_width),           # 우측 어깨
-		Vector2(body_length, chest_width*0.8),# 앞가슴 우측
-		Vector2(body_length, -chest_width*0.8),# 앞가슴 좌측
-		Vector2(0, -shoulder_width)           # 좌측 어깨
-	])
-	
-	var colors_outline = PackedColorArray()
-	var colors_cloth = PackedColorArray()
-	var outline_col := Color(0.1, 0.1, 0.1)
-	if enemy_type == EnemyType.BOSS:
-		outline_col = Color(0.95, 0.75, 0.15)
-	elif enemy_type == EnemyType.NIGHT_STALKER:
-		outline_col = Color(0.48, 0.16, 0.68, get_night_stalker_body_alpha())
-	for i in range(body_points.size()):
-		colors_outline.append(outline_col)
-		colors_cloth.append(cloth_color)
-		
-	var outline_points = PackedVector2Array()
-	for p in body_points:
-		outline_points.append(p * 1.15)
-	
-	visuals.draw_polygon(outline_points, colors_outline)
-	visuals.draw_polygon(body_points, colors_cloth)
-	
-	# --- 2. 찢어진 옷 또는 중장갑 패드 ---
-	if enemy_type == EnemyType.BOSS:
-		visuals.draw_rect(Rect2(Vector2(-8, -14), Vector2(16, 28)), Color(0.55, 0.12, 0.12))
-	else:
-		var torn_points1 = PackedVector2Array([
-			Vector2(body_length*0.5, -shoulder_width*0.6),
-			Vector2(0, -shoulder_width*0.8),
-			Vector2(body_length*0.2, -shoulder_width*0.4)
-		])
-		visuals.draw_polygon(torn_points1, PackedColorArray([body_color, body_color, body_color]))
-	
-	if enemy_type == EnemyType.TANK:
-		var torn_points2 = PackedVector2Array([
-			Vector2(-body_length*0.5, chest_width*0.5),
-			Vector2(-body_length*0.8, chest_width*0.8),
-			Vector2(-body_length*0.2, chest_width*0.9)
-		])
-		visuals.draw_polygon(torn_points2, PackedColorArray([body_color, body_color, body_color]))
-		
-	# --- 3. 혈흔 ---
-	var hp_ratio = hp / max_hp
-	if hp_ratio < 0.7:
-		var blood1 = PackedVector2Array([Vector2(-4, -4), Vector2(-8, -2), Vector2(-5, 3), Vector2(-2, 0)])
-		visuals.draw_polygon(blood1, PackedColorArray([Color(0.5, 0, 0, 0.8), Color(0.5, 0, 0, 0.8), Color(0.5, 0, 0, 0.8), Color(0.5, 0, 0, 0.8)]))
-	if hp_ratio < 0.4:
-		visuals.draw_polygon(PackedVector2Array([Vector2(4, 5), Vector2(8, 7), Vector2(6, 10), Vector2(2, 8)]), 
-			PackedColorArray([Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9), Color(0.4, 0, 0, 0.9)]))
 
-	# --- 4. 머리 ---
-	var head_radius_x = 7.0 * scale_f
-	var head_radius_y = 8.0 * scale_f
-	var head_offset = Vector2(body_length * 0.4, 0)
-	
-	var head_points = PackedVector2Array()
-	var head_colors = PackedColorArray()
-	var head_outlines = PackedColorArray()
-	var sides = 12
-	for i in range(sides):
-		var angle = (i / float(sides)) * TAU
-		var rx = head_radius_x
-		if cos(angle) > 0: rx += 2.0 * scale_f * cos(angle)
-		var p = head_offset + Vector2(cos(angle) * rx, sin(angle) * head_radius_y)
-		head_points.append(p)
-		head_colors.append(body_color)
-		head_outlines.append(Color(0.1, 0.1, 0.1))
-		
-	var head_outline_points = PackedVector2Array()
-	for p in head_points:
-		head_outline_points.append(head_offset + (p - head_offset) * 1.2)
-		
-	visuals.draw_polygon(head_outline_points, head_outlines)
-	visuals.draw_polygon(head_points, head_colors)
-	
-	var eye_offset = head_offset + Vector2(head_radius_x * 0.5, 0)
-	if is_ranged_human:
-		if enemy_type == EnemyType.BOSS:
-			visuals.draw_circle(head_offset, 8.6 * scale_f, Color(0.18, 0.18, 0.22))
-			visuals.draw_arc(head_offset, 8.6 * scale_f, 0, TAU, 16, Color(0.95, 0.78, 0.2), 1.8)
-			visuals.draw_rect(Rect2(head_offset + Vector2(2, -6.5), Vector2(5.0, 13.0)), Color(0.95, 0.2, 0.15, 0.95))
-		elif enemy_type == EnemyType.RAIDER:
-			visuals.draw_rect(Rect2(Vector2(-6, -10), Vector2(12, 20)), Color(0.15, 0.2, 0.15))
-			visuals.draw_circle(head_offset, 7.8 * scale_f, Color(0.22, 0.26, 0.22))
-			visuals.draw_rect(Rect2(head_offset + Vector2(2, -5.5), Vector2(4.5, 11.0)), Color(0.1, 0.75, 0.35, 0.9))
-		else:
-			visuals.draw_arc(head_offset, 6.5 * scale_f, PI * 0.4, PI * 1.6, 10, Color(0.55, 0.18, 0.15), 3.0)
-			visuals.draw_circle(eye_offset + Vector2(0, -3.0*scale_f), 1.3*scale_f, Color(0.15, 0.15, 0.15))
-			visuals.draw_circle(eye_offset + Vector2(0, 3.0*scale_f), 1.3*scale_f, Color(0.15, 0.15, 0.15))
-			
-		# 총기 파지 자세 및 총기 렌더링
-		var gun_len = 26.0 if enemy_type == EnemyType.BOSS else (22.0 if enemy_type == EnemyType.RAIDER else 15.0)
-		visuals.draw_line(Vector2(2, 8), Vector2(12, 4), cloth_color, 4.0)
-		visuals.draw_line(Vector2(2, -8), Vector2(14, 1), cloth_color, 4.0)
-		visuals.draw_circle(Vector2(12, 4), 2.5, body_color)
-		visuals.draw_circle(Vector2(14, 1), 2.5, body_color)
-		visuals.draw_line(Vector2(6, 2), Vector2(6 + gun_len, 2), Color(0.14, 0.15, 0.18), 3.6 if enemy_type == EnemyType.BOSS else 3.2)
-		if (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) and current_state == State.CHASE and reload_timer <= 0:
-			var laser_col = Color(1.0, 0.8, 0.15, 0.55) if enemy_type == EnemyType.BOSS else Color(1.0, 0.15, 0.15, 0.42)
-			visuals.draw_line(Vector2(6 + gun_len, 2), Vector2(135, 2), laser_col, 1.4)
-	else:
-		# 안광 렌더링 (야간 추격자는 형광 청록/보라 안광, 일반 감염체는 붉은 눈)
-		if enemy_type == EnemyType.NIGHT_STALKER:
-			visuals.draw_circle(eye_offset + Vector2(0, -3.6*scale_f), 3.2*scale_f, Color(0.35, 0.95, 1.0, 0.35))
-			visuals.draw_circle(eye_offset + Vector2(0, 3.6*scale_f), 3.2*scale_f, Color(0.35, 0.95, 1.0, 0.35))
-			visuals.draw_circle(eye_offset + Vector2(0, -3.6*scale_f), 1.7*scale_f, Color(0.4, 1.0, 1.0))
-			visuals.draw_circle(eye_offset + Vector2(0, 3.6*scale_f), 1.7*scale_f, Color(0.4, 1.0, 1.0))
-		else:
-			visuals.draw_circle(eye_offset + Vector2(0, -3.5*scale_f), 1.5*scale_f, Color.RED)
-			visuals.draw_circle(eye_offset + Vector2(0, 3.5*scale_f), 1.5*scale_f, Color.RED)
-		
-		# --- 5. 양 팔 (추적 시 손을 뻗음) ---
-		var reach = 0.0
-		if current_state == State.CHASE: reach = 6.0 * scale_f
-		if enemy_type == EnemyType.NIGHT_STALKER: reach += 4.5 * scale_f
-		
-		var arm_y = shoulder_width * 0.8
-		var arm_len = 16.0 * scale_f + reach
-		
-		var arm_l = PackedVector2Array([
-			Vector2(0, arm_y), Vector2(0, arm_y + 4*scale_f), 
-			Vector2(arm_len, arm_y + 2*scale_f), Vector2(arm_len, arm_y - 2*scale_f)
-		])
-		var arm_r = PackedVector2Array([
-			Vector2(0, -arm_y), Vector2(0, -arm_y - 4*scale_f), 
-			Vector2(arm_len, -arm_y - 2*scale_f), Vector2(arm_len, -arm_y + 2*scale_f)
-		])
-		
-		var arm_colors = PackedColorArray([body_color, body_color, body_color, body_color])
-		var arm_outlines = PackedColorArray([outline_col, outline_col, outline_col, outline_col])
-		
-		var arm_l_outline = PackedVector2Array()
-		for p in arm_l: arm_l_outline.append(p + (p - Vector2(arm_len/2, arm_y))*0.2)
-		visuals.draw_polygon(arm_l_outline, arm_outlines)
-		visuals.draw_polygon(arm_l, arm_colors)
-		
-		var arm_r_outline = PackedVector2Array()
-		for p in arm_r: arm_r_outline.append(p + (p - Vector2(arm_len/2, -arm_y))*0.2)
-		visuals.draw_polygon(arm_r_outline, arm_outlines)
-		visuals.draw_polygon(arm_r, arm_colors)
-		
-		if enemy_type == EnemyType.NIGHT_STALKER:
-			visuals.draw_circle(Vector2(arm_len, arm_y), 3.4*scale_f, Color(0.65, 0.15, 0.85))
-			visuals.draw_circle(Vector2(arm_len, -arm_y), 3.4*scale_f, Color(0.65, 0.15, 0.85))
-		elif enemy_type == EnemyType.RUNNER or current_state == State.CHASE:
-			visuals.draw_circle(Vector2(arm_len, arm_y), 3.0*scale_f, Color(0.6, 0, 0))
-			visuals.draw_circle(Vector2(arm_len, -arm_y), 3.0*scale_f, Color(0.6, 0, 0))
-		else:
-			visuals.draw_circle(Vector2(arm_len, arm_y), 2.5*scale_f, body_color)
-			visuals.draw_circle(Vector2(arm_len, -arm_y), 2.5*scale_f, body_color)
-	
+	var scale_f := _get_type_scale()
+	# 머리 위 UI(재장전 게이지, HP 바, ! / ? 경고)는 항상 정방향(회전 무효화) 렌더링
+	_hud_overlay.draw_set_transform(Vector2(0.0, -visuals.position.y), -rotation - visuals.rotation, Vector2.ONE)
+
 	# 재장전 게이지 표시 (인간형 무장 적)
 	if is_ranged_human and reload_timer > 0:
-		var r_w = 24.0
-		var r_pos = Vector2(-r_w / 2.0, -18.0 * scale_f - 16.0)
-		visuals.draw_rect(Rect2(r_pos, Vector2(r_w, 3.0)), Color(0.15, 0.15, 0.2, 0.85))
-		var r_ratio = clamp(1.0 - (reload_timer / 1.9), 0.0, 1.0)
-		visuals.draw_rect(Rect2(r_pos, Vector2(r_w * r_ratio, 3.0)), Color(1.0, 0.85, 0.25))
-	
+		var r_w := 24.0
+		var r_pos := Vector2(-r_w / 2.0, -18.0 * scale_f - 16.0)
+		_hud_overlay.draw_rect(Rect2(r_pos, Vector2(r_w, 3.0)), Color(0.15, 0.15, 0.2, 0.85))
+		var r_ratio := clampf(1.0 - (reload_timer / 1.9), 0.0, 1.0)
+		_hud_overlay.draw_rect(Rect2(r_pos, Vector2(r_w * r_ratio, 3.0)), Color(1.0, 0.85, 0.25))
+
 	# HP 바 (보스는 상시 표시, 일반 적은 피격 시 표시)
 	if (hp < max_hp or enemy_type == EnemyType.BOSS) and hp > 0:
-		var bar_w = 38.0 if enemy_type == EnemyType.BOSS else 26.0
-		var bar_h = 5.0 if enemy_type == EnemyType.BOSS else 4.0
-		var bar_pos = Vector2(-bar_w/2.0, -18.0 * scale_f - 10.0)
-		visuals.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.15, 0.15, 0.18))
-		var fill_w = (hp / max_hp) * bar_w
-		var bar_col = Color(1.0, 0.75, 0.15) if enemy_type == EnemyType.BOSS else Color(0.9, 0.2, 0.2)
-		visuals.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), bar_col)
+		var bar_w := 38.0 if enemy_type == EnemyType.BOSS else 26.0
+		var bar_h := 5.0 if enemy_type == EnemyType.BOSS else 4.0
+		var bar_pos := Vector2(-bar_w / 2.0, -18.0 * scale_f - 10.0)
+		_hud_overlay.draw_rect(Rect2(bar_pos + Vector2(-1, -1), Vector2(bar_w + 2, bar_h + 2)), Color(0.05, 0.05, 0.08, 0.9))
+		_hud_overlay.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.15, 0.15, 0.18))
+		var fill_w := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0) * bar_w
+		var bar_col := Color(1.0, 0.75, 0.15) if enemy_type == EnemyType.BOSS else Color(0.9, 0.2, 0.2)
+		_hud_overlay.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), bar_col)
 
 	# 느낌표/물음표 경고 아이콘 (소음 감지 또는 플레이어 발견 시)
 	if alert_timer > 0:
-		var icon_pos = Vector2(0, -22.0 * scale_f - 12.0)
-		var icon_col = Color(1.0, 0.2, 0.2) if alert_icon_type == "!" else Color(1.0, 0.8, 0.2)
-		var bg_alpha = clamp(alert_timer, 0.0, 1.0)
-		visuals.draw_circle(icon_pos, 8.0, Color(0.1, 0.1, 0.1, 0.8 * bg_alpha))
-		visuals.draw_arc(icon_pos, 8.0, 0, TAU, 16, icon_col * Color(1, 1, 1, bg_alpha), 1.5)
-		
+		var icon_pos := Vector2(0, -22.0 * scale_f - 12.0)
+		var icon_col := Color(1.0, 0.2, 0.2) if alert_icon_type == "!" else Color(1.0, 0.8, 0.2)
+		var bg_alpha := clampf(alert_timer, 0.0, 1.0)
+		_hud_overlay.draw_circle(icon_pos, 8.0, Color(0.1, 0.1, 0.1, 0.8 * bg_alpha))
+		_hud_overlay.draw_arc(icon_pos, 8.0, 0, TAU, 16, icon_col * Color(1, 1, 1, bg_alpha), 1.5)
+
 		if alert_icon_type == "!":
-			visuals.draw_line(icon_pos + Vector2(0, -4), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.5)
-			visuals.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
+			_hud_overlay.draw_line(icon_pos + Vector2(0, -4), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.5)
+			_hud_overlay.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
 		else:
-			visuals.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
-			visuals.draw_arc(icon_pos + Vector2(0, -2), 3.0, -PI, 0, 8, icon_col * Color(1, 1, 1, bg_alpha), 2.0)
-			visuals.draw_line(icon_pos + Vector2(3, -2), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.0)
+			_hud_overlay.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
+			_hud_overlay.draw_arc(icon_pos + Vector2(0, -2), 3.0, -PI, 0, 8, icon_col * Color(1, 1, 1, bg_alpha), 2.0)
+			_hud_overlay.draw_line(icon_pos + Vector2(3, -2), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.0)
+
+	_hud_overlay.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

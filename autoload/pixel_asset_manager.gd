@@ -4,11 +4,13 @@ extends Node
 ## 픽셀 아트 디스크 리소스(*_d.png, *_n.png)를 로드하고 CanvasTexture로 결합·캐싱하는 싱글톤
 
 const PIXEL_ROOT := "res://assets/pixel/"
+const PixelEntityShader = preload("res://graphics/shaders/pixel_entity.gdshader")
 
 var _canvas_cache: Dictionary = {}
 var _diffuse_cache: Dictionary = {}
 var _normal_cache: Dictionary = {}
 var _slice_cache: Dictionary = {}
+var _radial_light_tex: GradientTexture2D = null
 
 func _ready() -> void:
 	# 핵심 시트 선행 워밍업 (게임/테스트 진입 시 즉시 사용 가능)
@@ -20,6 +22,36 @@ func _ready() -> void:
 		"props/world_props"
 	]:
 		get_canvas_texture(key)
+
+func create_pixel_entity_material(rim: float = 0.22, local_to_scene: bool = false) -> ShaderMaterial:
+	var mat := ShaderMaterial.new()
+	mat.resource_local_to_scene = local_to_scene
+	mat.shader = PixelEntityShader
+	mat.set_shader_parameter("flash_modifier", 0.0)
+	mat.set_shader_parameter("flash_color", Color(1.0, 1.0, 1.0, 1.0))
+	mat.set_shader_parameter("stealth_dissolve", 0.0)
+	mat.set_shader_parameter("rim_strength", rim)
+	return mat
+
+func get_radial_light_texture() -> GradientTexture2D:
+	if _radial_light_tex != null:
+		return _radial_light_tex
+	var grad := Gradient.new()
+	grad.colors = PackedColorArray([
+		Color(1.0, 1.0, 1.0, 1.0),
+		Color(0.58, 0.58, 0.58, 0.55),
+		Color(0.0, 0.0, 0.0, 0.0)
+	])
+	grad.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.width = 128
+	tex.height = 128
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(0.5, 0.0)
+	_radial_light_tex = tex
+	return _radial_light_tex
 
 func get_canvas_texture(key: String) -> CanvasTexture:
 	if _canvas_cache.has(key):
@@ -115,20 +147,20 @@ func create_canvas_texture_from_images(diff_img: Image, norm_img: Image = null, 
 	return ct
 
 func load_texture_2d(res_path: String) -> Texture2D:
-	# 1. 에디터 임포트(.ctex)가 준비된 경우 ResourceLoader 사용
-	if ResourceLoader.exists(res_path):
-		var loaded := load(res_path)
-		if loaded is Texture2D:
-			return loaded
-	# 2. 미임포트 상태 또는 헤드리스 실행 시 디스크에서 직접 PNG 로드
+	# 1. 소스 체크아웃/에셋 리베이크 환경에서는 디스크 PNG를 우선 로드 (구버전 .ctex 캐시 무시)
 	var abs_path := ProjectSettings.globalize_path(res_path)
-	if FileAccess.file_exists(res_path) or FileAccess.file_exists(abs_path):
+	if FileAccess.file_exists(abs_path):
 		var img := Image.new()
 		var err := img.load(abs_path)
 		if err == OK and not img.is_empty():
 			if img.get_format() != Image.FORMAT_RGBA8:
 				img.convert(Image.FORMAT_RGBA8)
 			return ImageTexture.create_from_image(img)
+	# 2. 익스포트(.pck) 환경 폴백: ResourceLoader(.ctex) 사용
+	if ResourceLoader.exists(res_path):
+		var loaded := load(res_path)
+		if loaded is Texture2D:
+			return loaded
 	return null
 
 func generate_normal_map_from_image(img: Image, strength: float = 2.4) -> Image:

@@ -2,68 +2,56 @@ extends StaticBody2D
 
 var body_color: Color
 var rotation_angle: float = 0.0
+var car_variant: int = -1
 
 var interactable_type: Vector2i = Vector2i(5, 1) # 기존 OBJ_CAR(폐차)와 동일한 타입 코드
 
+var _car_spr: Sprite2D = null
+
 func _ready() -> void:
-	# 차량의 외형 색상 랜덤화
-	var colors = [Color(0.6, 0.2, 0.2), Color(0.2, 0.3, 0.6), Color(0.5, 0.5, 0.5), Color(0.8, 0.7, 0.2), Color(0.15, 0.2, 0.15)]
-	body_color = colors[randi() % colors.size()]
-	
-	# 심하게 부식된 느낌 추가
-	var rust = Color(0.5, 0.3, 0.1)
-	body_color = body_color.lerp(rust, randf_range(0.3, 0.7))
-	
+	# 차량의 외형 변형 및 미세 부식 틴트 결정 (위치 기반 결정론적 변형)
+	if car_variant < 0:
+		var h: int = int(abs(round(position.x * 0.13 + position.y * 0.29)))
+		car_variant = h % 4
+
+	var tint_pool := [
+		Color(1.0, 0.96, 0.94),
+		Color(0.94, 0.98, 1.02),
+		Color(0.95, 1.0, 0.92),
+		Color(1.0, 0.97, 0.88)
+	]
+	body_color = tint_pool[car_variant % tint_pool.size()]
 	rotation = rotation_angle
-	
-	if has_node("Visuals"):
-		get_node("Visuals").draw.connect(_on_visuals_draw)
-		get_node("Visuals").queue_redraw()
+
+	var visuals := get_node_or_null("Visuals")
+	if visuals == null:
+		visuals = Node2D.new()
+		visuals.name = "Visuals"
+		add_child(visuals)
+	_setup_car_sprite(visuals)
+	visuals.draw.connect(_on_visuals_draw)
+	visuals.queue_redraw()
+
+func _setup_car_sprite(visuals: Node2D) -> void:
+	if _car_spr:
+		return
+	_car_spr = Sprite2D.new()
+	_car_spr.name = "CarPixelSprite"
+	_car_spr.centered = true
+	_car_spr.region_enabled = true
+	_car_spr.region_rect = Rect2(float(car_variant * 48), 0.0, 48.0, 96.0)
+	_car_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	_car_spr.modulate = body_color
+	_car_spr.z_index = 0
+	if PixelAssetManager:
+		var props_tex := PixelAssetManager.get_canvas_texture("props/world_props")
+		if props_tex:
+			_car_spr.texture = props_tex
+		_car_spr.material = PixelAssetManager.create_pixel_entity_material(0.24)
+	visuals.add_child(_car_spr)
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
-	# 차량 크기 (가로 48, 세로 96 - 약 1.5 x 3 타일 크기)
-	var width = 48.0
-	var length = 96.0
-	
-	var half_w = width / 2.0
-	var half_l = length / 2.0
-	
-	# 그림자 (차량 아래)
-	visuals.draw_rect(Rect2(-half_w, -half_l, width, length), Color(0, 0, 0, 0.5))
-	
-	# 기본 차체 (테두리 포함)
-	visuals.draw_rect(Rect2(-half_w, -half_l, width, length), Color(0.1, 0.1, 0.1)) # 외곽선
-	visuals.draw_rect(Rect2(-half_w + 2, -half_l + 2, width - 4, length - 4), body_color)
-	
-	# 차 지붕 (루프)
-	var roof_w = width - 10.0
-	var roof_l = length * 0.45
-	visuals.draw_rect(Rect2(-roof_w/2, -roof_l/2 - 4.0, roof_w, roof_l), body_color.lightened(0.1))
-	
-	# 앞유리 (Windshield)
-	var win_w = width - 12.0
-	var win_y = -roof_l/2 - 12.0
-	visuals.draw_rect(Rect2(-win_w/2, win_y, win_w, 8.0), Color(0.1, 0.15, 0.2))
-	# 깨진 앞유리 디테일
-	if randf() < 0.7:
-		visuals.draw_line(Vector2(-win_w/2 + 2, win_y + 2), Vector2(0, win_y + 6), Color(0.3, 0.35, 0.4), 2.0)
-	
-	# 뒷유리
-	var rwin_y = roof_l/2 - 4.0
-	visuals.draw_rect(Rect2(-win_w/2, rwin_y, win_w, 6.0), Color(0.1, 0.15, 0.2))
-	
-	# 보닛 (Hood) 노이즈/녹 표현
-	# 폴리곤이나 점을 이용해 녹슨 얼룩 표현
-	for i in range(15):
-		var rx = randf_range(-half_w + 4, half_w - 4)
-		var ry = randf_range(-half_l + 4, win_y - 2)
-		visuals.draw_circle(Vector2(rx, ry), randf_range(1.0, 3.0), Color(0.6, 0.3, 0.15, 0.8))
-		
-	# 전조등 (헤드라이트 - 깨짐/꺼짐)
-	visuals.draw_rect(Rect2(-half_w + 4, -half_l + 2, 8, 4), Color(0.2, 0.2, 0.2))
-	visuals.draw_rect(Rect2(half_w - 12, -half_l + 2, 8, 4), Color(0.2, 0.2, 0.2))
-	
-	# 사이드 미러
-	visuals.draw_rect(Rect2(-half_w - 2, win_y + 4, 4, 6), body_color)
-	visuals.draw_rect(Rect2(half_w - 2, win_y + 4, 4, 6), body_color)
+	# 남동쪽(+5, +6) 지면 드롭 섀도우 (차량 회전을 상쇄하여 광원 방향 통일)
+	var shadow_off := Vector2(5.0, 6.0).rotated(-rotation)
+	visuals.draw_rect(Rect2(shadow_off - Vector2(21.0, 45.0), Vector2(42.0, 90.0)), Color(0.02, 0.03, 0.05, 0.42))
