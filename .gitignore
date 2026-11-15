@@ -19,3 +19,21 @@ mono_crash.*.json
 RuinHarvest_Pygame/
 RuinHarvest.exe
 RuinHarvest.pck
+
+# Sensitive files & webhooks
+.env
+.env.*
+*webhook*
+*.key
+*.pem
+secrets*
+credentials*
+
+# Python, logs & temporary/agent files
+__pycache__/
+*.pyc
+*.pyo
+*.log
+tmp/
+.claude/
+.gemini/
