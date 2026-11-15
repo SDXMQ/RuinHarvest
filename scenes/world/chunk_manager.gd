@@ -52,26 +52,10 @@ static func _tile_hash(wx: int, wy: int, salt: int = 0) -> float:
 	return float(h) / 65535.0
 
 static func _is_structure_wall(coords: Vector2i) -> bool:
-	return (
-		coords == TileManager.OBJ_WALL
-		or coords == TileManager.OBJ_DOOR_CLOSED
-		or coords == TileManager.OBJ_DOOR_OPEN
-		or coords == TileManager.OBJ_DOOR_LOCKED
-		or coords == TileManager.OBJ_WINDOW
-		or coords == TileManager.OBJ_WINDOW_BROKEN
-	)
+	return TileManager.is_structure_wall_line(coords)
 
 static func _casts_oval_shadow(coords: Vector2i) -> bool:
-	return (
-		coords == TileManager.OBJ_TREE
-		or coords == TileManager.OBJ_ROCK
-		or coords == TileManager.OBJ_CRATE
-		or coords == TileManager.OBJ_BARREL
-		or coords == TileManager.OBJ_FRIDGE
-		or coords == TileManager.OBJ_BED
-		or coords == TileManager.OBJ_DESK
-		or coords == TileManager.OBJ_SHELF
-	)
+	return coords == TileManager.OBJ_TREE or TileManager.casts_oval_shadow(coords)
 
 func _ready() -> void:
 	# WorldGenerator 초기화
@@ -165,6 +149,12 @@ func _ready() -> void:
 		roof_layer.tile_set = ts
 		roof_fade_out_layer.tile_set = ts
 		roof_fade_in_layer.tile_set = ts
+		if ts.get_source_count() > 0:
+			var atlas_src := ts.get_source(0) as TileSetAtlasSource
+			if atlas_src and atlas_src.texture:
+				var tex_h := float(atlas_src.texture.get_height())
+				if tex_h > 0.0:
+					_foliage_mat.set_shader_parameter("tile_v_range", Vector2(32.0 / tex_h, 64.0 / tex_h))
 
 	if EventBus.has_signal("door_toggled"):
 		EventBus.door_toggled.connect(_on_door_toggled)
@@ -180,15 +170,17 @@ func _exit_tree() -> void:
 
 func _on_door_toggled(tile_pos: Vector2i, is_open: bool) -> void:
 	var cur_atlas = object_layer.get_cell_atlas_coords(tile_pos) if object_layer else Vector2i(-1, -1)
-	if cur_atlas == TileManager.OBJ_WINDOW_BROKEN:
-		chunk_deltas[tile_pos] = TileManager.OBJ_WINDOW_BROKEN
+	if TileManager.is_window_broken(cur_atlas) or TileManager.is_window(cur_atlas):
+		chunk_deltas[tile_pos] = TileManager.get_window_broken_tile(cur_atlas)
 	else:
-		chunk_deltas[tile_pos] = TileManager.OBJ_DOOR_OPEN if is_open else TileManager.OBJ_DOOR_CLOSED
+		var is_v := TileManager.is_vertical_variant(cur_atlas)
+		chunk_deltas[tile_pos] = TileManager.get_door_open_tile(is_v) if is_open else TileManager.get_door_closed_tile(is_v)
 	if GameManager:
 		GameManager.current_world_data["chunk_deltas"] = chunk_deltas
 
 func _on_window_broken(tile_pos: Vector2i) -> void:
-	chunk_deltas[tile_pos] = TileManager.OBJ_WINDOW_BROKEN
+	var cur_atlas = object_layer.get_cell_atlas_coords(tile_pos) if object_layer else Vector2i(-1, -1)
+	chunk_deltas[tile_pos] = TileManager.get_window_broken_tile(cur_atlas)
 	if GameManager:
 		GameManager.current_world_data["chunk_deltas"] = chunk_deltas
 

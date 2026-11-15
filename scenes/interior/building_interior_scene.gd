@@ -298,39 +298,52 @@ func _render_interior(b_type: String = "house") -> void:
 	wall_grid.resize(w * h)
 	wall_grid.fill(false)
 
+	var furn_occupied := {}
+	for f_info in building_data.get("furnitures", []):
+		furn_occupied[f_info.get("pos", Vector2i.ZERO)] = true
+
 	var is_2d: bool = tiles.size() > 0 and tiles[0] is Array
+	if is_2d:
+		for y in range(h):
+			for x in range(w):
+				var v := int(tiles[y][x])
+				if v == 3 or v == 4:
+					furn_occupied[Vector2i(x, y)] = true
+
 	for y in range(h):
 		for x in range(w):
 			var pos = Vector2i(x, y)
 			floor_layer.set_cell(pos, 0, floor_tile)
 			var t: int = int(tiles[y][x]) if is_2d else int(tiles[y * w + x])
+			var mask := _get_interior_wall_mask(tiles, w, h, is_2d, x, y)
+			var is_v := _is_interior_opening_vertical(tiles, w, h, is_2d, x, y)
 			if is_2d:
 				if t == 1:
-					object_layer.set_cell(pos, 0, TileManager.WALL_BRICK)
+					object_layer.set_cell(pos, 0, TileManager.get_wall_tile_for_mask(mask))
 					wall_grid[y * w + x] = true
 				elif t == 2:
-					object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_CLOSED)
+					object_layer.set_cell(pos, 0, TileManager.get_door_closed_tile(is_v))
 					wall_grid[y * w + x] = true
 				elif t == 3:
 					object_layer.set_cell(pos, 0, TileManager.OBJ_CRATE)
 				elif t == 4:
-					object_layer.set_cell(pos, 0, TileManager.OBJ_FURNITURE)
+					object_layer.set_cell(pos, 0, _get_interior_furniture_variant(tiles, furn_occupied, w, h, is_2d, pos, TileManager.OBJ_FURNITURE))
 				elif t == 5:
-					object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_OPEN)
+					object_layer.set_cell(pos, 0, TileManager.get_door_open_tile(is_v))
 			else:
 				if t == 0:
-					object_layer.set_cell(pos, 0, TileManager.WALL_BRICK)
+					object_layer.set_cell(pos, 0, TileManager.get_wall_tile_for_mask(mask))
 					wall_grid[y * w + x] = true
 				elif t == 2:
-					object_layer.set_cell(pos, 0, TileManager.OBJ_DOOR_CLOSED)
+					object_layer.set_cell(pos, 0, TileManager.get_door_closed_tile(is_v))
 					wall_grid[y * w + x] = true
 				elif t == 3:
-					object_layer.set_cell(pos, 0, TileManager.OBJ_WINDOW)
+					object_layer.set_cell(pos, 0, TileManager.get_window_tile(is_v))
 					wall_grid[y * w + x] = true
 				elif t == 4:
 					object_layer.set_cell(pos, 0, TileManager.OBJ_LIGHT_SWITCH)
 
-	# 가구 타일 배치
+	# 가구 타일 배치 (벽면을 등지고 실내를 향하도록 4방향 회전)
 	for f_info in building_data.get("furnitures", []):
 		var f_pos: Vector2i = f_info.get("pos", Vector2i.ZERO)
 		var f_type: String = String(f_info.get("type", "선반"))
@@ -341,6 +354,7 @@ func _render_interior(b_type: String = "house") -> void:
 			f_tile = TileManager.OBJ_CRATE
 		elif f_type == "금고":
 			f_tile = TileManager.OBJ_DESK
+		f_tile = _get_interior_furniture_variant(tiles, furn_occupied, w, h, is_2d, f_pos, f_tile)
 		object_layer.set_cell(f_pos, 0, f_tile)
 
 	# 실내 벽체 드롭 섀도우 (ShadowLayer)
@@ -908,7 +922,7 @@ func _on_interact_prompt(can_interact: bool, text: String) -> void:
 func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_inventory_window != null: return
 	
-	if tile_pos == exit_tile_pos or (type == TileManager.OBJ_DOOR_OPEN and tile_pos.y >= building_data["height"] - 1):
+	if tile_pos == exit_tile_pos or (TileManager.is_door_open(type) and tile_pos.y >= building_data["height"] - 1):
 		_exit_interior()
 		return
 		
@@ -919,20 +933,15 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			EventBus.event_logged.emit("💡 실내 비상등 전원: %s" % ("ON" if _lights_enabled else "OFF"))
 		return
 
-	if type == TileManager.OBJ_DOOR_CLOSED:
-		object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
-		EventBus.noise_created.emit(world_pos, 100.0, "door")
-		if SoundManager: SoundManager.play("menu_select")
-		return
-	elif type == TileManager.OBJ_DOOR_OPEN:
-		object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_CLOSED)
+	if TileManager.is_door_closed(type) or TileManager.is_door_open(type):
+		object_layer.set_cell(tile_pos, 0, TileManager.get_toggled_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 100.0, "door")
 		if SoundManager: SoundManager.play("menu_select")
 		return
 
 	if container_inventories.has(tile_pos):
 		var inv = container_inventories[tile_pos]
-		var fallback_title = "수납함" if type == TileManager.OBJ_FURNITURE else "보급 상자"
+		var fallback_title = "수납함" if TileManager.is_desk(type) or TileManager.is_shelf(type) else "보급 상자"
 		var title = String(container_titles.get(tile_pos, fallback_title))
 		_open_loot_window(inv, title)
 
@@ -1022,3 +1031,53 @@ func _on_exit_pressed() -> void:
 			GameManager.end_raid("survived", get_backpack_items())
 		else:
 			GameManager.end_raid("mia", get_backpack_items())
+
+static func _wall_strength_interior(tiles: Array, w: int, h: int, is_2d: bool, x: int, y: int) -> int:
+	if x < 0 or x >= w or y < 0 or y >= h:
+		return 0
+	var v: int = int(tiles[y][x]) if is_2d else int(tiles[y * w + x])
+	if is_2d:
+		if v == 1:
+			return 2
+		if v == 2 or v == 5:
+			return 1
+	else:
+		if v == 0:
+			return 2
+		if v == 2 or v == 3:
+			return 1
+	return 0
+
+static func _get_interior_wall_mask(tiles: Array, w: int, h: int, is_2d: bool, x: int, y: int) -> int:
+	var mask := 0
+	if _wall_strength_interior(tiles, w, h, is_2d, x, y - 1) > 0:
+		mask |= TileManager.DIR_N
+	if _wall_strength_interior(tiles, w, h, is_2d, x + 1, y) > 0:
+		mask |= TileManager.DIR_E
+	if _wall_strength_interior(tiles, w, h, is_2d, x, y + 1) > 0:
+		mask |= TileManager.DIR_S
+	if _wall_strength_interior(tiles, w, h, is_2d, x - 1, y) > 0:
+		mask |= TileManager.DIR_W
+	return mask
+
+static func _is_interior_opening_vertical(tiles: Array, w: int, h: int, is_2d: bool, x: int, y: int) -> bool:
+	return TileManager.choose_door_is_vertical(
+		_wall_strength_interior(tiles, w, h, is_2d, x, y - 1) > 0,
+		_wall_strength_interior(tiles, w, h, is_2d, x + 1, y) > 0,
+		_wall_strength_interior(tiles, w, h, is_2d, x, y + 1) > 0,
+		_wall_strength_interior(tiles, w, h, is_2d, x - 1, y) > 0
+	)
+
+static func _get_interior_furniture_variant(tiles: Array, furn_occupied: Dictionary, w: int, h: int, is_2d: bool, pos: Vector2i, base_tile: Vector2i) -> Vector2i:
+	if not (base_tile in [TileManager.OBJ_FRIDGE, TileManager.OBJ_BED, TileManager.OBJ_DESK, TileManager.OBJ_SHELF]):
+		return base_tile
+	var nw := _wall_strength_interior(tiles, w, h, is_2d, pos.x, pos.y - 1)
+	var ew := _wall_strength_interior(tiles, w, h, is_2d, pos.x + 1, pos.y)
+	var sw := _wall_strength_interior(tiles, w, h, is_2d, pos.x, pos.y + 1)
+	var ww := _wall_strength_interior(tiles, w, h, is_2d, pos.x - 1, pos.y)
+	var no := pos.y - 1 >= 0 and nw == 0 and not furn_occupied.has(Vector2i(pos.x, pos.y - 1))
+	var eo := pos.x + 1 < w and ew == 0 and not furn_occupied.has(Vector2i(pos.x + 1, pos.y))
+	var so := pos.y + 1 < h and sw == 0 and not furn_occupied.has(Vector2i(pos.x, pos.y + 1))
+	var wo := pos.x - 1 >= 0 and ww == 0 and not furn_occupied.has(Vector2i(pos.x - 1, pos.y))
+	var facing := TileManager.choose_furniture_facing(nw, ew, sw, ww, no, eo, so, wo)
+	return TileManager.get_furniture_variant(base_tile, facing)

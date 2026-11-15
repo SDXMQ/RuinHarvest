@@ -19,6 +19,35 @@ const TILE_FLOOR_TILE = Vector2i(5, 0)
 const TILE_ROAD_LINE = Vector2i(6, 0)
 const TILE_GRAVEL = Vector2i(7, 0) # 자갈길
 const TILE_WATER = Vector2i(7, 2) # 물/물웅덩이 타일
+const TILE_CROSSWALK_H = Vector2i(6, 10) # 가로 방향 횡단보도 (동서 도로용)
+
+# 곡선/전환 차선 및 도로-인도 연석/코너 타일 (y=11..13)
+const TILE_ROAD_LINE_VB_TR = Vector2i(0, 11)
+const TILE_ROAD_LINE_VB_LB = Vector2i(1, 11)
+const TILE_ROAD_LINE_VB_TL = Vector2i(2, 11)
+const TILE_ROAD_LINE_VB_RB = Vector2i(3, 11)
+const TILE_ROAD_LINE_HB_LD = Vector2i(4, 11)
+const TILE_ROAD_LINE_HB_TR = Vector2i(5, 11)
+const TILE_ROAD_LINE_HB_LU = Vector2i(6, 11)
+const TILE_ROAD_LINE_HB_BR = Vector2i(7, 11)
+
+const TILE_SIDEWALK_CURB_N = Vector2i(0, 12)
+const TILE_SIDEWALK_CURB_E = Vector2i(1, 12)
+const TILE_SIDEWALK_CURB_S = Vector2i(2, 12)
+const TILE_SIDEWALK_CURB_W = Vector2i(3, 12)
+const TILE_SIDEWALK_CORNER_NW = Vector2i(4, 12)
+const TILE_SIDEWALK_CORNER_NE = Vector2i(5, 12)
+const TILE_SIDEWALK_CORNER_SE = Vector2i(6, 12)
+const TILE_SIDEWALK_CORNER_SW = Vector2i(7, 12)
+
+const TILE_SIDEWALK_DIAG_NW = Vector2i(0, 13)
+const TILE_SIDEWALK_DIAG_NE = Vector2i(1, 13)
+const TILE_SIDEWALK_DIAG_SE = Vector2i(2, 13)
+const TILE_SIDEWALK_DIAG_SW = Vector2i(3, 13)
+const TILE_ROAD_EDGE_W = Vector2i(4, 13)
+const TILE_ROAD_EDGE_E = Vector2i(5, 13)
+const TILE_ROAD_EDGE_N = Vector2i(6, 13)
+const TILE_ROAD_EDGE_S = Vector2i(7, 13)
 
 # 오브젝트 타일 (y=1)
 const OBJ_TREE = Vector2i(0, 1)
@@ -52,6 +81,38 @@ const TILE_CROSSWALK = Vector2i(5, 3)    # 교차로 횡단보도 아스팔트
 const WALL_BRICK = OBJ_WALL
 const OBJ_FURNITURE = OBJ_DESK
 
+# 비트마스크 방향 & 가구 회전 상수
+const DIR_N: int = 1
+const DIR_E: int = 2
+const DIR_S: int = 4
+const DIR_W: int = 8
+
+const FACE_S: int = 0
+const FACE_N: int = 1
+const FACE_E: int = 2
+const FACE_W: int = 3
+
+# 세로 방향 문/창문/게이트 (y=10) 및 4방향 회전 가구 (y=14..15)
+const OBJ_DOOR_CLOSED_V = Vector2i(0, 10)
+const OBJ_DOOR_OPEN_V = Vector2i(1, 10)
+const OBJ_DOOR_LOCKED_V = Vector2i(2, 10)
+const OBJ_WINDOW_V = Vector2i(3, 10)
+const OBJ_WINDOW_BROKEN_V = Vector2i(4, 10)
+const OBJ_GATE_V = Vector2i(5, 10)
+
+const OBJ_FRIDGE_N = Vector2i(0, 14)
+const OBJ_FRIDGE_E = Vector2i(1, 14)
+const OBJ_FRIDGE_W = Vector2i(2, 14)
+const OBJ_BED_N = Vector2i(3, 14)
+const OBJ_BED_E = Vector2i(4, 14)
+const OBJ_BED_W = Vector2i(5, 14)
+const OBJ_DESK_N = Vector2i(6, 14)
+const OBJ_DESK_E = Vector2i(7, 14)
+const OBJ_DESK_W = Vector2i(0, 15)
+const OBJ_SHELF_N = Vector2i(1, 15)
+const OBJ_SHELF_E = Vector2i(2, 15)
+const OBJ_SHELF_W = Vector2i(3, 15)
+
 # 드롭 섀도우 & 환경 데코 오버레이 타일 (y=4, y=5)
 const SHADOW_SE = Vector2i(0, 4)
 const SHADOW_SOUTH = Vector2i(1, 4)
@@ -81,8 +142,8 @@ func _generate_procedural_tileset() -> void:
 		texture = pam.get_canvas_texture("tiles/world_tileset")
 
 	if texture == null:
-		# 폴백: 8x6 절차적 픽셀 타일 아틀라스 이미지 + 자동 노멀맵 생성
-		var img = Image.create_empty(8 * TILE_SIZE, 6 * TILE_SIZE, false, Image.FORMAT_RGBA8)
+		# 폴백: 8x16 절차적 픽셀 타일 아틀라스 이미지 + 자동 노멀맵 생성
+		var img = Image.create_empty(8 * TILE_SIZE, 16 * TILE_SIZE, false, Image.FORMAT_RGBA8)
 		var colors = {
 			TILE_GRASS: Color(0.25, 0.5, 0.2),
 			TILE_DIRT: Color(0.55, 0.45, 0.3),
@@ -118,6 +179,7 @@ func _generate_procedural_tileset() -> void:
 		_draw_shelf(img, OBJ_SHELF.x * TILE_SIZE, OBJ_SHELF.y * TILE_SIZE)
 		_draw_door_locked(img, OBJ_DOOR_LOCKED.x * TILE_SIZE, OBJ_DOOR_LOCKED.y * TILE_SIZE)
 		_draw_fallback_shadows_decos(img)
+		_draw_fallback_extended_tiles(img)
 		if pam and pam.has_method("generate_normal_map_from_image") and pam.has_method("create_canvas_texture_from_images"):
 			var norm_img: Image = pam.generate_normal_map_from_image(img, 2.4)
 			texture = pam.create_canvas_texture_from_images(img, norm_img)
@@ -138,8 +200,18 @@ func _generate_procedural_tileset() -> void:
 	source.texture = texture
 	source.texture_region_size = Vector2i(TILE_SIZE, TILE_SIZE)
 
-	# 바닥 타일 등록
-	for coords in [TILE_GRASS, TILE_DIRT, TILE_ROAD, TILE_CONCRETE, TILE_FLOOR_WOOD, TILE_FLOOR_TILE, TILE_ROAD_LINE, TILE_ROAD_LINE_H, TILE_CROSSWALK, TILE_GRAVEL, TILE_WATER]:
+	# 바닥 타일 등록 (기본 + 확장 가로 횡단보도 / 곡선 차선 / 연석·코너 / 도로 갓길)
+	var ground_coords: Array[Vector2i] = [
+		TILE_GRASS, TILE_DIRT, TILE_ROAD, TILE_CONCRETE, TILE_FLOOR_WOOD, TILE_FLOOR_TILE,
+		TILE_ROAD_LINE, TILE_ROAD_LINE_H, TILE_CROSSWALK, TILE_GRAVEL, TILE_WATER, TILE_CROSSWALK_H,
+		TILE_ROAD_LINE_VB_TR, TILE_ROAD_LINE_VB_LB, TILE_ROAD_LINE_VB_TL, TILE_ROAD_LINE_VB_RB,
+		TILE_ROAD_LINE_HB_LD, TILE_ROAD_LINE_HB_TR, TILE_ROAD_LINE_HB_LU, TILE_ROAD_LINE_HB_BR,
+		TILE_SIDEWALK_CURB_N, TILE_SIDEWALK_CURB_E, TILE_SIDEWALK_CURB_S, TILE_SIDEWALK_CURB_W,
+		TILE_SIDEWALK_CORNER_NW, TILE_SIDEWALK_CORNER_NE, TILE_SIDEWALK_CORNER_SE, TILE_SIDEWALK_CORNER_SW,
+		TILE_SIDEWALK_DIAG_NW, TILE_SIDEWALK_DIAG_NE, TILE_SIDEWALK_DIAG_SE, TILE_SIDEWALK_DIAG_SW,
+		TILE_ROAD_EDGE_W, TILE_ROAD_EDGE_E, TILE_ROAD_EDGE_N, TILE_ROAD_EDGE_S,
+	]
+	for coords in ground_coords:
 		source.create_tile(coords)
 
 	# 드롭 섀도우 & 환경 데코 타일 등록 (충돌/차폐 없음)
@@ -149,12 +221,25 @@ func _generate_procedural_tileset() -> void:
 	tileset.add_source(source, 0)
 
 	# 오브젝트 타일 등록 및 충돌체/차폐체 설정
-	var all_objects = [
+	var all_objects: Array[Vector2i] = [
 		OBJ_TREE, OBJ_ROCK, OBJ_WALL, OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS,
 		OBJ_DOOR_CLOSED, OBJ_DOOR_OPEN, OBJ_FRIDGE,
 		OBJ_WINDOW, OBJ_WINDOW_BROKEN, OBJ_FENCE, OBJ_GATE, OBJ_LIGHT_SWITCH, TILE_ROOF,
-		OBJ_BED, OBJ_DESK, OBJ_SHELF, OBJ_DOOR_LOCKED
+		OBJ_BED, OBJ_DESK, OBJ_SHELF, OBJ_DOOR_LOCKED,
+		OBJ_DOOR_CLOSED_V, OBJ_DOOR_OPEN_V, OBJ_DOOR_LOCKED_V,
+		OBJ_WINDOW_V, OBJ_WINDOW_BROKEN_V, OBJ_GATE_V,
+		OBJ_FRIDGE_N, OBJ_FRIDGE_E, OBJ_FRIDGE_W,
+		OBJ_BED_N, OBJ_BED_E, OBJ_BED_W,
+		OBJ_DESK_N, OBJ_DESK_E, OBJ_DESK_W,
+		OBJ_SHELF_N, OBJ_SHELF_E, OBJ_SHELF_W,
 	]
+	for m in range(16):
+		var wm: Vector2i = get_wall_tile_for_mask(m)
+		if wm != OBJ_WALL and not all_objects.has(wm):
+			all_objects.append(wm)
+		var fm: Vector2i = get_fence_tile_for_mask(m)
+		if fm != OBJ_FENCE and not all_objects.has(fm):
+			all_objects.append(fm)
 
 	for coords in all_objects:
 		source.create_tile(coords)
@@ -172,10 +257,10 @@ func _generate_procedural_tileset() -> void:
 			var has_collision = false
 			var col_poly = full_poly
 
-			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_FRIDGE]:
+			if is_wall(coords) or is_door_closed(coords) or is_door_locked(coords) or coords == OBJ_CRATE or is_fridge(coords):
 				has_collision = true
 				col_poly = full_poly
-			elif coords in [OBJ_BED, OBJ_DESK, OBJ_SHELF]:
+			elif is_bed(coords) or is_desk(coords) or is_shelf(coords):
 				has_collision = true
 				col_poly = PackedVector2Array([
 					Vector2(-TILE_SIZE*0.42, -TILE_SIZE*0.42),
@@ -191,11 +276,11 @@ func _generate_procedural_tileset() -> void:
 					Vector2(TILE_SIZE*0.4, TILE_SIZE*0.4),
 					Vector2(-TILE_SIZE*0.4, TILE_SIZE*0.4)
 				])
-			elif coords in [OBJ_WINDOW, OBJ_FENCE]:
+			elif is_window(coords) or is_fence(coords):
 				# 창문과 울타리는 이동을 막음
 				has_collision = true
 				col_poly = full_poly
-			# OBJ_DOOR_OPEN, OBJ_WINDOW_BROKEN, OBJ_GATE, OBJ_LIGHT_SWITCH는 충돌 없음 (통과 가능)
+			# OBJ_DOOR_OPEN*, OBJ_WINDOW_BROKEN*, OBJ_GATE*, OBJ_LIGHT_SWITCH는 충돌 없음 (통과 가능)
 
 			if has_collision:
 				tile_data.add_collision_polygon(0)
@@ -203,7 +288,7 @@ func _generate_procedural_tileset() -> void:
 
 			# 빛 차폐(Occluder) 등록 (빛을 막는 벽, 닫힌/잠긴 문, 상자, 바위, 냉장고, 높은 선반장 등)
 			# 창문, 깨진 창문, 울타리, 게이트, 열린 문, 낮은 가구(침대/책상)는 빛을 통과시킴!
-			if coords in [OBJ_WALL, OBJ_DOOR_CLOSED, OBJ_DOOR_LOCKED, OBJ_CRATE, OBJ_ROCK, OBJ_FRIDGE, OBJ_SHELF]:
+			if is_wall(coords) or is_door_closed(coords) or is_door_locked(coords) or coords in [OBJ_CRATE, OBJ_ROCK] or is_fridge(coords) or is_shelf(coords):
 				var occluder = OccluderPolygon2D.new()
 				occluder.polygon = full_poly
 				tile_data.set_occluder(0, occluder)
@@ -563,3 +648,216 @@ func _draw_door_locked(img: Image, x: int, y: int) -> void:
 				if ix >= TILE_SIZE - 8 and ix <= TILE_SIZE - 7 and iy >= 15 and iy <= 16:
 					c = Color(1.0, 0.15, 0.15) # 적색 LOCKED LED
 			img.set_pixel(x + ix, y + iy, c)
+
+func _draw_fallback_extended_tiles(img: Image) -> void:
+	var copy_pairs := {
+		TILE_CROSSWALK_H: TILE_CROSSWALK,
+		OBJ_DOOR_CLOSED_V: OBJ_DOOR_CLOSED,
+		OBJ_DOOR_OPEN_V: OBJ_DOOR_OPEN,
+		OBJ_DOOR_LOCKED_V: OBJ_DOOR_LOCKED,
+		OBJ_WINDOW_V: OBJ_WINDOW,
+		OBJ_WINDOW_BROKEN_V: OBJ_WINDOW_BROKEN,
+		OBJ_GATE_V: OBJ_GATE,
+		OBJ_FRIDGE_N: OBJ_FRIDGE,
+		OBJ_FRIDGE_E: OBJ_FRIDGE,
+		OBJ_FRIDGE_W: OBJ_FRIDGE,
+		OBJ_BED_N: OBJ_BED,
+		OBJ_BED_E: OBJ_BED,
+		OBJ_BED_W: OBJ_BED,
+		OBJ_DESK_N: OBJ_DESK,
+		OBJ_DESK_E: OBJ_DESK,
+		OBJ_DESK_W: OBJ_DESK,
+		OBJ_SHELF_N: OBJ_SHELF,
+		OBJ_SHELF_E: OBJ_SHELF,
+		OBJ_SHELF_W: OBJ_SHELF,
+	}
+	for dst in [TILE_ROAD_LINE_VB_TR, TILE_ROAD_LINE_VB_LB, TILE_ROAD_LINE_VB_TL, TILE_ROAD_LINE_VB_RB,
+				TILE_ROAD_LINE_HB_LD, TILE_ROAD_LINE_HB_TR, TILE_ROAD_LINE_HB_LU, TILE_ROAD_LINE_HB_BR,
+				TILE_ROAD_EDGE_W, TILE_ROAD_EDGE_E, TILE_ROAD_EDGE_N, TILE_ROAD_EDGE_S]:
+		copy_pairs[dst] = TILE_ROAD
+	for dst in [TILE_SIDEWALK_CURB_N, TILE_SIDEWALK_CURB_E, TILE_SIDEWALK_CURB_S, TILE_SIDEWALK_CURB_W,
+				TILE_SIDEWALK_CORNER_NW, TILE_SIDEWALK_CORNER_NE, TILE_SIDEWALK_CORNER_SE, TILE_SIDEWALK_CORNER_SW,
+				TILE_SIDEWALK_DIAG_NW, TILE_SIDEWALK_DIAG_NE, TILE_SIDEWALK_DIAG_SE, TILE_SIDEWALK_DIAG_SW]:
+		copy_pairs[dst] = TILE_CONCRETE
+	for m in range(16):
+		var wm := get_wall_tile_for_mask(m)
+		if wm != OBJ_WALL:
+			copy_pairs[wm] = OBJ_WALL
+		var fm := get_fence_tile_for_mask(m)
+		if fm != OBJ_FENCE:
+			copy_pairs[fm] = OBJ_FENCE
+	var src_img: Image = img.duplicate()
+	for dst in copy_pairs.keys():
+		var src: Vector2i = copy_pairs[dst]
+		img.blit_rect(src_img, Rect2i(src * TILE_SIZE, Vector2i(TILE_SIZE, TILE_SIZE)), dst * TILE_SIZE)
+
+# ==========================================================
+# 방향/코너/비트마스크 판별 및 상태 전이 유틸리티 API
+# ==========================================================
+static func get_wall_tile_for_mask(mask: int) -> Vector2i:
+	var m := clampi(mask, 0, 15)
+	if m == (DIR_E | DIR_W):
+		return OBJ_WALL
+	return Vector2i(m % 8, 6 + int(m / 8))
+
+static func get_fence_tile_for_mask(mask: int) -> Vector2i:
+	var m := clampi(mask, 0, 15)
+	if m == (DIR_E | DIR_W):
+		return OBJ_FENCE
+	return Vector2i(m % 8, 8 + int(m / 8))
+
+static func is_wall(coords: Vector2i) -> bool:
+	return coords == OBJ_WALL or (coords.y in [6, 7] and coords.x >= 0 and coords.x < 8 and coords != Vector2i(2, 7))
+
+static func is_fence(coords: Vector2i) -> bool:
+	return coords == OBJ_FENCE or (coords.y in [8, 9] and coords.x >= 0 and coords.x < 8 and coords != Vector2i(2, 9))
+
+static func is_gate(coords: Vector2i) -> bool:
+	return coords == OBJ_GATE or coords == OBJ_GATE_V
+
+static func is_door_closed(coords: Vector2i) -> bool:
+	return coords == OBJ_DOOR_CLOSED or coords == OBJ_DOOR_CLOSED_V
+
+static func is_door_open(coords: Vector2i) -> bool:
+	return coords == OBJ_DOOR_OPEN or coords == OBJ_DOOR_OPEN_V
+
+static func is_door_locked(coords: Vector2i) -> bool:
+	return coords == OBJ_DOOR_LOCKED or coords == OBJ_DOOR_LOCKED_V
+
+static func is_window(coords: Vector2i) -> bool:
+	return coords == OBJ_WINDOW or coords == OBJ_WINDOW_V
+
+static func is_window_broken(coords: Vector2i) -> bool:
+	return coords == OBJ_WINDOW_BROKEN or coords == OBJ_WINDOW_BROKEN_V
+
+static func is_fridge(coords: Vector2i) -> bool:
+	return coords == OBJ_FRIDGE or coords == OBJ_FRIDGE_N or coords == OBJ_FRIDGE_E or coords == OBJ_FRIDGE_W
+
+static func is_bed(coords: Vector2i) -> bool:
+	return coords == OBJ_BED or coords == OBJ_BED_N or coords == OBJ_BED_E or coords == OBJ_BED_W
+
+static func is_desk(coords: Vector2i) -> bool:
+	return coords == OBJ_DESK or coords == OBJ_DESK_N or coords == OBJ_DESK_E or coords == OBJ_DESK_W
+
+static func is_shelf(coords: Vector2i) -> bool:
+	return coords == OBJ_SHELF or coords == OBJ_SHELF_N or coords == OBJ_SHELF_E or coords == OBJ_SHELF_W
+
+static func is_structure_wall_line(coords: Vector2i) -> bool:
+	return is_wall(coords) or is_door_closed(coords) or is_door_open(coords) or is_door_locked(coords) or is_window(coords) or is_window_broken(coords)
+
+static func is_structure_shadow_caster(coords: Vector2i) -> bool:
+	return is_structure_wall_line(coords) or is_fence(coords) or is_gate(coords)
+
+static func casts_oval_shadow(coords: Vector2i) -> bool:
+	return coords in [OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS, OBJ_ROCK] or is_fridge(coords) or is_bed(coords) or is_desk(coords) or is_shelf(coords)
+
+static func is_road_asphalt(coords: Vector2i) -> bool:
+	return coords in [
+		TILE_ROAD, TILE_ROAD_LINE, TILE_ROAD_LINE_H, TILE_CROSSWALK, TILE_CROSSWALK_H,
+		TILE_ROAD_LINE_VB_TR, TILE_ROAD_LINE_VB_LB, TILE_ROAD_LINE_VB_TL, TILE_ROAD_LINE_VB_RB,
+		TILE_ROAD_LINE_HB_LD, TILE_ROAD_LINE_HB_TR, TILE_ROAD_LINE_HB_LU, TILE_ROAD_LINE_HB_BR,
+		TILE_ROAD_EDGE_W, TILE_ROAD_EDGE_E, TILE_ROAD_EDGE_N, TILE_ROAD_EDGE_S,
+	]
+
+static func is_sidewalk_tile(coords: Vector2i) -> bool:
+	return coords in [
+		TILE_CONCRETE,
+		TILE_SIDEWALK_CURB_N, TILE_SIDEWALK_CURB_E, TILE_SIDEWALK_CURB_S, TILE_SIDEWALK_CURB_W,
+		TILE_SIDEWALK_CORNER_NW, TILE_SIDEWALK_CORNER_NE, TILE_SIDEWALK_CORNER_SE, TILE_SIDEWALK_CORNER_SW,
+		TILE_SIDEWALK_DIAG_NW, TILE_SIDEWALK_DIAG_NE, TILE_SIDEWALK_DIAG_SE, TILE_SIDEWALK_DIAG_SW,
+	]
+
+static func is_vertical_variant(coords: Vector2i) -> bool:
+	return coords in [OBJ_DOOR_CLOSED_V, OBJ_DOOR_OPEN_V, OBJ_DOOR_LOCKED_V, OBJ_WINDOW_V, OBJ_WINDOW_BROKEN_V, OBJ_GATE_V]
+
+static func get_door_closed_tile(is_vertical: bool) -> Vector2i:
+	return OBJ_DOOR_CLOSED_V if is_vertical else OBJ_DOOR_CLOSED
+
+static func get_door_open_tile(is_vertical: bool) -> Vector2i:
+	return OBJ_DOOR_OPEN_V if is_vertical else OBJ_DOOR_OPEN
+
+static func get_door_locked_tile(is_vertical: bool) -> Vector2i:
+	return OBJ_DOOR_LOCKED_V if is_vertical else OBJ_DOOR_LOCKED
+
+static func get_window_tile(is_vertical: bool) -> Vector2i:
+	return OBJ_WINDOW_V if is_vertical else OBJ_WINDOW
+
+static func get_gate_tile(is_vertical: bool) -> Vector2i:
+	return OBJ_GATE_V if is_vertical else OBJ_GATE
+
+static func get_window_broken_tile(coords: Vector2i) -> Vector2i:
+	return OBJ_WINDOW_BROKEN_V if coords == OBJ_WINDOW_V or coords == OBJ_WINDOW_BROKEN_V else OBJ_WINDOW_BROKEN
+
+static func get_toggled_door_tile(coords: Vector2i) -> Vector2i:
+	if coords == OBJ_DOOR_CLOSED:
+		return OBJ_DOOR_OPEN
+	if coords == OBJ_DOOR_CLOSED_V:
+		return OBJ_DOOR_OPEN_V
+	if coords == OBJ_DOOR_OPEN:
+		return OBJ_DOOR_CLOSED
+	if coords == OBJ_DOOR_OPEN_V:
+		return OBJ_DOOR_CLOSED_V
+	if coords == OBJ_DOOR_LOCKED:
+		return OBJ_DOOR_OPEN
+	if coords == OBJ_DOOR_LOCKED_V:
+		return OBJ_DOOR_OPEN_V
+	return coords
+
+static func get_unlocked_door_tile(coords: Vector2i) -> Vector2i:
+	return OBJ_DOOR_OPEN_V if coords == OBJ_DOOR_LOCKED_V else OBJ_DOOR_OPEN
+
+static func get_furniture_variant(base_coords: Vector2i, facing: int) -> Vector2i:
+	if facing == FACE_S:
+		return base_coords
+	if base_coords == OBJ_FRIDGE:
+		match facing:
+			FACE_N: return OBJ_FRIDGE_N
+			FACE_E: return OBJ_FRIDGE_E
+			FACE_W: return OBJ_FRIDGE_W
+	elif base_coords == OBJ_BED:
+		match facing:
+			FACE_N: return OBJ_BED_N
+			FACE_E: return OBJ_BED_E
+			FACE_W: return OBJ_BED_W
+	elif base_coords == OBJ_DESK:
+		match facing:
+			FACE_N: return OBJ_DESK_N
+			FACE_E: return OBJ_DESK_E
+			FACE_W: return OBJ_DESK_W
+	elif base_coords == OBJ_SHELF:
+		match facing:
+			FACE_N: return OBJ_SHELF_N
+			FACE_E: return OBJ_SHELF_E
+			FACE_W: return OBJ_SHELF_W
+	return base_coords
+
+static func choose_door_is_vertical(n_wall: bool, e_wall: bool, s_wall: bool, w_wall: bool) -> bool:
+	var v_score: int = int(n_wall) + int(s_wall)
+	var h_score: int = int(e_wall) + int(w_wall)
+	return v_score > h_score
+
+static func choose_furniture_facing(n_wall: int, e_wall: int, s_wall: int, w_wall: int, n_open: bool, e_open: bool, s_open: bool, w_open: bool) -> int:
+	# 각 방향 후보 [facing, back_wall_strength(0/1/2), front_open, front_wall_strength]
+	var candidates := [
+		[FACE_S, n_wall, s_open, s_wall],
+		[FACE_N, s_wall, n_open, n_wall],
+		[FACE_E, w_wall, e_open, e_wall],
+		[FACE_W, e_wall, w_open, w_wall],
+	]
+	var best_facing: int = FACE_S
+	var best_score: int = -99999
+	for cand in candidates:
+		var back_str: int = cand[1]
+		var f_open: bool = cand[2]
+		var f_wall: int = cand[3]
+		var score: int = back_str * 10
+		if f_open:
+			score += 6
+		elif f_wall > 0:
+			score -= 10
+		else:
+			score -= 4
+		if score > best_score:
+			best_score = score
+			best_facing = cand[0]
+	return best_facing

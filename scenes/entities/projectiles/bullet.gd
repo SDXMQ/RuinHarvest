@@ -99,8 +99,8 @@ func _on_body_entered(body: Node2D) -> void:
 		var layer = body as TileMapLayer
 		var hit_tile_pos = layer.local_to_map(global_position + direction * 4.0)
 		var coords = layer.get_cell_atlas_coords(hit_tile_pos)
-		if coords == TileManager.OBJ_WINDOW:
-			layer.set_cell(hit_tile_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+		if TileManager.is_window(coords):
+			layer.set_cell(hit_tile_pos, 0, TileManager.get_window_broken_tile(coords))
 			EventBus.noise_created.emit(global_position, 400.0, "break")
 			EventBus.window_broken.emit(hit_tile_pos)
 			EventBus.event_logged.emit("💥 총격으로 창문이 깨졌습니다!")

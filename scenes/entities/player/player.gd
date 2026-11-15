@@ -429,7 +429,7 @@ func _play_surface_footstep() -> void:
 	if chunk_mgr and chunk_mgr.ground_layer:
 		var t_pos = chunk_mgr.ground_layer.local_to_map(global_position)
 		var atlas = chunk_mgr.ground_layer.get_cell_atlas_coords(t_pos)
-		if atlas == TileManager.TILE_ROAD or atlas == TileManager.TILE_ROAD_LINE or atlas == TileManager.TILE_CONCRETE:
+		if TileManager.is_road_asphalt(atlas) or TileManager.is_sidewalk_tile(atlas):
 			sfx = "footstep_concrete"
 		elif atlas == TileManager.TILE_FLOOR_WOOD:
 			sfx = "footstep_wood"

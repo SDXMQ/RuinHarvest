@@ -36,9 +36,9 @@ func get_or_bake_chunk_texture(cpos: Vector2i, c_data: Dictionary) -> ImageTextu
 			var tile_coords: Vector2i = tiles[idx] if idx < tiles.size() else Vector2i(-1, -1)
 			var obj_coords: Vector2i = objects[idx] if idx < objects.size() else Vector2i(-1, -1)
 			var px_col := base_col
-			if obj_coords == TileManager.OBJ_WALL or obj_coords == TileManager.OBJ_DOOR_CLOSED or obj_coords == TileManager.OBJ_DOOR_OPEN or obj_coords == TileManager.OBJ_DOOR_LOCKED:
+			if TileManager.is_wall(obj_coords) or TileManager.is_door_closed(obj_coords) or TileManager.is_door_open(obj_coords) or TileManager.is_door_locked(obj_coords):
 				px_col = wall_col
-			elif tile_coords == TileManager.TILE_ROAD or tile_coords == TileManager.TILE_ROAD_LINE or tile_coords == TileManager.TILE_ROAD_LINE_H or tile_coords == TileManager.TILE_CROSSWALK or tile_coords == TileManager.TILE_CONCRETE:
+			elif TileManager.is_road_asphalt(tile_coords) or TileManager.is_sidewalk_tile(tile_coords):
 				px_col = road_col
 			elif tile_coords == TileManager.TILE_WATER:
 				px_col = water_col
@@ -116,7 +116,7 @@ static func extract_locked_vault_markers(chunks_dict: Dictionary) -> Array[Dicti
 		for ly in range(16):
 			for lx in range(16):
 				var idx := ly * 16 + lx
-				if idx < objects.size() and objects[idx] == TileManager.OBJ_DOOR_LOCKED:
+				if idx < objects.size() and TileManager.is_door_locked(objects[idx]):
 					var wx: int = int(cpos.x) * 16 + lx
 					var wy: int = int(cpos.y) * 16 + ly
 					var wpos := Vector2(float(wx) * 32.0 + 16.0, float(wy) * 32.0 + 16.0)

@@ -272,11 +272,11 @@ class Canvas:
 
 
 # ==============================================================================
-# 1. WORLD TILESET BAKER (256 x 192 = 8x6 tiles of 32x32)
+# 1. WORLD TILESET BAKER (256 x 512 = 8x16 tiles of 32x32)
 # ==============================================================================
 def bake_world_tileset():
     TS = 32
-    c = Canvas(8 * TS, 6 * TS)
+    c = Canvas(8 * TS, 16 * TS)
 
     # --- (0, 0) TILE_GRASS: Dark desaturated moss & clustered grass blades (seamless 32x32) ---
     ox, oy = 0 * TS, 0 * TS
@@ -349,19 +349,22 @@ def bake_world_tileset():
     draw_asphalt_base(2 * TS, 0 * TS, 303)
 
     # --- (3, 0) TILE_CONCRETE: Sidewalk paving slabs with subtle bevel seams ---
+    def draw_concrete_base(tx_off: int, ty_off: int, seed: int = 404):
+        for y in range(TS):
+            for x in range(TS):
+                r = cell_hash(x, y, seed)
+                is_seam = (x == 0 or y == 0 or x == 16 or y == 16)
+                is_hi = (x == 1 or y == 1 or x == 17 or y == 17)
+                if is_seam:
+                    c.set_px(tx_off + x, ty_off + y, PAL["SLATE_DARK"], 0.24)
+                elif is_hi:
+                    c.set_px(tx_off + x, ty_off + y, PAL["STEEL_BRIGHT"] if r > 0.4 else PAL["SLATE_LIGHT"], 0.295)
+                else:
+                    col = PAL["SLATE_LIGHT"] if r > 0.25 else PAL["SLATE_MID"]
+                    c.set_px(tx_off + x, ty_off + y, col, 0.28 + r * 0.01)
+
+    draw_concrete_base(3 * TS, 0 * TS, 404)
     ox, oy = 3 * TS, 0 * TS
-    for y in range(TS):
-        for x in range(TS):
-            r = cell_hash(x, y, 404)
-            is_seam = (x == 0 or y == 0 or x == 16 or y == 16)
-            is_hi = (x == 1 or y == 1 or x == 17 or y == 17)
-            if is_seam:
-                c.set_px(ox + x, oy + y, PAL["SLATE_DARK"], 0.24)
-            elif is_hi:
-                c.set_px(ox + x, oy + y, PAL["STEEL_BRIGHT"] if r > 0.4 else PAL["SLATE_LIGHT"], 0.295)
-            else:
-                col = PAL["SLATE_LIGHT"] if r > 0.25 else PAL["SLATE_MID"]
-                c.set_px(ox + x, oy + y, col, 0.28 + r * 0.01)
     # Grime chip
     for gx, gy in [(8, 7), (9, 7), (22, 24), (23, 25)]:
         c.set_px(ox + gx, oy + gy, PAL["SLATE_DARK"], 0.23)
@@ -859,9 +862,507 @@ def bake_world_tileset():
         c.fill_rect(ox + x, oy + 12, 1, 8, PAL["OUTLINE"], 0.20)
     c.add_outline_cell(ox, oy, TS, TS)
 
+    # ==========================================================================
+    # Rows y = 6..15: Extended Directional, Bitmask & Curb/Corner Tiles
+    # Bitmask convention: N=1, E=2, S=4, W=8
+    # ==============================================================================
+
+    # --- Rows y = 6..7: OBJ_WALL 16-state N/E/S/W bitmask ---
+    def draw_wall_mask(tx_off: int, ty_off: int, mask: int):
+        has_n = bool(mask & 1)
+        has_e = bool(mask & 2)
+        has_s = bool(mask & 4)
+        has_w = bool(mask & 8)
+
+        def in_cap(lx: int, ly: int) -> bool:
+            if lx < 0:
+                return has_w and (0 <= ly <= 13)
+            if lx >= TS:
+                return has_e and (0 <= ly <= 13)
+            if ly < 0:
+                return has_n and (9 <= lx <= 22)
+            if ly >= TS:
+                return has_s and (9 <= lx <= 22)
+            if 9 <= lx <= 22 and 0 <= ly <= 13:
+                return True
+            if has_e and lx >= 9 and 0 <= ly <= 13:
+                return True
+            if has_w and lx <= 22 and 0 <= ly <= 13:
+                return True
+            if has_s and 9 <= lx <= 22 and ly >= 13:
+                return True
+            return False
+
+        def in_brick(lx: int, ly: int) -> bool:
+            if lx < 0:
+                return has_w and (14 <= ly <= TS - 1)
+            if lx >= TS:
+                return has_e and (14 <= ly <= TS - 1)
+            if 14 <= ly <= TS - 1:
+                return (not in_cap(lx, ly)) and in_cap(lx, 13)
+            return False
+
+        for y in range(TS):
+            for x in range(TS):
+                r = cell_hash(x, y, 1101 + mask * 17)
+                if in_cap(x, y):
+                    edge = (
+                        not in_cap(x - 1, y)
+                        or not in_cap(x + 1, y)
+                        or not in_cap(x, y - 1)
+                        or not in_cap(x, y + 1)
+                    )
+                    inner = (
+                        not in_cap(x - 2, y)
+                        or not in_cap(x + 2, y)
+                        or not in_cap(x, y - 2)
+                        or not in_cap(x, y + 2)
+                    )
+                    if edge:
+                        # Horizontal outer rims use OUTLINE, vertical sides blend cleanly with (2,1)
+                        if not in_cap(x, y - 1) or not in_cap(x, y + 1):
+                            c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.75)
+                        else:
+                            c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.75)
+                    elif inner:
+                        c.set_px(tx_off + x, ty_off + y, PAL["SLATE_LIGHT"], 0.90)
+                    else:
+                        col = PAL["SLATE_MID"] if r > 0.2 else PAL["SLATE_DARK"]
+                        c.set_px(tx_off + x, ty_off + y, col, 0.95)
+                elif in_brick(x, y):
+                    by = y - 14
+                    brick_row = by // 5
+                    mortar_h = (by % 5 == 4)
+                    brick_shift = (brick_row % 2) * 5
+                    mortar_v = ((x + brick_shift) % 10 == 0)
+                    slope_h = 0.88 - (by / 18.0) * 0.65
+                    side_outline = (not in_brick(x - 1, y) and not in_cap(x - 1, y)) or (
+                        not in_brick(x + 1, y) and not in_cap(x + 1, y)
+                    )
+                    adj_spine = in_cap(x - 1, y) or in_cap(x + 1, y)
+                    if by >= 16:
+                        c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.12)
+                    elif side_outline:
+                        c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.35)
+                    elif adj_spine:
+                        c.set_px(tx_off + x, ty_off + y, PAL["SHADOW_DARK"], slope_h - 0.10)
+                    elif mortar_h or mortar_v:
+                        c.set_px(tx_off + x, ty_off + y, PAL["SHADOW_DARK"], slope_h - 0.12)
+                    else:
+                        col = PAL["BRICK_MID"]
+                        if r > 0.78:
+                            col = PAL["BRICK_LIGHT"]
+                        elif r < 0.22:
+                            col = PAL["BRICK_DARK"]
+                        if by % 5 == 0:
+                            col = PAL["BRICK_LIGHT"]
+                        c.set_px(tx_off + x, ty_off + y, col, slope_h)
+
+    for mask in range(16):
+        col_i = mask % 8
+        row_i = 6 + (mask // 8)
+        draw_wall_mask(col_i * TS, row_i * TS, mask)
+
+    # --- Rows y = 8..9: OBJ_FENCE 16-state N/E/S/W bitmask ---
+    def draw_fence_mask(tx_off: int, ty_off: int, mask: int):
+        has_n = bool(mask & 1)
+        has_e = bool(mask & 2)
+        has_s = bool(mask & 4)
+        has_w = bool(mask & 8)
+
+        # Horizontal rails behind pickets (aligns with (3,2) at y=9..11 and y=20..22)
+        if has_w:
+            c.fill_rect(tx_off + 0, ty_off + 9, 16, 3, PAL["WOOD_DARK"], 0.55)
+            c.fill_rect(tx_off + 0, ty_off + 20, 16, 3, PAL["WOOD_DARK"], 0.55)
+            c.fill_rect(tx_off + 3, ty_off + 3, 5, 26, PAL["WOOD_MID"], 0.72)
+            c.fill_rect(tx_off + 4, ty_off + 4, 2, 23, PAL["WOOD_LIGHT"], 0.76)
+        if has_e:
+            c.fill_rect(tx_off + 16, ty_off + 9, 16, 3, PAL["WOOD_DARK"], 0.55)
+            c.fill_rect(tx_off + 16, ty_off + 20, 16, 3, PAL["WOOD_DARK"], 0.55)
+            c.fill_rect(tx_off + 24, ty_off + 3, 5, 26, PAL["WOOD_MID"], 0.72)
+            c.fill_rect(tx_off + 25, ty_off + 4, 2, 23, PAL["WOOD_LIGHT"], 0.76)
+
+        # Vertical rails along center column (edge-to-edge y=0..16 / y=16..31)
+        if has_n:
+            c.fill_rect(tx_off + 11, ty_off + 0, 2, 16, PAL["WOOD_DARK"], 0.56)
+            c.fill_rect(tx_off + 19, ty_off + 0, 2, 16, PAL["WOOD_DARK"], 0.56)
+            c.fill_rect(tx_off + 13, ty_off + 0, 6, 16, PAL["WOOD_MID"], 0.72)
+            c.fill_rect(tx_off + 14, ty_off + 0, 2, 16, PAL["WOOD_LIGHT"], 0.78)
+            c.fill_rect(tx_off + 12, ty_off + 3, 8, 4, PAL["WOOD_MID"], 0.80)
+            c.fill_rect(tx_off + 13, ty_off + 4, 6, 2, PAL["WOOD_LIGHT"], 0.84)
+        if has_s:
+            c.fill_rect(tx_off + 11, ty_off + 16, 2, 16, PAL["WOOD_DARK"], 0.56)
+            c.fill_rect(tx_off + 19, ty_off + 16, 2, 16, PAL["WOOD_DARK"], 0.56)
+            c.fill_rect(tx_off + 13, ty_off + 16, 6, 16, PAL["WOOD_MID"], 0.72)
+            c.fill_rect(tx_off + 14, ty_off + 16, 2, 16, PAL["WOOD_LIGHT"], 0.78)
+            c.fill_rect(tx_off + 12, ty_off + 23, 8, 4, PAL["WOOD_MID"], 0.80)
+            c.fill_rect(tx_off + 13, ty_off + 24, 6, 2, PAL["WOOD_LIGHT"], 0.84)
+
+        # Central post anchor
+        c.fill_rect(tx_off + 13, ty_off + 4, 6, 24, PAL["WOOD_MID"], 0.75)
+        c.fill_rect(tx_off + 14, ty_off + 5, 3, 21, PAL["WOOD_LIGHT"], 0.82)
+        c.fill_rect(tx_off + 13, ty_off + 3, 6, 3, PAL["WOOD_HIGH"], 0.86)
+        c.add_outline_cell(tx_off, ty_off, TS, TS)
+
+    for mask in range(16):
+        col_i = mask % 8
+        row_i = 8 + (mask // 8)
+        draw_fence_mask(col_i * TS, row_i * TS, mask)
+
+    # --- Row y = 10: Vertical Doors, Windows, Gate & Horizontal Crosswalk ---
+    # (0, 10) OBJ_DOOR_CLOSED_V: Vertical oak door in iron frame (x=8..23, y=0..31)
+    ox, oy = 0 * TS, 10 * TS
+    c.fill_rect(ox + 8, oy + 0, 16, TS, PAL["SLATE_DARK"], 0.75)
+    c.fill_rect(ox + 10, oy + 2, 12, TS - 4, PAL["WOOD_MID"], 0.58)
+    for y in range(4, TS - 4):
+        if y % 6 == 0:
+            for x in range(11, 21):
+                c.set_px(ox + x, oy + y, PAL["WOOD_DARK"], 0.46)
+    c.fill_rect(ox + 12, oy + 5, 8, 8, PAL["WOOD_LIGHT"], 0.64)
+    c.fill_rect(ox + 12, oy + 19, 8, 8, PAL["WOOD_LIGHT"], 0.64)
+    c.fill_rect(ox + 17, oy + 14, 4, 4, PAL["BRASS"], 0.85)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (1, 10) OBJ_DOOR_OPEN_V: Vertical sill + door swung west at top jamb
+    ox, oy = 1 * TS, 10 * TS
+    c.fill_rect(ox + 9, oy + 0, 14, TS, PAL["WOOD_MID"], 0.25)
+    for y in range(TS):
+        c.set_px(ox + 15, oy + y, PAL["WOOD_DARK"], 0.22)
+    c.fill_rect(ox + 8, oy + 0, 16, 5, PAL["SLATE_DARK"], 0.70)
+    c.fill_rect(ox + 8, oy + TS - 5, 16, 5, PAL["SLATE_DARK"], 0.70)
+    c.fill_rect(ox + 2, oy + 2, 20, 5, PAL["WOOD_LIGHT"], 0.78)
+    c.set_px(ox + 4, oy + 5, PAL["BRASS"], 0.90)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (2, 10) OBJ_DOOR_LOCKED_V: Vertical armored security door + keypad LED
+    ox, oy = 2 * TS, 10 * TS
+    c.fill_rect(ox + 8, oy + 0, 16, TS, PAL["CHARCOAL"], 0.85)
+    c.fill_rect(ox + 10, oy + 2, 12, TS - 4, PAL["SLATE_MID"], 0.78)
+    for y in range(4, TS - 4):
+        for x in range(10, 14):
+            stripe = ((x + y) // 3) % 2 == 0
+            c.set_px(ox + x, oy + y, PAL["BLOOD_BRIGHT"] if stripe else PAL["ROAD_YELLOW"], 0.82)
+    c.fill_rect(ox + 14, oy + 20, 6, 7, PAL["BRASS"], 0.90)
+    c.fill_rect(ox + 16, oy + 22, 2, 2, PAL["RED_LED"], 0.96)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (3, 10) OBJ_WINDOW_V: Vertical sill + glass panes (x=9..22, y=0..31)
+    ox, oy = 3 * TS, 10 * TS
+    c.fill_rect(ox + 9, oy + 0, 14, TS, PAL["SLATE_DARK"], 0.70)
+    c.fill_rect(ox + 11, oy + 3, 10, TS - 6, (48, 92, 118, 175), 0.42)
+    c.fill_rect(ox + 10, oy + 15, 12, 2, PAL["WOOD_DARK"], 0.68)
+    for k in range(5):
+        c.set_px(ox + 13 + k, oy + 6 + k, PAL["CYAN_GLOW"], 0.45)
+        c.set_px(ox + 13 + k, oy + 19 + k, PAL["CYAN_GLOW"], 0.45)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (4, 10) OBJ_WINDOW_BROKEN_V: Vertical shattered window frame + glass shards
+    ox, oy = 4 * TS, 10 * TS
+    c.fill_rect(ox + 9, oy + 0, 14, 4, PAL["SLATE_DARK"], 0.65)
+    c.fill_rect(ox + 9, oy + TS - 4, 14, 4, PAL["SLATE_DARK"], 0.65)
+    c.fill_rect(ox + 9, oy + 0, 3, TS, PAL["SLATE_DARK"], 0.65)
+    c.fill_rect(ox + 20, oy + 0, 3, TS, PAL["SLATE_DARK"], 0.65)
+    for gx, gy in [(12, 5), (13, 6), (18, 5), (17, 7), (12, 25), (14, 24), (18, 25), (17, 23)]:
+        c.set_px(ox + gx, oy + gy, PAL["CYAN_GLASS"], 0.45)
+        c.set_px(ox + gx, oy + gy + 1, PAL["WHITE_MUTED"], 0.46)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (5, 10) OBJ_GATE_V: Open gate posts top & bottom for N-S fence passage
+    ox, oy = 5 * TS, 10 * TS
+    c.fill_rect(ox + 4, oy + 1, 24, 6, PAL["WOOD_MID"], 0.78)
+    c.fill_rect(ox + 4, oy + TS - 7, 24, 6, PAL["WOOD_MID"], 0.78)
+    c.fill_rect(ox + 6, oy + 2, 20, 4, PAL["SLATE_LIGHT"], 0.86)
+    c.fill_rect(ox + 6, oy + TS - 6, 20, 4, PAL["SLATE_LIGHT"], 0.86)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (6, 10) TILE_CROSSWALK_H: Horizontal zebra stripes for E-W urban main roads
+    draw_asphalt_base(6 * TS, 10 * TS, 1753)
+    ox, oy = 6 * TS, 10 * TS
+    for sy in [3, 11, 19, 26]:
+        for x in range(4, TS - 4):
+            for dy in range(4):
+                r = cell_hash(x, sy + dy, 1754)
+                if sy + dy < TS - 2 and r > 0.14:
+                    c.set_px(ox + x, oy + sy + dy, PAL["WHITE_MUTED"] if r > 0.35 else PAL["SLATE_LIGHT"], 0.265)
+
+    # --- Row y = 11: Road Centerline Bends for Warped Outskirts Highways ---
+    def draw_road_bend(tx_off: int, ty_off: int, seed: int, p0, p1, p2):
+        draw_asphalt_base(tx_off, ty_off, seed)
+        samples = 96
+        for i in range(samples + 1):
+            t = i / float(samples)
+            omt = 1.0 - t
+            bx = omt * omt * p0[0] + 2.0 * omt * t * p1[0] + t * t * p2[0]
+            by = omt * omt * p0[1] + 2.0 * omt * t * p1[1] + t * t * p2[1]
+            cx_i = int(round(bx))
+            cy_i = int(round(by))
+            for dy in range(-2, 3):
+                for dx in range(-2, 3):
+                    px = cx_i + dx
+                    py = cy_i + dy
+                    if 0 <= px < TS and 0 <= py < TS:
+                        d = math.hypot(px - bx, py - by)
+                        if d <= 1.55:
+                            r = cell_hash(px, py, seed + 19)
+                            if r > 0.08:
+                                col = PAL["ROAD_YELLOW"] if d <= 1.0 else PAL["ROAD_YELLOW_DIM"]
+                                c.set_px(tx_off + px, ty_off + py, col, 0.265)
+
+    # Vertical shift right (+1): top->right + left->bottom
+    draw_road_bend(0 * TS, 11 * TS, 1801, (29.0, 0.0), (29.8, 5.0), (31.0, 8.0))
+    draw_road_bend(1 * TS, 11 * TS, 1802, (0.0, 8.0), (18.0, 13.0), (29.0, 31.0))
+    # Vertical shift left (-1): top->left + right->bottom
+    draw_road_bend(2 * TS, 11 * TS, 1803, (29.0, 0.0), (18.0, 17.0), (0.0, 23.0))
+    draw_road_bend(3 * TS, 11 * TS, 1804, (31.0, 23.0), (29.8, 27.0), (29.0, 31.0))
+    # Horizontal shift down (+1): left->bottom + top->right
+    draw_road_bend(4 * TS, 11 * TS, 1805, (0.0, 29.0), (5.0, 29.8), (8.0, 31.0))
+    draw_road_bend(5 * TS, 11 * TS, 1806, (8.0, 0.0), (13.0, 18.0), (31.0, 29.0))
+    # Horizontal shift up (-1): left->top + bottom->right
+    draw_road_bend(6 * TS, 11 * TS, 1807, (0.0, 29.0), (17.0, 18.0), (23.0, 0.0))
+    draw_road_bend(7 * TS, 11 * TS, 1808, (23.0, 31.0), (27.0, 29.8), (31.0, 29.0))
+
+    # --- Row y = 12: Sidewalk Straight Curbs (N, E, S, W) & Rounded Outer Corners ---
+    def apply_curb_band(tx_off: int, ty_off: int, side: str, seed: int):
+        draw_concrete_base(tx_off, ty_off, seed)
+        for y in range(TS):
+            for x in range(TS):
+                d = {"N": y, "E": (TS - 1 - x), "S": (TS - 1 - y), "W": x}[side]
+                along = x if side in ("N", "S") else y
+                if d == 0:
+                    c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.25)
+                elif d <= 2:
+                    if along % 16 == 0:
+                        c.set_px(tx_off + x, ty_off + y, PAL["SLATE_DARK"], 0.31)
+                    else:
+                        c.set_px(tx_off + x, ty_off + y, PAL["STEEL_BRIGHT"] if d == 1 else PAL["SLATE_LIGHT"], 0.36)
+                elif d == 3:
+                    c.set_px(tx_off + x, ty_off + y, PAL["SLATE_DARK"], 0.30)
+
+    apply_curb_band(0 * TS, 12 * TS, "N", 411)
+    apply_curb_band(1 * TS, 12 * TS, "E", 412)
+    apply_curb_band(2 * TS, 12 * TS, "S", 413)
+    apply_curb_band(3 * TS, 12 * TS, "W", 414)
+
+    def draw_sidewalk_corner(tx_off: int, ty_off: int, pivot_x: float, pivot_y: float, seed: int):
+        draw_concrete_base(tx_off, ty_off, seed)
+        for y in range(TS):
+            for x in range(TS):
+                dist = math.hypot(x - pivot_x, y - pivot_y)
+                r = cell_hash(x, y, seed + 51)
+                if dist > 31.5:
+                    col = PAL["ASPHALT_MID"] if r > 0.20 else PAL["ASPHALT_DARK"]
+                    c.set_px(tx_off + x, ty_off + y, col, 0.25 + r * 0.01)
+                elif dist >= 30.5:
+                    c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.25)
+                elif dist >= 28.5:
+                    c.set_px(tx_off + x, ty_off + y, PAL["STEEL_BRIGHT"] if dist >= 29.5 else PAL["SLATE_LIGHT"], 0.36)
+                elif dist >= 27.5:
+                    c.set_px(tx_off + x, ty_off + y, PAL["SLATE_DARK"], 0.30)
+
+    draw_sidewalk_corner(4 * TS, 12 * TS, 31.0, 31.0, 421)  # NW (road on N & W)
+    draw_sidewalk_corner(5 * TS, 12 * TS, 0.0, 31.0, 422)   # NE (road on N & E)
+    draw_sidewalk_corner(6 * TS, 12 * TS, 0.0, 0.0, 423)    # SE (road on S & E)
+    draw_sidewalk_corner(7 * TS, 12 * TS, 31.0, 0.0, 424)   # SW (road on S & W)
+
+    # --- Row y = 13: Diagonal Sidewalk Tips (0..3) & Rural Road Shoulder Edges (4..7) ---
+    def draw_sidewalk_diag(tx_off: int, ty_off: int, cx_p: float, cy_p: float, seed: int):
+        draw_concrete_base(tx_off, ty_off, seed)
+        for y in range(TS):
+            for x in range(TS):
+                dist = math.hypot(x - cx_p, y - cy_p)
+                r = cell_hash(x, y, seed + 61)
+                if dist < 2.2:
+                    col = PAL["ASPHALT_MID"] if r > 0.20 else PAL["ASPHALT_DARK"]
+                    c.set_px(tx_off + x, ty_off + y, col, 0.25)
+                elif dist < 3.2:
+                    c.set_px(tx_off + x, ty_off + y, PAL["OUTLINE"], 0.25)
+                elif dist < 5.2:
+                    c.set_px(tx_off + x, ty_off + y, PAL["STEEL_BRIGHT"] if dist < 4.2 else PAL["SLATE_LIGHT"], 0.36)
+                elif dist < 6.4:
+                    c.set_px(tx_off + x, ty_off + y, PAL["SLATE_DARK"], 0.30)
+
+    draw_sidewalk_diag(0 * TS, 13 * TS, 0.0, 0.0, 431)    # NW diag tip
+    draw_sidewalk_diag(1 * TS, 13 * TS, 31.0, 0.0, 432)   # NE diag tip
+    draw_sidewalk_diag(2 * TS, 13 * TS, 31.0, 31.0, 433)  # SE diag tip
+    draw_sidewalk_diag(3 * TS, 13 * TS, 0.0, 31.0, 434)   # SW diag tip
+
+    def draw_road_shoulder(tx_off: int, ty_off: int, side: str, seed: int):
+        draw_asphalt_base(tx_off, ty_off, seed)
+        for y in range(TS):
+            for x in range(TS):
+                d = {"W": x, "E": (TS - 1 - x), "N": y, "S": (TS - 1 - y)}[side]
+                r = cell_hash(x, y, seed + 77)
+                if d == 0 or (d == 1 and r > 0.35):
+                    col = PAL["DIRT_DARK"] if r < 0.6 else PAL["SLATE_DARK"]
+                    c.set_px(tx_off + x, ty_off + y, col, 0.23)
+                elif d <= 3 and r > 0.55:
+                    c.set_px(tx_off + x, ty_off + y, PAL["ASPHALT_DARK"], 0.24)
+
+    draw_road_shoulder(4 * TS, 13 * TS, "W", 311)
+    draw_road_shoulder(5 * TS, 13 * TS, "E", 312)
+    draw_road_shoulder(6 * TS, 13 * TS, "N", 313)
+    draw_road_shoulder(7 * TS, 13 * TS, "S", 314)
+
+    # --- Rows y = 14..15: Directional Indoor Furniture (N, E, W; S uses original tiles) ---
+    # (0, 14) OBJ_FRIDGE_N: Back against S, door/handle faces N
+    ox, oy = 0 * TS, 14 * TS
+    c.fill_rect(ox + 5, oy + 5, 22, 22, PAL["WHITE_MUTED"], 0.80)
+    c.fill_rect(ox + 6, oy + 6, 20, 20, PAL["WHITE_MUTED"], 0.85)
+    for y in range(6, 26):
+        c.set_px(ox + 5, oy + y, PAL["SLATE_MID"], 0.70)
+        c.set_px(ox + 26, oy + y, PAL["SLATE_DARK"], 0.65)
+    for x in range(6, 26):
+        c.set_px(ox + x, oy + 15, PAL["SLATE_MID"], 0.68)
+        if cell_hash(x, 10, 1302) > 0.72:
+            c.set_px(ox + x, oy + 10, PAL["RUST_MID"], 0.82)
+            c.set_px(ox + x, oy + 20, PAL["RUST_DARK"], 0.82)
+    c.fill_rect(ox + 8, oy + 9, 2, 5, PAL["SLATE_DARK"], 0.95)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (1, 14) OBJ_FRIDGE_E: Back against W, door/handle faces E
+    ox, oy = 1 * TS, 14 * TS
+    c.fill_rect(ox + 5, oy + 5, 22, 22, PAL["WHITE_MUTED"], 0.80)
+    c.fill_rect(ox + 6, oy + 6, 20, 20, PAL["WHITE_MUTED"], 0.85)
+    for x in range(6, 26):
+        c.set_px(ox + x, oy + 5, PAL["SLATE_MID"], 0.70)
+        c.set_px(ox + x, oy + 26, PAL["SLATE_DARK"], 0.65)
+    for y in range(6, 26):
+        c.set_px(ox + 16, oy + y, PAL["SLATE_MID"], 0.68)
+        if cell_hash(12, y, 1303) > 0.72:
+            c.set_px(ox + 11, oy + y, PAL["RUST_MID"], 0.82)
+            c.set_px(ox + 21, oy + y, PAL["RUST_DARK"], 0.82)
+    c.fill_rect(ox + 18, oy + 22, 5, 2, PAL["SLATE_DARK"], 0.95)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (2, 14) OBJ_FRIDGE_W: Back against E, door/handle faces W
+    ox, oy = 2 * TS, 14 * TS
+    c.fill_rect(ox + 5, oy + 5, 22, 22, PAL["WHITE_MUTED"], 0.80)
+    c.fill_rect(ox + 6, oy + 6, 20, 20, PAL["WHITE_MUTED"], 0.85)
+    for x in range(6, 26):
+        c.set_px(ox + x, oy + 5, PAL["SLATE_MID"], 0.70)
+        c.set_px(ox + x, oy + 26, PAL["SLATE_DARK"], 0.65)
+    for y in range(6, 26):
+        c.set_px(ox + 15, oy + y, PAL["SLATE_MID"], 0.68)
+        if cell_hash(10, y, 1304) > 0.72:
+            c.set_px(ox + 10, oy + y, PAL["RUST_DARK"], 0.82)
+            c.set_px(ox + 20, oy + y, PAL["RUST_MID"], 0.82)
+    c.fill_rect(ox + 9, oy + 8, 5, 2, PAL["SLATE_DARK"], 0.95)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (3, 14) OBJ_BED_N: Head against S, blanket extends N
+    ox, oy = 3 * TS, 14 * TS
+    c.fill_rect(ox + 4, oy + 2, 24, 28, PAL["WOOD_DARK"], 0.62)
+    c.fill_rect(ox + 6, oy + 4, 20, 24, PAL["OLIVE_MID"], 0.68)
+    c.fill_rect(ox + 7, oy + 20, 18, 7, PAL["WHITE_MUTED"], 0.78)
+    c.fill_rect(ox + 6, oy + 17, 20, 3, PAL["SLATE_LIGHT"], 0.72)
+    for x in range(7, 25):
+        if x % 5 == 0:
+            c.set_px(ox + x, oy + 12, PAL["OLIVE_DARK"], 0.56)
+            c.set_px(ox + x, oy + 9, PAL["OLIVE_LIGHT"], 0.74)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (4, 14) OBJ_BED_E: Head against W, blanket extends E
+    ox, oy = 4 * TS, 14 * TS
+    c.fill_rect(ox + 2, oy + 4, 28, 24, PAL["WOOD_DARK"], 0.62)
+    c.fill_rect(ox + 4, oy + 6, 24, 20, PAL["OLIVE_MID"], 0.68)
+    c.fill_rect(ox + 5, oy + 7, 7, 18, PAL["WHITE_MUTED"], 0.78)
+    c.fill_rect(ox + 12, oy + 6, 3, 20, PAL["SLATE_LIGHT"], 0.72)
+    for y in range(7, 25):
+        if y % 5 == 0:
+            c.set_px(ox + 19, oy + y, PAL["OLIVE_DARK"], 0.56)
+            c.set_px(ox + 22, oy + y, PAL["OLIVE_LIGHT"], 0.74)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (5, 14) OBJ_BED_W: Head against E, blanket extends W
+    ox, oy = 5 * TS, 14 * TS
+    c.fill_rect(ox + 2, oy + 4, 28, 24, PAL["WOOD_DARK"], 0.62)
+    c.fill_rect(ox + 4, oy + 6, 24, 20, PAL["OLIVE_MID"], 0.68)
+    c.fill_rect(ox + 20, oy + 7, 7, 18, PAL["WHITE_MUTED"], 0.78)
+    c.fill_rect(ox + 17, oy + 6, 3, 20, PAL["SLATE_LIGHT"], 0.72)
+    for y in range(7, 25):
+        if y % 5 == 0:
+            c.set_px(ox + 12, oy + y, PAL["OLIVE_DARK"], 0.56)
+            c.set_px(ox + 9, oy + y, PAL["OLIVE_LIGHT"], 0.74)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (6, 14) OBJ_DESK_N: Back against S, drawers pull N
+    ox, oy = 6 * TS, 14 * TS
+    c.fill_rect(ox + 2, oy + 5, 28, 22, PAL["WOOD_MID"], 0.70)
+    c.fill_rect(ox + 3, oy + 6, 26, 20, PAL["WOOD_LIGHT"], 0.75)
+    for y in range(6, 26):
+        c.set_px(ox + 12, oy + y, PAL["WOOD_DARK"], 0.60)
+    c.fill_rect(ox + 18, oy + 14, 8, 9, PAL["WHITE_MUTED"], 0.80)
+    c.fill_rect(ox + 20, oy + 16, 5, 2, PAL["SLATE_MID"], 0.81)
+    c.fill_rect(ox + 6, oy + 7, 4, 2, PAL["BRASS"], 0.85)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (7, 14) OBJ_DESK_E: Back against W, drawers pull E
+    ox, oy = 7 * TS, 14 * TS
+    c.fill_rect(ox + 5, oy + 2, 22, 28, PAL["WOOD_MID"], 0.70)
+    c.fill_rect(ox + 6, oy + 3, 20, 26, PAL["WOOD_LIGHT"], 0.75)
+    for x in range(6, 26):
+        c.set_px(ox + x, oy + 19, PAL["WOOD_DARK"], 0.60)
+    c.fill_rect(ox + 9, oy + 6, 9, 8, PAL["WHITE_MUTED"], 0.80)
+    c.fill_rect(ox + 11, oy + 8, 2, 5, PAL["SLATE_MID"], 0.81)
+    c.fill_rect(ox + 23, oy + 22, 2, 4, PAL["BRASS"], 0.85)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (0, 15) OBJ_DESK_W: Back against E, drawers pull W
+    ox, oy = 0 * TS, 15 * TS
+    c.fill_rect(ox + 5, oy + 2, 22, 28, PAL["WOOD_MID"], 0.70)
+    c.fill_rect(ox + 6, oy + 3, 20, 26, PAL["WOOD_LIGHT"], 0.75)
+    for x in range(6, 26):
+        c.set_px(ox + x, oy + 12, PAL["WOOD_DARK"], 0.60)
+    c.fill_rect(ox + 14, oy + 18, 9, 8, PAL["WHITE_MUTED"], 0.80)
+    c.fill_rect(ox + 16, oy + 20, 2, 5, PAL["SLATE_MID"], 0.81)
+    c.fill_rect(ox + 7, oy + 6, 2, 4, PAL["BRASS"], 0.85)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (1, 15) OBJ_SHELF_N: Backplate on S, open shelf faces N
+    ox, oy = 1 * TS, 15 * TS
+    c.fill_rect(ox + 3, oy + 3, 26, 26, PAL["SLATE_DARK"], 0.75)
+    c.fill_rect(ox + 4, oy + 4, 24, 22, PAL["SLATE_MID"], 0.66)
+    c.fill_rect(ox + 3, oy + 26, 26, 3, PAL["CHARCOAL"], 0.84)
+    c.fill_rect(ox + 4, oy + 10, 24, 2, PAL["CHARCOAL"], 0.72)
+    c.fill_rect(ox + 4, oy + 18, 24, 2, PAL["CHARCOAL"], 0.72)
+    c.fill_rect(ox + 16, oy + 21, 8, 4, PAL["BRASS_DARK"], 0.84)
+    c.fill_rect(ox + 7, oy + 13, 6, 4, PAL["CYAN_GLASS"], 0.84)
+    c.fill_rect(ox + 15, oy + 13, 10, 4, PAL["DIRT_LIGHT"], 0.82)
+    c.fill_rect(ox + 9, oy + 5, 9, 4, PAL["OLIVE_LIGHT"], 0.86)
+    c.fill_rect(ox + 20, oy + 5, 6, 4, PAL["BLOOD_MID"], 0.84)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (2, 15) OBJ_SHELF_E: Backplate on W, vertical shelf tiers face E
+    ox, oy = 2 * TS, 15 * TS
+    c.fill_rect(ox + 3, oy + 3, 26, 26, PAL["SLATE_DARK"], 0.75)
+    c.fill_rect(ox + 6, oy + 4, 22, 24, PAL["SLATE_MID"], 0.66)
+    c.fill_rect(ox + 3, oy + 3, 3, 26, PAL["CHARCOAL"], 0.84)
+    c.fill_rect(ox + 12, oy + 4, 2, 24, PAL["CHARCOAL"], 0.72)
+    c.fill_rect(ox + 20, oy + 4, 2, 24, PAL["CHARCOAL"], 0.72)
+    c.fill_rect(ox + 7, oy + 6, 4, 7, PAL["BLOOD_MID"], 0.84)
+    c.fill_rect(ox + 7, oy + 15, 4, 9, PAL["OLIVE_LIGHT"], 0.86)
+    c.fill_rect(ox + 15, oy + 6, 4, 10, PAL["DIRT_LIGHT"], 0.82)
+    c.fill_rect(ox + 15, oy + 19, 4, 6, PAL["CYAN_GLASS"], 0.84)
+    c.fill_rect(ox + 23, oy + 9, 4, 8, PAL["BRASS_DARK"], 0.84)
+    c.add_outline_cell(ox, oy, TS, TS)
+
+    # (3, 15) OBJ_SHELF_W: Backplate on E, vertical shelf tiers face W
+    ox, oy = 3 * TS, 15 * TS
+    c.fill_rect(ox + 3, oy + 3, 26, 26, PAL["SLATE_DARK"], 0.75)
+    c.fill_rect(ox + 4, oy + 4, 22, 24, PAL["SLATE_MID"], 0.66)
+    c.fill_rect(ox + 26, oy + 3, 3, 26, PAL["CHARCOAL"], 0.84)
+    c.fill_rect(ox + 10, oy + 4, 2, 24, PAL["CHARCOAL"], 0.72)
+    c.fill_rect(ox + 18, oy + 4, 2, 24, PAL["CHARCOAL"], 0.72)
+    c.fill_rect(ox + 5, oy + 14, 4, 8, PAL["BRASS_DARK"], 0.84)
+    c.fill_rect(ox + 13, oy + 7, 4, 6, PAL["CYAN_GLASS"], 0.84)
+    c.fill_rect(ox + 13, oy + 16, 4, 10, PAL["DIRT_LIGHT"], 0.82)
+    c.fill_rect(ox + 21, oy + 6, 4, 9, PAL["OLIVE_LIGHT"], 0.86)
+    c.fill_rect(ox + 21, oy + 18, 4, 6, PAL["BLOOD_MID"], 0.84)
+    c.add_outline_cell(ox, oy, TS, TS)
+
     wrap_floor_cells = {
         (0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0),
-        (6, 2), (7, 2), (4, 3), (5, 3),
+        (6, 2), (7, 2), (4, 3), (5, 3), (6, 10),
     }
     flat_shadow_cells = {(0, 4), (1, 4), (2, 4), (3, 4)}
     return c.save_pair("tiles/world_tileset", TS, TS, strength=2.4, wrap_cells=wrap_floor_cells, flat_cells=flat_shadow_cells)

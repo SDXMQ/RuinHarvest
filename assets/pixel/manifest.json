@@ -4,7 +4,7 @@
       "diffuse": "res://assets/pixel/tiles/world_tileset_d.png",
       "normal": "res://assets/pixel/tiles/world_tileset_n.png",
       "width": 256,
-      "height": 192
+      "height": 512
     },
     "entities/player_parts": {
       "diffuse": "res://assets/pixel/entities/player_parts_d.png",

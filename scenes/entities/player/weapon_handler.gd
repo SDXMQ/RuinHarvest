@@ -246,8 +246,9 @@ func _melee_punch(aim_dir: Vector2, spawn_pos: Vector2, melee_dmg: float = 18.0)
 	var obj_layer: TileMapLayer = chunk_mgr.object_layer if chunk_mgr and chunk_mgr.object_layer else get_tree().current_scene.get_node_or_null("ObjectsLayer")
 	if obj_layer:
 		var check_tile = obj_layer.local_to_map(spawn_pos + dir_norm * 28.0)
-		if obj_layer.get_cell_atlas_coords(check_tile) == TileManager.OBJ_WINDOW:
-			obj_layer.set_cell(check_tile, 0, TileManager.OBJ_WINDOW_BROKEN)
+		var w_coords: Vector2i = obj_layer.get_cell_atlas_coords(check_tile)
+		if TileManager.is_window(w_coords):
+			obj_layer.set_cell(check_tile, 0, TileManager.get_window_broken_tile(w_coords))
 			EventBus.noise_created.emit(spawn_pos, 350.0, "break")
 			EventBus.window_broken.emit(check_tile)
 			EventBus.event_logged.emit("💥 근접 타격으로 창문을 깼습니다!")

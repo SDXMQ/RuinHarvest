@@ -129,26 +129,15 @@ func _update_interaction(delta: float) -> void:
 	if not found_entity and object_layer:
 		var t_pos = object_layer.local_to_map(check_pos)
 		var tile_coords = object_layer.get_cell_atlas_coords(t_pos)
-		
-		var texts = {
-			Vector2i(3,1): "[E] 수색하기", Vector2i(4,1): "[E] 드럼통 수색하기",
-			Vector2i(5,1): "[E] 잔해물 뒤지기", Vector2i(6,1): "[E] 문 열기",
-			Vector2i(7,1): "[E] 문 닫기", Vector2i(0,2): "[E] 냉장고 수색하기",
-			Vector2i(1,2): "[E] 창문 깨기", Vector2i(2,2): "[E 꾹 누르기] 창문 넘어가기",
-			Vector2i(5,2): "[E] ⚡ 주 발전기 / 조명 스위치 가동 (전력 및 벙커 개방)",
-			Vector2i(0,3): "[E] 침대 수색하기",
-			Vector2i(1,3): "[E] 책상 서랍 수색하기",
-			Vector2i(2,3): "[E] 선반장 수색하기",
-			Vector2i(3,3): "[E] 🔒 보안 잠금문 해제 (열쇠 / 보안 키카드)"
-		}
-		if texts.has(tile_coords):
+		var resolved_prompt := _get_tile_interaction_prompt(tile_coords)
+		if resolved_prompt != "":
 			can_interact = true
-			prompt_text = texts[tile_coords]
+			prompt_text = resolved_prompt
 			interactable_tile_pos = t_pos
 			interactable_type = tile_coords
 	
 	# 창문 넘어가기 홀드 처리
-	if can_interact and interactable_type == Vector2i(2, 2):
+	if can_interact and TileManager.is_window_broken(interactable_type):
 		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_pressed("interact"):
 			vault_timer += delta
 			if player and player.has_node("Visuals"): player.get_node("Visuals").queue_redraw()
@@ -194,7 +183,36 @@ func _update_interaction(delta: float) -> void:
 		if is_instance_valid(active_objective_node) and active_objective_node.has_method("set_hold_progress"):
 			active_objective_node.set_hold_progress(0.0)
 	
-	if can_interact and interact_cooldown <= 0.0 and interactable_type != Vector2i(2, 2) and interactable_type != Vector2i(8, 2):
+	if can_interact and interact_cooldown <= 0.0 and not TileManager.is_window_broken(interactable_type) and interactable_type != Vector2i(8, 2):
 		if Input.is_physical_key_pressed(KEY_E) or Input.is_action_just_pressed("interact"):
 			interact_cooldown = 0.35
 			object_interacted.emit(check_pos, interactable_tile_pos, interactable_type)
+
+static func _get_tile_interaction_prompt(tile_coords: Vector2i) -> String:
+	if tile_coords == TileManager.OBJ_CRATE:
+		return "[E] 수색하기"
+	if tile_coords == TileManager.OBJ_BARREL:
+		return "[E] 드럼통 수색하기"
+	if tile_coords == TileManager.OBJ_DEBRIS:
+		return "[E] 잔해물 뒤지기"
+	if TileManager.is_door_closed(tile_coords):
+		return "[E] 문 열기"
+	if TileManager.is_door_open(tile_coords):
+		return "[E] 문 닫기"
+	if TileManager.is_fridge(tile_coords):
+		return "[E] 냉장고 수색하기"
+	if TileManager.is_window(tile_coords):
+		return "[E] 창문 깨기"
+	if TileManager.is_window_broken(tile_coords):
+		return "[E 꾹 누르기] 창문 넘어가기"
+	if tile_coords == TileManager.OBJ_LIGHT_SWITCH:
+		return "[E] ⚡ 주 발전기 / 조명 스위치 가동 (전력 및 벙커 개방)"
+	if TileManager.is_bed(tile_coords):
+		return "[E] 침대 수색하기"
+	if TileManager.is_desk(tile_coords):
+		return "[E] 책상 서랍 수색하기"
+	if TileManager.is_shelf(tile_coords):
+		return "[E] 선반장 수색하기"
+	if TileManager.is_door_locked(tile_coords):
+		return "[E] 🔒 보안 잠금문 해제 (열쇠 / 보안 키카드)"
+	return ""

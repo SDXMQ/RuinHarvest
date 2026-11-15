@@ -130,16 +130,45 @@ func get_road_tile(wx: int, wy: int) -> Vector2i:
 	if in_v and in_h:
 		return TileManager.TILE_ROAD
 		
-	# 도심 주간선 교차로 직전 횡단보도 마킹
+	# 도심 주간선 교차로 직전 횡단보도 마킹 (세로/가로 도로 회전 분기)
 	if is_urban_block and in_v_main and (my64 == 5 or my64 == 62):
 		return TileManager.TILE_CROSSWALK
-		
-	# 연속 중앙선 (주간선 폭 4타일 중 중심 타일 x0+1 / y0+1)
-	if in_v_main and wx == x0 + 1:
-		return TileManager.TILE_ROAD_LINE
-	if in_h_main and wy == y0 + 1:
-		return TileManager.TILE_ROAD_LINE_H
-		
+	if is_urban_block and in_h_main and (mx64 == 5 or mx64 == 62):
+		return TileManager.TILE_CROSSWALK_H
+
+	# 연속 중앙선 (주간선 폭 4타일 중 중심 타일 x0+1 / y0+1 + 외곽 곡선 구간 S-커브 연결)
+	if in_v_main:
+		var x0_prev: int = _get_v_highway_x0(kx, wy - 1)
+		var dx_prev: int = int(x0) - x0_prev
+		if dx_prev == 1:
+			if wx == x0:
+				return TileManager.TILE_ROAD_LINE_VB_TR
+			if wx == x0 + 1:
+				return TileManager.TILE_ROAD_LINE_VB_LB
+		elif dx_prev == -1:
+			if wx == x0 + 2:
+				return TileManager.TILE_ROAD_LINE_VB_TL
+			if wx == x0 + 1:
+				return TileManager.TILE_ROAD_LINE_VB_RB
+		elif wx == x0 + 1:
+			return TileManager.TILE_ROAD_LINE
+
+	if in_h_main:
+		var y0_prev: int = _get_h_highway_y0(ky, wx - 1)
+		var dy_prev: int = int(y0) - y0_prev
+		if dy_prev == 1:
+			if wy == y0:
+				return TileManager.TILE_ROAD_LINE_HB_LD
+			if wy == y0 + 1:
+				return TileManager.TILE_ROAD_LINE_HB_TR
+		elif dy_prev == -1:
+			if wy == y0 + 2:
+				return TileManager.TILE_ROAD_LINE_HB_LU
+			if wy == y0 + 1:
+				return TileManager.TILE_ROAD_LINE_HB_BR
+		elif wy == y0 + 1:
+			return TileManager.TILE_ROAD_LINE_H
+
 	return TileManager.TILE_ROAD
 
 func is_road(wx: int, wy: int) -> bool:
@@ -333,10 +362,10 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 			var biome = get_biome(wx, wy)
 			var r_tile = get_road_tile(wx, wy)
 			if r_tile != Vector2i(-1, -1):
-				tiles[idx] = r_tile
+				tiles[idx] = _get_road_display_tile(wx, wy, r_tile)
 				road_mask[idx] = 1
 			elif is_sidewalk(wx, wy):
-				tiles[idx] = TileManager.TILE_CONCRETE
+				tiles[idx] = _get_sidewalk_tile(wx, wy)
 				sidewalk_mask[idx] = 1
 			else:
 				var n_val = noise.get_noise_2d(wx, wy)
@@ -354,7 +383,6 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 		var bw = int(b["width"])
 		var bh = int(b["height"])
 		var preset: Dictionary = b["preset"]
-		var is_l_shape = preset.get("shape", "rect") == "l_shape"
 		var floor_tile: Vector2i = preset.get("floor_tile", TileManager.TILE_FLOOR_WOOD)
 		var ext_doors: Array = preset.get("doors", [])
 		var ext_windows: Array = preset.get("windows", [])
@@ -383,40 +411,25 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 				roofs[idx] = TileManager.TILE_ROOF
 				objects[idx] = Vector2i(-1, -1)
 				
-				var is_ext_wall = false
-				if is_l_shape:
-					if rel_x == 0 or rel_y == bh - 1:
-						is_ext_wall = true
-					elif rel_y == 0 and rel_x < bw / 2:
-						is_ext_wall = true
-					elif rel_x == bw - 1 and rel_y >= bh / 2:
-						is_ext_wall = true
-					elif rel_x == bw / 2 - 1 and rel_y <= bh / 2:
-						is_ext_wall = true
-					elif rel_y == bh / 2 and rel_x >= bw / 2 - 1:
-						is_ext_wall = true
-				else:
-					if rel_x == 0 or rel_x == bw - 1 or rel_y == 0 or rel_y == bh - 1:
-						is_ext_wall = true
-						
-				if is_ext_wall:
+				if _is_building_ext_wall_rel(b, rel_x, rel_y):
 					if pt in ext_doors:
-						objects[idx] = TileManager.OBJ_DOOR_CLOSED
+						objects[idx] = TileManager.get_door_closed_tile(_is_building_opening_vertical(b, wx, wy))
 					elif pt in ext_windows:
-						objects[idx] = TileManager.OBJ_WINDOW
+						objects[idx] = TileManager.get_window_tile(_is_building_opening_vertical(b, wx, wy))
 					else:
-						objects[idx] = TileManager.OBJ_WALL
+						objects[idx] = TileManager.get_wall_tile_for_mask(_get_building_wall_mask(b, wx, wy))
 				else:
 					if pt in locked_doors:
-						objects[idx] = TileManager.OBJ_DOOR_LOCKED
+						objects[idx] = TileManager.get_door_locked_tile(_is_building_opening_vertical(b, wx, wy))
 					elif pt in inner_doors:
-						objects[idx] = TileManager.OBJ_DOOR_OPEN
+						objects[idx] = TileManager.get_door_open_tile(_is_building_opening_vertical(b, wx, wy))
 					elif pt in inner_walls:
-						objects[idx] = TileManager.OBJ_WALL
+						objects[idx] = TileManager.get_wall_tile_for_mask(_get_building_wall_mask(b, wx, wy))
 					else:
 						for f in furn_list:
 							if int(f.get("x", -1)) == rel_x and int(f.get("y", -1)) == rel_y:
-								objects[idx] = _furniture_type_to_atlas(String(f.get("type", "crate")))
+								var base_furn: Vector2i = _furniture_type_to_atlas(String(f.get("type", "crate")))
+								objects[idx] = _get_building_furniture_tile(b, wx, wy, base_furn)
 								break
 								
 	# [Pass 3] 마당, 울타리, 게이트 및 출입문 진입로 생성 (실내 마스크 및 도로 침범 절대 금지)
@@ -456,11 +469,12 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 								is_gate = true
 								break
 						if is_gate:
-							objects[idx] = TileManager.OBJ_GATE
+							var is_gate_v: bool = (wx == y_left or wx == y_right) and not (wy == y_top or wy == y_bottom)
+							objects[idx] = TileManager.get_gate_tile(is_gate_v)
 							tiles[idx] = path_tile
 							protected_zone[idx] = 1
 						elif protected_zone[idx] == 0 and objects[idx] == Vector2i(-1, -1) and sidewalk_mask[idx] == 0:
-							objects[idx] = TileManager.OBJ_FENCE
+							objects[idx] = TileManager.get_fence_tile_for_mask(_get_yard_fence_mask(b, active_buildings, wx, wy))
 					else:
 						if sidewalk_mask[idx] == 0 and protected_zone[idx] == 0:
 							tiles[idx] = TileManager.TILE_GRASS
@@ -482,9 +496,9 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 						if pwx == door_wx:
 							if sidewalk_mask[pidx] == 0:
 								tiles[pidx] = path_tile
-							if objects[pidx] != TileManager.OBJ_GATE:
+							if not TileManager.is_gate(objects[pidx]):
 								objects[pidx] = Vector2i(-1, -1)
-						elif objects[pidx] != TileManager.OBJ_FENCE and objects[pidx] != TileManager.OBJ_GATE:
+						elif not TileManager.is_fence(objects[pidx]) and not TileManager.is_gate(objects[pidx]):
 							objects[pidx] = Vector2i(-1, -1)
 				if is_sidewalk(door_wx, pwy):
 					break
@@ -538,3 +552,170 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 		"inside_mask": inside_building,
 		"entities": entities
 	}
+
+# ==========================================================
+# 방향/코너/비트마스크 및 실내 가구 회전 헬퍼
+# ==========================================================
+func _get_road_display_tile(wx: int, wy: int, base_road: Vector2i) -> Vector2i:
+	if base_road != TileManager.TILE_ROAD:
+		return base_road
+	if not is_road(wx - 1, wy) and not is_sidewalk(wx - 1, wy):
+		return TileManager.TILE_ROAD_EDGE_W
+	if not is_road(wx + 1, wy) and not is_sidewalk(wx + 1, wy):
+		return TileManager.TILE_ROAD_EDGE_E
+	if not is_road(wx, wy - 1) and not is_sidewalk(wx, wy - 1):
+		return TileManager.TILE_ROAD_EDGE_N
+	if not is_road(wx, wy + 1) and not is_sidewalk(wx, wy + 1):
+		return TileManager.TILE_ROAD_EDGE_S
+	return base_road
+
+func _get_sidewalk_tile(wx: int, wy: int) -> Vector2i:
+	var rn := is_road(wx, wy - 1)
+	var re := is_road(wx + 1, wy)
+	var rs := is_road(wx, wy + 1)
+	var rw := is_road(wx - 1, wy)
+	if rn and rw and not rs and not re:
+		return TileManager.TILE_SIDEWALK_CORNER_NW
+	if rn and re and not rs and not rw:
+		return TileManager.TILE_SIDEWALK_CORNER_NE
+	if rs and re and not rn and not rw:
+		return TileManager.TILE_SIDEWALK_CORNER_SE
+	if rs and rw and not rn and not re:
+		return TileManager.TILE_SIDEWALK_CORNER_SW
+	if rn and not rs and not re and not rw:
+		return TileManager.TILE_SIDEWALK_CURB_N
+	if re and not rw and not rn and not rs:
+		return TileManager.TILE_SIDEWALK_CURB_E
+	if rs and not rn and not re and not rw:
+		return TileManager.TILE_SIDEWALK_CURB_S
+	if rw and not re and not rn and not rs:
+		return TileManager.TILE_SIDEWALK_CURB_W
+	if not rn and not re and not rs and not rw:
+		if is_road(wx - 1, wy - 1):
+			return TileManager.TILE_SIDEWALK_DIAG_NW
+		if is_road(wx + 1, wy - 1):
+			return TileManager.TILE_SIDEWALK_DIAG_NE
+		if is_road(wx + 1, wy + 1):
+			return TileManager.TILE_SIDEWALK_DIAG_SE
+		if is_road(wx - 1, wy + 1):
+			return TileManager.TILE_SIDEWALK_DIAG_SW
+	return TileManager.TILE_CONCRETE
+
+static func _is_building_ext_wall_rel(b: Dictionary, rel_x: int, rel_y: int) -> bool:
+	var bw := int(b["width"])
+	var bh := int(b["height"])
+	if rel_x < 0 or rel_x >= bw or rel_y < 0 or rel_y >= bh:
+		return false
+	var preset: Dictionary = b.get("preset", {})
+	if preset.get("shape", "rect") == "l_shape":
+		if rel_x >= bw / 2 and rel_y < bh / 2:
+			return false
+		if rel_x == 0 or rel_y == bh - 1:
+			return true
+		if rel_y == 0 and rel_x < bw / 2:
+			return true
+		if rel_x == bw - 1 and rel_y >= bh / 2:
+			return true
+		if rel_x == bw / 2 - 1 and rel_y <= bh / 2:
+			return true
+		if rel_y == bh / 2 and rel_x >= bw / 2 - 1:
+			return true
+		return false
+	return rel_x == 0 or rel_x == bw - 1 or rel_y == 0 or rel_y == bh - 1
+
+static func _classify_building_wall_cell(b: Dictionary, wx: int, wy: int) -> int:
+	if not is_point_in_building(b, wx, wy):
+		return 0
+	var pt := Vector2i(wx - int(b["wx"]), wy - int(b["wy"]))
+	var preset: Dictionary = b.get("preset", {})
+	if _is_building_ext_wall_rel(b, pt.x, pt.y):
+		var ext_doors: Array = preset.get("doors", [])
+		var ext_windows: Array = preset.get("windows", [])
+		if pt in ext_doors or pt in ext_windows:
+			return 1
+		return 2
+	var locked_doors: Array = preset.get("locked_doors", [])
+	var inner_doors: Array = preset.get("inner_doors", [])
+	if pt in locked_doors or pt in inner_doors:
+		return 1
+	var inner_walls: Array = preset.get("inner_walls", [])
+	if pt in inner_walls:
+		return 2
+	return 0
+
+static func _has_building_furniture_at(b: Dictionary, wx: int, wy: int) -> bool:
+	var rel_x := wx - int(b["wx"])
+	var rel_y := wy - int(b["wy"])
+	var furn_list: Array = b.get("preset", {}).get("furniture", [])
+	for f in furn_list:
+		if int(f.get("x", -1)) == rel_x and int(f.get("y", -1)) == rel_y:
+			return true
+	return false
+
+static func _get_building_wall_mask(b: Dictionary, wx: int, wy: int) -> int:
+	var mask := 0
+	if _classify_building_wall_cell(b, wx, wy - 1) > 0:
+		mask |= TileManager.DIR_N
+	if _classify_building_wall_cell(b, wx + 1, wy) > 0:
+		mask |= TileManager.DIR_E
+	if _classify_building_wall_cell(b, wx, wy + 1) > 0:
+		mask |= TileManager.DIR_S
+	if _classify_building_wall_cell(b, wx - 1, wy) > 0:
+		mask |= TileManager.DIR_W
+	return mask
+
+static func _is_building_opening_vertical(b: Dictionary, wx: int, wy: int) -> bool:
+	return TileManager.choose_door_is_vertical(
+		_classify_building_wall_cell(b, wx, wy - 1) > 0,
+		_classify_building_wall_cell(b, wx + 1, wy) > 0,
+		_classify_building_wall_cell(b, wx, wy + 1) > 0,
+		_classify_building_wall_cell(b, wx - 1, wy) > 0
+	)
+
+static func _get_building_furniture_tile(b: Dictionary, wx: int, wy: int, base_furn: Vector2i) -> Vector2i:
+	if not (base_furn in [TileManager.OBJ_FRIDGE, TileManager.OBJ_BED, TileManager.OBJ_DESK, TileManager.OBJ_SHELF]):
+		return base_furn
+	var nw := _classify_building_wall_cell(b, wx, wy - 1)
+	var ew := _classify_building_wall_cell(b, wx + 1, wy)
+	var sw := _classify_building_wall_cell(b, wx, wy + 1)
+	var ww := _classify_building_wall_cell(b, wx - 1, wy)
+	var no := is_point_in_building(b, wx, wy - 1) and nw == 0 and not _has_building_furniture_at(b, wx, wy - 1)
+	var eo := is_point_in_building(b, wx + 1, wy) and ew == 0 and not _has_building_furniture_at(b, wx + 1, wy)
+	var so := is_point_in_building(b, wx, wy + 1) and sw == 0 and not _has_building_furniture_at(b, wx, wy + 1)
+	var wo := is_point_in_building(b, wx - 1, wy) and ww == 0 and not _has_building_furniture_at(b, wx - 1, wy)
+	var facing := TileManager.choose_furniture_facing(nw, ew, sw, ww, no, eo, so, wo)
+	return TileManager.get_furniture_variant(base_furn, facing)
+
+func _is_yard_fence_line(b: Dictionary, active_buildings: Array[Dictionary], wx: int, wy: int) -> bool:
+	var preset: Dictionary = b["preset"]
+	var yard_m := int(preset.get("yard_margin", 0))
+	if yard_m <= 0:
+		return false
+	var b_x := int(b["wx"])
+	var b_y := int(b["wy"])
+	var y_left := b_x - yard_m
+	var y_right := b_x + int(b["width"]) + yard_m - 1
+	var y_top := b_y - yard_m
+	var y_bottom := b_y + int(b["height"]) + yard_m - 1
+	if wx < y_left or wx > y_right or wy < y_top or wy > y_bottom:
+		return false
+	if wx != y_left and wx != y_right and wy != y_top and wy != y_bottom:
+		return false
+	for other_b in active_buildings:
+		if is_point_in_building(other_b, wx, wy):
+			return false
+	if is_road(wx, wy) or is_sidewalk(wx, wy):
+		return false
+	return true
+
+func _get_yard_fence_mask(b: Dictionary, active_buildings: Array[Dictionary], wx: int, wy: int) -> int:
+	var mask := 0
+	if _is_yard_fence_line(b, active_buildings, wx, wy - 1):
+		mask |= TileManager.DIR_N
+	if _is_yard_fence_line(b, active_buildings, wx + 1, wy):
+		mask |= TileManager.DIR_E
+	if _is_yard_fence_line(b, active_buildings, wx, wy + 1):
+		mask |= TileManager.DIR_S
+	if _is_yard_fence_line(b, active_buildings, wx - 1, wy):
+		mask |= TileManager.DIR_W
+	return mask

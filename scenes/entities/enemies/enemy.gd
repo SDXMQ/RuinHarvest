@@ -433,9 +433,10 @@ func _physics_process(delta: float) -> void:
 					var chunk_mgr = get_node_or_null("/root/MainWorld/ChunkManager")
 					if chunk_mgr and chunk_mgr.object_layer:
 						var t_pos = chunk_mgr.object_layer.local_to_map(forward_pos)
-						if chunk_mgr.object_layer.get_cell_atlas_coords(t_pos) == TileManager.OBJ_WINDOW:
+						var win_coords: Vector2i = chunk_mgr.object_layer.get_cell_atlas_coords(t_pos)
+						if TileManager.is_window(win_coords):
 							if attack_timer <= 0:
-								chunk_mgr.object_layer.set_cell(t_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+								chunk_mgr.object_layer.set_cell(t_pos, 0, TileManager.get_window_broken_tile(win_coords))
 								EventBus.noise_created.emit(forward_pos, 400.0, "break")
 								EventBus.window_broken.emit(t_pos)
 								EventBus.event_logged.emit("💥 적이 창문을 깨부수고 침입합니다!")

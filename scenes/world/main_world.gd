@@ -131,23 +131,25 @@ func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO
 		for dy in range(-14, 15):
 			for dx in range(-14, 15):
 				var check_t := tile_pos + Vector2i(dx, dy)
-				if obj_layer.get_cell_source_id(check_t) != -1 and obj_layer.get_cell_atlas_coords(check_t) == TileManager.OBJ_DOOR_LOCKED:
-					obj_layer.set_cell(check_t, 0, TileManager.OBJ_DOOR_OPEN)
-					unlocked_doors += 1
-					EventBus.door_toggled.emit(check_t, true)
+				if obj_layer.get_cell_source_id(check_t) != -1:
+					var cur_coords := obj_layer.get_cell_atlas_coords(check_t)
+					if TileManager.is_door_locked(cur_coords):
+						obj_layer.set_cell(check_t, 0, TileManager.get_unlocked_door_tile(cur_coords))
+						unlocked_doors += 1
+						EventBus.door_toggled.emit(check_t, true)
 	if chunk_manager and chunk_manager.loaded_chunks is Dictionary:
 		for cpos in chunk_manager.loaded_chunks.keys():
 			var c_data = chunk_manager.loaded_chunks[cpos]
 			if c_data is Dictionary and c_data.get("objects") is Array:
 				var objs: Array = c_data["objects"]
 				for idx in range(objs.size()):
-					if objs[idx] == TileManager.OBJ_DOOR_LOCKED:
+					if TileManager.is_door_locked(objs[idx]):
 						var lx := idx % 16
 						var ly := int(idx / 16)
 						var wx := int(cpos.x) * 16 + lx
 						var wy := int(cpos.y) * 16 + ly
 						if abs(wx - tile_pos.x) <= 14 and abs(wy - tile_pos.y) <= 14:
-							objs[idx] = TileManager.OBJ_DOOR_OPEN
+							objs[idx] = TileManager.get_unlocked_door_tile(objs[idx])
 							unlocked_doors += 1
 	if SoundManager:
 		SoundManager.play("menu_select")
@@ -1443,19 +1445,19 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		table_name = "car"
 		loot_title = "폐차 트렁크"
 		slots = 8
-	elif type == Vector2i(0, 2): # OBJ_FRIDGE
+	elif TileManager.is_fridge(type): # OBJ_FRIDGE*
 		table_name = "fridge"
 		loot_title = "냉장고"
 		slots = 6
-	elif type == Vector2i(0, 3): # OBJ_BED
+	elif TileManager.is_bed(type): # OBJ_BED*
 		table_name = "bed"
 		loot_title = "침대 주변"
 		slots = 6
-	elif type == Vector2i(1, 3): # OBJ_DESK
+	elif TileManager.is_desk(type): # OBJ_DESK*
 		table_name = "desk"
 		loot_title = "책상 서랍"
 		slots = 8
-	elif type == Vector2i(2, 3): # OBJ_SHELF
+	elif TileManager.is_shelf(type): # OBJ_SHELF*
 		table_name = "shelf"
 		loot_title = "수납 선반장"
 		slots = 8
@@ -1466,7 +1468,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 	elif type == Vector2i(5, 2): # OBJ_LIGHT_SWITCH
 		activate_power_switch(tile_pos, world_pos)
 		return
-	elif type == Vector2i(3, 3): # OBJ_DOOR_LOCKED
+	elif TileManager.is_door_locked(type): # OBJ_DOOR_LOCKED / _V
 		var req_key = "무기고 열쇠"
 		if chunk_manager and chunk_manager.generator:
 			var b_info = chunk_manager.generator.get_building_at(tile_pos.x, tile_pos.y)
@@ -1512,7 +1514,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			else:
 				player.inventory_grid.grid_changed.emit()
 		if chunk_manager and chunk_manager.object_layer:
-			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_unlocked_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 140.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
 		if key_destroyed:
@@ -1521,28 +1523,28 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다! (남은 사용 횟수: %d/%d)" % [used_key_name, rem_uses, max_uses])
 		if SoundManager: SoundManager.play("item_pickup")
 		return
-	elif type == Vector2i(6, 1): # OBJ_DOOR_CLOSED
-		# 닫힌 문 열기 -> 열린 문으로 타일 교체 및 소음 발생
+	elif TileManager.is_door_closed(type): # OBJ_DOOR_CLOSED / _V
+		# 닫힌 문 열기 -> 열린 문(방향 유지)으로 타일 교체 및 소음 발생
 		if chunk_manager and chunk_manager.object_layer:
-			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_OPEN)
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_toggled_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
 		EventBus.event_logged.emit("🚪 문을 열었습니다.")
 		if SoundManager: SoundManager.play("menu_select")
 		return
-	elif type == Vector2i(7, 1): # OBJ_DOOR_OPEN
-		# 열린 문 닫기 -> 닫힌 문으로 교체
+	elif TileManager.is_door_open(type): # OBJ_DOOR_OPEN / _V
+		# 열린 문 닫기 -> 닫힌 문(방향 유지)으로 교체
 		if chunk_manager and chunk_manager.object_layer:
-			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_DOOR_CLOSED)
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_toggled_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, false)
 		EventBus.event_logged.emit("🚪 문을 닫았습니다.")
 		if SoundManager: SoundManager.play("menu_select")
 		return
-	elif type == Vector2i(1, 2): # OBJ_WINDOW
-		# 창문 깨기 -> 깨진 창문으로 타일 교체 및 큰 소음 발생
+	elif TileManager.is_window(type): # OBJ_WINDOW / _V
+		# 창문 깨기 -> 깨진 창문(방향 유지)으로 타일 교체 및 큰 소음 발생
 		if chunk_manager and chunk_manager.object_layer:
-			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.OBJ_WINDOW_BROKEN)
+			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_window_broken_tile(type))
 		EventBus.noise_created.emit(world_pos, 400.0, "break")
 		EventBus.door_toggled.emit(tile_pos, true)
 		EventBus.window_broken.emit(tile_pos)

@@ -1353,5 +1353,150 @@ func _ready() -> void:
 	else:
 		printerr("[FAIL] Test 50: Performance check failed (lot=%s, pool=%s, map=%s, san=%s, uid=%s)" % [str(lot_memo_ok), str(particle_pool_ok), str(map_tex_cache_ok), str(sanitize_keys_ok), str(uid_counter_ok)])
 
+	# Test 51: Extended 256x512 Tileset (Wall/Fence 16-bitmasks, Vertical Doors/Windows/Gate, Crosswalk_H, Road Bends, Sidewalk Curbs/Corners, 4-way Furniture) & Shader Sync
+	total_tests += 1
+	var t51_ts := TileManager.get_tileset()
+	var t51_src := t51_ts.get_source(0) as TileSetAtlasSource
+	var tex_ok := (t51_src != null and t51_src.texture != null and t51_src.texture.get_width() == 256 and t51_src.texture.get_height() == 512)
+	var wall_fence_ok := true
+	for m in range(16):
+		var wc := TileManager.get_wall_tile_for_mask(m)
+		var wd := t51_src.get_tile_data(wc, 0)
+		if wd == null or wd.get_collision_polygons_count(0) == 0 or wd.get_occluder(0) == null:
+			wall_fence_ok = false
+		var fc := TileManager.get_fence_tile_for_mask(m)
+		var fd := t51_src.get_tile_data(fc, 0)
+		if fd == null or fd.get_collision_polygons_count(0) == 0 or fd.get_occluder(0) != null:
+			wall_fence_ok = false
+	var v_struct_ok := (
+		t51_src.get_tile_data(TileManager.OBJ_DOOR_CLOSED_V, 0).get_collision_polygons_count(0) > 0
+		and t51_src.get_tile_data(TileManager.OBJ_DOOR_CLOSED_V, 0).get_occluder(0) != null
+		and t51_src.get_tile_data(TileManager.OBJ_DOOR_OPEN_V, 0).get_collision_polygons_count(0) == 0
+		and t51_src.get_tile_data(TileManager.OBJ_DOOR_LOCKED_V, 0).get_occluder(0) != null
+		and t51_src.get_tile_data(TileManager.OBJ_WINDOW_V, 0).get_collision_polygons_count(0) > 0
+		and t51_src.get_tile_data(TileManager.OBJ_WINDOW_V, 0).get_occluder(0) == null
+		and t51_src.get_tile_data(TileManager.OBJ_WINDOW_BROKEN_V, 0).get_collision_polygons_count(0) == 0
+		and t51_src.get_tile_data(TileManager.OBJ_GATE_V, 0).get_collision_polygons_count(0) == 0
+	)
+	var furn_ok := true
+	for fcoords in [
+		TileManager.OBJ_FRIDGE_N, TileManager.OBJ_FRIDGE_E, TileManager.OBJ_FRIDGE_W,
+		TileManager.OBJ_BED_N, TileManager.OBJ_BED_E, TileManager.OBJ_BED_W,
+		TileManager.OBJ_DESK_N, TileManager.OBJ_DESK_E, TileManager.OBJ_DESK_W,
+		TileManager.OBJ_SHELF_N, TileManager.OBJ_SHELF_E, TileManager.OBJ_SHELF_W
+	]:
+		var fdat := t51_src.get_tile_data(fcoords, 0)
+		if fdat == null or fdat.get_collision_polygons_count(0) == 0:
+			furn_ok = false
+	var t51_cm := preload("res://scenes/world/chunk_manager.gd").new()
+	add_child(t51_cm)
+	var vrange: Vector2 = t51_cm._foliage_mat.get_shader_parameter("tile_v_range")
+	var shader_v_ok := is_equal_approx(vrange.x, 32.0 / 512.0) and is_equal_approx(vrange.y, 64.0 / 512.0)
+	t51_cm.free()
+
+	var t51_gen := WorldGenerator.new(20261108)
+	var road_orient_ok := (
+		t51_gen.get_road_tile(1, 5) == TileManager.TILE_CROSSWALK
+		and t51_gen.get_road_tile(5, 1) == TileManager.TILE_CROSSWALK_H
+		and t51_gen._get_sidewalk_tile(-1, -1) == TileManager.TILE_SIDEWALK_CORNER_SE
+		and t51_gen._get_sidewalk_tile(4, 4) == TileManager.TILE_SIDEWALK_CORNER_NW
+	)
+	var found_bend := false
+	for wy in range(155, 290):
+		var rx0 := t51_gen._get_v_highway_x0(0, wy)
+		for wx in range(rx0, rx0 + 4):
+			var rt := t51_gen.get_road_tile(wx, wy)
+			if rt in [TileManager.TILE_ROAD_LINE_VB_TR, TileManager.TILE_ROAD_LINE_VB_LB, TileManager.TILE_ROAD_LINE_VB_TL, TileManager.TILE_ROAD_LINE_VB_RB]:
+				found_bend = true
+				break
+		if found_bend:
+			break
+	var found_corner_wall := false
+	var found_rotated_furn := false
+	for cy in range(-1, 2):
+		for cx in range(-1, 2):
+			var cd := t51_gen.generate_chunk(Vector2i(cx, cy))
+			for o in cd["objects"]:
+				if TileManager.is_wall(o) and o != TileManager.OBJ_WALL:
+					found_corner_wall = true
+				if o in [TileManager.OBJ_BED_E, TileManager.OBJ_BED_W, TileManager.OBJ_BED_N, TileManager.OBJ_DESK_E, TileManager.OBJ_DESK_W, TileManager.OBJ_DESK_N, TileManager.OBJ_SHELF_E, TileManager.OBJ_SHELF_W, TileManager.OBJ_SHELF_N, TileManager.OBJ_FRIDGE_E, TileManager.OBJ_FRIDGE_W, TileManager.OBJ_FRIDGE_N]:
+					found_rotated_furn = true
+	if tex_ok and wall_fence_ok and v_struct_ok and furn_ok and shader_v_ok and road_orient_ok and found_bend and found_corner_wall and found_rotated_furn:
+		print("[PASS] Test 51: Extended 256x512 tileset, bitmask physics/occluders, foliage v_range sync, crosswalk_H, road bends, sidewalk corners, and wall/furniture orientation verified")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 51: Extended tileset check failed (tex=%s, wf=%s, v=%s, furn=%s, vrange=%s, road=%s, bend=%s, corner=%s, rfurn=%s)" % [str(tex_ok), str(wall_fence_ok), str(v_struct_ok), str(furn_ok), str(shader_v_ok), str(road_orient_ok), str(found_bend), str(found_corner_wall), str(found_rotated_furn)])
+
+	# Test 52: Orientation Preservation Across Door/Window Interactions, Deltas, BuildingInteriorScene & Prompts
+	total_tests += 1
+	var t52_mw := preload("res://scenes/world/main_world.gd").new()
+	var t52_cm := preload("res://scenes/world/chunk_manager.gd").new()
+	add_child(t52_cm)
+	t52_mw.chunk_manager = t52_cm
+	var v_door_pos := Vector2i(71, 71)
+	var v_win_pos := Vector2i(72, 71)
+	var v_lock_pos := Vector2i(73, 71)
+	var v_desk_pos := Vector2i(74, 71)
+	t52_cm.object_layer.set_cell(v_door_pos, 0, TileManager.OBJ_DOOR_CLOSED_V)
+	t52_mw._on_object_interacted(Vector2.ZERO, v_door_pos, TileManager.OBJ_DOOR_CLOSED_V)
+	var v_door_opened: bool = (t52_cm.object_layer.get_cell_atlas_coords(v_door_pos) == TileManager.OBJ_DOOR_OPEN_V)
+	var v_delta_open: bool = (t52_cm.chunk_deltas.get(v_door_pos, Vector2i.ZERO) == TileManager.OBJ_DOOR_OPEN_V)
+	t52_mw._on_object_interacted(Vector2.ZERO, v_door_pos, TileManager.OBJ_DOOR_OPEN_V)
+	var v_door_closed: bool = (t52_cm.object_layer.get_cell_atlas_coords(v_door_pos) == TileManager.OBJ_DOOR_CLOSED_V)
+	t52_cm.object_layer.set_cell(v_win_pos, 0, TileManager.OBJ_WINDOW_V)
+	t52_mw._on_object_interacted(Vector2.ZERO, v_win_pos, TileManager.OBJ_WINDOW_V)
+	var v_win_broken: bool = (t52_cm.object_layer.get_cell_atlas_coords(v_win_pos) == TileManager.OBJ_WINDOW_BROKEN_V)
+	var v_delta_win: bool = (t52_cm.chunk_deltas.get(v_win_pos, Vector2i.ZERO) == TileManager.OBJ_WINDOW_BROKEN_V)
+	t52_cm.object_layer.set_cell(v_lock_pos, 0, TileManager.OBJ_DOOR_LOCKED_V)
+	t52_mw.activate_power_switch(Vector2i(75, 71), Vector2.ZERO)
+	var v_lock_unlocked := (t52_cm.object_layer.get_cell_atlas_coords(v_lock_pos) == TileManager.OBJ_DOOR_OPEN_V)
+	t52_mw._on_object_interacted(Vector2.ZERO, v_desk_pos, TileManager.OBJ_DESK_E)
+	var rotated_desk_loot_ok := t52_mw.container_inventories.has(v_desk_pos)
+
+	var t52_int := preload("res://scenes/interior/building_interior_scene.gd").new()
+	t52_int.building_data = {"height": 8}
+	t52_int.object_layer = TileMapLayer.new()
+	t52_int.object_layer.tile_set = TileManager.get_tileset()
+	t52_int.object_layer.set_cell(Vector2i(0, 3), 0, TileManager.OBJ_DOOR_CLOSED_V)
+	t52_int._on_object_interacted(Vector2.ZERO, Vector2i(0, 3), TileManager.OBJ_DOOR_CLOSED_V)
+	var int_v_door_ok: bool = (t52_int.object_layer.get_cell_atlas_coords(Vector2i(0, 3)) == TileManager.OBJ_DOOR_OPEN_V)
+	var int_tiles := [
+		[1, 1, 1],
+		[2, 0, 1],
+		[1, 1, 1]
+	]
+	var int_mask_ok: bool = (
+		t52_int._get_interior_wall_mask(int_tiles, 3, 3, true, 0, 0) == (TileManager.DIR_E | TileManager.DIR_S)
+		and t52_int._is_interior_opening_vertical(int_tiles, 3, 3, true, 0, 1)
+	)
+	var int_furn_v: Vector2i = t52_int._get_interior_furniture_variant(
+		int_tiles, {Vector2i(1, 1): true}, 3, 3, true, Vector2i(1, 1), TileManager.OBJ_SHELF
+	)
+	var int_furn_ok: bool = int_furn_v in [TileManager.OBJ_SHELF, TileManager.OBJ_SHELF_N, TileManager.OBJ_SHELF_W]
+	t52_int.object_layer.free()
+	t52_int.free()
+
+	var prompt_ok := (
+		InteractionDetector._get_tile_interaction_prompt(TileManager.OBJ_DOOR_CLOSED_V) != ""
+		and InteractionDetector._get_tile_interaction_prompt(TileManager.OBJ_WINDOW_BROKEN_V) != ""
+		and InteractionDetector._get_tile_interaction_prompt(TileManager.OBJ_DESK_E) != ""
+		and InteractionDetector._get_tile_interaction_prompt(TileManager.OBJ_SHELF_W) != ""
+		and InteractionDetector._get_tile_interaction_prompt(TileManager.OBJ_BED_N) != ""
+		and InteractionDetector._get_tile_interaction_prompt(TileManager.OBJ_FRIDGE_E) != ""
+	)
+	var t52_mock_objs := []
+	t52_mock_objs.resize(256)
+	t52_mock_objs.fill(Vector2i(-1, -1))
+	t52_mock_objs[5] = TileManager.OBJ_DOOR_LOCKED_V
+	var map_win_script = preload("res://scenes/ui/map_window.gd")
+	var map_lock_v_ok: bool = (map_win_script.extract_locked_vault_markers({Vector2i(0, 0): {"objects": t52_mock_objs}}).size() == 1)
+	t52_cm.free()
+	t52_mw.free()
+	if v_door_opened and v_delta_open and v_door_closed and v_win_broken and v_delta_win and v_lock_unlocked and rotated_desk_loot_ok and int_v_door_ok and int_mask_ok and int_furn_ok and prompt_ok and map_lock_v_ok:
+		print("[PASS] Test 52: Vertical door/window/locked-door transitions, chunk_deltas, interior bitmask/furniture, prompts, and minimap markers preserve orientation")
+		passed_tests += 1
+	else:
+		printerr("[FAIL] Test 52: Orientation preservation failed (open=%s, d_open=%s, close=%s, win=%s, d_win=%s, lock=%s, desk=%s, ivd=%s, im=%s, if=%s, prompt=%s, map=%s)" % [str(v_door_opened), str(v_delta_open), str(v_door_closed), str(v_win_broken), str(v_delta_win), str(v_lock_unlocked), str(rotated_desk_loot_ok), str(int_v_door_ok), str(int_mask_ok), str(int_furn_ok), str(prompt_ok), str(map_lock_v_ok)])
+
 	print("=== RESULTS: %d/%d TESTS PASSED ===" % [passed_tests, total_tests])
 	get_tree().quit(0 if passed_tests == total_tests else 1)
