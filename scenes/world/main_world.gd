@@ -57,8 +57,8 @@ var current_spawner_window: Control = null
 const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
 const AirdropCrateScript = preload("res://scenes/world/objects/airdrop_crate.gd")
 const FieldObjectiveScript = preload("res://scenes/world/objects/field_objective.gd")
-var enemy_spawn_timer: float = 10.0
-var max_enemies_count: int = 22
+var enemy_spawn_timer: float = 18.0
+var max_enemies_count: int = 10
 var airdrop_timer: float = 65.0
 var airdrop_count: int = 0
 var max_airdrops: int = 3
@@ -303,9 +303,9 @@ func _ready() -> void:
 	_on_player_stats_changed()
 	
 	# 시작 시 주변에 초기 좀비 스폰 (설정된 밀도 반영)
-	var init_zombies = int(2 * (GameManager.current_world_data.get("world_settings", {}).get("zombie_multiplier", 1.0) if GameManager else 1.0))
+	var init_zombies = int(1 * (GameManager.current_world_data.get("world_settings", {}).get("zombie_multiplier", 1.0) if GameManager else 1.0))
 	for i in range(init_zombies):
-		_spawn_enemy_near_player(350.0 + i * 80.0)
+		_spawn_enemy_near_player(450.0 + i * 90.0)
 	_spawn_landmark_boss()
 		
 	# 탈출 지점 3개 스폰 (1800~2500px 원거리 배치)
@@ -518,14 +518,14 @@ func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 	
 	var enemy = EnemyScene.instantiate()
 	enemy.position = spawn_pos
-	# 무작위 적 타입 결정 (야간에는 변이체 '야간 추격자' 스폰 확률 부여)
+	# 무작위 적 타입 결정 (전체적인 난이도 및 인간형 용병 조우 빈도 대폭 완화)
 	var r = randf()
-	if is_night_time() and r < 0.28:
+	if is_night_time() and r < 0.14:
 		enemy.enemy_type = 6 # NIGHT_STALKER (야간 추격자)
-	elif r < 0.08: enemy.enemy_type = 4 # RAIDER (정예 무장 용병)
-	elif r < 0.25: enemy.enemy_type = 3 # SCAV (무장 약탈자)
-	elif r < 0.43: enemy.enemy_type = 1 # RUNNER
-	elif r < 0.55: enemy.enemy_type = 2 # TANK
+	elif r < 0.025: enemy.enemy_type = 4 # RAIDER (정예 무장 용병 2.5%)
+	elif r < 0.09: enemy.enemy_type = 3 # SCAV (무장 약탈자 6.5%)
+	elif r < 0.25: enemy.enemy_type = 1 # RUNNER
+	elif r < 0.34: enemy.enemy_type = 2 # TANK
 	else: enemy.enemy_type = 0 # ZOMBIE
 	
 	entities_layer.add_child(enemy)
@@ -929,18 +929,13 @@ func _on_compass_draw() -> void:
 func _spawn_landmark_boss() -> void:
 	if not player: return
 	var angle = randf() * TAU
-	var dist = randf_range(580.0, 820.0)
+	var dist = randf_range(680.0, 920.0)
 	var boss_pos = player.global_position + Vector2.RIGHT.rotated(angle) * dist
 	var boss = EnemyScene.instantiate()
 	boss.position = boss_pos
 	boss.enemy_type = 5 # EnemyType.BOSS
 	entities_layer.add_child(boss)
 	boss_entity = boss
-	# 보스 호위 레이더 1기 배치
-	var escort = EnemyScene.instantiate()
-	escort.position = boss_pos + Vector2(36, -24)
-	escort.enemy_type = 4 # EnemyType.RAIDER
-	entities_layer.add_child(escort)
 	# 랜드마크 현장 상호작용 퀘스트 오브젝트 3종 스폰 (군사 단말기 / 병원 생체 표본 채취기 / 상업 지구 무선 중계기)
 	field_objectives.clear()
 	var obj_Offsets = [
@@ -961,17 +956,16 @@ func _spawn_landmark_boss() -> void:
 			landmark_objective = obj_node
 
 func _on_field_objective_wave_triggered(obj_pos: Vector2, obj_kind: int) -> void:
-	for i in range(2):
-		var wave_enemy = EnemyScene.instantiate()
-		var spawn_ang = randf() * TAU
-		wave_enemy.position = obj_pos + Vector2.RIGHT.rotated(spawn_ang) * randf_range(190.0, 260.0)
-		if obj_kind == 0:
-			wave_enemy.enemy_type = 4 if i == 0 else 3 # 군사기지: 레이더 + 스캐브
-		elif obj_kind == 1:
-			wave_enemy.enemy_type = 1 if i == 0 else 2 # 병원구역: 러너 + 탱커
-		else:
-			wave_enemy.enemy_type = 3 if i == 0 else 1 # 상업지구: 스캐브 + 러너
-		entities_layer.add_child(wave_enemy)
+	var wave_enemy = EnemyScene.instantiate()
+	var spawn_ang = randf() * TAU
+	wave_enemy.position = obj_pos + Vector2.RIGHT.rotated(spawn_ang) * randf_range(220.0, 300.0)
+	if obj_kind == 0:
+		wave_enemy.enemy_type = 3 # 군사기지: 스캐브 1기
+	elif obj_kind == 1:
+		wave_enemy.enemy_type = 1 # 병원구역: 러너 1기
+	else:
+		wave_enemy.enemy_type = 0 # 상업지구: 좀비 1기
+	entities_layer.add_child(wave_enemy)
 
 func _on_crosshair_draw() -> void:
 	if not crosshair_overlay or not player or get_tree().paused:
@@ -1188,13 +1182,13 @@ func _process(delta: float) -> void:
 					airdrop_timer = randf_range(95.0, 140.0)
 					_spawn_airdrop_crate()
 		
-		# 적 주기적 스폰
+		# 적 주기적 스폰 (스폰 간격 완화 및 스폰 거리 확대)
 		enemy_spawn_timer -= delta
 		if enemy_spawn_timer <= 0:
-			enemy_spawn_timer = randf_range(4.0, 8.0)
+			enemy_spawn_timer = randf_range(16.0, 26.0)
 			var current_enemies = get_tree().get_nodes_in_group("enemies").size()
 			if current_enemies < max_enemies_count:
-				_spawn_enemy_near_player(randf_range(350.0, 550.0))
+				_spawn_enemy_near_player(randf_range(440.0, 680.0))
 		
 		if debug_label:
 			var cx = floor(player.global_position.x / (16 * 32))
@@ -1501,6 +1495,10 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		table_name = "military"
 		loot_title = "🪂 군용 항공 보급품"
 		slots = 12
+	elif type == Vector2i(9, 2): # Mercenary Corpse Box
+		table_name = "military"
+		loot_title = "🎒 용병 유품 가방"
+		slots = 8
 	elif type == Vector2i(5, 2): # OBJ_LIGHT_SWITCH
 		activate_power_switch(tile_pos, world_pos)
 		return

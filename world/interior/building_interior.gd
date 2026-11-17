@@ -40,22 +40,22 @@ const BUILDING_LAYOUTS = {
 	"house": {
 		"title": "버려진 주택",
 		"furnitures": ["냉장고", "선반", "약품장", "선반"],
-		"zombie_count": [1, 2]
+		"zombie_count": [0, 1]
 	},
 	"store": {
 		"title": "약탈당한 상점",
 		"furnitures": ["선반", "냉장고", "금고", "선반"],
-		"zombie_count": [1, 3]
+		"zombie_count": [1, 2]
 	},
 	"hospital": {
 		"title": "폐쇄된 병원",
 		"furnitures": ["약품장", "약품장", "선반", "금고"],
-		"zombie_count": [2, 3]
+		"zombie_count": [1, 2]
 	},
 	"military": {
 		"title": "군사 시설 격납고",
 		"furnitures": ["무기함", "무기함", "금고", "선반"],
-		"zombie_count": [2, 4]
+		"zombie_count": [1, 2]
 	}
 }
 

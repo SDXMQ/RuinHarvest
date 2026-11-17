@@ -93,6 +93,27 @@ func _update_interaction(delta: float) -> void:
 		interact_prompt.emit(true, prompt_text)
 		return
 
+	# 용병/보스 시체 전리품 상자 근접 감지 (46px 반경)
+	var nearby_corpses = get_tree().get_nodes_in_group("corpse_boxes")
+	var closest_corpse: Node2D = null
+	var min_corpse_dist := 46.0
+	for cb in nearby_corpses:
+		if is_instance_valid(cb):
+			var c_dist = player.global_position.distance_to(cb.global_position)
+			if c_dist < min_corpse_dist:
+				min_corpse_dist = c_dist
+				closest_corpse = cb
+	if closest_corpse:
+		can_interact = true
+		prompt_text = closest_corpse.get_prompt_text() if closest_corpse.has_method("get_prompt_text") else "[E] 🎒 시체 가방 수색하기"
+		interactable_type = Vector2i(9, 2)
+		interactable_tile_pos = closest_corpse.get("corpse_tile_pos") if closest_corpse.get("corpse_tile_pos") != null else Vector2i(int(floor(closest_corpse.global_position.x / 32.0)), int(floor(closest_corpse.global_position.y / 32.0)))
+		interact_prompt.emit(true, prompt_text)
+		if interact_cooldown <= 0.0 and (Input.is_physical_key_pressed(KEY_E) or Input.is_action_just_pressed("interact")):
+			interact_cooldown = 0.35
+			object_interacted.emit(closest_corpse.global_position, interactable_tile_pos, interactable_type)
+		return
+
 	# 엔티티 상호작용
 	var space_state = player.get_world_2d().direct_space_state
 	var query = PhysicsPointQueryParameters2D.new()
@@ -108,12 +129,19 @@ func _update_interaction(delta: float) -> void:
 		var collider = res["collider"]
 		if collider and collider.get("interactable_type") != null:
 			var i_type = collider.get("interactable_type")
-			if typeof(i_type) == TYPE_VECTOR2I and (i_type == Vector2i(5, 1) or i_type == Vector2i(7, 2) or i_type == Vector2i(8, 2)):
+			if typeof(i_type) == TYPE_VECTOR2I and (i_type == Vector2i(5, 1) or i_type == Vector2i(7, 2) or i_type == Vector2i(8, 2) or i_type == Vector2i(9, 2)):
 				can_interact = true
 				if i_type == Vector2i(5, 1):
 					prompt_text = "[E] 폐차 트렁크 열기"
 				elif i_type == Vector2i(7, 2):
 					prompt_text = "[E] 🪂 항공 보급품 상자 열기"
+				elif i_type == Vector2i(9, 2):
+					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[E] 🎒 용병 시체 가방 수색하기"
+					if collider.get("corpse_tile_pos") != null:
+						interactable_tile_pos = collider.get("corpse_tile_pos")
+						interactable_type = i_type
+						found_entity = true
+						break
 				else:
 					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[E 3초 홀드] 📡 랜드마크 기밀 단말기 해킹"
 					active_objective_node = collider

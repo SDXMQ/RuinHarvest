@@ -974,6 +974,8 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		var inv = container_inventories[tile_pos]
 		var fallback_title = "수납함" if TileManager.is_desk(type) or TileManager.is_shelf(type) else "보급 상자"
 		var title = String(container_titles.get(tile_pos, fallback_title))
+		if inv and inv.has_meta("custom_title"):
+			title = String(inv.get_meta("custom_title"))
 		_open_loot_window(inv, title)
 
 func _exit_interior() -> void:

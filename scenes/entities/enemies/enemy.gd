@@ -6,6 +6,7 @@ enum State { IDLE, WANDER, CHASE, ATTACK, INVESTIGATE, HURT, DEAD }
 
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
 const GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
+const CorpseBoxScript = preload("res://scenes/world/objects/corpse_box.gd")
 
 @export var enemy_type: EnemyType = EnemyType.ZOMBIE
 
@@ -144,69 +145,69 @@ func _setup_stats_by_type() -> void:
 	has_used_medkit = false
 	match enemy_type:
 		EnemyType.ZOMBIE:
-			max_hp = 40.0
-			speed = 70.0
-			damage = 12.0
-			detection_radius = 240.0
+			max_hp = 32.0
+			speed = 62.0
+			damage = 8.0
+			detection_radius = 200.0
 			attack_radius = 28.0
 		EnemyType.RUNNER:
-			max_hp = 25.0
-			speed = 135.0
-			damage = 8.0
-			detection_radius = 260.0
+			max_hp = 20.0
+			speed = 115.0
+			damage = 6.0
+			detection_radius = 220.0
 			attack_radius = 26.0
 		EnemyType.TANK:
-			max_hp = 120.0
-			speed = 45.0
-			damage = 25.0
+			max_hp = 90.0
+			speed = 40.0
+			damage = 16.0
 			armor_tier = 1
-			armor_value = 12.0
-			detection_radius = 220.0
+			armor_value = 10.0
+			detection_radius = 190.0
 			attack_radius = 34.0
 		EnemyType.SCAV:
 			is_ranged_human = true
 			armor_tier = 1
-			armor_value = 15.0
-			max_hp = 55.0
-			speed = 82.0
-			damage = 10.0
-			attack_cooldown = 0.85
-			detection_radius = 310.0
-			attack_radius = 230.0
+			armor_value = 10.0
+			max_hp = 42.0
+			speed = 72.0
+			damage = 7.0
+			attack_cooldown = 1.25
+			detection_radius = 250.0
+			attack_radius = 200.0
 			max_mag_ammo = 8
 			mag_ammo = 8
 		EnemyType.RAIDER:
 			is_ranged_human = true
 			armor_tier = 2
-			armor_value = 30.0
-			max_hp = 95.0
-			speed = 94.0
-			damage = 14.0
-			attack_cooldown = 0.42
-			detection_radius = 360.0
-			attack_radius = 290.0
+			armor_value = 20.0
+			max_hp = 72.0
+			speed = 82.0
+			damage = 10.0
+			attack_cooldown = 0.72
+			detection_radius = 290.0
+			attack_radius = 240.0
 			max_mag_ammo = 15
 			mag_ammo = 15
 		EnemyType.BOSS:
 			is_ranged_human = true
 			armor_tier = 3
-			armor_value = 45.0
-			max_hp = 260.0
-			speed = 90.0
-			damage = 18.0
-			attack_cooldown = 0.28
-			detection_radius = 420.0
-			attack_radius = 330.0
+			armor_value = 32.0
+			max_hp = 190.0
+			speed = 80.0
+			damage = 12.0
+			attack_cooldown = 0.45
+			detection_radius = 340.0
+			attack_radius = 270.0
 			max_mag_ammo = 30
 			mag_ammo = 30
 		EnemyType.NIGHT_STALKER:
-			max_hp = 85.0
-			speed = 152.0
-			damage = 19.0
+			max_hp = 65.0
+			speed = 130.0
+			damage = 13.0
 			armor_tier = 1
-			armor_value = 18.0
-			attack_cooldown = 0.75
-			detection_radius = 380.0
+			armor_value = 14.0
+			attack_cooldown = 0.85
+			detection_radius = 300.0
 			attack_radius = 30.0
 	hp = max_hp
 	strafe_sign = 1.0 if randf() > 0.5 else -1.0
@@ -798,13 +799,13 @@ func _try_attack(victim: Node2D = null) -> void:
 				boss_grenade_cooldown = 9.5
 				attack_timer = 0.75
 				return
-			# 보스 특수 패턴 1: 6연발 제압 사격 (Suppressive Burst Fire)
-			boss_burst_remaining = 5
-			boss_burst_timer = 0.09
-			attack_timer = 1.35
+			# 보스 특수 패턴 1: 4연발 제압 사격 (Suppressive Burst Fire)
+			boss_burst_remaining = 3
+			boss_burst_timer = 0.11
+			attack_timer = 1.55
 			_fire_ranged_shot(target_node)
 		else:
-			attack_timer = attack_cooldown * randf_range(0.85, 1.2)
+			attack_timer = attack_cooldown * randf_range(0.95, 1.3)
 			_fire_ranged_shot(target_node)
 	else:
 		attack_timer = attack_cooldown
@@ -829,7 +830,7 @@ func _fire_ranged_shot(target_node: Node2D) -> void:
 		return
 	mag_ammo -= 1
 	var aim_dir = global_position.direction_to(target_node.global_position)
-	var spread_deg = 7.5 if enemy_type == EnemyType.SCAV else (2.8 if enemy_type == EnemyType.BOSS else 4.0)
+	var spread_deg = 11.0 if enemy_type == EnemyType.SCAV else (4.5 if enemy_type == EnemyType.BOSS else 6.5)
 	var shot_dir = aim_dir.rotated(deg_to_rad(randf_range(-spread_deg, spread_deg)))
 	var muzzle_pos = global_position + aim_dir * 18.0
 	
@@ -973,25 +974,29 @@ func _spawn_loot_drop() -> void:
 		EnemyType.SCAV:
 			drops.append({"id": "Scav 인식표", "amount": 1})
 			var ammo_pool = [
-				{"id": "9mm", "amount": randi_range(10, 20)},
-				{"id": ".45ACP", "amount": randi_range(8, 16)},
-				{"id": "12게이지_벅샷", "amount": randi_range(5, 10)}
+				{"id": "9mm", "amount": randi_range(12, 24)},
+				{"id": ".45ACP", "amount": randi_range(10, 20)},
+				{"id": "12게이지_벅샷", "amount": randi_range(6, 12)}
 			]
 			drops.append(ammo_pool.pick_random())
-			if randf() < 0.65:
+			if randf() < 0.75:
 				var gear_pool = [
 					{"id": "붕대", "amount": 1},
 					{"id": "진통제", "amount": 1},
 					{"id": "생수", "amount": 1},
+					{"id": "식량통조림", "amount": 1},
 					{"id": "M9_리시버", "amount": 1},
-					{"id": "레밍턴_리시버", "amount": 1}
+					{"id": "레밍턴_리시버", "amount": 1},
+					{"id": "레드닷_사이트", "amount": 1},
+					{"id": "수직_포어그립", "amount": 1}
 				]
 				drops.append(gear_pool.pick_random())
 		EnemyType.RAIDER:
 			drops.append({"id": "Scav 인식표", "amount": 1})
 			var ammo_pool = [
-				{"id": "5.56mm", "amount": randi_range(15, 30)},
-				{"id": "7.62mm", "amount": randi_range(15, 30)}
+				{"id": "5.56mm", "amount": randi_range(18, 30)},
+				{"id": "7.62mm", "amount": randi_range(18, 30)},
+				{"id": "12게이지_슬러그", "amount": randi_range(8, 14)}
 			]
 			drops.append(ammo_pool.pick_random())
 			var high_pool = [
@@ -1001,11 +1006,14 @@ func _spawn_loot_drop() -> void:
 				{"id": "AK_리시버", "amount": 1},
 				{"id": "M4_리시버", "amount": 1},
 				{"id": "2레벨_방탄복", "amount": 1},
-				{"id": "2레벨_헬멧", "amount": 1}
+				{"id": "2레벨_헬멧", "amount": 1},
+				{"id": "2배율_조준경", "amount": 1},
+				{"id": "대용량_확장_탄창", "amount": 1},
+				{"id": "소음기", "amount": 1}
 			]
 			drops.append(high_pool.pick_random())
-			if randf() < 0.28:
-				drops.append({"id": "보안 키카드" if randf() < 0.32 else "무기고 열쇠", "amount": 1})
+			if randf() < 0.32:
+				drops.append({"id": "보안 키카드" if randf() < 0.35 else "무기고 열쇠", "amount": 1})
 		EnemyType.NIGHT_STALKER:
 			var night_pool = [
 				{"id": "고급 치료킷", "amount": 1},
@@ -1047,6 +1055,10 @@ func _spawn_loot_drop() -> void:
 			drops.append({"id": "보안 키카드", "amount": 1})
 			drops.append({"id": "무기고 열쇠", "amount": 1})
 			
+	if is_ranged_human or enemy_type in [EnemyType.SCAV, EnemyType.RAIDER, EnemyType.BOSS]:
+		_spawn_corpse_loot_box(drops)
+		return
+
 	for i in range(drops.size()):
 		var d = drops[i]
 		var g_item = GroundItemScene.instantiate()
@@ -1054,6 +1066,74 @@ func _spawn_loot_drop() -> void:
 		g_item.global_position = global_position + offset
 		get_parent().call_deferred("add_child", g_item)
 		g_item.call_deferred("setup", d["id"], d["amount"], d.get("custom_data", {}))
+
+func _spawn_corpse_loot_box(drops: Array) -> void:
+	if not get_parent() or drops.is_empty():
+		return
+	var scene: Node = get_tree().current_scene if get_tree() else null
+	if scene == null or not ("container_inventories" in scene):
+		var p := get_parent()
+		while p != null:
+			if "container_inventories" in p:
+				scene = p
+				break
+			p = p.get_parent()
+
+	var base_tile := Vector2i(int(floor(global_position.x / 32.0)), int(floor(global_position.y / 32.0)))
+	var chosen_tile := base_tile
+	if scene and "container_inventories" in scene:
+		var c_dict: Dictionary = scene.container_inventories
+		if c_dict.has(chosen_tile):
+			var found_free := false
+			for rad in range(1, 5):
+				for dy in range(-rad, rad + 1):
+					for dx in range(-rad, rad + 1):
+						var cand := base_tile + Vector2i(dx, dy)
+						if not c_dict.has(cand):
+							chosen_tile = cand
+							found_free = true
+							break
+					if found_free:
+						break
+				if found_free:
+					break
+
+	var title := "🎒 스캐브 유품 가방"
+	var rank := 3
+	if enemy_type == EnemyType.RAIDER:
+		title = "🎒 정예 레이더 군장 상자"
+		rank = 4
+	elif enemy_type == EnemyType.BOSS:
+		title = "💀 보스 지휘관 특수 군장함"
+		rank = 5
+
+	var inv := Inventory.new()
+	inv.max_slots = 12 if enemy_type == EnemyType.BOSS else 8
+	inv.clear()
+	inv.set_meta("custom_title", title)
+	if scene:
+		scene.add_child(inv)
+	else:
+		get_parent().add_child(inv)
+
+	for d in drops:
+		var item_id := String(d.get("id", ""))
+		var amt := int(d.get("amount", 1))
+		var c_data: Dictionary = d.get("custom_data", {})
+		if c_data.is_empty() and WeaponPartsDatabase.RECEIVERS.has(item_id):
+			c_data = WeaponPartsDatabase.create_default_weapon(item_id)
+		inv.add_item(item_id, amt, c_data)
+
+	if scene and "container_inventories" in scene:
+		scene.container_inventories[chosen_tile] = inv
+		if "container_titles" in scene and scene.container_titles is Dictionary:
+			scene.container_titles[chosen_tile] = title
+
+	var box := StaticBody2D.new()
+	box.set_script(CorpseBoxScript)
+	box.global_position = global_position
+	box.call("setup_corpse_box", chosen_tile, inv, title, rank)
+	get_parent().call_deferred("add_child", box)
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
