@@ -355,6 +355,67 @@ func _handle_channeling(delta: float) -> void:
 	if channel_timer >= channel_duration:
 		complete_channeling()
 
+func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefix: String = "") -> bool:
+	if item.is_empty():
+		return false
+	var item_id := String(item.get("id", ""))
+	var d: Dictionary = item_data if not item_data.is_empty() else (ItemDatabase.get_item_data(item_id) if ItemDatabase else {})
+	var item_name := String(d.get("name", item_id))
+	var duration := get_channeling_duration_for(item_id, d)
+	var target_uid := String(item.get("uid", ""))
+	var effects: Dictionary = d.get("effects", {}).duplicate(true)
+
+	start_channeling(duration, item_name, func():
+		if not is_instance_valid(self):
+			return
+		if effects.has("hp"):
+			hp = min(max_hp, hp + float(effects["hp"]))
+		if effects.has("hunger"):
+			hunger = min(max_hunger, hunger + float(effects["hunger"]))
+		if effects.has("thirst"):
+			thirst = min(max_thirst, thirst + float(effects["thirst"]))
+		if effects.has("stamina"):
+			stamina = min(max_stamina, stamina + float(effects["stamina"]))
+		if effects.get("cures_bleeding", false):
+			is_bleeding = false
+		if effects.get("cures_fracture", false):
+			is_fractured = false
+		if effects.get("cures_infection", false) or float(effects.get("infection", 0)) < 0.0:
+			is_infected = false
+
+		if inventory_grid:
+			var cur_item: Dictionary = {}
+			for it in inventory_grid.items:
+				if target_uid != "" and String(it.get("uid", "")) == target_uid:
+					cur_item = it
+					break
+			if cur_item.is_empty():
+				for it in inventory_grid.items:
+					if String(it.get("id", "")) == item_id:
+						cur_item = it
+						break
+			if not cur_item.is_empty():
+				var amt := int(cur_item.get("amount", 1))
+				if amt > 1:
+					cur_item["amount"] = amt - 1
+					inventory_grid.grid_changed.emit()
+				else:
+					inventory_grid.remove_item_by_uid(String(cur_item.get("uid", "")))
+			elif target_uid != "":
+				inventory_grid.remove_item_by_uid(target_uid)
+
+		stats_changed.emit()
+		if SoundManager:
+			SoundManager.play("menu_select")
+		if EventBus and EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("💊 %s%s 사용 완료!" % [log_prefix, item_name])
+	)
+	if SoundManager:
+		SoundManager.play("menu_select")
+	if EventBus and EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("⏳ %s 사용 시작 (%.1f초)..." % [item_name, duration])
+	return true
+
 func _use_quickslot_item(slot_kind: String) -> void:
 	if not inventory_grid:
 		return
@@ -383,43 +444,7 @@ func _use_quickslot_item(slot_kind: String) -> void:
 			EventBus.event_logged.emit("⚠️ 가방에 사용할 수 있는 %s 아이템이 없습니다." % label_map.get(slot_kind, "소비"))
 		return
 
-	var item_name = target_data.get("name", target_item.get("id", ""))
-	var duration = get_channeling_duration_for(target_item.get("id", ""), target_data)
-	var target_uid = target_item.get("uid", "")
-
-	start_channeling(duration, item_name, func():
-		var effects = target_data.get("effects", {})
-		if effects.has("hp"): hp = min(max_hp, hp + effects["hp"])
-		if effects.has("hunger"): hunger = min(max_hunger, hunger + effects["hunger"])
-		if effects.has("thirst"): thirst = min(max_thirst, thirst + effects["thirst"])
-		if effects.has("stamina"): stamina = min(max_stamina, stamina + effects["stamina"])
-		if effects.get("cures_bleeding", false): is_bleeding = false
-		if effects.get("cures_fracture", false): is_fractured = false
-		if effects.get("cures_infection", false) or effects.get("infection", 0) < 0: is_infected = false
-		
-		if inventory_grid:
-			var cur_item: Dictionary = {}
-			for it in inventory_grid.items:
-				if it.get("uid", "") == target_uid:
-					cur_item = it
-					break
-			if not cur_item.is_empty():
-				var amt = int(cur_item.get("amount", 1))
-				if amt > 1:
-					cur_item["amount"] = amt - 1
-					inventory_grid.grid_changed.emit()
-				else:
-					inventory_grid.remove_item_by_uid(target_uid)
-			else:
-				inventory_grid.remove_item_by_uid(target_uid)
-		stats_changed.emit()
-		if SoundManager: SoundManager.play("menu_select")
-		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💊 [퀵슬롯] %s 사용 완료!" % item_name)
-	)
-	if SoundManager: SoundManager.play("menu_select")
-	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⏳ %s 사용 시작 (%.1f초)..." % [item_name, duration])
+	use_consumable_item(target_item, target_data, "[퀵슬롯] ")
 
 func _play_surface_footstep() -> void:
 	if not SoundManager:

@@ -406,15 +406,15 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 
 const WEAPON_MASTERY_KILL_THRESHOLD: int = 30
 const TRACKED_MASTERY_WEAPONS: Array[String] = [
-	"M4_리시버", "AK_리시버", "SV98_리시버", "MP5_리시버", "레밍턴_리시버", "M9_리시버"
+	"M4_리시버", "AK_리시버", "SV98_리시버", "레버액션_리시버", "레밍턴_리시버", "M9_리시버"
 ]
 
 static func normalize_weapon_id(weapon_id: String) -> String:
-	if weapon_id == "권총":
-		return "M9_리시버"
-	elif weapon_id == "레버액션 소총":
-		return "SV98_리시버"
-	return weapon_id
+	if weapon_id == "":
+		return ""
+	if weapon_id == "레버액션 소총" or weapon_id == "레버액션_소총":
+		return "레버액션_리시버"
+	return WeaponPartsDatabase.resolve_receiver_id(weapon_id)
 
 static func record_weapon_kill(world_data: Dictionary, weapon_id: String, count: int = 1) -> int:
 	if weapon_id == "" or weapon_id == "맨손":

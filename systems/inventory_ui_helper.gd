@@ -207,9 +207,11 @@ static func highlight_compatible_slots(drop_targets: Array, item: Dictionary, ho
 			var slot_key = target.get("slot_key", "")
 			var eq_slot = ItemDatabase.get_item_equip_slot(item_id)
 			var idata = ItemDatabase.get_item_data(item_id)
-			var cat = idata.get("category", -1)
-			if slot_key.begins_with("primary"):
-				is_compat = (cat == ItemDatabase.ItemCategory.WEAPON or idata.get("type", "") == "receiver" or eq_slot == "primary" or eq_slot == "")
+			var is_ammo = (idata.get("type", "") == "ammo" or ItemDatabase.is_ammo_item(item_id))
+			if is_ammo:
+				is_compat = false
+			elif slot_key.begins_with("primary"):
+				is_compat = (eq_slot == "primary" or idata.get("type", "") == "receiver")
 			elif slot_key == "sidearm":
 				is_compat = (idata.get("type", "") == "melee" or item_id.contains("권총") or item_id.begins_with("M9") or eq_slot == "sidearm" or eq_slot == "melee")
 			elif slot_key == "throwable":

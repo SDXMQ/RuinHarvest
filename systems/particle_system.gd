@@ -10,6 +10,8 @@ var particles: Array = []
 var _pool: Array = []
 var splash_rings: Array = [] # {"x": float, "y": float, "life": float, "max_life": float}
 var _glow_layer: Node2D = null
+var _was_active: bool = false
+var _had_glow: bool = false
 
 func _ready() -> void:
 	_glow_layer = Node2D.new()
@@ -135,10 +137,18 @@ func _process(delta: float) -> void:
 			splash_rings.pop_back()
 		si -= 1
 
-	if particles.size() > 0 or decals.size() > 0 or splash_rings.size() > 0:
+	var is_active := particles.size() > 0 or decals.size() > 0 or splash_rings.size() > 0
+	var has_glow := false
+	for p in particles:
+		if p.glow:
+			has_glow = true
+			break
+	if is_active or _was_active:
 		queue_redraw()
-		if _glow_layer:
-			_glow_layer.queue_redraw()
+	if _glow_layer and (has_glow or _had_glow):
+		_glow_layer.queue_redraw()
+	_was_active = is_active
+	_had_glow = has_glow
 
 func _draw() -> void:
 	# 1. 바닥 지속성 픽셀 데칼 (혈흔 다중 도트 클러스터 / 황동 2x4 탄피)
@@ -229,9 +239,14 @@ func emit(preset: String, x: float, y: float, count: int = 1, angle: float = 0.0
 		var p := _create_particle(preset, x, y, angle, extra)
 		if p:
 			particles.append(p)
+	_was_active = true
 	queue_redraw()
 	if _glow_layer:
-		_glow_layer.queue_redraw()
+		for p in particles:
+			if p.glow:
+				_had_glow = true
+				_glow_layer.queue_redraw()
+				break
 
 func _create_particle(preset: String, x: float, y: float, angle: float, extra: Dictionary) -> P:
 	var p: P = _acquire_particle()
@@ -408,6 +423,8 @@ func clear() -> void:
 		_release_particle(p)
 	particles.clear()
 	splash_rings.clear()
+	_was_active = decals.size() > 0
+	_had_glow = false
 	queue_redraw()
 	if _glow_layer:
 		_glow_layer.queue_redraw()

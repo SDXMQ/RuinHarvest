@@ -343,8 +343,38 @@ func _spawn_grenade_entity(start_pos: Vector2, target_pos: Vector2, blast_dmg: f
 		gren.queue_free()
 	)
 
+static func is_firearm_dict(w_dict: Dictionary) -> bool:
+	if w_dict.is_empty():
+		return false
+	if String(w_dict.get("type", "")) == "throwable":
+		return false
+	var w_id := String(w_dict.get("id", ""))
+	if w_id in ["나이프", "파이프", "도끼", "야구방망이", "수류탄"]:
+		return false
+	var idata := ItemDatabase.get_item_data(w_id) if ItemDatabase else {}
+	var w_type := String(idata.get("type", ""))
+	var weapon_type := String(idata.get("weapon_type", ""))
+	if w_type == "melee" or weapon_type == "melee" or w_type == "ammo" or w_type == "throwable":
+		return false
+	var cat := int(idata.get("category", -1))
+	if cat == ItemDatabase.ItemCategory.TOOL or cat == ItemDatabase.ItemCategory.MATERIAL or cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or cat == ItemDatabase.ItemCategory.MEDICAL or cat == ItemDatabase.ItemCategory.QUEST or cat == ItemDatabase.ItemCategory.MISC:
+		if not WeaponPartsDatabase.RECEIVERS.has(WeaponPartsDatabase.resolve_receiver_id(w_id)):
+			return false
+	var stats = w_dict.get("computed_stats", {})
+	if stats is Dictionary and stats.has("ammo_types"):
+		return not stats["ammo_types"].is_empty()
+	var res_id := WeaponPartsDatabase.resolve_receiver_id(String(w_dict.get("receiver", w_id)))
+	if WeaponPartsDatabase.RECEIVERS.has(res_id):
+		return true
+	return w_type == "ranged" or w_type == "receiver" or w_type == "assembled_weapon"
+
+func is_firearm_equipped() -> bool:
+	if active_weapon_slot == "throwable":
+		return false
+	return is_firearm_dict(equipped_weapon_data)
+
 func cycle_ammo_type() -> void:
-	if is_reloading or equipped_weapon_data.is_empty() or active_weapon_slot == "throwable":
+	if is_reloading or not is_firearm_equipped():
 		return
 	if not player or not player.has_node("InventoryGrid"):
 		return
@@ -382,7 +412,7 @@ func cycle_ammo_type() -> void:
 	start_reload()
 
 func start_reload() -> void:
-	if is_reloading or equipped_weapon_data.is_empty() or active_weapon_slot == "throwable": return
+	if is_reloading or not is_firearm_equipped(): return
 	if is_jammed:
 		is_jammed = false
 		is_reloading = true
@@ -472,11 +502,15 @@ func _finish_reload() -> void:
 	EventBus.event_logged.emit("✅ 재장전 완료! (%d/%d)" % [equipped_weapon_data["current_magazine_ammo"], mag_size])
 
 func get_compatible_ammo_types() -> Array:
-	if not equipped_weapon_data.is_empty():
-		var stats = equipped_weapon_data.get("computed_stats", {})
-		if stats.has("ammo_types"): return stats["ammo_types"]
-		return [equipped_weapon_data.get("loaded_ammo", "9mm"), "탄약"]
-	return ["9mm", "탄약"]
+	if not is_firearm_equipped():
+		return []
+	var stats = equipped_weapon_data.get("computed_stats", {})
+	if stats.has("ammo_types"):
+		return stats["ammo_types"]
+	var res_id := WeaponPartsDatabase.resolve_receiver_id(String(equipped_weapon_data.get("receiver", equipped_weapon_data.get("id", ""))))
+	if WeaponPartsDatabase.RECEIVERS.has(res_id):
+		return WeaponPartsDatabase.RECEIVERS[res_id].get("ammo_types", ["9mm"])
+	return [String(equipped_weapon_data.get("loaded_ammo", "9mm"))]
 
 func _get_compatible_ammo_types() -> Array:
 	return get_compatible_ammo_types()

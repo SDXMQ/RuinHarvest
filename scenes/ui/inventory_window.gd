@@ -1153,6 +1153,9 @@ func _try_drop_on_container() -> void:
 		return
 		
 	var src = drag_data.get("source", "")
+	if src == "container":
+		_end_drag()
+		return
 	var item = drag_data.get("item", {})
 	var item_id = item.get("id", "")
 	var amt = item.get("amount", 1)
@@ -1763,11 +1766,16 @@ func _try_equip_weapon(slot_key: String) -> void:
 	var it_type = String(it_data.get("type", ""))
 
 	# 탄약 드래그 앤 드롭 시 탄종 선택 재장전 및 잔탄 확인/교체 처리
-	if it_type == "ammo" or WeaponPartsDatabase.AMMO_TYPES.has(it_id) or it_id.contains("탄약") or it_id.contains("mm") or it_id.contains("게이지") or it_id.contains("ACP"):
+	if it_type == "ammo" or ItemDatabase.is_ammo_item(it_id) or WeaponPartsDatabase.AMMO_TYPES.has(it_id):
 		var target_w = equipment_data.get(slot_key, {})
 		if target_w.is_empty():
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("⚠️ 탄약을 장전할 무기가 슬롯에 없습니다.")
+			_end_drag()
+			return
+		if slot_key == "throwable" or not WeaponHandler.is_firearm_dict(target_w):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 총기가 아닌 장비(근접무기/도구)에는 탄약을 장전할 수 없습니다.")
 			_end_drag()
 			return
 
@@ -1778,7 +1786,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 		if allowed_ammos.is_empty() and rec_data.has("default_ammo"):
 			allowed_ammos = [rec_data["default_ammo"]]
 
-		if not (it_id in allowed_ammos or "탄약" in allowed_ammos):
+		if not (it_id in allowed_ammos or (it_id == "9mm" and "탄약" in allowed_ammos) or (it_id == "탄약" and "9mm" in allowed_ammos)):
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("⚠️ [%s] 탄약은 [%s]에 호환되지 않습니다." % [it_data.get("name", it_id), target_w.get("name", rec_id)])
 			_end_drag()
@@ -1873,7 +1881,9 @@ func _try_equip_weapon(slot_key: String) -> void:
 
 	var eq_slot = ItemDatabase.get_item_equip_slot(item.get("id", ""))
 	var valid = false
-	if slot_key.begins_with("primary") and (eq_slot == "primary" or eq_slot == ""): valid = true
+	if it_type == "ammo" or ItemDatabase.is_ammo_item(it_id):
+		valid = false
+	elif slot_key.begins_with("primary") and (eq_slot == "primary" or it_type == "receiver"): valid = true
 	elif slot_key == "sidearm" and (eq_slot == "sidearm" or eq_slot == "melee"): valid = true
 	elif slot_key == "throwable" and eq_slot == "throwable": valid = true
 	
@@ -2200,8 +2210,9 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false)
 					EventBus.event_logged.emit("🪖 [%s] 장착 완료!" % idata.get("name", id))
 			return
 
-	# 3. 무기류 (주무기, 권총/보조무기, 투척무기)
-	if cat == ItemDatabase.ItemCategory.WEAPON or idata.get("type", "") == "receiver" or equip_slot in ["primary", "sidearm", "throwable", "melee"]:
+	# 3. 무기류 (주무기, 권총/보조무기, 투척무기) — 탄약/도구 제외
+	var is_ammo_item = (idata.get("type", "") == "ammo" or ItemDatabase.is_ammo_item(id))
+	if not is_ammo_item and (idata.get("type", "") == "receiver" or equip_slot in ["primary", "sidearm", "throwable", "melee"]):
 		var target_slot = "primary1"
 		if equip_slot == "throwable":
 			target_slot = "throwable"
@@ -2329,57 +2340,13 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false)
 
 func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 	if not player: return
-	
-	var item_name = idata.get("name", item.get("id", ""))
-	var item_id = item.get("id", "")
-	var target_uid = item.get("uid", "")
-	
-	if player.has_method("start_channeling"):
-		var duration = 2.0
-		if player.has_method("get_channeling_duration_for"):
-			duration = player.get_channeling_duration_for(item_id, idata)
-		elif item_id.contains("붕대") or item_id.contains("지혈") or item_id == "bandage":
-			duration = 1.5
-		elif item_id.contains("구급") or item_id.contains("수술") or item_id.contains("키트") or item_id.contains("부목") or item_id == "medkit":
-			duration = 3.0
-			
-		player.start_channeling(duration, item_name, func():
-			var effects = idata.get("effects", {})
-			if effects.has("hp"): player.hp = min(player.max_hp, player.hp + effects["hp"])
-			if effects.has("hunger"): player.hunger = min(player.max_hunger, player.hunger + effects["hunger"])
-			if effects.has("thirst"): player.thirst = min(player.max_thirst, player.thirst + effects["thirst"])
-			if effects.has("stamina"): player.stamina = min(player.max_stamina, player.stamina + effects["stamina"])
-			if effects.get("cures_bleeding", false): player.is_bleeding = false
-			if effects.get("cures_fracture", false): player.is_fractured = false
-			if effects.get("cures_infection", false) or effects.get("infection", 0) < 0: player.is_infected = false
-			
-			if inventory_grid:
-				var cur_item: Dictionary = {}
-				for it in inventory_grid.items:
-					if it.get("uid", "") == target_uid:
-						cur_item = it
-						break
-				if not cur_item.is_empty():
-					var amt = int(cur_item.get("amount", 1))
-					if amt > 1:
-						cur_item["amount"] = amt - 1
-						inventory_grid.grid_changed.emit()
-					else:
-						inventory_grid.remove_item_by_uid(target_uid)
-				else:
-					inventory_grid.remove_item_by_uid(target_uid)
-					
-			player.stats_changed.emit()
-			if SoundManager: SoundManager.play("menu_select")
-			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("✨ %s을(를) 사용 완료했습니다." % item_name)
-		)
-		if SoundManager: SoundManager.play("menu_select")
-		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⏳ %s 사용 시작 (%.1f초)..." % [item_name, duration])
+
+	if player.has_method("use_consumable_item"):
+		player.use_consumable_item(item, idata)
 		_on_close_pressed()
 		return
-		
+
+	var item_name = idata.get("name", item.get("id", ""))
 	var effects = idata.get("effects", {})
 	if effects.has("hp"): player.hp = min(player.max_hp, player.hp + effects["hp"])
 	if effects.has("hunger"): player.hunger = min(player.max_hunger, player.hunger + effects["hunger"])

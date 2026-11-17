@@ -146,6 +146,23 @@ func _load_all_items():
 			"value": 4500,
 			"effects": {}
 		}
+	if not items.has("초콜릿"):
+		items["초콜릿"] = {
+			"id": "초콜릿",
+			"name": "초콜릿 바",
+			"category": ItemCategory.FOOD,
+			"description": "열량이 높은 비상용 초콜릿 바입니다. 허기와 스태미나를 빠르게 회복합니다.",
+			"stackable": true,
+			"max_stack": 5,
+			"weight": 0.12,
+			"rarity": 1,
+			"value": 450,
+			"effects": {
+				"hunger": 20,
+				"stamina": 20,
+				"stress": -5
+			}
+		}
 
 # 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {
@@ -165,11 +182,11 @@ var loot_tables: Dictionary = {
 	],
 	"fridge": [
 		{"id": "식량통조림", "chance": 0.5}, {"id": "생수", "chance": 0.5},
-		{"id": "초콜릿", "chance": 0.3}, {"id": "에너지드링크", "chance": 0.25}
+		{"id": "초콜릿", "chance": 0.3}, {"id": "에너지 드링크", "chance": 0.25}
 	],
 	"residential": [
 		{"id": "식량통조림", "chance": 0.5}, {"id": "생수", "chance": 0.5},
-		{"id": "초콜릿", "chance": 0.25}, {"id": "에너지드링크", "chance": 0.25}
+		{"id": "초콜릿", "chance": 0.25}, {"id": "에너지 드링크", "chance": 0.25}
 	],
 	"bed": [
 		{"id": "붕대", "chance": 0.45}, {"id": "진통제", "chance": 0.3},
@@ -394,19 +411,27 @@ func get_item_grid_size(id: String) -> Vector2i:
 	_cached_grid_sizes[id] = size
 	return size
 
+static func is_ammo_item(item_id: String) -> bool:
+	if item_id == "":
+		return false
+	return item_id == "탄약" or item_id.ends_with("mm") or item_id.contains("게이지") or item_id.contains("ACP")
+
 func get_item_equip_slot(id: String) -> String:
 	if _cached_equip_slots.has(id):
 		return _cached_equip_slots[id]
 		
 	var data = get_item_data(id)
 	var slot = ""
+	var type = data.get("type", "")
+	if type == "ammo" or is_ammo_item(id):
+		_cached_equip_slots[id] = ""
+		return ""
 	if data.has("equip_slot"):
 		slot = data["equip_slot"]
 	else:
 		var cat = data.get("category", -1)
-		var type = data.get("type", "")
 		if cat == ItemCategory.WEAPON or type == "receiver":
-			if id == "수류탄":
+			if id == "수류탄" or type == "throwable":
 				slot = "throwable"
 			elif type == "melee":
 				slot = "melee"

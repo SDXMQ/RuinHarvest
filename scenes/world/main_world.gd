@@ -118,14 +118,18 @@ var day_night_cycle_duration: float = 300.0 # 낮/밤 1주기 시간(초)
 var raid_power_restored: bool = false
 
 func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO) -> Dictionary:
+	if raid_power_restored:
+		return {
+			"power_restored": true,
+			"unlocked_doors": 0,
+			"bunker_unlocked": true
+		}
 	raid_power_restored = true
 	if GameManager:
 		GameManager.raid_power_restored = true
 		if GameManager.current_world_data is Dictionary:
 			GameManager.current_world_data["raid_power_restored"] = true
-	if day_night_modulate:
-		day_night_modulate.color = day_night_modulate.color.lerp(Color(1.0, 1.0, 1.0), 0.35)
-	var unlocked_doors := 0
+	var unlocked_door_coords := {}
 	if chunk_manager and chunk_manager.object_layer:
 		var obj_layer: TileMapLayer = chunk_manager.object_layer
 		for dy in range(-14, 15):
@@ -135,7 +139,7 @@ func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO
 					var cur_coords := obj_layer.get_cell_atlas_coords(check_t)
 					if TileManager.is_door_locked(cur_coords):
 						obj_layer.set_cell(check_t, 0, TileManager.get_unlocked_door_tile(cur_coords))
-						unlocked_doors += 1
+						unlocked_door_coords[check_t] = true
 						EventBus.door_toggled.emit(check_t, true)
 	if chunk_manager and chunk_manager.loaded_chunks is Dictionary:
 		for cpos in chunk_manager.loaded_chunks.keys():
@@ -150,7 +154,8 @@ func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO
 						var wy := int(cpos.y) * 16 + ly
 						if abs(wx - tile_pos.x) <= 14 and abs(wy - tile_pos.y) <= 14:
 							objs[idx] = TileManager.get_unlocked_door_tile(objs[idx])
-							unlocked_doors += 1
+							unlocked_door_coords[Vector2i(wx, wy)] = true
+	var unlocked_doors := unlocked_door_coords.size()
 	if SoundManager:
 		SoundManager.play("menu_select")
 	if world_pos != Vector2.ZERO:
@@ -344,6 +349,7 @@ func _ready() -> void:
 	var tool_btn = Button.new()
 	tool_btn.name = "SandboxToolBtn"
 	tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
+	tool_btn.focus_mode = Control.FOCUS_NONE
 	tool_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	tool_btn.offset_left = -160.0
 	tool_btn.offset_top = 10.0
@@ -351,6 +357,10 @@ func _ready() -> void:
 	tool_btn.offset_bottom = 44.0
 	tool_btn.pressed.connect(_open_item_spawner)
 	$UI.add_child(tool_btn)
+	for badge in [badge_bleed, badge_fracture, badge_biohazard]:
+		if badge:
+			badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			badge.focus_mode = Control.FOCUS_NONE
 	
 	if ResponsiveManager:
 		ResponsiveManager.breakpoint_changed.connect(_on_responsive_breakpoint_changed)
@@ -526,8 +536,29 @@ var current_crafting_window: Control = null
 var current_radio_window: Control = null
 var current_modding_window: Control = null
 
+func _has_open_modal_window() -> bool:
+	return (
+		is_instance_valid(current_inventory_window)
+		or is_instance_valid(current_crafting_window)
+		or is_instance_valid(current_map_window)
+		or is_instance_valid(current_radio_window)
+		or is_instance_valid(current_modding_window)
+		or is_instance_valid(current_spawner_window)
+	)
+
+func _input(event: InputEvent) -> void:
+	if _has_open_modal_window() or (pause_menu and pause_menu.visible):
+		return
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner is LineEdit or focus_owner is TextEdit:
+		return
+	var is_inv_key: bool = event.is_action_pressed("inventory") or (event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode == KEY_TAB or event.keycode == KEY_TAB))
+	if is_inv_key:
+		_open_inventory_window()
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if current_inventory_window != null or current_crafting_window != null or current_map_window != null or current_radio_window != null or current_modding_window != null:
+	if _has_open_modal_window():
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -539,6 +570,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
+		return
 		
 	# 인벤토리 열기 (Tab 또는 I 키로 4단 인벤토리 열기)
 	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
@@ -1269,6 +1301,9 @@ func _on_player_stats_changed() -> void:
 				var amt = player.equipped_weapon_data.get("amount", 1)
 				ammo_label.text = "💣 수량: %d개" % amt
 				ammo_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+			elif not WeaponHandler.is_firearm_dict(player.equipped_weapon_data):
+				ammo_label.text = "🗡️ 근접 무기 (좌클릭 타격)"
+				ammo_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
 			else:
 				var cur_mag = player.equipped_weapon_data.get("current_magazine_ammo", 0)
 				var stats = player.equipped_weapon_data.get("computed_stats", {})
@@ -1509,8 +1544,14 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			key_item_ref["durability"] = float(rem_uses)
 			key_item_ref["max_durability"] = float(max_uses)
 			if rem_uses <= 0:
+				var stack_amt := int(key_item_ref.get("amount", 1))
 				key_destroyed = true
-				player.inventory_grid.remove_item_by_uid(String(key_item_ref.get("uid", "")))
+				if stack_amt > 1:
+					key_item_ref["amount"] = stack_amt - 1
+					key_item_ref["durability"] = float(max_uses)
+					player.inventory_grid.grid_changed.emit()
+				else:
+					player.inventory_grid.remove_item_by_uid(String(key_item_ref.get("uid", "")))
 			else:
 				player.inventory_grid.grid_changed.emit()
 		if chunk_manager and chunk_manager.object_layer:
@@ -1609,7 +1650,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 
 
 func _open_inventory_window(target_inv: Inventory = null, title: String = "") -> void:
-	if current_inventory_window != null: return
+	if is_instance_valid(current_inventory_window): return
 	if not is_inside_tree() or get_tree() == null: return
 	get_tree().paused = true
 	current_inventory_window = InventoryWindowScene.instantiate()

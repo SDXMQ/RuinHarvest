@@ -103,8 +103,7 @@ func fulfill_bounty_order(item_id: String, amount: int, world_data: Dictionary, 
 	var resolved: String = ItemDatabase.resolve_item_id(item_id) if ItemDatabase else item_id
 	var unit_bounty: int = get_bounty_price(resolved)
 	if unit_bounty <= 0:
-		var m_price: int = get_current_price(resolved)
-		unit_bounty = maxi(25, int(round(float(m_price) * BOUNTY_MULTIPLIER)))
+		return {"success": false, "earned": 0, "sold": 0}
 	var sell_amt: int = maxi(1, amount)
 	if player_grid != null or stash_grid != null:
 		var owned: int = 0

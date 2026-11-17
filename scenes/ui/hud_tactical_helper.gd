@@ -21,6 +21,7 @@ static func style_quickslot_button(
 	btn.text = ""
 	btn.tooltip_text = tooltip_str
 	btn.clip_contents = true
+	btn.focus_mode = Control.FOCUS_NONE
 
 	var style: StyleBoxFlat
 	if btn.has_theme_stylebox_override("normal"):

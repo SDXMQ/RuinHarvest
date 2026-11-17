@@ -166,6 +166,10 @@ func _ensure_tactical_hud_widgets() -> void:
 			badge_bleed = status_badges_container.get_node_or_null("BleedBadge")
 			badge_fracture = status_badges_container.get_node_or_null("FractureBadge")
 			badge_biohazard = status_badges_container.get_node_or_null("BiohazardBadge")
+			for badge in [badge_bleed, badge_fracture, badge_biohazard]:
+				if badge:
+					badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					badge.focus_mode = Control.FOCUS_NONE
 
 	channeling_bar = hud.get_node_or_null("ChannelingBar")
 	if not channeling_bar:
@@ -257,6 +261,7 @@ func _ensure_tactical_hud_widgets() -> void:
 			var b = Button.new()
 			b.name = s_name
 			b.custom_minimum_size = Vector2(52, 52)
+			b.focus_mode = Control.FOCUS_NONE
 			quickslot_hbox.add_child(b)
 		hud.add_child(quickslot_bar)
 	else:
@@ -266,8 +271,11 @@ func _create_status_badge(node_name: String, text_str: String, col: Color) -> Pa
 	var pc = PanelContainer.new()
 	pc.name = node_name
 	pc.visible = false
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.focus_mode = Control.FOCUS_NONE
 	var lbl = Label.new()
 	lbl.name = "Label"
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lbl.text = text_str
 	lbl.add_theme_font_size_override("font_size", 11)
 	lbl.add_theme_color_override("font_color", col)
@@ -674,8 +682,26 @@ func _on_hit_arc_draw() -> void:
 		var p_right = center + Vector2.RIGHT.rotated(arc_angle + 0.09) * (arc_radius + 1.0)
 		hit_arc_overlay.draw_colored_polygon(PackedVector2Array([tip_pos, p_left, p_right]), col)
 
+func _has_open_modal_window() -> bool:
+	return (
+		is_instance_valid(current_inventory_window)
+		or is_instance_valid(current_crafting_window)
+		or is_instance_valid(current_modding_window)
+	)
+
+func _input(event: InputEvent) -> void:
+	if _has_open_modal_window() or (pause_menu and pause_menu.visible):
+		return
+	var focus_owner := get_viewport().gui_get_focus_owner()
+	if focus_owner is LineEdit or focus_owner is TextEdit:
+		return
+	var is_inv_key: bool = event.is_action_pressed("inventory") or (event is InputEventKey and event.pressed and not event.echo and (event.physical_keycode == KEY_TAB or event.keycode == KEY_TAB))
+	if is_inv_key:
+		_open_inventory_window()
+		get_viewport().set_input_as_handled()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if current_inventory_window != null or current_crafting_window != null or current_modding_window != null:
+	if _has_open_modal_window():
 		return
 		
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -687,6 +713,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("pause"):
 		_toggle_pause()
 		get_viewport().set_input_as_handled()
+		return
 		
 	if event.is_action_pressed("inventory") or (event is InputEventKey and event.physical_keycode == KEY_TAB and event.pressed):
 		_open_inventory_window()
@@ -728,7 +755,7 @@ func _open_crafting_window() -> void:
 	)
 
 func _open_inventory_window(target_inv: Inventory = null, title: String = "") -> void:
-	if current_inventory_window != null: return
+	if is_instance_valid(current_inventory_window): return
 	get_tree().paused = true
 	current_inventory_window = InventoryWindowScene.instantiate()
 	$UI.add_child(current_inventory_window)
@@ -789,6 +816,9 @@ func _on_player_stats_changed() -> void:
 				var amt = player.equipped_weapon_data.get("amount", 1)
 				ammo_label.text = "💣 수량: %d개" % amt
 				ammo_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+			elif not WeaponHandler.is_firearm_dict(player.equipped_weapon_data):
+				ammo_label.text = "🗡️ 근접 무기 (좌클릭 타격)"
+				ammo_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
 			else:
 				var cur_mag = player.equipped_weapon_data.get("current_magazine_ammo", 0)
 				var stats = player.equipped_weapon_data.get("computed_stats", {})

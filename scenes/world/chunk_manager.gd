@@ -501,7 +501,16 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 				if roof_fade_in_layer:
 					roof_fade_in_layer.erase_cell(pos)
 				hidden_roof_cells.erase(pos)
-				_fading_in_cells.erase(pos)
+				if _fading_in_cells.has(pos):
+					_fading_in_cells.erase(pos)
+
+		# 청크 경계(남쪽 ly==16, 동쪽 lx==16, 남동쪽 (16,16))로 드리워졌던 고아 벽체 그림자 정리
+		if deco_shadow_layer:
+			for lx in range(CHUNK_SIZE):
+				_clear_orphan_border_shadow(Vector2i(start_wx + lx, start_wy + CHUNK_SIZE))
+			for ly in range(CHUNK_SIZE):
+				_clear_orphan_border_shadow(Vector2i(start_wx + CHUNK_SIZE, start_wy + ly))
+			_clear_orphan_border_shadow(Vector2i(start_wx + CHUNK_SIZE, start_wy + CHUNK_SIZE))
 
 		if chunk_entities.has(chunk_pos):
 			for ent in chunk_entities[chunk_pos]:
@@ -511,3 +520,19 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 
 		loaded_chunks.erase(chunk_pos)
 		chunk_unloaded.emit(chunk_pos)
+
+func _clear_orphan_border_shadow(pos: Vector2i) -> void:
+	if not deco_shadow_layer or not object_layer:
+		return
+	if deco_shadow_layer.get_cell_source_id(pos) == -1:
+		return
+	var atlas := deco_shadow_layer.get_cell_atlas_coords(pos)
+	if atlas == TileManager.SHADOW_SOUTH:
+		if not _is_structure_wall(object_layer.get_cell_atlas_coords(pos + Vector2i(0, -1))):
+			deco_shadow_layer.erase_cell(pos)
+	elif atlas == TileManager.SHADOW_EAST:
+		if not _is_structure_wall(object_layer.get_cell_atlas_coords(pos + Vector2i(-1, 0))):
+			deco_shadow_layer.erase_cell(pos)
+	elif atlas == TileManager.SHADOW_SE:
+		if not _is_structure_wall(object_layer.get_cell_atlas_coords(pos + Vector2i(-1, -1))):
+			deco_shadow_layer.erase_cell(pos)
