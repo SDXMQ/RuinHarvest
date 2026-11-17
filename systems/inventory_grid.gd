@@ -23,6 +23,10 @@ static func is_same_item_id(a: String, b: String) -> bool:
 	var nb = b.replace("_", " ").strip_edges()
 	if na == nb:
 		return true
+	if (na == "9mm" or na == "탄약" or na == "9mm 탄약") and (nb == "9mm" or nb == "탄약" or nb == "9mm 탄약"):
+		return true
+	if (na == "군용 나침반" or na == "나침반") and (nb == "군용 나침반" or nb == "나침반"):
+		return true
 	if (na == "기밀 SSD" or na == "암호화된 SSD") and (nb == "기밀 SSD" or nb == "암호화된 SSD"):
 		return true
 	if na in ["무전기", "군용 무전기", "장거리 무전기"] and nb in ["무전기", "군용 무전기", "장거리 무전기"]:
@@ -89,6 +93,10 @@ func load_items(saved_items: Array) -> void:
 	for it in saved_items:
 		if not (it is Dictionary) or not it.has("id"): continue
 		var item = it.duplicate(true)
+		if String(item["id"]) == "탄약":
+			item["id"] = "9mm"
+		elif String(item["id"]) == "나침반":
+			item["id"] = "군용 나침반"
 		var ix = item.get("x", -1)
 		var iy = item.get("y", -1)
 		var is_rot = item.get("rotated", false)

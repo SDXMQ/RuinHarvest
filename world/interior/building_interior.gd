@@ -14,12 +14,20 @@ const FURNITURE_LOOT_TABLES = {
 		{"id": "구급상자", "chance": 0.25}, {"id": "고급 치료킷", "chance": 0.1}
 	],
 	"무기함": [
-		{"id": "권총", "chance": 0.3}, {"id": "탄약", "chance": 0.6},
-		{"id": "레버액션 소총", "chance": 0.12}, {"id": "방탄조끼", "chance": 0.2}
+		{"id": "권총", "chance": 0.3}, {"id": "9mm", "chance": 0.55, "amount": 20},
+		{"id": ".45ACP", "chance": 0.35, "amount": 16}, {"id": "5.56mm", "chance": 0.32, "amount": 20},
+		{"id": "7.62mm", "chance": 0.28, "amount": 18}, {"id": "12게이지_벅샷", "chance": 0.28, "amount": 10},
+		{"id": "12게이지_슬러그", "chance": 0.16, "amount": 8},
+		{"id": "레버액션 소총", "chance": 0.15}, {"id": "방탄조끼", "chance": 0.22},
+		{"id": "레드닷_사이트", "chance": 0.20}, {"id": "2배율_조준경", "chance": 0.15},
+		{"id": "소음기", "chance": 0.12}, {"id": "대용량_확장_탄창", "chance": 0.18},
+		{"id": "수직_포어그립", "chance": 0.16}, {"id": "컴펜세이터", "chance": 0.14}
 	],
 	"선반": [
 		{"id": "고철", "chance": 0.4}, {"id": "못", "chance": 0.5},
-		{"id": "천", "chance": 0.4}, {"id": "손전등", "chance": 0.2}
+		{"id": "천", "chance": 0.4}, {"id": "손전등", "chance": 0.2},
+		{"id": "9mm", "chance": 0.22, "amount": 15}, {"id": "경량_접이식_스톡", "chance": 0.10},
+		{"id": "전술_손전등", "chance": 0.10}
 	],
 	"금고": [
 		{"id": "금시계", "chance": 0.4}, {"id": "은반지", "chance": 0.5},
@@ -130,11 +138,13 @@ static func generate_interior(b_type: String, seed_val: int) -> Dictionary:
 		var pool = FURNITURE_LOOT_TABLES.get(f_type, [])
 		for entry in pool:
 			if rng.randf() < entry["chance"]:
-				loot.append({"id": entry["id"], "amount": 1})
+				var drop_id := String(entry["id"])
+				var drop_amt := int(entry.get("amount", 1))
+				loot.append({"id": drop_id, "amount": drop_amt})
 				
 		if loot.is_empty() and pool.size() > 0:
 			var guaranteed_entry = pool[rng.randi() % pool.size()]
-			loot.append({"id": guaranteed_entry["id"], "amount": 1})
+			loot.append({"id": String(guaranteed_entry["id"]), "amount": int(guaranteed_entry.get("amount", 1))})
 				
 		furnitures.append({
 			"type": f_type,

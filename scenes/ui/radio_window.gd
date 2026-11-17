@@ -154,7 +154,9 @@ func _determine_preferred_ammo() -> String:
 		var w_data: Dictionary = player.equipped_weapon_data
 		if not w_data.is_empty():
 			var loaded = String(w_data.get("loaded_ammo", ""))
-			if loaded != "" and loaded != "탄약":
+			if loaded == "탄약":
+				loaded = "9mm"
+			if loaded != "":
 				return loaded
 			var raw_rec = String(w_data.get("receiver", w_data.get("id", "")))
 			var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_rec)

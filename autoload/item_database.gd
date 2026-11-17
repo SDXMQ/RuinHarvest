@@ -32,7 +32,7 @@ func _load_all_items():
 		dir.list_dir_begin()
 		var fname = dir.get_next()
 		while fname != "":
-			if fname.ends_with(".tres"):
+			if fname.ends_with(".tres") and fname != "탄약.tres":
 				var res = load("res://data/items/" + fname)
 				if res and res is ItemData:
 					var d: Dictionary = {
@@ -164,21 +164,43 @@ func _load_all_items():
 			}
 		}
 
+	if not items.has("함정"):
+		items["함정"] = {
+			"id": "함정",
+			"name": "강철 덫 (함정)",
+			"category": ItemCategory.TOOL,
+			"type": "trap",
+			"description": "접근하는 감염체나 적의 발목을 물어 피해와 이동 저지를 가하는 강철 덫입니다. 인벤토리에서 사용하여 설치합니다.",
+			"stackable": true,
+			"max_stack": 3,
+			"weight": 1.2,
+			"rarity": 2,
+			"value": 2400,
+			"effects": {}
+		}
+
 # 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {
 	"crate": [
 		{"id": "식량통조림", "chance": 0.35}, {"id": "생수", "chance": 0.35},
-		{"id": "붕대", "chance": 0.25}, {"id": "탄약", "chance": 0.2},
-		{"id": "권총", "chance": 0.05}, {"id": "손전등", "chance": 0.1}
+		{"id": "붕대", "chance": 0.25}, {"id": "9mm", "chance": 0.32, "amount": 20},
+		{"id": ".45ACP", "chance": 0.22, "amount": 15}, {"id": "12게이지_벅샷", "chance": 0.20, "amount": 8},
+		{"id": "5.56mm", "chance": 0.16, "amount": 18}, {"id": "7.62mm", "chance": 0.14, "amount": 15},
+		{"id": "권총", "chance": 0.08}, {"id": "손전등", "chance": 0.12},
+		{"id": "레드닷_사이트", "chance": 0.12}, {"id": "수직_포어그립", "chance": 0.10},
+		{"id": "플래시_소염기", "chance": 0.10}, {"id": "경량_접이식_스톡", "chance": 0.09}
 	],
 	"barrel": [
-		{"id": "고철", "chance": 0.5}, {"id": "화약", "chance": 0.2},
-		{"id": "폐전선", "chance": 0.3}, {"id": "생수", "chance": 0.15}
+		{"id": "고철", "chance": 0.5}, {"id": "화약", "chance": 0.25},
+		{"id": "폐전선", "chance": 0.3}, {"id": "생수", "chance": 0.15},
+		{"id": "9mm", "chance": 0.18, "amount": 15}
 	],
 	"car": [
-		{"id": "고철", "chance": 0.4}, {"id": "비상용 배터리", "chance": 0.2},
-		{"id": "나침반", "chance": 0.1}, {"id": "금시계", "chance": 0.05},
-		{"id": "지도", "chance": 0.05}
+		{"id": "고철", "chance": 0.4}, {"id": "비상용 배터리", "chance": 0.22},
+		{"id": "군용 나침반", "chance": 0.12}, {"id": "금시계", "chance": 0.06},
+		{"id": "지도", "chance": 0.12}, {"id": "9mm", "chance": 0.24, "amount": 18},
+		{"id": ".45ACP", "chance": 0.18, "amount": 15}, {"id": "12게이지_벅샷", "chance": 0.16, "amount": 8},
+		{"id": "전술_손전등", "chance": 0.10}, {"id": "짧은_총열", "chance": 0.08}
 	],
 	"fridge": [
 		{"id": "식량통조림", "chance": 0.5}, {"id": "생수", "chance": 0.5},
@@ -190,47 +212,64 @@ var loot_tables: Dictionary = {
 	],
 	"bed": [
 		{"id": "붕대", "chance": 0.45}, {"id": "진통제", "chance": 0.3},
-		{"id": "천", "chance": 0.4}, {"id": "1레벨_가방", "chance": 0.12},
-		{"id": "은반지", "chance": 0.12}
+		{"id": "천", "chance": 0.4}, {"id": "1레벨_가방", "chance": 0.15},
+		{"id": "은반지", "chance": 0.12}, {"id": "9mm", "chance": 0.22, "amount": 15}
 	],
 	"desk": [
-		{"id": "나침반", "chance": 0.18}, {"id": "지도", "chance": 0.18},
-		{"id": "9mm", "chance": 0.28}, {"id": "CPU", "chance": 0.15},
+		{"id": "군용 나침반", "chance": 0.18}, {"id": "지도", "chance": 0.20},
+		{"id": "9mm", "chance": 0.32, "amount": 20}, {"id": ".45ACP", "chance": 0.22, "amount": 15},
+		{"id": "5.56mm", "chance": 0.16, "amount": 18}, {"id": "CPU", "chance": 0.15},
 		{"id": "금시계", "chance": 0.12}, {"id": "장거리 무전기", "chance": 0.08},
-		{"id": "무기고 열쇠", "chance": 0.08}, {"id": "보안 키카드", "chance": 0.05}
+		{"id": "무기고 열쇠", "chance": 0.10}, {"id": "보안 키카드", "chance": 0.06},
+		{"id": "레드닷_사이트", "chance": 0.12}, {"id": "적색_레이저_표적지시기", "chance": 0.10},
+		{"id": "대용량_확장_탄창", "chance": 0.10}
 	],
 	"shelf": [
 		{"id": "식량통조림", "chance": 0.35}, {"id": "생수", "chance": 0.35},
 		{"id": "고철", "chance": 0.35}, {"id": "못", "chance": 0.3},
-		{"id": "손전등", "chance": 0.2}, {"id": "비상용 배터리", "chance": 0.2}
+		{"id": "손전등", "chance": 0.2}, {"id": "비상용 배터리", "chance": 0.2},
+		{"id": "12게이지_벅샷", "chance": 0.20, "amount": 8}, {"id": "컴펜세이터", "chance": 0.10},
+		{"id": "수직_포어그립", "chance": 0.10}
 	],
 	"house": [
 		{"id": "식량통조림", "chance": 0.3}, {"id": "생수", "chance": 0.3},
-		{"id": "마른 빵", "chance": 0.2}, {"id": "나이프", "chance": 0.1},
-		{"id": "천", "chance": 0.2}, {"id": "붕대", "chance": 0.15},
+		{"id": "마른 빵", "chance": 0.2}, {"id": "나이프", "chance": 0.12},
+		{"id": "천", "chance": 0.2}, {"id": "붕대", "chance": 0.18},
+		{"id": "9mm", "chance": 0.25, "amount": 18}, {"id": ".45ACP", "chance": 0.18, "amount": 14},
+		{"id": "12게이지_벅샷", "chance": 0.15, "amount": 8},
 		{"id": "은반지", "chance": 0.15}, {"id": "금시계", "chance": 0.05}
 	],
 	"hospital": [
 		{"id": "구급상자", "chance": 0.4}, {"id": "진통제", "chance": 0.3},
 		{"id": "붕대", "chance": 0.4}, {"id": "약초", "chance": 0.15},
-		{"id": "고급 치료킷", "chance": 0.1}
+		{"id": "고급 치료킷", "chance": 0.12}, {"id": "항생제", "chance": 0.22}
 	],
 	"military": [
-		{"id": "탄약", "chance": 0.35}, {"id": "권총", "chance": 0.1},
-		{"id": "레버액션 소총", "chance": 0.05}, {"id": "방탄조끼", "chance": 0.12},
-		{"id": "구급상자", "chance": 0.2}, {"id": "수류탄", "chance": 0.1},
-		{"id": "암호화된 SSD", "chance": 0.05}
+		{"id": "9mm", "chance": 0.38, "amount": 25}, {"id": "5.56mm", "chance": 0.38, "amount": 25},
+		{"id": "7.62mm", "chance": 0.34, "amount": 20}, {"id": ".45ACP", "chance": 0.28, "amount": 20},
+		{"id": "12게이지_벅샷", "chance": 0.26, "amount": 10}, {"id": "12게이지_슬러그", "chance": 0.20, "amount": 8},
+		{"id": "권총", "chance": 0.12}, {"id": "레버액션 소총", "chance": 0.08},
+		{"id": "방탄조끼", "chance": 0.15}, {"id": "구급상자", "chance": 0.22},
+		{"id": "수류탄", "chance": 0.15}, {"id": "암호화된 SSD", "chance": 0.06},
+		{"id": "2배율_조준경", "chance": 0.16}, {"id": "4배율_ACOG", "chance": 0.12},
+		{"id": "소음기", "chance": 0.12}, {"id": "대용량_확장_탄창", "chance": 0.16},
+		{"id": "컴펜세이터", "chance": 0.14}, {"id": "RK-1_인체공학_그립", "chance": 0.12},
+		{"id": "적색_레이저_표적지시기", "chance": 0.14}
 	],
 	"locked_armory": [
-		{"id": "5.56mm", "chance": 0.65}, {"id": "7.62mm", "chance": 0.65},
+		{"id": "5.56mm", "chance": 0.65, "amount": 30}, {"id": "7.62mm", "chance": 0.65, "amount": 30},
+		{"id": "9mm", "chance": 0.50, "amount": 30}, {"id": "12게이지_슬러그", "chance": 0.45, "amount": 12},
 		{"id": "3레벨_방탄복", "chance": 0.35}, {"id": "3레벨_헬멧", "chance": 0.35},
-		{"id": "수류탄", "chance": 0.45}, {"id": "소음기", "chance": 0.3},
-		{"id": "4배율_ACOG", "chance": 0.28}, {"id": "암호화된 SSD", "chance": 0.25},
+		{"id": "수류탄", "chance": 0.45}, {"id": "소음기", "chance": 0.35},
+		{"id": "4배율_ACOG", "chance": 0.30}, {"id": "8배율_스나이퍼_스코프", "chance": 0.22},
+		{"id": "50발_드럼_탄창", "chance": 0.25}, {"id": "PRS_정밀_저격_스톡", "chance": 0.25},
+		{"id": "정밀_롱헤비_총열", "chance": 0.25}, {"id": "암호화된 SSD", "chance": 0.25},
 		{"id": "장거리 무전기", "chance": 0.25}
 	],
 	"locked_medical": [
 		{"id": "고급 치료킷", "chance": 0.75}, {"id": "구급상자", "chance": 0.65},
-		{"id": "진통제", "chance": 0.55}, {"id": "암호화된 SSD", "chance": 0.35},
+		{"id": "진통제", "chance": 0.55}, {"id": "항생제", "chance": 0.55},
+		{"id": "암호화된 SSD", "chance": 0.35},
 		{"id": "그래픽카드", "chance": 0.22}, {"id": "금시계", "chance": 0.3}
 	]
 }
@@ -243,7 +282,14 @@ var traders: Dictionary = {
 		"stock": [
 			{"id": "권총", "price": 18000},
 			{"id": "레버액션 소총", "price": 35000},
-			{"id": "탄약", "price": 200, "amount": 30},
+			{"id": "9mm", "price": 150, "amount": 30},
+			{"id": ".45ACP", "price": 250, "amount": 25},
+			{"id": "5.56mm", "price": 350, "amount": 30},
+			{"id": "7.62mm", "price": 450, "amount": 25},
+			{"id": "12게이지_벅샷", "price": 300, "amount": 12},
+			{"id": "레드닷_사이트", "price": 6500},
+			{"id": "대용량_확장_탄창", "price": 9000},
+			{"id": "수직_포어그립", "price": 4000},
 			{"id": "수류탄", "price": 4000},
 			{"id": "파이프", "price": 1500},
 			{"id": "방탄조끼", "price": 15000}
@@ -279,6 +325,14 @@ var traders: Dictionary = {
 }
 
 func resolve_item_id(id: String) -> String:
+	if id in ["탄약", "9mm 탄약", "9mm_탄약"]:
+		return "9mm"
+	if id == "나침반":
+		if items.has("군용 나침반"):
+			return "군용 나침반"
+	if id == "에너지드링크":
+		if items.has("에너지 드링크"):
+			return "에너지 드링크"
 	if id in ["기밀_SSD", "기밀 SSD", "암호화된_SSD", "암호화된 SSD"]:
 		if items.has("암호화된 SSD"):
 			return "암호화된 SSD"
@@ -344,7 +398,14 @@ func generate_loot(table_name: String, rolls: int = 3) -> Array[Dictionary]:
 	for i in range(rolls):
 		for entry in pool:
 			if randf() < entry["chance"]:
-				_add_to_loot(results, entry["id"], 1)
+				var drop_id := resolve_item_id(String(entry["id"]))
+				var drop_amt := int(entry.get("amount", 0))
+				if drop_amt <= 0:
+					if is_ammo_item(drop_id):
+						drop_amt = randi_range(6, 12) if drop_id.contains("12게이지") else randi_range(12, 24)
+					else:
+						drop_amt = 1
+				_add_to_loot(results, drop_id, drop_amt)
 				break
 				
 	return results

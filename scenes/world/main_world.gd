@@ -1309,9 +1309,10 @@ func _on_player_stats_changed() -> void:
 				var stats = player.equipped_weapon_data.get("computed_stats", {})
 				var mag_size = stats.get("magazine_size", 15)
 				var reserve_ammo = player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0
-				var cal = player._get_compatible_ammo_types()[0] if player.has_method("_get_compatible_ammo_types") and player._get_compatible_ammo_types().size() > 0 else "탄약"
+				var cal = player._get_compatible_ammo_types()[0] if player.has_method("_get_compatible_ammo_types") and player._get_compatible_ammo_types().size() > 0 else "9mm"
+				var cal_disp = "9mm 탄약" if cal in ["9mm", "탄약"] else cal.replace("_", " ")
 				
-				ammo_label.text = "🔫 %d / %d  [%s: %d]" % [cur_mag, mag_size, cal, reserve_ammo]
+				ammo_label.text = "🔫 %d / %d  [%s: %d]" % [cur_mag, mag_size, cal_disp, reserve_ammo]
 				if cur_mag == 0:
 					ammo_label.add_theme_color_override("font_color", Color.RED)
 				else:

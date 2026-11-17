@@ -225,6 +225,21 @@ func _display_gun_details(item: Dictionary, rec_id: String, _data: Dictionary) -
 	_append_gun_stat_line(stat_lines, "탄창 용량", base_stats.get("magazine_size", 15), cur_stats.get("magazine_size", 15), "%d발", true)
 	_append_gun_stat_line(stat_lines, "사격 소음", base_stats.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false)
 	_append_gun_stat_line(stat_lines, "총기 중량", base_stats.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false)
+
+	var rec_info = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
+	var compat_ammos: Array = rec_info.get("ammo_types", cur_stats.get("ammo_types", []))
+	if not compat_ammos.is_empty():
+		var cal_names: Array[String] = []
+		for cal in compat_ammos:
+			var cal_s := str(cal)
+			cal_names.append("9mm 탄약" if cal_s in ["9mm", "탄약"] else cal_s.replace("_", " "))
+		stat_lines.append(" • 호환 탄약: [color=#f1fa8c]%s[/color]" % ", ".join(cal_names))
+
+	stat_lines.append("")
+	stat_lines.append("[color=#8be9fd][b]USAGE // 총기 사용법[/b][/color]")
+	var slot_hint := "[보조무기 슬롯 (3)]" if rec_info.get("category", "") == "pistol" else "[주무기 슬롯 (1/2)]"
+	stat_lines.append(" • 장착: %s에 드래그 또는 우클릭 장착" % slot_hint)
+	stat_lines.append(" • 조작: [좌클릭] 사격 | [우클릭] 정조준 | [R] 재장전 | [Alt+R] 탄종변경 | [B] 총기개조")
 	
 	if stats_label:
 		stats_label.text = "\n".join(stat_lines)
@@ -287,16 +302,23 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 					stats.append(" • 장전 시간: %.1f초" % val)
 				"zoom":
 					stats.append(" • 조준경 배율: %.1fx" % val)
+		stats.append("")
+		stats.append("[color=#8be9fd][b]USAGE // 장착 방법[/b][/color]")
+		stats.append(" • 인벤토리 우측 무기 카드의 [%s] 슬롯으로 드래그하거나 우클릭 [장착], 또는 필드에서 [B] 총기 개조창 이용" % slot_name)
 					
 	# 탄약 제원
-	elif WeaponPartsDatabase.AMMO_TYPES.has(item_id):
-		var a_data = WeaponPartsDatabase.AMMO_TYPES[item_id]
+	elif WeaponPartsDatabase.AMMO_TYPES.has(item_id) or (item_id == "탄약" and WeaponPartsDatabase.AMMO_TYPES.has("9mm")):
+		var lookup_id = "9mm" if item_id == "탄약" else item_id
+		var a_data = WeaponPartsDatabase.AMMO_TYPES[lookup_id]
 		stats.append("[color=#f1fa8c][b]AMMUNITION // 탄약 제원[/b][/color]")
 		stats.append(" • 피해 배율: [color=#8be9fd]x%.2f[/color]" % a_data.get("damage_mult", 1.0))
 		stats.append(" • 관통력: [color=#8be9fd]%d[/color]" % a_data.get("penetration", 10))
 		var pellets = a_data.get("pellets", 1)
 		if pellets > 1:
 			stats.append(" • 펠릿 수: [color=#bd93f9]%d개 (산탄)[/color]" % pellets)
+		stats.append("")
+		stats.append("[color=#8be9fd][b]USAGE // 장전 방법[/b][/color]")
+		stats.append(" • 호환 총기를 손에 들고 [R] 키 재장전 ([Alt+R] 탄종 전환), 또는 인벤토리에서 총기 슬롯 위로 드래그하여 직접 장전")
 			
 	# 일반 장비 및 소비 아이템
 	else:
@@ -320,11 +342,18 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 		if effects.has("stamina"): stats.append(" • 스태미나: [color=#f1fa8c]+%d[/color]" % effects["stamina"])
 		if effects.get("cures_bleeding", false): stats.append(" • [color=#ff79c6]출혈 지혈 효과[/color]")
 		if effects.get("cures_fracture", false): stats.append(" • [color=#ff79c6]골절 치료 효과[/color]")
+		if effects.get("cures_infection", false): stats.append(" • [color=#50fa7b]생체 감염(바이오하자드) 완치[/color]")
 		if effects.get("poison_resist", false): stats.append(" • [color=#bd93f9]독성/방독 저항[/color]")
 		
 		var max_s = int(data.get("max_stack", 1))
 		if max_s > 1:
 			stats.append(" • 최대 중첩: %d개" % max_s)
+
+		var usage_hint := _get_item_usage_hint(item_id, data)
+		if usage_hint != "":
+			stats.append("")
+			stats.append("[color=#8be9fd][b]USAGE // 사용법[/b][/color]")
+			stats.append(" • " + usage_hint)
 	
 	if stats_label:
 		if stats.size() > 0:
@@ -333,6 +362,32 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 		else:
 			stats_label.text = ""
 			stats_label.hide()
+
+static func _get_item_usage_hint(item_id: String, data: Dictionary) -> String:
+	var item_type := str(data.get("type", ""))
+	var cat := int(data.get("category", -1))
+	var eq_slot := ItemDatabase.get_item_equip_slot(item_id) if ItemDatabase else str(data.get("equip_slot", ""))
+	if item_type == "melee" or eq_slot == "melee" or item_id in ["나이프", "파이프", "도끼", "야구방망이"]:
+		return "[보조무기 슬롯]에 장착 후 [3] 키로 선택 -> [좌클릭] 근접 공격 (탄약 불필요)"
+	if item_type == "throwable" or eq_slot == "throwable" or item_id == "수류탄":
+		return "[투척무기 슬롯]에 장착 후 [4] 키로 선택 -> [좌클릭] 조준 지점에 투척"
+	if item_id == "지도":
+		return "가방에 소지 후 [M] 키를 눌러 작전 구역 전체 지도 및 탈출구 확인 (무기 슬롯 장착 불가)"
+	if item_id in ["군용 나침반", "나침반"]:
+		return "가방에 소지 시 화면 상단 방위각(N/E/S/W) 나침반으로 방향 확인"
+	if item_id == "손전등":
+		return "[F] 키를 눌러 전술 라이트 점등/소등 전환"
+	if item_id in ["장거리 무전기", "군용 무전기", "무전기"]:
+		return "가방에 소지한 채 [U] 키를 눌러 드론 탄약 보급·풀턴 회수·정찰 스캔 호출"
+	if item_id.contains("망원경"):
+		return "[N] 키 전술 야간투시경(NVG) 및 [우클릭] 정조준 원거리 관측에 활용"
+	if item_type in ["key", "keycard"] or item_id.contains("열쇠") or item_id.contains("키카드"):
+		return "가방 또는 안전 컨테이너(2x2)에 소지한 상태로 잠긴 보안문 앞에서 [E] 키로 개방"
+	if cat in [ItemDatabase.ItemCategory.FOOD, ItemDatabase.ItemCategory.WATER, ItemDatabase.ItemCategory.MEDICAL]:
+		return "인벤토리에서 더블클릭/우클릭 [사용], 또는 필드 단축키 [5] 붕대 · [6] 구급 · [7] 식수"
+	if cat == ItemDatabase.ItemCategory.EQUIPMENT or eq_slot in ["helmet", "vest", "backpack", "bottom"]:
+		return "캐릭터 장비 슬롯으로 드래그하거나 더블클릭/우클릭 [장착]"
+	return ""
 
 func update_position(target_global_pos: Vector2) -> void:
 	reset_size()

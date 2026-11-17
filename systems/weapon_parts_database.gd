@@ -9,7 +9,7 @@ extends RefCounted
 # ============================================================
 const AMMO_TYPES = {
 	"9mm": {
-		"name": "9x19mm 탄약",
+		"name": "9mm 탄약",
 		"damage_mult": 1.0,
 		"penetration": 10,
 		"recoil_mult": 1.0,
@@ -144,7 +144,7 @@ const RECEIVERS = {
 		"base_rpm": 65,
 		"base_recoil": 38.0,
 		"base_accuracy": 85.0,
-		"ammo_types": [".45ACP", "7.62mm", "탄약"],
+		"ammo_types": [".45ACP", "7.62mm", "9mm"],
 		"default_ammo": ".45ACP",
 		"slots": {
 			"barrel": 1, "muzzle": 1, "stock": 1,
@@ -161,7 +161,7 @@ const RECEIVERS = {
 		"base_rpm": 65,
 		"base_recoil": 38.0,
 		"base_accuracy": 85.0,
-		"ammo_types": [".45ACP", "7.62mm", "탄약"],
+		"ammo_types": [".45ACP", "7.62mm", "9mm"],
 		"default_ammo": ".45ACP",
 		"slots": {
 			"barrel": 1, "muzzle": 1, "stock": 1,

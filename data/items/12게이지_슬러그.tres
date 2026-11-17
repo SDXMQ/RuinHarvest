@@ -5,11 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "12게이지_슬러그"
-name = "12게이지_슬러그"
+name = "12게이지 슬러그 탄약"
 category = 3
-description = "12게이지 중량 슬러그탄. 단발 관통력 극대화."
+description = "12게이지 중량 단발 슬러그탄. 레밍턴 870 산탄총에 호환되며 중거리 장갑 관통력이 뛰어납니다."
 stackable = true
 max_stack = 20
 weight = 0.06
 rarity = 0.08
 value = 500
+item_type = "ammo"

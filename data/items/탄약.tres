@@ -4,12 +4,13 @@
 
 [resource]
 script = ExtResource("1")
-id = "탄약"
-name = "탄약"
+id = "9mm"
+name = "9mm 탄약"
 category = 3
-description = "9mm 탄약."
+description = "9x19mm 파라벨룸 표준 탄약. 권총(M9) 및 기관단총(MP5) 등에 호환됩니다. [R] 키로 재장전하거나 인벤토리에서 총기 슬롯 위로 드래그하여 장전합니다."
 stackable = true
-max_stack = 30
-weight = 0.05
-rarity = 0.15
-value = 200
+max_stack = 60
+weight = 0.02
+rarity = 0.3
+value = 150
+item_type = "ammo"

@@ -5,11 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "5.56mm"
-name = "5.56mm"
+name = "5.56mm 탄약"
 category = 3
-description = "5.56x45mm NATO 고속 소총탄."
+description = "5.56x45mm NATO 고속 소총탄. M4A1 돌격소총 등에 호환되며 반동이 적고 관통력이 우수합니다."
 stackable = true
 max_stack = 60
 weight = 0.03
 rarity = 0.15
 value = 350
+item_type = "ammo"

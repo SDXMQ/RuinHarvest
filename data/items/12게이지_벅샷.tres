@@ -5,11 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "12게이지_벅샷"
-name = "12게이지_벅샷"
+name = "12게이지 벅샷 탄약"
 category = 3
-description = "12게이지 8펠릿 산탄. 근거리 파괴력 극대화."
+description = "12게이지 8펠릿 산탄. 레밍턴 870 산탄총에 호환되며 근거리 다중 타격에 특화되어 있습니다."
 stackable = true
 max_stack = 20
 weight = 0.05
 rarity = 0.2
 value = 300
+item_type = "ammo"

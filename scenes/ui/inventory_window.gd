@@ -1579,8 +1579,8 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 			var stats = weapon_dict.get("computed_stats", {})
 			var max_mag = int(stats.get("magazine_size", weapon_dict.get("magazine_size", 10)))
 			var cur_mag = int(weapon_dict.get("current_magazine_ammo", 0))
-			var l_ammo = weapon_dict.get("loaded_ammo", "")
-			var ammo_name = l_ammo.replace("_탄약", "").replace("탄약", "") if l_ammo != "" else "없음"
+			var l_ammo = str(weapon_dict.get("loaded_ammo", ""))
+			var ammo_name = "9mm 탄약" if l_ammo in ["9mm", "탄약"] else (l_ammo.replace("_", " ") if l_ammo != "" else "없음")
 			var info_str = ""
 			if max_mag > 0 or l_ammo != "":
 				info_str = " [%s | %d/%d발]" % [ammo_name, cur_mag, max_mag]

@@ -5,11 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = ".45ACP"
-name = ".45ACP"
+name = ".45 ACP 탄약"
 category = 3
-description = ".45 ACP 대구경 권총탄. 높은 저지력."
+description = ".45 ACP 대구경 탄약. M9 권총, MP5, 윈체스터 레버액션 소총에 호환되며 높은 대인 저지력을 지닙니다."
 stackable = true
 max_stack = 50
 weight = 0.03
 rarity = 0.2
 value = 250
+item_type = "ammo"

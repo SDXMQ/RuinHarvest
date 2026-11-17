@@ -5,11 +5,12 @@
 [resource]
 script = ExtResource("1")
 id = "7.62mm"
-name = "7.62mm"
+name = "7.62mm 탄약"
 category = 3
-description = "7.62x39mm 고위력 관통 소총탄."
+description = "7.62mm 고위력 소총탄. AK-47, SV-98 저격총, 레버액션 소총에 호환되며 강력한 관통력과 파괴력을 발휘합니다."
 stackable = true
 max_stack = 40
 weight = 0.04
 rarity = 0.1
 value = 450
+item_type = "ammo"
