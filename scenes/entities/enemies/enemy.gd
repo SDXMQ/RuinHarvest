@@ -844,6 +844,8 @@ func _fire_ranged_shot(target_node: Node2D) -> void:
 	if ps:
 		ps.emit("muzzle", muzzle_pos.x, muzzle_pos.y, 3, shot_dir.angle())
 		ps.emit("bullet_shell", global_position.x, global_position.y, 1, rotation - PI * 0.5)
+	if get_tree() and get_tree().current_scene and get_tree().current_scene.has_method("spawn_transient_point_light"):
+		get_tree().current_scene.spawn_transient_point_light(muzzle_pos, Color(1.0, 0.78, 0.28), 1.85, 1.75, 0.06, 48.0)
 	if SoundManager:
 		SoundManager.play("hit_ranged")
 	EventBus.noise_created.emit(global_position, 450.0, "gunshot")

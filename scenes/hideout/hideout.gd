@@ -984,14 +984,31 @@ func _refresh_market_ui() -> void:
 	if not bounties.is_empty():
 		var bounty_panel = PanelContainer.new()
 		bounty_panel.name = "BountyOrderPanel"
+		var bounty_sb := StyleBoxFlat.new()
+		bounty_sb.bg_color = Color(0.18, 0.14, 0.05, 0.96)
+		bounty_sb.border_width_left = 4
+		bounty_sb.border_width_top = 2
+		bounty_sb.border_width_right = 2
+		bounty_sb.border_width_bottom = 2
+		bounty_sb.border_color = Color(1.0, 0.82, 0.22, 0.98)
+		bounty_sb.corner_radius_top_left = 6
+		bounty_sb.corner_radius_top_right = 6
+		bounty_sb.corner_radius_bottom_left = 6
+		bounty_sb.corner_radius_bottom_right = 6
+		bounty_sb.content_margin_left = 12
+		bounty_sb.content_margin_right = 12
+		bounty_sb.content_margin_top = 10
+		bounty_sb.content_margin_bottom = 10
+		bounty_panel.add_theme_stylebox_override("panel", bounty_sb)
+
 		var b_vbox = VBoxContainer.new()
-		b_vbox.add_theme_constant_override("separation", 6)
+		b_vbox.add_theme_constant_override("separation", 8)
 		bounty_panel.add_child(b_vbox)
 		
 		var b_title = Label.new()
-		b_title.text = "🎯 암시장 특수 상인 — 금일의 긴급 수배 물품 (시세 2.5배 즉시 매입)"
-		b_title.add_theme_font_size_override("font_size", 14)
-		b_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.25))
+		b_title.text = "[🔥 오늘의 2.5x 긴급 수배] 암시장 특수 상인 고가 매입 품목"
+		b_title.add_theme_font_size_override("font_size", 15)
+		b_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 		b_vbox.add_child(b_title)
 		
 		for b_entry in bounties:
@@ -1003,14 +1020,23 @@ func _refresh_market_ui() -> void:
 			
 			var b_row = HBoxContainer.new()
 			b_row.add_theme_constant_override("separation", 12)
+			if ItemIconManager:
+				var b_icon := TextureRect.new()
+				b_icon.custom_minimum_size = Vector2(28, 28)
+				b_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				b_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				b_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+				b_icon.texture = ItemIconManager.get_icon(b_id)
+				b_row.add_child(b_icon)
+
 			var b_lbl = Label.new()
 			b_lbl.text = "★ [%s]  일반 시세: %d RUB ➔ 수배 매입가: %d RUB (x2.5)  |  보유: %d개" % [b_name, m_price, b_price, owned_cnt]
 			b_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			b_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if owned_cnt > 0 else Color(0.85, 0.88, 0.92))
+			b_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if owned_cnt > 0 else Color(0.92, 0.88, 0.76))
 			b_row.add_child(b_lbl)
 			
 			var sell_b_btn = Button.new()
-			sell_b_btn.text = "즉시 납품 (+%d RUB)" % b_price
+			sell_b_btn.text = "🔥 즉시 납품 (+%d RUB)" % b_price
 			sell_b_btn.disabled = (owned_cnt <= 0)
 			var cap_id = b_id
 			sell_b_btn.pressed.connect(func():

@@ -116,6 +116,75 @@ var raid_time_remaining: float = 1800.0 # 30분
 var raid_total_time: float = 1800.0
 var day_night_cycle_duration: float = 300.0 # 낮/밤 1주기 시간(초)
 var raid_power_restored: bool = false
+var power_lights_container: Node2D = null
+static var _shared_point_light_tex: GradientTexture2D = null
+
+static func _get_shared_point_light_tex() -> GradientTexture2D:
+	if _shared_point_light_tex == null:
+		var grad := GradientTexture2D.new()
+		grad.width = 128
+		grad.height = 128
+		grad.fill = GradientTexture2D.FILL_RADIAL
+		grad.fill_from = Vector2(0.5, 0.5)
+		grad.fill_to = Vector2(0.5, 0.0)
+		var g := Gradient.new()
+		g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(0.65, 0.65, 0.65, 0.55), Color(0, 0, 0, 0)])
+		g.offsets = PackedFloat32Array([0.0, 0.45, 1.0])
+		grad.gradient = g
+		_shared_point_light_tex = grad
+	return _shared_point_light_tex
+
+func spawn_transient_point_light(world_pos: Vector2, col: Color = Color(1.0, 0.78, 0.28), energy_val: float = 1.9, scale_val: float = 1.8, duration: float = 0.06, height_val: float = 48.0) -> PointLight2D:
+	var pl := PointLight2D.new()
+	pl.global_position = world_pos
+	pl.texture = _get_shared_point_light_tex()
+	pl.texture_scale = scale_val
+	pl.color = col
+	pl.energy = energy_val
+	pl.height = height_val
+	if entities_layer:
+		entities_layer.add_child(pl)
+	else:
+		add_child(pl)
+	if pl.is_inside_tree():
+		var tw := pl.create_tween()
+		tw.tween_property(pl, "energy", 0.0, maxf(0.02, duration)).set_ease(Tween.EASE_OUT)
+		tw.tween_callback(pl.queue_free)
+	return pl
+
+func _spawn_power_restored_lights(switch_tile: Vector2i) -> int:
+	if power_lights_container == null or not is_instance_valid(power_lights_container):
+		power_lights_container = Node2D.new()
+		power_lights_container.name = "PowerRestoredLights"
+		add_child(power_lights_container)
+	var light_positions: Array[Vector2] = [Vector2(switch_tile) * 32.0 + Vector2(16.0, 16.0)]
+	if chunk_manager and chunk_manager.object_layer:
+		var obj_layer: TileMapLayer = chunk_manager.object_layer
+		for dy in range(-14, 15):
+			for dx in range(-14, 15):
+				var check_t := switch_tile + Vector2i(dx, dy)
+				if obj_layer.get_cell_source_id(check_t) != -1:
+					var c_coords := obj_layer.get_cell_atlas_coords(check_t)
+					if c_coords == TileManager.OBJ_LIGHT_SWITCH or TileManager.is_door_open(c_coords) or TileManager.is_desk(c_coords):
+						var w_pt := Vector2(check_t) * 32.0 + Vector2(16.0, 16.0)
+						var too_close := false
+						for existing_pt in light_positions:
+							if existing_pt.distance_to(w_pt) < 120.0:
+								too_close = true
+								break
+						if not too_close and light_positions.size() < 8:
+							light_positions.append(w_pt)
+	var tex := _get_shared_point_light_tex()
+	for pt in light_positions:
+		var pl := PointLight2D.new()
+		pl.position = pt
+		pl.texture = tex
+		pl.texture_scale = 3.2
+		pl.color = Color(1.0, 0.80, 0.44)
+		pl.energy = 1.55
+		pl.height = 64.0
+		power_lights_container.add_child(pl)
+	return light_positions.size()
 
 func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO) -> Dictionary:
 	if raid_power_restored:
@@ -156,14 +225,16 @@ func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO
 							objs[idx] = TileManager.get_unlocked_door_tile(objs[idx])
 							unlocked_door_coords[Vector2i(wx, wy)] = true
 	var unlocked_doors := unlocked_door_coords.size()
+	var lit_count := _spawn_power_restored_lights(tile_pos)
 	if SoundManager:
 		SoundManager.play("menu_select")
 	if world_pos != Vector2.ZERO:
 		EventBus.noise_created.emit(world_pos, 180.0, "generator")
-	EventBus.event_logged.emit("⚡ [주 발전기 가동] 건물 조명 및 전력이 복구되었습니다! 전자식 보안 잠금문 및 지하 벙커 탈출구가 개방됩니다!")
+	EventBus.event_logged.emit("⚡ [주 발전기 가동] 건물 실내 조명(%d개소) 및 전력이 복구되었습니다! 전자식 보안 잠금문 및 지하 벙커 탈출구가 개방됩니다!" % lit_count)
 	return {
 		"power_restored": true,
 		"unlocked_doors": unlocked_doors,
+		"lights_spawned": lit_count,
 		"bunker_unlocked": true
 	}
 
@@ -1146,6 +1217,8 @@ func _process(delta: float) -> void:
 					storm_thunder_delay = 1.0
 					if day_night_modulate:
 						day_night_modulate.color = Color(1.6, 1.8, 2.2) # 번개 섬광
+					if player:
+						spawn_transient_point_light(player.global_position + Vector2(randf_range(-90.0, 90.0), -60.0), Color(0.75, 0.88, 1.0), 2.4, 7.5, 0.35, 160.0)
 				
 				if storm_lightning_active:
 					storm_lightning_duration -= delta

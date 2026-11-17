@@ -85,6 +85,23 @@ const RECEIVERS = {
 		"value": 8000,
 		"weight": 0.5
 	},
+	"MP5_리시버": {
+		"name": "MP5A5 기관단총 리시버",
+		"category": "smg",
+		"base_damage": 19.0,
+		"base_range": 11.5,
+		"base_rpm": 210,
+		"base_recoil": 18.0,
+		"base_accuracy": 78.0,
+		"ammo_types": ["9mm", ".45ACP"],
+		"default_ammo": "9mm",
+		"slots": {
+			"barrel": 1, "muzzle": 1, "stock": 1, "grip": 1,
+			"magazine": 1, "optic": 1, "rail": 2
+		},
+		"value": 26000,
+		"weight": 1.3
+	},
 	"AK_리시버": {
 		"name": "AK-47 돌격소총 리시버",
 		"category": "rifle",
@@ -194,6 +211,8 @@ static func resolve_receiver_id(item_id: String) -> String:
 		return item_id
 	if item_id == "레버액션 소총" or item_id == "레버액션_소총" or item_id.contains("레버액션"):
 		return "레버액션_리시버"
+	elif item_id.contains("MP5") or item_id.contains("기관단총"):
+		return "MP5_리시버"
 	elif item_id == "M4A1 소총" or item_id == "M4A1" or item_id.contains("M4"):
 		return "M4_리시버"
 	elif item_id == "AK-47 돌격소총" or item_id == "AK-47" or item_id.contains("AK"):
@@ -229,14 +248,14 @@ const PARTS = {
 	"짧은_총열": {
 		"name": "카빈용 단축 총열",
 		"slot": "barrel",
-		"compatible_categories": ["pistol", "rifle", "shotgun"],
+		"compatible_categories": ["pistol", "smg", "rifle", "shotgun"],
 		"stat_modifiers": {"range": -2.0, "accuracy": -5, "ads_speed": +15, "weight": -0.3},
 		"tier": "cheap", "value": 3500
 	},
 	"정밀_롱헤비_총열": {
 		"name": "매치그레이드 롱 헤비 총열",
 		"slot": "barrel",
-		"compatible_categories": ["rifle", "sniper", "pistol"],
+		"compatible_categories": ["rifle", "smg", "sniper", "pistol"],
 		"stat_modifiers": {"range": +4.0, "accuracy": +18, "damage": +3, "recoil": -5, "weight": +0.5},
 		"tier": "expensive", "value": 16000
 	},
@@ -252,7 +271,7 @@ const PARTS = {
 	"컴펜세이터": {
 		"name": "반동 제어 컴펜세이터",
 		"slot": "muzzle",
-		"compatible_categories": ["rifle", "pistol", "shotgun"],
+		"compatible_categories": ["rifle", "smg", "pistol", "shotgun"],
 		"stat_modifiers": {"recoil": -18, "accuracy": +8, "noise_radius": +50},
 		"tier": "mid", "value": 8500
 	},
@@ -312,14 +331,14 @@ const PARTS = {
 	"대용량_확장_탄창": {
 		"name": "30발 확장 탄창",
 		"slot": "magazine",
-		"compatible_categories": ["rifle", "pistol"],
+		"compatible_categories": ["rifle", "smg", "pistol"],
 		"stat_modifiers": {"magazine_size": 30, "reload_speed": 2.2, "weight": +0.3},
 		"tier": "mid", "value": 9000
 	},
 	"50발_드럼_탄창": {
 		"name": "50발 대용량 드럼 탄창",
 		"slot": "magazine",
-		"compatible_categories": ["rifle", "pistol"],
+		"compatible_categories": ["rifle", "smg", "pistol"],
 		"stat_modifiers": {"magazine_size": 50, "reload_speed": 2.8, "weight": +0.9, "recoil": +5},
 		"tier": "expensive", "value": 22000
 	},
@@ -328,14 +347,14 @@ const PARTS = {
 	"경량_접이식_스톡": {
 		"name": "경량 접이식 개머리판",
 		"slot": "stock",
-		"compatible_categories": ["rifle", "shotgun", "sniper"],
+		"compatible_categories": ["rifle", "smg", "shotgun", "sniper"],
 		"stat_modifiers": {"recoil": -10, "ads_speed": +10, "weight": -0.2},
 		"tier": "cheap", "value": 4500
 	},
 	"PRS_정밀_저격_스톡": {
 		"name": "PRS 조절식 정밀 반동제어 스톡",
 		"slot": "stock",
-		"compatible_categories": ["rifle", "sniper", "shotgun"],
+		"compatible_categories": ["rifle", "smg", "sniper", "shotgun"],
 		"stat_modifiers": {"recoil": -28, "accuracy": +12, "weight": +0.5},
 		"tier": "expensive", "value": 18000
 	},
@@ -344,14 +363,14 @@ const PARTS = {
 	"수직_포어그립": {
 		"name": "전술 수직 포어그립",
 		"slot": "grip",
-		"compatible_categories": ["rifle", "pistol", "sniper"],
+		"compatible_categories": ["rifle", "smg", "pistol", "sniper"],
 		"stat_modifiers": {"recoil": -15, "accuracy": +5},
 		"tier": "cheap", "value": 4000
 	},
 	"RK-1_인체공학_그립": {
 		"name": "RK-1 고급 앵글 포어그립",
 		"slot": "grip",
-		"compatible_categories": ["rifle", "sniper"],
+		"compatible_categories": ["rifle", "smg", "sniper"],
 		"stat_modifiers": {"recoil": -22, "accuracy": +10, "ads_speed": +8},
 		"tier": "expensive", "value": 14000
 	},

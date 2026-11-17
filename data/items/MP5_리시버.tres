@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="ItemData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://systems/data/item_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+id = "MP5_리시버"
+name = "MP5A5 기관단총"
+category = 3
+description = "9mm 및 .45 ACP 탄약을 사용하는 독일제 롤러 지연식 기관단총입니다. 연사력이 높고 반동이 낮아 근접·실내 교전에 특화되어 있습니다. [주무기 슬롯]에 장착 후 [1]/[2] 키로 선택하여 사격합니다."
+stackable = false
+weight = 1.3
+rarity = 0.08
+value = 26000
+max_durability = 100
+item_type = "receiver"

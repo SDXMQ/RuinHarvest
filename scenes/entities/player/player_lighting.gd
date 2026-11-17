@@ -61,8 +61,10 @@ func _process(delta: float) -> void:
 func trigger_muzzle_flash() -> void:
 	muzzle_flash_timer = 0.06
 	if muzzle_light:
+		muzzle_light.color = Color(1.0, 0.78, 0.28)
+		muzzle_light.height = 52.0
 		muzzle_light.enabled = true
-		muzzle_light.energy = 1.4
+		muzzle_light.energy = 2.1
 
 func toggle_flashlight() -> void:
 	set_flashlight(not flashlight_enabled)

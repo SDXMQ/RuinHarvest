@@ -1541,19 +1541,53 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	panel.add_child(vbox)
 	
-	# 상단 헤더 & 메인 무기 버튼
+	# 상단 헤더 & 메인 무기 버튼 (장착 무기 아이콘 프레임 + 마스터 황금 테두리 + 현재 손에 든 슬롯 표시)
+	var is_active_hand: bool = (player != null and "active_weapon_slot" in player and String(player.active_weapon_slot) == slot_key)
+	var w_world_data: Dictionary = GameManager.current_world_data if (GameManager and GameManager.current_world_data is Dictionary) else {}
+	var is_gold_master := false
+	if not weapon_dict.is_empty():
+		var m_bonus := HideoutProgression.get_weapon_mastery_bonus(w_world_data, str(weapon_dict.get("id", "")))
+		is_gold_master = bool(m_bonus.get("gold_border", false))
+	if is_gold_master:
+		style.border_width_left = 3
+		style.border_width_top = 1
+		style.border_width_right = 1
+		style.border_width_bottom = 1
+		style.border_color = Color(1.0, 0.84, 0.22, 0.98)
+
 	var top_hbox = HBoxContainer.new()
+	top_hbox.add_theme_constant_override("separation", 6)
 	vbox.add_child(top_hbox)
 	
 	var title_lbl = Label.new()
-	title_lbl.text = "[%s]" % title
+	title_lbl.text = "[%s%s]" % [title, " ★장착중" if is_active_hand else ""]
 	title_lbl.add_theme_font_size_override("font_size", 12)
-	title_lbl.add_theme_color_override("font_color", Color(1, 0.8, 0.3))
+	title_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.55) if is_active_hand else Color(1, 0.8, 0.3))
 	top_hbox.add_child(title_lbl)
+
+	if not weapon_dict.is_empty() and ItemIconManager:
+		var icon_frame := PanelContainer.new()
+		var ic_sb := StyleBoxFlat.new()
+		ic_sb.bg_color = Color(0.07, 0.09, 0.13, 0.95)
+		ic_sb.border_width_left = 2 if is_gold_master else 1
+		ic_sb.border_width_top = 2 if is_gold_master else 1
+		ic_sb.border_width_right = 2 if is_gold_master else 1
+		ic_sb.border_width_bottom = 2 if is_gold_master else 1
+		ic_sb.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gold_master else Color(0.35, 0.78, 0.55, 0.9)
+		icon_frame.add_theme_stylebox_override("panel", ic_sb)
+		var wep_icon := TextureRect.new()
+		wep_icon.name = "EquippedWeaponIcon"
+		wep_icon.custom_minimum_size = Vector2(30, 30)
+		wep_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		wep_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		wep_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		wep_icon.texture = ItemIconManager.get_icon(str(weapon_dict.get("id", "")))
+		icon_frame.add_child(wep_icon)
+		top_hbox.add_child(icon_frame)
 	
 	var wep_btn = Button.new()
 	wep_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	wep_btn.custom_minimum_size = Vector2(0, 32)
+	wep_btn.custom_minimum_size = Vector2(0, 34)
 	wep_btn.focus_mode = Control.FOCUS_NONE
 	wep_btn.clip_text = true
 	
@@ -1585,7 +1619,6 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 			if max_mag > 0 or l_ammo != "":
 				info_str = " [%s | %d/%d발]" % [ammo_name, cur_mag, max_mag]
 			wep_btn.text = "%s%s" % [w_name, info_str]
-		if ItemIconManager: wep_btn.icon = ItemIconManager.get_icon(w_id)
 	top_hbox.add_child(wep_btn)
 	
 	if not weapon_dict.is_empty() and not is_throwable:

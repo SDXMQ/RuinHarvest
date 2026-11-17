@@ -18,7 +18,7 @@ const FURNITURE_LOOT_TABLES = {
 		{"id": ".45ACP", "chance": 0.35, "amount": 16}, {"id": "5.56mm", "chance": 0.32, "amount": 20},
 		{"id": "7.62mm", "chance": 0.28, "amount": 18}, {"id": "12게이지_벅샷", "chance": 0.28, "amount": 10},
 		{"id": "12게이지_슬러그", "chance": 0.16, "amount": 8},
-		{"id": "레버액션 소총", "chance": 0.15}, {"id": "방탄조끼", "chance": 0.22},
+		{"id": "레버액션 소총", "chance": 0.15}, {"id": "MP5_리시버", "chance": 0.16}, {"id": "방탄조끼", "chance": 0.22},
 		{"id": "레드닷_사이트", "chance": 0.20}, {"id": "2배율_조준경", "chance": 0.15},
 		{"id": "소음기", "chance": 0.12}, {"id": "대용량_확장_탄창", "chance": 0.18},
 		{"id": "수직_포어그립", "chance": 0.16}, {"id": "컴펜세이터", "chance": 0.14}

@@ -60,7 +60,7 @@ func save_all_icons_to_disk(force_overwrite: bool = true) -> int:
 		all_ids[str(p_id)] = true
 	for a_id in WeaponPartsDatabase.AMMO_TYPES.keys():
 		all_ids[str(a_id)] = true
-	for extra_id in ["무기고 열쇠", "보안 키카드", "항생제", "Scav 인식표", "초콜릿"]:
+	for extra_id in ["무기고 열쇠", "보안 키카드", "항생제", "Scav 인식표", "초콜릿", "MP5_리시버", "함정"]:
 		all_ids[extra_id] = true
 
 	var saved_count: int = 0
@@ -135,6 +135,8 @@ func _paint_icon_by_id(img: Image, item_id: String, size: int) -> void:
 	# === 6. 총기 리시버 및 완제품 ===
 	elif norm_id.contains("레버액션") or lower_id.contains("lever"):
 		_draw_receiver(img, "lever", size)
+	elif lower_id.contains("mp5") or norm_id.contains("기관단총"):
+		_draw_receiver(img, "mp5", size)
 	elif lower_id.contains("m4"):
 		_draw_receiver(img, "m4", size)
 	elif lower_id.contains("ak"):
@@ -262,6 +264,8 @@ func _paint_icon_by_id(img: Image, item_id: String, size: int) -> void:
 		_draw_keycard(img, size)
 	elif lower_id.contains("ssd"):
 		_draw_ssd(img, size)
+	elif norm_id.contains("함정") or norm_id.contains("덫") or lower_id.contains("trap"):
+		_draw_bear_trap(img, size)
 	else:
 		_draw_generic_box(img, size)
 
@@ -473,6 +477,45 @@ func _draw_receiver(img: Image, rec_type: String, _size: int) -> void:
 			img.set_pixel(x, 19, Color(0.22, 0.22, 0.26))
 		img.set_pixel(11, 18, Color(0.22, 0.22, 0.26))
 		img.set_pixel(14, 18, Color(0.22, 0.22, 0.26))
+	elif rec_type == "mp5":
+		# MP5A5 기관단총: 슬림 상부 리시버 + 골진 핸드가드 + 곡선형 9mm 탄창 + 인입식 스톡
+		for x in range(8, 25):
+			for y in range(12, 16):
+				img.set_pixel(x, y, Color(0.22, 0.24, 0.28))
+		for x in range(18, 25):
+			for y in range(13, 16):
+				img.set_pixel(x, y, Color(0.14, 0.16, 0.19) if x % 2 == 0 else Color(0.26, 0.29, 0.34))
+		for x in range(25, 28):
+			img.set_pixel(x, 14, Color(0.38, 0.42, 0.48))
+		img.set_pixel(24, 11, Color(0.32, 0.36, 0.42)) # 원형 가늠쇠 후드
+		for x in range(4, 8):
+			img.set_pixel(x, 13, Color(0.35, 0.38, 0.44)) # 인입식 스톡 바
+		for y in range(11, 17):
+			img.set_pixel(4, y, Color(0.16, 0.17, 0.20)) # 스톡 패드
+		for y in range(16, 22):
+			for x in range(11, 14):
+				img.set_pixel(x, y, Color(0.16, 0.17, 0.20)) # 권총손잡이
+		for step in range(8):
+			var mx := 17 + int(step / 2)
+			var my := 16 + step
+			for dx in range(3):
+				if mx + dx < 28 and my < 26:
+					img.set_pixel(mx + dx, my, Color(0.28, 0.32, 0.38)) # 곡선형 9mm 탄창
+
+func _draw_bear_trap(img: Image, _size: int) -> void:
+	# 강철 덫 (원형 톱니 턱 + 중앙 압력판 + 체인)
+	for y in range(11, 23):
+		for x in range(6, 26):
+			var dx := float(x) - 15.5
+			var dy := (float(y) - 16.5) * 1.35
+			var dist := sqrt(dx * dx + dy * dy)
+			if dist >= 7.0 and dist <= 9.5:
+				img.set_pixel(x, y, Color(0.38, 0.42, 0.48))
+			elif dist < 4.2:
+				img.set_pixel(x, y, Color(0.55, 0.38, 0.22))
+	for tx in [9, 12, 15, 18, 21]:
+		img.set_pixel(tx, 12, Color(0.82, 0.86, 0.92))
+		img.set_pixel(tx, 20, Color(0.82, 0.86, 0.92))
 
 # ============================================================
 # 3. 구경별 탄약 드로잉

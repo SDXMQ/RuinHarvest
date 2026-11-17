@@ -248,7 +248,7 @@ var loot_tables: Dictionary = {
 		{"id": "9mm", "chance": 0.38, "amount": 25}, {"id": "5.56mm", "chance": 0.38, "amount": 25},
 		{"id": "7.62mm", "chance": 0.34, "amount": 20}, {"id": ".45ACP", "chance": 0.28, "amount": 20},
 		{"id": "12게이지_벅샷", "chance": 0.26, "amount": 10}, {"id": "12게이지_슬러그", "chance": 0.20, "amount": 8},
-		{"id": "권총", "chance": 0.12}, {"id": "레버액션 소총", "chance": 0.08},
+		{"id": "권총", "chance": 0.12}, {"id": "MP5_리시버", "chance": 0.10}, {"id": "레버액션 소총", "chance": 0.08},
 		{"id": "방탄조끼", "chance": 0.15}, {"id": "구급상자", "chance": 0.22},
 		{"id": "수류탄", "chance": 0.15}, {"id": "암호화된 SSD", "chance": 0.06},
 		{"id": "2배율_조준경", "chance": 0.16}, {"id": "4배율_ACOG", "chance": 0.12},
@@ -281,6 +281,7 @@ var traders: Dictionary = {
 		"desc": "전직 군수 보급관. 총기와 탄약, 방어구를 취급합니다.",
 		"stock": [
 			{"id": "권총", "price": 18000},
+			{"id": "MP5_리시버", "price": 26000},
 			{"id": "레버액션 소총", "price": 35000},
 			{"id": "9mm", "price": 150, "amount": 30},
 			{"id": ".45ACP", "price": 250, "amount": 25},

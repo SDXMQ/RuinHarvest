@@ -290,6 +290,8 @@ func _sync_pixel_layers() -> void:
 				_wep_receiver.region_rect = _cell_rect(4, 0)
 			"레버액션_리시버", "레버액션 소총":
 				_wep_receiver.region_rect = _cell_rect(5, 0)
+			"MP5_리시버":
+				_wep_receiver.region_rect = _cell_rect(0, 3)
 			_:
 				_wep_receiver.region_rect = _cell_rect(0, 0) if is_pistol else _cell_rect(2, 0)
 

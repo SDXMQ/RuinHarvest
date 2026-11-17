@@ -1712,6 +1712,17 @@ def bake_weapon_parts():
         c.set_px(ox + 10 + s // 2, oy + 16 - s, PAL["MUZZLE_CORE"] if s < 4 else PAL["MUZZLE_OUTER"], 0.85)
         c.set_px(ox + 10 + s // 2, oy + 16 + s, PAL["MUZZLE_CORE"] if s < 4 else PAL["MUZZLE_OUTER"], 0.85)
 
+    # Row 3: Additional Firearms
+    # (0, 3) MP5A5 Submachine Gun Receiver
+    ox, oy = 0 * CS, 3 * CS
+    c.fill_rect(ox + 8, oy + 13, 14, 4, PAL["CHARCOAL"], 0.84)
+    c.fill_rect(ox + 16, oy + 14, 7, 3, PAL["SLATE_DARK"], 0.86)
+    for rx in range(17, 23, 2):
+        c.set_px(ox + rx, oy + 15, PAL["SLATE_LIGHT"], 0.90) # ribbed handguard
+    c.fill_rect(ox + 14, oy + 17, 3, 5, PAL["SLATE_MID"], 0.80) # curved 9mm mag
+    c.set_px(ox + 22, oy + 12, PAL["STEEL_BRIGHT"], 0.92) # hooded front sight
+    c.add_outline_cell(ox, oy, CS, CS)
+
     return c.save_pair("weapons/weapon_parts", CS, CS, strength=2.2)
 
 

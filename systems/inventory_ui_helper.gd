@@ -239,13 +239,20 @@ static func clear_slot_highlights(drop_targets: Array) -> void:
 
 static func render_equip_slot_button(btn: Button, slot_name: String, default_text: String, equipment_data: Dictionary) -> void:
 	if not btn: return
+	btn.clip_text = true
 	var equipped = equipment_data.get(slot_name, {})
 	var dur_bar: ProgressBar = btn.get_node_or_null("SlotDurabilityBar") as ProgressBar
+	var eq_overlay: Control = btn.get_node_or_null("EquippedVisualOverlay") as Control
+	var is_tall_slot := btn.custom_minimum_size.y >= 64.0 or btn.size.y >= 64.0
+
 	if equipped.is_empty():
 		btn.text = default_text
 		btn.icon = null
+		if eq_overlay:
+			eq_overlay.visible = false
 		if dur_bar:
 			dur_bar.visible = false
+		btn.remove_theme_stylebox_override("normal")
 	else:
 		var item_id = str(equipped.get("id", ""))
 		var d = ItemDatabase.get_item_data(item_id)
@@ -255,10 +262,79 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 			if d_name == item_id and WeaponPartsDatabase.RECEIVERS.has(item_id):
 				d_name = str(WeaponPartsDatabase.RECEIVERS[item_id].get("name", item_id))
 			disp_name = d_name
-		btn.text = disp_name
-		if ItemIconManager:
-			btn.icon = ItemIconManager.get_icon(item_id)
-			btn.expand_icon = true
+
+		var w_data: Dictionary = GameManager.current_world_data if (GameManager and GameManager.current_world_data is Dictionary) else {}
+		var is_gold_master := false
+		if slot_name in ["primary1", "primary2", "sidearm"]:
+			var m_info := HideoutProgression.get_weapon_mastery_bonus(w_data, item_id)
+			is_gold_master = bool(m_info.get("gold_border", false))
+
+		var eq_sb := StyleBoxFlat.new()
+		eq_sb.bg_color = Color(0.16, 0.13, 0.06, 0.94) if is_gold_master else Color(0.11, 0.17, 0.22, 0.94)
+		eq_sb.border_width_left = 2
+		eq_sb.border_width_top = 2
+		eq_sb.border_width_right = 2
+		eq_sb.border_width_bottom = 2
+		eq_sb.border_color = Color(1.0, 0.84, 0.22, 0.98) if is_gold_master else Color(0.32, 0.82, 0.55, 0.92)
+		eq_sb.corner_radius_top_left = 4
+		eq_sb.corner_radius_top_right = 4
+		eq_sb.corner_radius_bottom_left = 4
+		eq_sb.corner_radius_bottom_right = 4
+		btn.add_theme_stylebox_override("normal", eq_sb)
+
+		if is_tall_slot:
+			btn.text = ""
+			btn.icon = null
+			if eq_overlay == null:
+				eq_overlay = Control.new()
+				eq_overlay.name = "EquippedVisualOverlay"
+				eq_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+				eq_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				btn.add_child(eq_overlay)
+
+				var icon_rect := TextureRect.new()
+				icon_rect.name = "EquippedIcon"
+				icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+				icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+				icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+				icon_rect.set_anchors_preset(Control.PRESET_CENTER_TOP)
+				icon_rect.offset_left = -20.0
+				icon_rect.offset_top = 6.0
+				icon_rect.offset_right = 20.0
+				icon_rect.offset_bottom = 46.0
+				eq_overlay.add_child(icon_rect)
+
+				var name_lbl := Label.new()
+				name_lbl.name = "EquippedName"
+				name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				name_lbl.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+				name_lbl.offset_left = 3.0
+				name_lbl.offset_top = -32.0
+				name_lbl.offset_right = -3.0
+				name_lbl.offset_bottom = -7.0
+				name_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+				name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+				name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+				name_lbl.clip_text = true
+				name_lbl.add_theme_font_size_override("font_size", 10)
+				name_lbl.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0))
+				eq_overlay.add_child(name_lbl)
+
+			eq_overlay.visible = true
+			var ic_node: TextureRect = eq_overlay.get_node_or_null("EquippedIcon") as TextureRect
+			if ic_node and ItemIconManager:
+				ic_node.texture = ItemIconManager.get_icon(item_id)
+			var nm_node: Label = eq_overlay.get_node_or_null("EquippedName") as Label
+			if nm_node:
+				nm_node.text = disp_name
+		else:
+			if eq_overlay:
+				eq_overlay.visible = false
+			btn.text = disp_name
+			if ItemIconManager:
+				btn.icon = ItemIconManager.get_icon(item_id)
+				btn.expand_icon = true
 		var max_dur = float(equipped.get("max_durability", d.get("max_durability", 0.0)))
 		if (slot_name in ["helmet", "vest"] or equipped.has("durability")) and max_dur > 0.0:
 			var cur_dur = clamp(float(equipped.get("durability", max_dur)), 0.0, max_dur)

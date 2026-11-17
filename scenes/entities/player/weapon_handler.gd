@@ -30,10 +30,10 @@ func _process(delta: float) -> void:
 		if reload_timer <= 0:
 			_finish_reload()
 	elif not get_tree().paused and player and player.hp > 0:
-		# 연사 총기(RPM >= 300)는 좌클릭 유지 시 자동 사격 지원
+		# 연사 총기(RPM >= 200)는 좌클릭 유지 시 자동 사격 지원
 		if Input.is_action_pressed("attack") and not equipped_weapon_data.is_empty() and active_weapon_slot != "throwable":
 			var rpm = equipped_weapon_data.get("computed_stats", {}).get("rpm", 150)
-			if rpm >= 300 and attack_cooldown_timer <= 0:
+			if rpm >= 200 and attack_cooldown_timer <= 0:
 				try_attack(Vector2.RIGHT.rotated(player.rotation), player.global_position)
 
 func switch_weapon_slot(slot_name: String) -> void:
@@ -137,8 +137,9 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		if SoundManager: SoundManager.play("dry_fire")
 		return
 
-	# 저내구도(<40%) 총기 사격 시 5% 확률로 잼(탄걸림) 발생
-	if cur_dur <= 40.0 and randf() < 0.05:
+	# 저내구도(<40%) 총기 사격 시 기본 5% 확률로 잼(탄걸림) 발생 (숙련도 Lv.3 Мастер 달성 시 50% 감소)
+	var jam_mult := float(get_current_weapon_mastery().get("jam_chance_mult", 1.0))
+	if cur_dur <= 40.0 and randf() < (0.05 * jam_mult):
 		is_jammed = true
 		attack_cooldown_timer = 0.35
 		var jam_pos = spawn_pos + aim_dir.normalized() * 18.0
@@ -198,6 +199,8 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	if stats.get("muzzle_flash", true):
 		if player.has_node("PlayerLighting"):
 			player.get_node("PlayerLighting").trigger_muzzle_flash()
+		if get_tree() and get_tree().current_scene and get_tree().current_scene.has_method("spawn_transient_point_light"):
+			get_tree().current_scene.spawn_transient_point_light(spawn_pos + aim_dir.normalized() * 18.0, Color(1.0, 0.78, 0.28), 2.1, 2.0, 0.06, 52.0)
 			
 	var muzzle_pos = spawn_pos + aim_dir.normalized() * 18.0
 	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")

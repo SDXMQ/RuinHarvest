@@ -404,9 +404,39 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			
 		q_list.add_child(card)
 
-const WEAPON_MASTERY_KILL_THRESHOLD: int = 30
+const WEAPON_MASTERY_LV1_KILLS: int = 15
+const WEAPON_MASTERY_LV2_KILLS: int = 35
+const WEAPON_MASTERY_LV3_KILLS: int = 70
+const WEAPON_MASTERY_KILL_THRESHOLD: int = 15
 const TRACKED_MASTERY_WEAPONS: Array[String] = [
-	"M4_리시버", "AK_리시버", "SV98_리시버", "레버액션_리시버", "레밍턴_리시버", "M9_리시버"
+	"M4_리시버", "AK_리시버", "SV98_리시버", "MP5_리시버", "레버액션_리시버", "레밍턴_리시버", "M9_리시버"
+]
+
+const DOGTAG_BARTER_TRADES: Array[Dictionary] = [
+	{
+		"id": "barter_keycard",
+		"cost_tags": 5,
+		"reward_id": "보안 키카드",
+		"reward_amount": 1,
+		"title": "보안 키카드 (Security Keycard)",
+		"desc": "병원 원장실 및 특수 보안 잠금문을 개방하는 마그네틱 키카드"
+	},
+	{
+		"id": "barter_armor3",
+		"cost_tags": 10,
+		"reward_id": "3레벨_방탄복",
+		"reward_amount": 1,
+		"title": "3레벨 중갑 방탄복 (Lv.3 Heavy Armor)",
+		"desc": "최고 등급의 방탄 플레이트 캐리어 (방어력 +60)"
+	},
+	{
+		"id": "barter_scope8x",
+		"cost_tags": 10,
+		"reward_id": "8배율_스나이퍼_스코프",
+		"reward_amount": 1,
+		"title": "8배율 초장거리 저격 스코프 (8.0x Scope)",
+		"desc": "소총 및 저격총에 장착 가능한 최고배율 정밀 조준경"
+	}
 ]
 
 static func normalize_weapon_id(weapon_id: String) -> String:
@@ -415,6 +445,43 @@ static func normalize_weapon_id(weapon_id: String) -> String:
 	if weapon_id == "레버액션 소총" or weapon_id == "레버액션_소총":
 		return "레버액션_리시버"
 	return WeaponPartsDatabase.resolve_receiver_id(weapon_id)
+
+static func execute_dogtag_barter(trade_id: String, _world_data: Dictionary, player_grid: InventoryGrid, stash_grid: InventoryGrid) -> Dictionary:
+	var trade: Dictionary = {}
+	for t in DOGTAG_BARTER_TRADES:
+		if String(t.get("id", "")) == trade_id:
+			trade = t
+			break
+	if trade.is_empty():
+		return {"success": false, "reason": "invalid_trade"}
+	var cost_tags := int(trade.get("cost_tags", 5))
+	var have_tags := count_total_item("Scav 인식표", player_grid, stash_grid)
+	if have_tags < cost_tags:
+		return {"success": false, "reason": "not_enough_tags", "have": have_tags, "need": cost_tags}
+	var reward_id := String(trade.get("reward_id", ""))
+	var reward_amt := int(trade.get("reward_amount", 1))
+	var target_grid: InventoryGrid = stash_grid if stash_grid != null else player_grid
+	var fallback_grid: InventoryGrid = player_grid if target_grid == stash_grid else stash_grid
+	if target_grid == null and fallback_grid == null:
+		return {"success": false, "reason": "no_grid"}
+	consume_total_item("Scav 인식표", cost_tags, player_grid, stash_grid)
+	var rem := reward_amt
+	if target_grid:
+		rem = target_grid.auto_add_item(reward_id, rem)
+	if rem > 0 and fallback_grid:
+		rem = fallback_grid.auto_add_item(reward_id, rem)
+	if rem >= reward_amt:
+		# 공간 부족 시 인식표 복구
+		if target_grid:
+			target_grid.auto_add_item("Scav 인식표", cost_tags)
+		return {"success": false, "reason": "inventory_full"}
+	return {
+		"success": true,
+		"trade_id": trade_id,
+		"spent_tags": cost_tags,
+		"reward_id": reward_id,
+		"reward_amount": reward_amt - rem
+	}
 
 static func record_weapon_kill(world_data: Dictionary, weapon_id: String, count: int = 1) -> int:
 	if weapon_id == "" or weapon_id == "맨손":
@@ -428,11 +495,15 @@ static func record_weapon_kill(world_data: Dictionary, weapon_id: String, count:
 	var prev_cnt: int = int(w_kills.get(norm_id, 0))
 	var next_cnt: int = prev_cnt + maxi(1, count)
 	w_kills[norm_id] = next_cnt
-	if prev_cnt < WEAPON_MASTERY_KILL_THRESHOLD and next_cnt >= WEAPON_MASTERY_KILL_THRESHOLD:
-		if EventBus and EventBus.has_signal("event_logged"):
-			var w_data := ItemDatabase.get_item_data(norm_id) if ItemDatabase else {}
-			var w_name := String(w_data.get("name", norm_id))
-			EventBus.event_logged.emit("★ 🎖️ [총기 숙련도 마스터] %s 30킬 달성! 재장전 속도 및 반동 제어 +5%% 영구 보너스가 적용됩니다!" % w_name)
+	if EventBus and EventBus.has_signal("event_logged"):
+		var w_data := ItemDatabase.get_item_data(norm_id) if ItemDatabase else {}
+		var w_name := String(w_data.get("name", norm_id))
+		if prev_cnt < WEAPON_MASTERY_LV3_KILLS and next_cnt >= WEAPON_MASTERY_LV3_KILLS:
+			EventBus.event_logged.emit("★ 🏆 [총기 숙련도 Lv.3 Мастер] %s 70킬 달성! 기능고장 확률 50%% 감소 및 황금 테두리가 해금되었습니다!" % w_name)
+		elif prev_cnt < WEAPON_MASTERY_LV2_KILLS and next_cnt >= WEAPON_MASTERY_LV2_KILLS:
+			EventBus.event_logged.emit("★ 🎖️ [총기 숙련도 Lv.2] %s 35킬 달성! 반동 제어 +5%% 보너스가 해금되었습니다!" % w_name)
+		elif prev_cnt < WEAPON_MASTERY_LV1_KILLS and next_cnt >= WEAPON_MASTERY_LV1_KILLS:
+			EventBus.event_logged.emit("★ 🎖️ [총기 숙련도 Lv.1] %s 15킬 달성! 재장전 속도 +3%% 보너스가 해금되었습니다!" % w_name)
 	return next_cnt
 
 static func get_weapon_kill_count(world_data: Dictionary, weapon_id: String) -> int:
@@ -444,15 +515,49 @@ static func get_weapon_kill_count(world_data: Dictionary, weapon_id: String) -> 
 
 static func get_weapon_mastery_bonus(world_data: Dictionary, weapon_id: String) -> Dictionary:
 	var kills := get_weapon_kill_count(world_data, weapon_id)
-	var mastered := kills >= WEAPON_MASTERY_KILL_THRESHOLD
+	var lv := 0
+	var next_th := WEAPON_MASTERY_LV1_KILLS
+	var reload_mult := 1.0
+	var recoil_mult := 1.0
+	var jam_mult := 1.0
+	var title_tag := "미숙련"
+	if kills >= WEAPON_MASTERY_LV3_KILLS:
+		lv = 3
+		next_th = WEAPON_MASTERY_LV3_KILLS
+		reload_mult = 0.95
+		recoil_mult = 0.95
+		jam_mult = 0.50
+		title_tag = "Lv.3 Мастер"
+	elif kills >= WEAPON_MASTERY_LV2_KILLS:
+		lv = 2
+		next_th = WEAPON_MASTERY_LV3_KILLS
+		reload_mult = 0.97
+		recoil_mult = 0.95
+		jam_mult = 1.0
+		title_tag = "Lv.2 전문"
+	elif kills >= WEAPON_MASTERY_LV1_KILLS:
+		lv = 1
+		next_th = WEAPON_MASTERY_LV2_KILLS
+		reload_mult = 0.97
+		recoil_mult = 1.0
+		jam_mult = 1.0
+		title_tag = "Lv.1 숙련"
+	var mastered := (lv >= 1)
 	return {
 		"weapon_id": normalize_weapon_id(weapon_id),
 		"kills": kills,
+		"level": lv,
+		"title": title_tag,
 		"threshold": WEAPON_MASTERY_KILL_THRESHOLD,
+		"next_threshold": next_th,
+		"max_threshold": WEAPON_MASTERY_LV3_KILLS,
 		"mastered": mastered,
-		"reload_speed_mult": 0.95 if mastered else 1.0,
-		"recoil_mult": 0.95 if mastered else 1.0,
-		"bonus_pct": 5 if mastered else 0
+		"is_grandmaster": lv >= 3,
+		"gold_border": lv >= 3,
+		"reload_speed_mult": reload_mult,
+		"recoil_mult": recoil_mult,
+		"jam_chance_mult": jam_mult,
+		"bonus_pct": 5 if lv >= 2 else (3 if lv == 1 else 0)
 	}
 
 static func get_service_record_data(world_data: Dictionary, player_grid: InventoryGrid = null, stash_grid: InventoryGrid = null) -> Dictionary:
@@ -501,7 +606,7 @@ static func setup_service_record_tab(_hideout: Control, tab_container: TabContai
 	mas_panel.add_child(mas_vbox_outer)
 
 	var mas_title := Label.new()
-	mas_title.text = "🔫 총기 숙련도 (Weapon Mastery — 30킬 달성 시 재장전/반동 +5%)"
+	mas_title.text = "🔫 총기 숙련도 3단계 (Lv.1 15킬 · Lv.2 35킬 · Lv.3 70킬 Мастер)"
 	mas_title.add_theme_font_size_override("font_size", 16)
 	mas_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	mas_vbox_outer.add_child(mas_title)
@@ -566,41 +671,154 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 		hbox.add_child(v_lbl)
 		rec_vbox.add_child(card)
 
+	# === Scav 인식표 전용 암시장 물물교환소 (Dogtag Barter Shop) ===
+	var barter_header := Label.new()
+	barter_header.text = "🏷️ Scav 인식표 암시장 물물교환소 (보유 인식표: %d개)" % int(summary["dogtag_count"])
+	barter_header.add_theme_font_size_override("font_size", 15)
+	barter_header.add_theme_color_override("font_color", Color(1.0, 0.84, 0.28))
+	rec_vbox.add_child(barter_header)
+
+	for b_trade in DOGTAG_BARTER_TRADES:
+		var b_card := PanelContainer.new()
+		var b_sb := StyleBoxFlat.new()
+		b_sb.bg_color = Color(0.11, 0.13, 0.18, 0.95)
+		b_sb.border_width_left = 3
+		b_sb.border_color = Color(1.0, 0.78, 0.22)
+		b_sb.content_margin_left = 8
+		b_sb.content_margin_right = 8
+		b_sb.content_margin_top = 6
+		b_sb.content_margin_bottom = 6
+		b_card.add_theme_stylebox_override("panel", b_sb)
+
+		var b_hbox := HBoxContainer.new()
+		b_hbox.add_theme_constant_override("separation", 10)
+		b_card.add_child(b_hbox)
+
+		var r_id := String(b_trade["reward_id"])
+		if ItemIconManager:
+			var b_icon := TextureRect.new()
+			b_icon.custom_minimum_size = Vector2(32, 32)
+			b_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			b_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			b_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			b_icon.texture = ItemIconManager.get_icon(r_id)
+			b_hbox.add_child(b_icon)
+
+		var b_info_v := VBoxContainer.new()
+		b_info_v.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var b_name_lbl := Label.new()
+		b_name_lbl.text = "%s (인식표 %d개 교환)" % [String(b_trade["title"]), int(b_trade["cost_tags"])]
+		b_name_lbl.add_theme_font_size_override("font_size", 13)
+		b_name_lbl.add_theme_color_override("font_color", Color(0.95, 0.92, 0.78))
+		b_info_v.add_child(b_name_lbl)
+
+		var b_desc_lbl := Label.new()
+		b_desc_lbl.text = String(b_trade["desc"])
+		b_desc_lbl.add_theme_font_size_override("font_size", 11)
+		b_desc_lbl.add_theme_color_override("font_color", Color(0.72, 0.76, 0.84))
+		b_info_v.add_child(b_desc_lbl)
+		b_hbox.add_child(b_info_v)
+
+		var cost_c := int(b_trade["cost_tags"])
+		var can_barter := int(summary["dogtag_count"]) >= cost_c
+		var b_btn := Button.new()
+		b_btn.text = "🏷️ %d개 교환" % cost_c
+		b_btn.disabled = not can_barter
+		var cap_tid := String(b_trade["id"])
+		b_btn.pressed.connect(func():
+			var res := execute_dogtag_barter(cap_tid, w_data, p_grid, s_grid)
+			if bool(res.get("success", false)):
+				if SoundManager:
+					SoundManager.play("level_up")
+				if hideout.has_method("_refresh_stash_ui"):
+					hideout._refresh_stash_ui()
+				if hideout.has_method("_sync_save_data"):
+					hideout._sync_save_data()
+				refresh_service_record_tab(hideout, tab_root)
+		)
+		b_hbox.add_child(b_btn)
+		rec_vbox.add_child(b_card)
+
 	for w_id in TRACKED_MASTERY_WEAPONS:
 		var m_info := get_weapon_mastery_bonus(w_data, w_id)
 		var kills := int(m_info["kills"])
-		var mastered := bool(m_info["mastered"])
+		var lv := int(m_info.get("level", 0))
+		var is_gm := bool(m_info.get("gold_border", false))
 		var idata := ItemDatabase.get_item_data(w_id) if ItemDatabase else {}
 		var w_name := String(idata.get("name", w_id))
 
 		var card := PanelContainer.new()
+		if is_gm:
+			var gm_sb := StyleBoxFlat.new()
+			gm_sb.bg_color = Color(0.16, 0.13, 0.05, 0.96)
+			gm_sb.border_width_left = 3
+			gm_sb.border_width_top = 2
+			gm_sb.border_width_right = 2
+			gm_sb.border_width_bottom = 2
+			gm_sb.border_color = Color(1.0, 0.84, 0.22, 0.98)
+			gm_sb.content_margin_left = 8
+			gm_sb.content_margin_right = 8
+			gm_sb.content_margin_top = 6
+			gm_sb.content_margin_bottom = 6
+			card.add_theme_stylebox_override("panel", gm_sb)
+
 		var vbox := VBoxContainer.new()
 		vbox.add_theme_constant_override("separation", 4)
 		card.add_child(vbox)
 
+		var h_row := HBoxContainer.new()
+		h_row.add_theme_constant_override("separation", 8)
+		vbox.add_child(h_row)
+
+		if ItemIconManager:
+			var icon_frame := PanelContainer.new()
+			var ic_sb := StyleBoxFlat.new()
+			ic_sb.bg_color = Color(0.08, 0.10, 0.14, 0.95)
+			ic_sb.border_width_left = 2 if is_gm else 1
+			ic_sb.border_width_top = 2 if is_gm else 1
+			ic_sb.border_width_right = 2 if is_gm else 1
+			ic_sb.border_width_bottom = 2 if is_gm else 1
+			ic_sb.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gm else (Color(0.4, 0.85, 1.0, 0.85) if lv >= 1 else Color(0.25, 0.30, 0.38, 0.75))
+			icon_frame.add_theme_stylebox_override("panel", ic_sb)
+			var w_icon := TextureRect.new()
+			w_icon.custom_minimum_size = Vector2(28, 28)
+			w_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			w_icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			w_icon.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+			w_icon.texture = ItemIconManager.get_icon(w_id)
+			icon_frame.add_child(w_icon)
+			h_row.add_child(icon_frame)
+
 		var header := Label.new()
-		header.text = "%s  —  처치: %d / %d 킬 %s" % [
+		var badge_str := " [🏆 Lv.3 Мастер]" if lv >= 3 else (" [★ Lv.%d]" % lv if lv >= 1 else "")
+		header.text = "%s  —  처치: %d / %d 킬%s" % [
 			w_name,
 			kills,
-			WEAPON_MASTERY_KILL_THRESHOLD,
-			" [★ MASTERY +5%]" if mastered else ""
+			WEAPON_MASTERY_LV3_KILLS,
+			badge_str
 		]
 		header.add_theme_font_size_override("font_size", 13)
-		header.add_theme_color_override("font_color", Color(1.0, 0.88, 0.32) if mastered else Color(0.88, 0.9, 0.95))
-		vbox.add_child(header)
+		header.add_theme_color_override("font_color", Color(1.0, 0.86, 0.25) if lv >= 3 else (Color(0.45, 0.95, 0.65) if lv >= 1 else Color(0.88, 0.9, 0.95)))
+		h_row.add_child(header)
 
 		var bar := ProgressBar.new()
-		bar.max_value = float(WEAPON_MASTERY_KILL_THRESHOLD)
-		bar.value = float(min(kills, WEAPON_MASTERY_KILL_THRESHOLD))
+		bar.max_value = float(WEAPON_MASTERY_LV3_KILLS)
+		bar.value = float(min(kills, WEAPON_MASTERY_LV3_KILLS))
 		bar.custom_minimum_size = Vector2(0, 14)
 		vbox.add_child(bar)
 
 		var bonus_lbl := Label.new()
-		if mastered:
-			bonus_lbl.text = "✅ 숙련도 보너스 활성화: 재장전 속도 +5% (x0.95) & 사격 반동 제어 +5% (x0.95)"
+		if lv >= 3:
+			bonus_lbl.text = "🏆 Lv.3 Мастер 달성: 재장전 +5% · 반동 제어 +5% · 기능고장(Jam) 확률 -50% · 황금 총기 테두리"
+			bonus_lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.28))
+		elif lv == 2:
+			bonus_lbl.text = "✅ Lv.2 활성화: 재장전 +3% & 반동 제어 +5%  |  다음 목표: 70킬 (Lv.3 Мастер: 기능고장 -50% & 황금 테두리)"
 			bonus_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
+		elif lv == 1:
+			bonus_lbl.text = "✅ Lv.1 활성화: 재장전 속도 +3%  |  다음 목표: 35킬 (Lv.2: 반동 제어 +5%)"
+			bonus_lbl.add_theme_color_override("font_color", Color(0.45, 0.92, 1.0))
 		else:
-			bonus_lbl.text = "목표: %d킬 달성 시 재장전 속도 +5%% 및 반동 제어 +5%% 영구 보너스 해금" % WEAPON_MASTERY_KILL_THRESHOLD
+			bonus_lbl.text = "단계별 보너스: Lv.1(15킬: 재장전+3%) ➔ Lv.2(35킬: 반동+5%) ➔ Lv.3 Мастер(70킬: 잼-50% & 황금 테두리)"
 			bonus_lbl.add_theme_color_override("font_color", Color(0.7, 0.74, 0.82))
 		bonus_lbl.add_theme_font_size_override("font_size", 11)
 		vbox.add_child(bonus_lbl)
