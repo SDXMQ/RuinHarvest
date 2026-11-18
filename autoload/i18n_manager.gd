@@ -14,6 +14,7 @@ func _ready() -> void:
 func _load_translations_from_csv() -> void:
 	var csv_file = FileAccess.open("res://resources/i18n/translations.csv", FileAccess.READ)
 	if not csv_file:
+		_load_compiled_translations()
 		return
 		
 	var tr_ko = Translation.new()
@@ -41,6 +42,16 @@ func _load_translations_from_csv() -> void:
 	csv_file.close()
 	TranslationServer.add_translation(tr_ko)
 	TranslationServer.add_translation(tr_en)
+
+func _load_compiled_translations() -> void:
+	for tr_path in [
+		"res://resources/i18n/translations.ko.translation",
+		"res://resources/i18n/translations.en.translation"
+	]:
+		if ResourceLoader.exists(tr_path):
+			var tr_res = ResourceLoader.load(tr_path)
+			if tr_res is Translation:
+				TranslationServer.add_translation(tr_res)
 
 func set_language(lang: String) -> void:
 	current_lang = lang

@@ -27,12 +27,15 @@ func _load_all_items():
 	_cached_item_data.clear()
 	_cached_grid_sizes.clear()
 	_cached_equip_slots.clear()
+	var seen_files: Dictionary = {}
 	var dir = DirAccess.open("res://data/items/")
 	if dir:
 		dir.list_dir_begin()
-		var fname = dir.get_next()
-		while fname != "":
-			if fname.ends_with(".tres") and fname != "탄약.tres":
+		var raw_name = dir.get_next()
+		while raw_name != "":
+			var fname := raw_name.trim_suffix(".remap")
+			if fname.ends_with(".tres") and fname != "탄약.tres" and not seen_files.has(fname):
+				seen_files[fname] = true
 				var res = load("res://data/items/" + fname)
 				if res and res is ItemData:
 					var d: Dictionary = {
@@ -74,7 +77,7 @@ func _load_all_items():
 					if res.ammo != "":
 						d["ammo"] = res.ammo
 					items[res.id] = d
-			fname = dir.get_next()
+			raw_name = dir.get_next()
 	# 잠긴 특수 방(무기고/원장실) 개방용 열쇠 및 보안 키카드 내장 등록 (내구도/사용 횟수 적용)
 	if not items.has("무기고 열쇠"):
 		items["무기고 열쇠"] = {
