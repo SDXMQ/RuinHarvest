@@ -591,21 +591,10 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	context_menu_panel.name = "ContextMenuPanel"
 	context_menu_panel.z_index = 300
 
-	var sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_tooltip", 8, 6, 8, 6, 4) if PixelAssetManager else null
-	if sb == null:
-		var flat_sb := StyleBoxFlat.new()
-		flat_sb.bg_color = Color(0.055, 0.07, 0.095, 0.98)
-		flat_sb.border_color = Color(0.35, 0.45, 0.60, 0.95)
-		flat_sb.set_border_width_all(2)
-		flat_sb.set_corner_radius_all(0)
-		flat_sb.corner_detail = 1
-		flat_sb.anti_aliasing = false
-		flat_sb.content_margin_left = 8
-		flat_sb.content_margin_right = 8
-		flat_sb.content_margin_top = 6
-		flat_sb.content_margin_bottom = 6
-		sb = flat_sb
-	context_menu_panel.add_theme_stylebox_override("panel", sb)
+	if PixelAssetManager:
+		var sb: StyleBox = PixelAssetManager.get_pixel_stylebox("context_menu", 8.0, 6.0, 8.0, 6.0, 4)
+		if sb != null:
+			context_menu_panel.add_theme_stylebox_override("panel", sb)
 
 	var vbox = VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
@@ -613,7 +602,9 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 
 	var header_lbl = Label.new()
 	header_lbl.text = item_name
-	header_lbl.add_theme_font_size_override("font_size", 11)
+	if PixelAssetManager:
+		header_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+	header_lbl.add_theme_font_size_override("font_size", 12)
 	header_lbl.add_theme_color_override("font_color", Color(0.9, 0.85, 0.4))
 	header_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(header_lbl)
@@ -1643,26 +1634,10 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 		var m_bonus := HideoutProgression.get_weapon_mastery_bonus(w_world_data, str(weapon_dict.get("id", "")))
 		is_gold_master = bool(m_bonus.get("gold_border", false))
 
-	var card_sb: StyleBox = null
 	if PixelAssetManager:
-		card_sb = PixelAssetManager.get_ui_stylebox("equip_gold" if is_gold_master else "panel_main", 8, 6, 8, 6, 4)
-	if card_sb == null:
-		var style := StyleBoxFlat.new()
-		style.bg_color = Color(0.065, 0.08, 0.11, 0.95)
-		style.border_width_left = 3
-		style.border_width_top = 1
-		style.border_width_right = 1
-		style.border_width_bottom = 1
-		style.border_color = Color(1.0, 0.84, 0.22, 0.98) if is_gold_master else (Color(0.9, 0.4, 0.4) if slot_key.begins_with("primary") else Color(0.4, 0.7, 1.0))
-		style.set_corner_radius_all(0)
-		style.corner_detail = 1
-		style.anti_aliasing = false
-		style.content_margin_left = 8
-		style.content_margin_right = 8
-		style.content_margin_top = 6
-		style.content_margin_bottom = 6
-		card_sb = style
-	panel.add_theme_stylebox_override("panel", card_sb)
+		var card_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("weapon_card_gold" if is_gold_master else "weapon_card", 8.0, 6.0, 8.0, 6.0, 4)
+		if card_sb != null:
+			panel.add_theme_stylebox_override("panel", card_sb)
 	
 	var vbox = VBoxContainer.new()
 	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1674,23 +1649,18 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	
 	var title_lbl = Label.new()
 	title_lbl.text = "[%s%s]" % [title, " ★장착중" if is_active_hand else ""]
+	if PixelAssetManager:
+		title_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
 	title_lbl.add_theme_font_size_override("font_size", 12)
 	title_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.55) if is_active_hand else Color(1, 0.8, 0.3))
 	top_hbox.add_child(title_lbl)
 
 	if not weapon_dict.is_empty() and ItemIconManager:
 		var icon_frame := PanelContainer.new()
-		var ic_sb: StyleBox = PixelAssetManager.get_ui_stylebox("equip_gold" if is_gold_master else "equip_filled", 2, 2, 2, 2, 3) if PixelAssetManager else null
-		if ic_sb == null:
-			var flat_ic := StyleBoxFlat.new()
-			flat_ic.bg_color = Color(0.05, 0.065, 0.095, 0.96)
-			flat_ic.set_border_width_all(2 if is_gold_master else 1)
-			flat_ic.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gold_master else Color(0.35, 0.78, 0.55, 0.92)
-			flat_ic.set_corner_radius_all(0)
-			flat_ic.corner_detail = 1
-			flat_ic.anti_aliasing = false
-			ic_sb = flat_ic
-		icon_frame.add_theme_stylebox_override("panel", ic_sb)
+		if PixelAssetManager:
+			var ic_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("icon_frame_gold" if is_gold_master else "icon_frame", 2.0, 2.0, 2.0, 2.0, 3)
+			if ic_sb != null:
+				icon_frame.add_theme_stylebox_override("panel", ic_sb)
 		var wep_icon := TextureRect.new()
 		wep_icon.name = "EquippedWeaponIcon"
 		wep_icon.custom_minimum_size = Vector2(30, 30)
@@ -1836,12 +1806,16 @@ func _create_attachment_sub_slot(parent: Container, weapon_slot_key: String, att
 		else:
 			btn.text = slot_labels.get(attach_type, attach_type)
 		btn.add_theme_color_override("font_color", Color(0.5, 0.55, 0.6))
+		if PixelAssetManager:
+			btn.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 		btn.add_theme_font_size_override("font_size", 10)
 	else:
 		var p_data = WeaponPartsDatabase.PARTS.get(current_part_id, {})
 		btn.text = p_data.get("name", current_part_id)
 		btn.tooltip_text = btn.text
 		btn.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
+		if PixelAssetManager:
+			btn.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 		btn.add_theme_font_size_override("font_size", 10)
 		
 	drop_targets.append({"control": btn, "type": "attachment", "weapon_slot_key": weapon_slot_key, "attach_type": attach_type, "rail_index": rail_index})

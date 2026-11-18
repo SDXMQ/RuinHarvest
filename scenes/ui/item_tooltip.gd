@@ -20,6 +20,19 @@ extends PanelContainer
 func _ready() -> void:
 	z_index = 100
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if PixelAssetManager:
+		var base_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("tooltip", 12.0, 10.0, 12.0, 10.0, 4)
+		if base_sb != null:
+			add_theme_stylebox_override("panel", base_sb)
+		if name_label:
+			name_label.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+			name_label.add_theme_font_size_override("font_size", 12)
+		if meta_label:
+			meta_label.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
+			meta_label.add_theme_font_size_override("font_size", 10)
+		if durability_label:
+			durability_label.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
+			durability_label.add_theme_font_size_override("font_size", 10)
 	hide()
 
 func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
@@ -73,7 +86,11 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 		
 	name_label.add_theme_color_override("font_color", name_color)
 	
-	# 테두리/패널 색조 갱신 (StyleBoxTexture 및 StyleBoxFlat 모두 지원)
+	# 테두리/패널 색조 갱신 (PixelAssetManager 9-Patch StyleBoxTexture 기반)
+	if PixelAssetManager and not has_theme_stylebox_override("panel"):
+		var base_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("tooltip", 12.0, 10.0, 12.0, 10.0, 4)
+		if base_sb != null:
+			add_theme_stylebox_override("panel", base_sb)
 	InventoryUIHelper.apply_dynamic_tint(self, "panel", border_color)
 		
 	# 3. 카테고리 / 무게 / 가격 메타데이터

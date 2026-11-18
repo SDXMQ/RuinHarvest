@@ -5,12 +5,16 @@ extends Node
 
 const PIXEL_ROOT := "res://assets/pixel/"
 const PixelEntityShader = preload("res://graphics/shaders/pixel_entity.gdshader")
+const FONT_PATH_REGULAR := "res://assets/fonts/Galmuri11.ttf"
+const FONT_PATH_BOLD := "res://assets/fonts/Galmuri11-Bold.ttf"
+const FONT_PATH_MICRO := "res://assets/fonts/Galmuri9.ttf"
 
 var _canvas_cache: Dictionary = {}
 var _diffuse_cache: Dictionary = {}
 var _normal_cache: Dictionary = {}
 var _slice_cache: Dictionary = {}
 var _ui_stylebox_cache: Dictionary = {}
+var _font_cache: Dictionary = {}
 var _radial_light_tex: GradientTexture2D = null
 
 const UI_CELL_SIZE := 24
@@ -47,6 +51,9 @@ const UI_SLICE_COORDS := {
 	"slot_incompat_red": Vector2i(5, 3),
 	"slot_guide_compat": Vector2i(6, 3),
 	"slot_guide_default": Vector2i(7, 3),
+	"btn_primary_pressed": Vector2i(0, 4),
+	"btn_danger_pressed": Vector2i(1, 4),
+	"equip_pressed": Vector2i(2, 4),
 }
 
 func _ready() -> void:
@@ -260,39 +267,114 @@ func _resolve_base_path(key: String) -> String:
 		return k
 	return PIXEL_ROOT + k
 
+func _load_crisp_pixel_font(res_path: String) -> Font:
+	if _font_cache.has(res_path):
+		return _font_cache[res_path]
+	if ResourceLoader.exists(res_path):
+		var loaded := load(res_path)
+		if loaded is FontFile:
+			var ff: FontFile = loaded as FontFile
+			ff.antialiasing = TextServer.FONT_ANTIALIASING_NONE
+			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+			ff.multichannel_signed_distance_field = false
+			ff.allow_system_fallback = false
+			ff.hinting = TextServer.HINTING_NONE
+			ff.generate_mipmaps = false
+			ff.oversampling = 1.0
+			_font_cache[res_path] = ff
+			return ff
+		elif loaded is Font:
+			_font_cache[res_path] = loaded
+			return loaded
+	return ThemeDB.fallback_font
+
+func get_pixel_font_regular() -> Font:
+	return _load_crisp_pixel_font(FONT_PATH_REGULAR)
+
+func get_pixel_font_bold() -> Font:
+	return _load_crisp_pixel_font(FONT_PATH_BOLD)
+
+func get_pixel_font_micro() -> Font:
+	return _load_crisp_pixel_font(FONT_PATH_MICRO)
+
+const UI_PRESET_MAP := {
+	"popup_frame": {"slice": "panel_tooltip", "cm": [6.0, 6.0, 6.0, 6.0], "tm": 4},
+	"context_menu": {"slice": "panel_tooltip", "cm": [8.0, 6.0, 8.0, 6.0], "tm": 4},
+	"tooltip": {"slice": "panel_tooltip", "cm": [12.0, 10.0, 12.0, 10.0], "tm": 4},
+	"receipt_panel": {"slice": "panel_main", "cm": [8.0, 8.0, 8.0, 8.0], "tm": 4, "tint": Color(0.85, 1.0, 0.94, 1.0)},
+	"market_confirm_panel": {"slice": "panel_main", "cm": [8.0, 6.0, 8.0, 6.0], "tm": 4, "tint": Color(0.86, 0.94, 1.0, 1.0)},
+	"bounty_panel": {"slice": "panel_bounty", "cm": [12.0, 10.0, 12.0, 10.0], "tm": 4},
+	"barter_card": {"slice": "panel_bounty", "cm": [8.0, 6.0, 8.0, 6.0], "tm": 4, "tint": Color(0.95, 0.90, 0.78, 1.0)},
+	"mastery_gold": {"slice": "panel_bounty", "cm": [8.0, 6.0, 8.0, 6.0], "tm": 4},
+	"weapon_card": {"slice": "panel_main", "cm": [8.0, 6.0, 8.0, 6.0], "tm": 4},
+	"weapon_card_gold": {"slice": "equip_gold", "cm": [8.0, 6.0, 8.0, 6.0], "tm": 4},
+	"icon_frame": {"slice": "equip_filled", "cm": [2.0, 2.0, 2.0, 2.0], "tm": 3},
+	"icon_frame_gold": {"slice": "equip_gold", "cm": [2.0, 2.0, 2.0, 2.0], "tm": 3},
+	"workbench_slot": {"slice": "equip_normal", "cm": [8.0, 4.0, 8.0, 4.0], "tm": 4},
+	"workbench_slot_active": {"slice": "equip_filled", "cm": [8.0, 4.0, 8.0, 4.0], "tm": 4},
+	"workbench_selected_btn": {"slice": "equip_filled", "cm": [8.0, 4.0, 8.0, 4.0], "tm": 4},
+	"toast": {"slice": "badge_frame", "cm": [10.0, 6.0, 10.0, 6.0], "tm": 4},
+	"progress_bg": {"slice": "progress_bg", "cm": [2.0, 2.0, 2.0, 2.0], "tm": 3},
+	"progress_fill": {"slice": "progress_fill_amber", "cm": [2.0, 1.0, 2.0, 1.0], "tm": 2},
+	"save_slot_card": {"slice": "panel_main", "cm": [12.0, 8.0, 12.0, 8.0], "tm": 4, "tint": Color(0.88, 0.94, 1.0, 1.0)},
+	"header_bar": {"slice": "panel_header", "cm": [10.0, 5.0, 10.0, 5.0], "tm": 4},
+	"footer_bar": {"slice": "panel_main", "cm": [10.0, 6.0, 10.0, 6.0], "tm": 4},
+	"drag_preview": {"slice": "equip_gold", "cm": [4.0, 4.0, 4.0, 4.0], "tm": 4},
+	"hover_compat": {"slice": "slot_compat_green", "cm": [6.0, 3.0, 6.0, 3.0], "tm": 4},
+	"hover_incompat": {"slice": "slot_incompat_red", "cm": [6.0, 3.0, 6.0, 3.0], "tm": 4},
+	"guide_compat": {"slice": "slot_guide_compat", "cm": [6.0, 3.0, 6.0, 3.0], "tm": 4},
+	"guide_default": {"slice": "slot_guide_default", "cm": [6.0, 3.0, 6.0, 3.0], "tm": 4},
+}
+
+func get_pixel_stylebox(
+	preset_name: String,
+	cm_l: float = -1.0,
+	cm_t: float = -1.0,
+	cm_r: float = -1.0,
+	cm_b: float = -1.0,
+	tex_margin: int = -1,
+	modulate_col: Color = Color.WHITE
+) -> StyleBox:
+	var slice_name: String = preset_name
+	var def_cm: Array = [10.0, 4.0, 10.0, 4.0]
+	var def_tm: int = 4
+	var preset_tint: Color = Color.WHITE
+
+	if UI_PRESET_MAP.has(preset_name):
+		var cfg: Dictionary = UI_PRESET_MAP[preset_name]
+		slice_name = str(cfg.get("slice", "panel_main"))
+		def_cm = cfg.get("cm", def_cm)
+		def_tm = int(cfg.get("tm", 4))
+		preset_tint = cfg.get("tint", Color.WHITE)
+	elif not UI_SLICE_COORDS.has(slice_name):
+		slice_name = "panel_main"
+
+	var resolved_l: float = cm_l if cm_l >= 0.0 else float(def_cm[0])
+	var resolved_t: float = cm_t if cm_t >= 0.0 else float(def_cm[1])
+	var resolved_r: float = cm_r if cm_r >= 0.0 else float(def_cm[2])
+	var resolved_b: float = cm_b if cm_b >= 0.0 else float(def_cm[3])
+	var resolved_tm: int = tex_margin if tex_margin >= 0 else def_tm
+	var effective_tint: Color = modulate_col if not modulate_col.is_equal_approx(Color.WHITE) else preset_tint
+
+	var base_sb: StyleBox = get_ui_stylebox(slice_name, resolved_l, resolved_t, resolved_r, resolved_b, resolved_tm)
+	if not effective_tint.is_equal_approx(Color.WHITE) and base_sb is StyleBoxTexture:
+		var tinted := base_sb.duplicate() as StyleBoxTexture
+		tinted.modulate_color = effective_tint
+		return tinted
+	return base_sb
+
 func make_pixel_stylebox_flat(
-	bg: Color,
+	_bg: Color,
 	border: Color,
-	bw_left: int = 2,
-	bw_top: int = 2,
-	bw_right: int = 2,
-	bw_bottom: int = 2,
+	_bw_left: int = 2,
+	_bw_top: int = 2,
+	_bw_right: int = 2,
+	_bw_bottom: int = 2,
 	cm_h: float = 8.0,
 	cm_v: float = 6.0,
-	with_shadow: bool = false
-) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.border_width_left = bw_left
-	sb.border_width_top = bw_top
-	sb.border_width_right = bw_right
-	sb.border_width_bottom = bw_bottom
-	sb.corner_radius_top_left = 0
-	sb.corner_radius_top_right = 0
-	sb.corner_radius_bottom_left = 0
-	sb.corner_radius_bottom_right = 0
-	sb.corner_detail = 1
-	sb.anti_aliasing = false
-	sb.content_margin_left = cm_h
-	sb.content_margin_right = cm_h
-	sb.content_margin_top = cm_v
-	sb.content_margin_bottom = cm_v
-	if with_shadow:
-		sb.shadow_color = Color(0, 0, 0, 0.65)
-		sb.shadow_size = 1
-		sb.shadow_offset = Vector2(2, 2)
-	return sb
+	_with_shadow: bool = false
+) -> StyleBox:
+	return get_pixel_stylebox("panel_main", cm_h, cm_v, cm_h, cm_v, 4, border.lerp(Color.WHITE, 0.35))
 
 func get_ui_stylebox(
 	style_name: String,
@@ -342,9 +424,24 @@ func get_ui_stylebox(
 				_ui_stylebox_cache[cache_key] = sbt
 				return sbt
 
-	var fallback := make_pixel_stylebox_flat(Color(0.08, 0.10, 0.13, 0.96), Color(0.28, 0.34, 0.42, 0.95), 2, 2, 2, 2, cm_l, cm_t)
-	_ui_stylebox_cache[cache_key] = fallback
-	return fallback
+	# 아틀라스 미로드 시에도 StyleBoxFlat 대신 1x1 근접 필터링 StyleBoxTexture 폴백 반환
+	var fb_img := Image.create_empty(8, 8, false, Image.FORMAT_RGBA8)
+	fb_img.fill(Color(0.08, 0.10, 0.13, 0.96))
+	var fb_ct := CanvasTexture.new()
+	fb_ct.diffuse_texture = ImageTexture.create_from_image(fb_img)
+	fb_ct.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+	var fb_sb := StyleBoxTexture.new()
+	fb_sb.texture = fb_ct
+	fb_sb.texture_margin_left = 2.0
+	fb_sb.texture_margin_top = 2.0
+	fb_sb.texture_margin_right = 2.0
+	fb_sb.texture_margin_bottom = 2.0
+	fb_sb.content_margin_left = cm_l
+	fb_sb.content_margin_top = cm_t
+	fb_sb.content_margin_right = cm_r
+	fb_sb.content_margin_bottom = cm_b
+	_ui_stylebox_cache[cache_key] = fb_sb
+	return fb_sb
 
 func apply_pixel_ui_theme() -> void:
 	var themes_to_patch: Array[Theme] = []
@@ -356,7 +453,21 @@ func apply_pixel_ui_theme() -> void:
 	if proj_t != null and not (proj_t in themes_to_patch):
 		themes_to_patch.append(proj_t)
 
+	var font_reg: Font = get_pixel_font_regular()
+	var font_bold: Font = get_pixel_font_bold()
+
 	for t in themes_to_patch:
+		if font_reg:
+			t.default_font = font_reg
+			t.default_font_size = 12
+		if font_bold:
+			t.set_font("font", "TabContainer", font_bold)
+			t.set_font("font", "PrimaryButton", font_bold)
+			t.set_font("font", "DangerButton", font_bold)
+			t.set_type_variation("HeaderLabel", "Label")
+			t.set_font("font", "HeaderLabel", font_bold)
+			t.set_font_size("font_size", "HeaderLabel", 12)
+
 		t.set_stylebox("panel", "Panel", get_ui_stylebox("panel_main", 10, 8, 10, 8, 5))
 		t.set_stylebox("panel", "PanelContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8, 5))
 		t.set_stylebox("panel", "PopupMenu", get_ui_stylebox("panel_tooltip", 8, 6, 8, 6, 4))
@@ -364,9 +475,10 @@ func apply_pixel_ui_theme() -> void:
 		t.set_stylebox("panel", "GridSurfacePanel", get_ui_stylebox("panel_grid_surface", 6, 6, 6, 6, 4))
 
 		# 소형 버튼(22~28px)에서도 9-Patch 중앙 영역이 음수가 되지 않도록 상하 texture_margin을 4px(합 8px)로 제한
+		# Pressed 상태는 content_margin_top +1 / content_margin_bottom -1로 물리적 1px 눌림 연출
 		var sb_btn_normal := get_ui_stylebox("btn_normal", 10, 4, 10, 4, 4)
 		var sb_btn_hover := get_ui_stylebox("btn_hover", 10, 4, 10, 4, 4)
-		var sb_btn_pressed := get_ui_stylebox("btn_pressed", 11, 5, 9, 3, 4)
+		var sb_btn_pressed := get_ui_stylebox("btn_pressed", 10, 5, 10, 3, 4)
 		var sb_btn_disabled := get_ui_stylebox("btn_disabled", 10, 4, 10, 4, 4)
 		t.set_stylebox("normal", "Button", sb_btn_normal)
 		t.set_stylebox("hover", "Button", sb_btn_hover)
@@ -380,26 +492,29 @@ func apply_pixel_ui_theme() -> void:
 		t.set_type_variation("SmallButton", "Button")
 		t.set_stylebox("normal", "SmallButton", get_ui_stylebox("btn_normal", 6, 2, 6, 2, 3))
 		t.set_stylebox("hover", "SmallButton", get_ui_stylebox("btn_hover", 6, 2, 6, 2, 3))
-		t.set_stylebox("pressed", "SmallButton", get_ui_stylebox("btn_pressed", 7, 3, 5, 1, 3))
+		t.set_stylebox("pressed", "SmallButton", get_ui_stylebox("btn_pressed", 6, 3, 6, 1, 3))
 		t.set_stylebox("disabled", "SmallButton", get_ui_stylebox("btn_disabled", 6, 2, 6, 2, 3))
 
 		var sb_pri_normal := get_ui_stylebox("btn_primary_normal", 12, 4, 12, 4, 4)
 		var sb_pri_hover := get_ui_stylebox("btn_primary_hover", 12, 4, 12, 4, 4)
+		var sb_pri_pressed := get_ui_stylebox("btn_primary_pressed", 12, 5, 12, 3, 4)
 		t.set_stylebox("normal", "PrimaryButton", sb_pri_normal)
 		t.set_stylebox("hover", "PrimaryButton", sb_pri_hover)
-		t.set_stylebox("pressed", "PrimaryButton", sb_pri_hover)
+		t.set_stylebox("pressed", "PrimaryButton", sb_pri_pressed)
 
 		var sb_dng_normal := get_ui_stylebox("btn_danger_normal", 10, 4, 10, 4, 4)
 		var sb_dng_hover := get_ui_stylebox("btn_danger_hover", 10, 4, 10, 4, 4)
+		var sb_dng_pressed := get_ui_stylebox("btn_danger_pressed", 10, 5, 10, 3, 4)
 		t.set_stylebox("normal", "DangerButton", sb_dng_normal)
 		t.set_stylebox("hover", "DangerButton", sb_dng_hover)
-		t.set_stylebox("pressed", "DangerButton", sb_dng_hover)
+		t.set_stylebox("pressed", "DangerButton", sb_dng_pressed)
 
 		var sb_eq_normal := get_ui_stylebox("equip_normal", 6, 4, 6, 4, 4)
 		var sb_eq_hover := get_ui_stylebox("equip_hover", 6, 4, 6, 4, 4)
+		var sb_eq_pressed := get_ui_stylebox("equip_pressed", 6, 5, 6, 3, 4)
 		t.set_stylebox("normal", "EquipSlotButton", sb_eq_normal)
 		t.set_stylebox("hover", "EquipSlotButton", sb_eq_hover)
-		t.set_stylebox("pressed", "EquipSlotButton", sb_eq_hover)
+		t.set_stylebox("pressed", "EquipSlotButton", sb_eq_pressed)
 
 		var sb_line_edit := get_ui_stylebox("panel_line_edit", 8, 4, 8, 4, 4)
 		t.set_stylebox("normal", "LineEdit", sb_line_edit)

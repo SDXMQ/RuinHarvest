@@ -2028,7 +2028,9 @@ def bake_world_props():
 # ==============================================================================
 def bake_ui_theme_atlas():
     CS = 24
-    c = Canvas(8 * CS, 4 * CS)
+    c = Canvas(8 * CS, 5 * CS)
+    AMBER_LED = hex_rgba("#E5A93C")
+    AMBER_LED_GLOW = hex_rgba("#FFF2B0")
 
     def draw_9slice_plate(
         col_idx: int,
@@ -2044,6 +2046,9 @@ def bake_ui_theme_atlas():
         chamfer: bool = True,
         recessed: bool = False,
         top_led=None,
+        shadow_2px: bool = False,
+        recess_2px: bool = False,
+        all_corner_rivets: bool = False,
     ):
         ox = col_idx * CS
         oy = row_idx * CS
@@ -2051,7 +2056,7 @@ def bake_ui_theme_atlas():
         z_bg = 0.25 if recessed else 0.55
         c.fill_rect(ox + 1, oy + 1, CS - 2, CS - 2, bg_col, z_bg)
 
-        # Outer 1px border
+        # Outer 1px border (#0D0F14)
         c.fill_rect(ox, oy, CS, 1, outer_col, 0.15)
         c.fill_rect(ox, oy + CS - 1, CS, 1, outer_col, 0.15)
         c.fill_rect(ox, oy, 1, CS, outer_col, 0.15)
@@ -2065,13 +2070,23 @@ def bake_ui_theme_atlas():
         c.fill_rect(ox + 1, oy + CS - 2, CS - 2, 1, bot_bevel, z_bot)
         c.fill_rect(ox + CS - 2, oy + 1, 1, CS - 2, bot_bevel, z_bot)
 
-        # Optional 2nd inner step frame for tactile depth
-        if not recessed:
+        # 2px bottom/right dark shadow bevel (Normal/Hover 3-state tactile metal)
+        if shadow_2px and not recessed:
+            inner_bot_shadow = lerp_rgba(bot_bevel, outer_col, 0.35)
+            c.fill_rect(ox + 2, oy + CS - 3, CS - 4, 1, inner_bot_shadow, 0.28)
+            c.fill_rect(ox + CS - 3, oy + 2, 1, CS - 4, inner_bot_shadow, 0.28)
+        elif not recessed:
             inner_rim = lerp_rgba(bg_col, top_bevel, 0.28)
             c.fill_rect(ox + 2, oy + 2, CS - 4, 1, inner_rim, 0.65)
             c.fill_rect(ox + 2, oy + CS - 3, CS - 4, 1, lerp_rgba(bg_col, bot_bevel, 0.55), 0.38)
 
-        # Left tactical LED accent strip (3px wide inside border: x=1..3)
+        # 2px top/left deepened recessed shadow (Pressed state)
+        if recess_2px:
+            deep_top_shadow = lerp_rgba(top_bevel, bg_col, 0.35)
+            c.fill_rect(ox + 2, oy + 2, CS - 4, 1, deep_top_shadow, 0.18)
+            c.fill_rect(ox + 2, oy + 2, 1, CS - 4, deep_top_shadow, 0.18)
+
+        # Left tactical LED accent strip
         if left_led is not None:
             c.fill_rect(ox + 1, oy + 2, 2, CS - 4, left_led, 0.88)
             c.fill_rect(ox + 3, oy + 2, 1, CS - 4, lerp_rgba(left_led, bg_col, 0.45), 0.72)
@@ -2086,28 +2101,33 @@ def bake_ui_theme_atlas():
 
         # 4x4 L-shaped pixel corner targeting brackets
         if corner_bracket is not None:
-            # Top-Left (2..5, 2..5)
             c.fill_rect(ox + 2, oy + 2, 4, 1, corner_bracket, 0.88)
             c.fill_rect(ox + 2, oy + 2, 1, 4, corner_bracket, 0.88)
-            # Top-Right (CS-6..CS-3, 2..5)
             c.fill_rect(ox + CS - 6, oy + 2, 4, 1, corner_bracket, 0.88)
             c.fill_rect(ox + CS - 3, oy + 2, 1, 4, corner_bracket, 0.88)
-            # Bottom-Left (2..5, CS-6..CS-3)
             c.fill_rect(ox + 2, oy + CS - 3, 4, 1, corner_bracket, 0.88)
             c.fill_rect(ox + 2, oy + CS - 6, 1, 4, corner_bracket, 0.88)
-            # Bottom-Right (CS-6..CS-3, CS-6..CS-3)
             c.fill_rect(ox + CS - 6, oy + CS - 3, 4, 1, corner_bracket, 0.88)
             c.fill_rect(ox + CS - 3, oy + CS - 6, 1, 4, corner_bracket, 0.88)
 
-        # Steel corner rivets (in 6x6 corner zones so they never stretch)
+        # Steel corner rivets:
+        # all_corner_rivets places 1px rivet dots at (2,2), (CS-3,2), (2,CS-3), (CS-3,CS-3)
+        # so they sit cleanly inside even 3px 9-Patch corners on SmallButton!
         if rivets:
-            r_hi = PAL["STEEL_BRIGHT"]
-            r_lo = PAL["OUTLINE"]
-            for rx, ry in [(3, 3), (CS - 4, 3), (3, CS - 4), (CS - 4, CS - 4)]:
-                if left_led is not None and rx <= 4:
-                    continue
-                c.set_px(ox + rx, oy + ry, r_hi, 0.90)
-                c.set_px(ox + rx + 1, oy + ry + 1, r_lo, 0.25)
+            if all_corner_rivets:
+                r_col = lerp_rgba(PAL["STEEL_BRIGHT"], bg_col, 0.35) if recessed else PAL["STEEL_BRIGHT"]
+                if top_bevel == AMBER_LED:
+                    r_col = AMBER_LED_GLOW
+                for rx, ry in [(2, 2), (CS - 3, 2), (2, CS - 3), (CS - 3, CS - 3)]:
+                    c.set_px(ox + rx, oy + ry, r_col, 0.40 if recessed else 0.92)
+            else:
+                r_hi = PAL["STEEL_BRIGHT"]
+                r_lo = PAL["OUTLINE"]
+                for rx, ry in [(3, 3), (CS - 4, 3), (3, CS - 4), (CS - 4, CS - 4)]:
+                    if left_led is not None and rx <= 4:
+                        continue
+                    c.set_px(ox + rx, oy + ry, r_hi, 0.90)
+                    c.set_px(ox + rx + 1, oy + ry + 1, r_lo, 0.25)
 
         # Crisp 1px notched pixel chamfer at outer corners
         if chamfer:
@@ -2211,42 +2231,43 @@ def bake_ui_theme_atlas():
         chamfer=True,
     )
 
-    # --- ROW 1: BUTTONS ---
-    # (0, 1) btn_normal: Raised steel tactical button
+    # --- ROW 1: BUTTONS (3-State 9-Patch Tactile Metal Plates) ---
+    # (0, 1) btn_normal: #0D0F14 outer 1px + top/left 1px bright bevel + bottom/right 2px shadow + 4-corner 1px rivets
     draw_9slice_plate(
         0, 1,
-        bg_col=hex_rgba("#1B212C", 246),
+        bg_col=hex_rgba("#1B212C", 248),
         outer_col=PAL["OUTLINE"],
-        top_bevel=PAL["SLATE_LIGHT"],
-        bot_bevel=hex_rgba("#0E1117", 252),
-        left_led=PAL["SLATE_LIGHT"],
+        top_bevel=PAL["STEEL_BRIGHT"],
+        bot_bevel=hex_rgba("#0E1117", 254),
         rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
-    # (1, 1) btn_hover: Hovered tactical button with glowing amber LED bar
+    # (1, 1) btn_hover: Top/left 1px bevel lit with #E5A93C amber + surface stepped up 1 brightness level
     draw_9slice_plate(
         1, 1,
-        bg_col=hex_rgba("#263040", 252),
+        bg_col=hex_rgba("#273243", 252),
         outer_col=PAL["OUTLINE"],
-        top_bevel=PAL["ROAD_YELLOW"],
-        bot_bevel=PAL["BRASS_DARK"],
-        left_led=PAL["ROAD_YELLOW"],
-        led_core=PAL["MUZZLE_CORE"],
-        corner_bracket=PAL["MUZZLE_CORE"],
+        top_bevel=AMBER_LED,
+        bot_bevel=hex_rgba("#121720", 254),
         rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
-    # (2, 1) btn_pressed: Depressed steel button
+    # (2, 1) btn_pressed: Deepened 2px top/left dark recessed shadow + muted depressed surface
     draw_9slice_plate(
         2, 1,
-        bg_col=hex_rgba("#12161E", 255),
+        bg_col=hex_rgba("#131720", 255),
         outer_col=PAL["OUTLINE"],
-        top_bevel=hex_rgba("#090B0E", 255),
-        bot_bevel=PAL["ROAD_YELLOW"],
-        left_led=PAL["MUZZLE_CORE"],
-        rivets=False,
+        top_bevel=hex_rgba("#080A0E", 255),
+        bot_bevel=PAL["SLATE_MID"],
+        rivets=True,
         chamfer=True,
         recessed=True,
+        recess_2px=True,
+        all_corner_rivets=True,
     )
     # (3, 1) btn_disabled: Disabled dark steel button
     draw_9slice_plate(
@@ -2255,8 +2276,10 @@ def bake_ui_theme_atlas():
         outer_col=PAL["OUTLINE"],
         top_bevel=PAL["SLATE_DARK"],
         bot_bevel=hex_rgba("#0B0D12", 185),
-        rivets=False,
+        rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
     # (4, 1) btn_primary_normal: Command/Deploy amber-brass button
     draw_9slice_plate(
@@ -2264,50 +2287,47 @@ def bake_ui_theme_atlas():
         bg_col=hex_rgba("#2A1F0F", 248),
         outer_col=PAL["OUTLINE"],
         top_bevel=PAL["BRASS"],
-        bot_bevel=hex_rgba("#161007", 252),
-        left_led=PAL["ROAD_YELLOW"],
-        led_core=PAL["MUZZLE_CORE"],
-        corner_bracket=PAL["BRASS"],
+        bot_bevel=hex_rgba("#140E06", 254),
         rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
-    # (5, 1) btn_primary_hover: Command/Deploy highlighted button
+    # (5, 1) btn_primary_hover: Command/Deploy highlighted button (#E5A93C top/left lit bevel + brighter surface)
     draw_9slice_plate(
         5, 1,
-        bg_col=hex_rgba("#3D2D15", 254),
+        bg_col=hex_rgba("#3D2E16", 254),
         outer_col=PAL["OUTLINE"],
-        top_bevel=PAL["MUZZLE_CORE"],
-        bot_bevel=PAL["BRASS"],
-        left_led=PAL["MUZZLE_CORE"],
-        led_core=PAL["WHITE_MUTED"],
-        corner_bracket=PAL["MUZZLE_CORE"],
+        top_bevel=AMBER_LED,
+        bot_bevel=hex_rgba("#1E1609", 254),
         rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
     # (6, 1) btn_danger_normal: Crimson alert button
     draw_9slice_plate(
         6, 1,
-        bg_col=hex_rgba("#281114", 246),
+        bg_col=hex_rgba("#291115", 248),
         outer_col=PAL["OUTLINE"],
         top_bevel=PAL["BLOOD_BRIGHT"],
-        bot_bevel=hex_rgba("#14080A", 252),
-        left_led=PAL["RED_LED"],
-        corner_bracket=PAL["BLOOD_BRIGHT"],
+        bot_bevel=hex_rgba("#140709", 254),
         rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
-    # (7, 1) btn_danger_hover: Highlighted crimson alert button
+    # (7, 1) btn_danger_hover: Highlighted crimson alert button (#E5A93C amber edge + brighter crimson)
     draw_9slice_plate(
         7, 1,
-        bg_col=hex_rgba("#3D181C", 254),
+        bg_col=hex_rgba("#3E191F", 254),
         outer_col=PAL["OUTLINE"],
-        top_bevel=hex_rgba("#FF6E6E", 255),
-        bot_bevel=PAL["BLOOD_BRIGHT"],
-        left_led=hex_rgba("#FF6E6E", 255),
-        led_core=PAL["MUZZLE_CORE"],
-        corner_bracket=hex_rgba("#FF6E6E", 255),
+        top_bevel=AMBER_LED,
+        bot_bevel=PAL["BLOOD_DARK"],
         rivets=True,
         chamfer=True,
+        shadow_2px=True,
+        all_corner_rivets=True,
     )
 
     # --- ROW 2: EQUIPMENT SLOTS & HUD QUICKSLOTS ---
@@ -2488,6 +2508,47 @@ def bake_ui_theme_atlas():
         corner_bracket=PAL["SLATE_MID"],
         rivets=False,
         chamfer=True,
+    )
+
+    # --- ROW 4: PRESSED BUTTON STATES (Deepened 2px Top/Left Shadow) ---
+    # (0, 4) btn_primary_pressed: Depressed amber-brass deploy button
+    draw_9slice_plate(
+        0, 4,
+        bg_col=hex_rgba("#1F170B", 255),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#090704", 255),
+        bot_bevel=PAL["BRASS"],
+        rivets=True,
+        chamfer=True,
+        recessed=True,
+        recess_2px=True,
+        all_corner_rivets=True,
+    )
+    # (1, 4) btn_danger_pressed: Depressed crimson alert button
+    draw_9slice_plate(
+        1, 4,
+        bg_col=hex_rgba("#1D0B0E", 255),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#0A0405", 255),
+        bot_bevel=PAL["BLOOD_BRIGHT"],
+        rivets=True,
+        chamfer=True,
+        recessed=True,
+        recess_2px=True,
+        all_corner_rivets=True,
+    )
+    # (2, 4) equip_pressed: Depressed tactical rig slot
+    draw_9slice_plate(
+        2, 4,
+        bg_col=hex_rgba("#0B0E14", 255),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#06070A", 255),
+        bot_bevel=PAL["CYAN_GLASS"],
+        corner_bracket=PAL["CYAN_GLASS"],
+        rivets=False,
+        chamfer=True,
+        recessed=True,
+        recess_2px=True,
     )
 
     return c.save_pair("ui/ui_theme_atlas", CS, CS, strength=1.8)

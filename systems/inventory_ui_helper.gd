@@ -8,18 +8,22 @@ extends RefCounted
 const CELL_SIZE: float = 36.0
 const POPUP_CELL_SIZE: float = 32.0
 
-# 캐시된 StyleBoxFlat (마우스 이동 시 반복 생성 방지)
-static var _sb_hover_compat: StyleBoxFlat = null
-static var _sb_hover_incompat: StyleBoxFlat = null
-static var _sb_guide_compat: StyleBoxFlat = null
-static var _sb_guide_default: StyleBoxFlat = null
+# 캐시된 StyleBox (마우스 이동 시 반복 생성 방지)
+static var _sb_hover_compat: StyleBox = null
+static var _sb_hover_incompat: StyleBox = null
+static var _sb_guide_compat: StyleBox = null
+static var _sb_guide_default: StyleBox = null
 
-# StyleBoxTexture / StyleBoxFlat 겸용 안전 색상 오버라이드 헬퍼
+# StyleBoxTexture 겸용 안전 색상 오버라이드 헬퍼
 static func apply_dynamic_tint(ctrl: Control, style_name: String, tint: Color) -> void:
 	if not is_instance_valid(ctrl):
 		return
 	var base_sb: StyleBox = ctrl.get_theme_stylebox(style_name)
-	var dup_sb: StyleBox = base_sb.duplicate() if base_sb else StyleBoxFlat.new()
+	if base_sb == null and PixelAssetManager:
+		base_sb = PixelAssetManager.get_pixel_stylebox("progress_fill" if style_name == "fill" else "panel_main")
+	if base_sb == null:
+		return
+	var dup_sb: StyleBox = base_sb.duplicate()
 	if dup_sb is StyleBoxTexture:
 		dup_sb.modulate_color = tint
 	elif dup_sb is StyleBoxFlat:
@@ -68,10 +72,9 @@ static func build_drag_preview(item: Dictionary, is_rot: bool, cell_size: float 
 	bg_panel.position = Vector2(2.0, 2.0)
 	bg_panel.size = Vector2(total_w - 4.0, total_h - 4.0)
 
-	var sb: StyleBox = PixelAssetManager.get_ui_stylebox("equip_gold", 4, 4, 4, 4, 4) if PixelAssetManager else null
-	if sb == null:
-		sb = _make_stylebox(Color(0.09, 0.12, 0.16, 0.88), Color(0.92, 0.68, 0.24, 0.98), 2)
-	bg_panel.add_theme_stylebox_override("panel", sb)
+	var sb: StyleBox = PixelAssetManager.get_pixel_stylebox("drag_preview", 4.0, 4.0, 4.0, 4.0, 4) if PixelAssetManager else null
+	if sb != null:
+		bg_panel.add_theme_stylebox_override("panel", sb)
 	preview.add_child(bg_panel)
 
 	var icon := TextureRect.new()
@@ -90,6 +93,8 @@ static func build_drag_preview(item: Dictionary, is_rot: bool, cell_size: float 
 	if amt > 1:
 		var amt_lbl := Label.new()
 		amt_lbl.text = "x%d" % amt
+		if PixelAssetManager:
+			amt_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 		amt_lbl.add_theme_font_size_override("font_size", 10)
 		amt_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 		amt_lbl.position = Vector2(6.0, total_h - 18.0)
@@ -122,23 +127,11 @@ static func calc_drag_drop_cell(grid_ctrl: Control, m_global_pos: Vector2, grid_
 static func init_cached_styleboxes() -> void:
 	if _sb_hover_compat != null:
 		return
-	_sb_hover_compat = _make_stylebox(Color(0.12, 0.42, 0.18, 0.9), Color(0.3, 1.0, 0.5, 1.0), 2)
-	_sb_hover_incompat = _make_stylebox(Color(0.42, 0.12, 0.12, 0.9), Color(1.0, 0.3, 0.3, 1.0), 2)
-	_sb_guide_compat = _make_stylebox(Color(0.08, 0.24, 0.14, 0.65), Color(0.2, 0.85, 0.4, 0.85), 2)
-	_sb_guide_default = _make_stylebox(Color(0.14, 0.15, 0.18, 0.5), Color(0.25, 0.28, 0.32, 0.4), 1)
-
-static func _make_stylebox(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
-	var sb = StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(bw)
-	sb.corner_radius_top_left = 0
-	sb.corner_radius_top_right = 0
-	sb.corner_radius_bottom_left = 0
-	sb.corner_radius_bottom_right = 0
-	sb.corner_detail = 1
-	sb.anti_aliasing = false
-	return sb
+	if PixelAssetManager:
+		_sb_hover_compat = PixelAssetManager.get_pixel_stylebox("hover_compat")
+		_sb_hover_incompat = PixelAssetManager.get_pixel_stylebox("hover_incompat")
+		_sb_guide_compat = PixelAssetManager.get_pixel_stylebox("guide_compat")
+		_sb_guide_default = PixelAssetManager.get_pixel_stylebox("guide_default")
 
 static func is_slot_compatible(item_id: String, slot_name: String) -> bool:
 	var idata = ItemDatabase.get_item_data(item_id)
@@ -197,14 +190,13 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 	
 	var w: int = grid_mgr.grid_width
 	var h: int = grid_mgr.grid_height
-	var font: Font = ThemeDB.fallback_font
+	var font_micro: Font = PixelAssetManager.get_pixel_font_micro() if PixelAssetManager else ThemeDB.fallback_font
 	var selected_uids: Dictionary = ctrl.get_meta("selected_sell_uids", {}) if ctrl.has_meta("selected_sell_uids") else {}
 	var filter_active: bool = bool(ctrl.get_meta("filter_active", false)) if ctrl.has_meta("filter_active") else false
 	var matched_uids: Dictionary = ctrl.get_meta("matched_uids", {}) if ctrl.has_meta("matched_uids") else {}
 	var unavailable_uids: Dictionary = ctrl.get_meta("unavailable_uids", {}) if ctrl.has_meta("unavailable_uids") else {}
 	var active_focus_uid: String = str(ctrl.get_meta("active_focus_uid", "")) if ctrl.has_meta("active_focus_uid") else ""
-	var is_compact_cell := cell_size <= 34.0
-	var lbl_font_sz: int = 8 if is_compact_cell else 9
+	var lbl_font_sz: int = 10
 	
 	# 0. 전체 그리드 베이스 배경 (다크 택티컬 스틸 웰)
 	var full_rect := Rect2(0.0, 0.0, float(w) * cell_size, float(h) * cell_size)
@@ -229,7 +221,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			ctrl.draw_rect(Rect2(float(hx) + 2.0, 2.0, 4.0, 2.0), Color(0.92, 0.68, 0.22, 0.38), true)
 		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.62), false, 1.0)
 		_draw_pixel_corner_brackets(ctrl, Rect2(1.0, 1.0, 2.0 * cell_size - 2.0, 2.0 * cell_size - 2.0), Color(1.0, 0.78, 0.28, 0.9), 5.0, 2.0)
-		ctrl.draw_string(font, Vector2(4.0, 2.0 * cell_size - 4.0), "SECURE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.95, 0.72, 0.24, 0.55))
+		ctrl.draw_string(font_micro, Vector2(4.0, 2.0 * cell_size - 4.0), "SECURE", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.95, 0.72, 0.24, 0.55))
 		
 	var line_col := Color(0.16, 0.20, 0.26, 0.9)
 	for x in range(w + 1):
@@ -317,7 +309,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			right_badge_pad += 8.0
 		if is_wish:
 			right_badge_pad += 10.0
-		ctrl.draw_string(font, item_rect.position + Vector2(5.0, 10.0), str(d.get("name", item_id_str)), HORIZONTAL_ALIGNMENT_LEFT, maxf(10.0, item_rect.size.x - right_badge_pad), lbl_font_sz, Color(0.88, 0.91, 0.95, 0.92))
+		ctrl.draw_string(font_micro, item_rect.position + Vector2(5.0, 10.0), str(d.get("name", item_id_str)), HORIZONTAL_ALIGNMENT_LEFT, maxf(10.0, item_rect.size.x - right_badge_pad), lbl_font_sz, Color(0.88, 0.91, 0.95, 0.92))
 
 		# 우상단 상태 배지: 잠금(자물쇠) & 위시리스트(★)
 		var badge_cursor_x: float = rx1 - 2.0
@@ -326,7 +318,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			_draw_pixel_padlock(ctrl, Vector2(badge_cursor_x, ry0 + 2.0), Color(1.0, 0.72, 0.20, 0.98))
 		if is_wish:
 			badge_cursor_x -= 10.0
-			ctrl.draw_string(font, Vector2(badge_cursor_x, ry0 + 10.0), "★", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.22, 0.98))
+			ctrl.draw_string(font_micro, Vector2(badge_cursor_x, ry0 + 10.0), "★", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.22, 0.98))
 
 		# 방어구/헬멧 내구도 바 표기 (최하단 2px, 텍스트와 비겹침)
 		var cat: int = int(d.get("category", -1))
@@ -336,12 +328,12 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		# 수량 or 중첩 컨테이너 보관 수량 표기
 		var amt: int = int(item.get("amount", 1))
 		if amt > 1:
-			ctrl.draw_string(font, item_rect.position + Vector2(5.0, item_rect.size.y - bottom_text_offset), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_font_sz, Color(0.98, 0.82, 0.32))
+			ctrl.draw_string(font_micro, item_rect.position + Vector2(5.0, item_rect.size.y - bottom_text_offset), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_font_sz, Color(0.98, 0.82, 0.32))
 		elif InventoryGrid.is_container_item(item):
 			var inner_arr = item.get("inner_items", [])
 			var inner_cnt: int = inner_arr.size() if inner_arr is Array else 0
 			var c_col := Color(0.45, 0.92, 1.0, 0.92) if inner_cnt > 0 else Color(0.58, 0.66, 0.74, 0.75)
-			ctrl.draw_string(font, item_rect.position + Vector2(5.0, item_rect.size.y - bottom_text_offset), "[%d]" % inner_cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c_col)
+			ctrl.draw_string(font_micro, item_rect.position + Vector2(5.0, item_rect.size.y - bottom_text_offset), "[%d]" % inner_cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, c_col)
 
 		# 총기류 탄약 표기 (우하단: cur/max, 잔탄 0: 적색, 잔탄 보유: 연녹색)
 		var item_type_str: String = str(d.get("type", item.get("type", "")))
@@ -362,7 +354,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			var ammo_str: String = "%d/%d" % [cur_ammo, max_ammo]
 			var ammo_col := Color(0.4, 1.0, 0.6) if cur_ammo > 0 else Color(1.0, 0.25, 0.25)
 			var text_w: float = 36.0
-			ctrl.draw_string(font, item_rect.position + Vector2(item_rect.size.x - text_w - 3.0, item_rect.size.y - bottom_text_offset), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, 8, ammo_col)
+			ctrl.draw_string(font_micro, item_rect.position + Vector2(item_rect.size.x - text_w - 3.0, item_rect.size.y - bottom_text_offset), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, 10, ammo_col)
 
 		if is_armor:
 			var max_dur: float = float(item.get("max_durability", d.get("max_durability", 100.0)))
@@ -400,7 +392,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 
 		if is_selected_sell:
 			ctrl.draw_rect(item_rect, Color(0.25, 0.98, 0.72, 0.98), false, 2.0)
-			ctrl.draw_string(font, Vector2(rx1 - 11.0, ry1 - 4.0), "✓", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.32, 1.0, 0.68, 1.0))
+			ctrl.draw_string(font_micro, Vector2(rx1 - 11.0, ry1 - 4.0), "✓", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.32, 1.0, 0.68, 1.0))
 
 	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강 픽셀 타겟 브래킷)
 	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
@@ -467,17 +459,18 @@ static func highlight_compatible_slots(drop_targets: Array, item: Dictionary, ho
 		if PixelAssetManager:
 			var t_margin: int = 3 if ctrl.custom_minimum_size.y > 0 and ctrl.custom_minimum_size.y <= 30.0 else 4
 			if ctrl == hovered_ctrl:
-				sb = PixelAssetManager.get_ui_stylebox("slot_compat_green" if is_compat else "slot_incompat_red", 6, 3, 6, 3, t_margin)
+				sb = PixelAssetManager.get_pixel_stylebox("hover_compat" if is_compat else "hover_incompat", 6.0, 3.0, 6.0, 3.0, t_margin)
 			else:
-				sb = PixelAssetManager.get_ui_stylebox("slot_guide_compat" if is_compat else "slot_guide_default", 6, 3, 6, 3, t_margin)
+				sb = PixelAssetManager.get_pixel_stylebox("guide_compat" if is_compat else "guide_default", 6.0, 3.0, 6.0, 3.0, t_margin)
 		if sb == null:
 			if ctrl == hovered_ctrl:
 				sb = _sb_hover_compat if is_compat else _sb_hover_incompat
 			else:
 				sb = _sb_guide_compat if is_compat else _sb_guide_default
 				
-		ctrl.add_theme_stylebox_override("normal", sb)
-		ctrl.add_theme_stylebox_override("hover", sb)
+		if sb != null:
+			ctrl.add_theme_stylebox_override("normal", sb)
+			ctrl.add_theme_stylebox_override("hover", sb)
 
 static func clear_slot_highlights(drop_targets: Array) -> void:
 	for target in drop_targets:
@@ -518,25 +511,9 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 			var m_info := HideoutProgression.get_weapon_mastery_bonus(w_data, item_id)
 			is_gold_master = bool(m_info.get("gold_border", false))
 
-		var eq_sb: StyleBox = null
-		if PixelAssetManager:
-			eq_sb = PixelAssetManager.get_ui_stylebox("equip_gold" if is_gold_master else "equip_filled", 6, 4, 6, 4, 4)
-		if eq_sb == null:
-			var flat_sb := StyleBoxFlat.new()
-			flat_sb.bg_color = Color(0.16, 0.13, 0.06, 0.94) if is_gold_master else Color(0.11, 0.17, 0.22, 0.94)
-			flat_sb.border_width_left = 2
-			flat_sb.border_width_top = 2
-			flat_sb.border_width_right = 2
-			flat_sb.border_width_bottom = 2
-			flat_sb.border_color = Color(1.0, 0.84, 0.22, 0.98) if is_gold_master else Color(0.32, 0.82, 0.55, 0.92)
-			flat_sb.corner_radius_top_left = 0
-			flat_sb.corner_radius_top_right = 0
-			flat_sb.corner_radius_bottom_left = 0
-			flat_sb.corner_radius_bottom_right = 0
-			flat_sb.corner_detail = 1
-			flat_sb.anti_aliasing = false
-			eq_sb = flat_sb
-		btn.add_theme_stylebox_override("normal", eq_sb)
+		var eq_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("equip_gold" if is_gold_master else "equip_filled", 6.0, 4.0, 6.0, 4.0, 4) if PixelAssetManager else null
+		if eq_sb != null:
+			btn.add_theme_stylebox_override("normal", eq_sb)
 
 		if is_tall_slot:
 			btn.text = ""
@@ -573,6 +550,8 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 				name_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 				name_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 				name_lbl.clip_text = true
+				if PixelAssetManager:
+					name_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 				name_lbl.add_theme_font_size_override("font_size", 10)
 				name_lbl.add_theme_color_override("font_color", Color(0.95, 0.98, 1.0))
 				eq_overlay.add_child(name_lbl)
@@ -608,10 +587,8 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 				dur_bar.offset_right = -4.0
 				dur_bar.offset_top = -6.0
 				dur_bar.offset_bottom = -2.0
-				var bg_style := StyleBoxFlat.new()
-				bg_style.bg_color = Color(0.05, 0.06, 0.08, 0.85)
-				bg_style.anti_aliasing = false
-				dur_bar.add_theme_stylebox_override("background", bg_style)
+				if PixelAssetManager:
+					dur_bar.add_theme_stylebox_override("background", PixelAssetManager.get_pixel_stylebox("progress_bg", 1.0, 1.0, 1.0, 1.0, 2))
 				btn.add_child(dur_bar)
 			dur_bar.max_value = max_dur
 			dur_bar.value = cur_dur

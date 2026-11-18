@@ -313,14 +313,22 @@ func _on_responsive_window_resized(vp_size: Vector2) -> void:
 func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector2) -> void:
 	if bp == ResponsiveManager.Breakpoint.COMPACT:
 		if has_node("TopBar/DayLabel"):
-			$TopBar/DayLabel.add_theme_font_size_override("font_size", 14)
+			if PixelAssetManager:
+				$TopBar/DayLabel.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+			$TopBar/DayLabel.add_theme_font_size_override("font_size", 12)
 		if has_node("TopBar/MoneyLabel"):
-			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 14)
+			if PixelAssetManager:
+				$TopBar/MoneyLabel.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 12)
 	else:
 		if has_node("TopBar/DayLabel"):
-			$TopBar/DayLabel.add_theme_font_size_override("font_size", 20)
+			if PixelAssetManager:
+				$TopBar/DayLabel.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+			$TopBar/DayLabel.add_theme_font_size_override("font_size", 24)
 		if has_node("TopBar/MoneyLabel"):
-			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 18)
+			if PixelAssetManager:
+				$TopBar/MoneyLabel.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 24)
 
 func _process(_delta: float) -> void:
 	if tooltip and tooltip.visible:
@@ -1240,8 +1248,10 @@ func _setup_traders_bulk_ui() -> void:
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_stretch_ratio = 0.88
-	var r_sb := PixelAssetManager.make_pixel_stylebox_flat(Color(0.06, 0.08, 0.11, 0.98), Color(0.28, 0.56, 0.48, 0.92), 2, 2, 2, 2, 8, 8, true)
-	right_panel.add_theme_stylebox_override("panel", r_sb)
+	if PixelAssetManager:
+		var r_sb := PixelAssetManager.get_pixel_stylebox("receipt_panel", 8.0, 8.0, 8.0, 8.0, 4)
+		if r_sb != null:
+			right_panel.add_theme_stylebox_override("panel", r_sb)
 	main_hbox.add_child(right_panel)
 
 	var r_vbox := VBoxContainer.new()
@@ -1250,7 +1260,9 @@ func _setup_traders_bulk_ui() -> void:
 
 	var r_title := Label.new()
 	r_title.text = "🧾 일괄 판매 정산 영수증"
-	r_title.add_theme_font_size_override("font_size", 14)
+	if PixelAssetManager:
+		r_title.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+	r_title.add_theme_font_size_override("font_size", 12)
 	r_title.add_theme_color_override("font_color", Color(0.38, 0.98, 0.72))
 	r_vbox.add_child(r_title)
 
@@ -1488,8 +1500,10 @@ func _setup_market_controls() -> void:
 	# 5. 하단 선택 아이템 등록 확인 패널
 	var confirm_panel := PanelContainer.new()
 	confirm_panel.name = "MarketConfirmPanel"
-	var c_sb := PixelAssetManager.make_pixel_stylebox_flat(Color(0.06, 0.08, 0.12, 0.98), Color(0.32, 0.56, 0.78, 0.92), 2, 2, 2, 2, 8, 6, true)
-	confirm_panel.add_theme_stylebox_override("panel", c_sb)
+	if PixelAssetManager:
+		var c_sb := PixelAssetManager.get_pixel_stylebox("market_confirm_panel", 8.0, 6.0, 8.0, 6.0, 4)
+		if c_sb != null:
+			confirm_panel.add_theme_stylebox_override("panel", c_sb)
 	reg_col.add_child(confirm_panel)
 
 	var c_hbox := HBoxContainer.new()
@@ -1895,24 +1909,10 @@ func _refresh_market_ui() -> void:
 	if not bounties.is_empty():
 		var bounty_panel = PanelContainer.new()
 		bounty_panel.name = "BountyOrderPanel"
-		var bounty_sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_bounty") if PixelAssetManager else null
-		if bounty_sb == null:
-			var flat_bounty := StyleBoxFlat.new()
-			flat_bounty.bg_color = Color(0.18, 0.14, 0.05, 0.96)
-			flat_bounty.border_width_left = 4
-			flat_bounty.border_width_top = 2
-			flat_bounty.border_width_right = 2
-			flat_bounty.border_width_bottom = 2
-			flat_bounty.border_color = Color(1.0, 0.82, 0.22, 0.98)
-			flat_bounty.set_corner_radius_all(0)
-			flat_bounty.corner_detail = 1
-			flat_bounty.anti_aliasing = false
-			flat_bounty.content_margin_left = 12
-			flat_bounty.content_margin_right = 12
-			flat_bounty.content_margin_top = 10
-			flat_bounty.content_margin_bottom = 10
-			bounty_sb = flat_bounty
-		bounty_panel.add_theme_stylebox_override("panel", bounty_sb)
+		if PixelAssetManager:
+			var bounty_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("bounty_panel", 12.0, 10.0, 12.0, 10.0, 4)
+			if bounty_sb != null:
+				bounty_panel.add_theme_stylebox_override("panel", bounty_sb)
 
 		var b_vbox = VBoxContainer.new()
 		b_vbox.add_theme_constant_override("separation", 8)
@@ -1920,7 +1920,9 @@ func _refresh_market_ui() -> void:
 		
 		var b_title = Label.new()
 		b_title.text = "[🔥 오늘의 2.5x 긴급 수배] 암시장 특수 상인 고가 매입 품목"
-		b_title.add_theme_font_size_override("font_size", 15)
+		if PixelAssetManager:
+			b_title.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+		b_title.add_theme_font_size_override("font_size", 12)
 		b_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 		b_vbox.add_child(b_title)
 		
@@ -2605,10 +2607,10 @@ func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String 
 
 	context_menu_panel = PanelContainer.new()
 	context_menu_panel.z_index = 300
-	var sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_tooltip", 8, 6, 8, 6, 4) if PixelAssetManager else null
-	if sb == null:
-		sb = PixelAssetManager.make_pixel_stylebox_flat(Color(0.055, 0.07, 0.095, 0.98), Color(0.35, 0.45, 0.60, 0.95), 2, 2, 2, 2, 8, 6, true)
-	context_menu_panel.add_theme_stylebox_override("panel", sb)
+	if PixelAssetManager:
+		var sb: StyleBox = PixelAssetManager.get_pixel_stylebox("context_menu", 8.0, 6.0, 8.0, 6.0, 4)
+		if sb != null:
+			context_menu_panel.add_theme_stylebox_override("panel", sb)
 
 	var vbox := VBoxContainer.new()
 	vbox.add_theme_constant_override("separation", 4)
@@ -2616,7 +2618,9 @@ func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String 
 
 	var hdr := Label.new()
 	hdr.text = item_name
-	hdr.add_theme_font_size_override("font_size", 11)
+	if PixelAssetManager:
+		hdr.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+	hdr.add_theme_font_size_override("font_size", 12)
 	hdr.add_theme_color_override("font_color", Color(0.92, 0.86, 0.42))
 	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vbox.add_child(hdr)

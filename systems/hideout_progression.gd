@@ -1018,21 +1018,10 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 
 	for b_trade in DOGTAG_BARTER_TRADES:
 		var b_card := PanelContainer.new()
-		var b_sb := StyleBoxFlat.new()
-		b_sb.bg_color = Color(0.08, 0.10, 0.14, 0.96)
-		b_sb.border_width_left = 3
-		b_sb.border_width_top = 1
-		b_sb.border_width_right = 1
-		b_sb.border_width_bottom = 1
-		b_sb.border_color = Color(1.0, 0.78, 0.22)
-		b_sb.set_corner_radius_all(0)
-		b_sb.corner_detail = 1
-		b_sb.anti_aliasing = false
-		b_sb.content_margin_left = 8
-		b_sb.content_margin_right = 8
-		b_sb.content_margin_top = 6
-		b_sb.content_margin_bottom = 6
-		b_card.add_theme_stylebox_override("panel", b_sb)
+		if PixelAssetManager:
+			var b_sb := PixelAssetManager.get_pixel_stylebox("barter_card", 8.0, 6.0, 8.0, 6.0, 4)
+			if b_sb != null:
+				b_card.add_theme_stylebox_override("panel", b_sb)
 
 		var b_hbox := HBoxContainer.new()
 		b_hbox.add_theme_constant_override("separation", 10)
@@ -1092,22 +1081,10 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 		var w_name := String(idata.get("name", w_id))
 
 		var card := PanelContainer.new()
-		if is_gm:
-			var gm_sb := StyleBoxFlat.new()
-			gm_sb.bg_color = Color(0.16, 0.13, 0.05, 0.96)
-			gm_sb.border_width_left = 3
-			gm_sb.border_width_top = 2
-			gm_sb.border_width_right = 2
-			gm_sb.border_width_bottom = 2
-			gm_sb.border_color = Color(1.0, 0.84, 0.22, 0.98)
-			gm_sb.set_corner_radius_all(0)
-			gm_sb.corner_detail = 1
-			gm_sb.anti_aliasing = false
-			gm_sb.content_margin_left = 8
-			gm_sb.content_margin_right = 8
-			gm_sb.content_margin_top = 6
-			gm_sb.content_margin_bottom = 6
-			card.add_theme_stylebox_override("panel", gm_sb)
+		if is_gm and PixelAssetManager:
+			var gm_sb := PixelAssetManager.get_pixel_stylebox("mastery_gold", 8.0, 6.0, 8.0, 6.0, 4)
+			if gm_sb != null:
+				card.add_theme_stylebox_override("panel", gm_sb)
 
 		var vbox := VBoxContainer.new()
 		vbox.add_theme_constant_override("separation", 4)
@@ -1119,17 +1096,11 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 
 		if ItemIconManager:
 			var icon_frame := PanelContainer.new()
-			var ic_sb := StyleBoxFlat.new()
-			ic_sb.bg_color = Color(0.06, 0.08, 0.11, 0.96)
-			ic_sb.border_width_left = 2 if is_gm else 1
-			ic_sb.border_width_top = 2 if is_gm else 1
-			ic_sb.border_width_right = 2 if is_gm else 1
-			ic_sb.border_width_bottom = 2 if is_gm else 1
-			ic_sb.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gm else (Color(0.4, 0.85, 1.0, 0.85) if lv >= 1 else Color(0.25, 0.30, 0.38, 0.75))
-			ic_sb.set_corner_radius_all(0)
-			ic_sb.corner_detail = 1
-			ic_sb.anti_aliasing = false
-			icon_frame.add_theme_stylebox_override("panel", ic_sb)
+			if PixelAssetManager:
+				var ic_preset := "icon_frame_gold" if is_gm else ("workbench_slot_active" if lv >= 1 else "icon_frame")
+				var ic_sb := PixelAssetManager.get_pixel_stylebox(ic_preset, 2.0, 2.0, 2.0, 2.0, 3)
+				if ic_sb != null:
+					icon_frame.add_theme_stylebox_override("panel", ic_sb)
 			var w_icon := TextureRect.new()
 			w_icon.custom_minimum_size = Vector2(28, 28)
 			w_icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE

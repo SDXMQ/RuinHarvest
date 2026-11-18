@@ -71,17 +71,10 @@ func _build_ui() -> void:
 	
 	# 상단 헤더 패널
 	var header_panel = PanelContainer.new()
-	var h_style = StyleBoxFlat.new()
-	h_style.bg_color = Color(0.09, 0.13, 0.11, 0.96)
-	h_style.set_corner_radius_all(0)
-	h_style.corner_detail = 1
-	h_style.anti_aliasing = false
-	h_style.border_width_left = 2
-	h_style.border_width_top = 2
-	h_style.border_width_right = 2
-	h_style.border_width_bottom = 2
-	h_style.border_color = Color(0.25, 0.45, 0.3)
-	header_panel.add_theme_stylebox_override("panel", h_style)
+	if PixelAssetManager:
+		var h_style: StyleBox = PixelAssetManager.get_pixel_stylebox("header_bar", 10.0, 5.0, 10.0, 5.0, 4)
+		if h_style != null:
+			header_panel.add_theme_stylebox_override("panel", h_style)
 	main_vbox.add_child(header_panel)
 	
 	var header_hbox = HBoxContainer.new()
@@ -120,17 +113,10 @@ func _build_ui() -> void:
 	
 	# 하단 전술 통계 & 안내 바
 	var footer_panel = PanelContainer.new()
-	var f_style = StyleBoxFlat.new()
-	f_style.bg_color = Color(0.08, 0.11, 0.09, 0.96)
-	f_style.set_corner_radius_all(0)
-	f_style.corner_detail = 1
-	f_style.anti_aliasing = false
-	f_style.border_width_left = 1
-	f_style.border_width_top = 2
-	f_style.border_width_right = 1
-	f_style.border_width_bottom = 1
-	f_style.border_color = Color(0.22, 0.38, 0.26)
-	footer_panel.add_theme_stylebox_override("panel", f_style)
+	if PixelAssetManager:
+		var f_style: StyleBox = PixelAssetManager.get_pixel_stylebox("footer_bar", 10.0, 6.0, 10.0, 6.0, 4)
+		if f_style != null:
+			footer_panel.add_theme_stylebox_override("panel", f_style)
 	main_vbox.add_child(footer_panel)
 	
 	var footer_hbox = HBoxContainer.new()

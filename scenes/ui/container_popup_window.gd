@@ -76,12 +76,10 @@ func setup(p_container_item: Dictionary, p_source_grid: InventoryGrid, p_host: C
 	_refresh_header_text()
 
 func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_kind: String) -> void:
-	var frame_sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_tooltip", 6, 6, 6, 6, 4) if PixelAssetManager else null
-	if frame_sb == null and PixelAssetManager:
-		frame_sb = PixelAssetManager.make_pixel_stylebox_flat(Color(0.06, 0.08, 0.11, 0.98), Color(0.38, 0.50, 0.65, 0.95), 2, 2, 2, 2, 6, 6, true)
-	elif frame_sb == null:
-		frame_sb = StyleBoxFlat.new()
-	add_theme_stylebox_override("panel", frame_sb)
+	if PixelAssetManager:
+		var frame_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("popup_frame", 6.0, 6.0, 6.0, 6.0, 4)
+		if frame_sb != null:
+			add_theme_stylebox_override("panel", frame_sb)
 
 	var root_vbox := VBoxContainer.new()
 	root_vbox.add_theme_constant_override("separation", 6)
@@ -111,7 +109,11 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 
 	title_label = Label.new()
 	title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title_label.add_theme_font_size_override("font_size", 11)
+	if PixelAssetManager:
+		title_label.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+		title_label.add_theme_font_size_override("font_size", 12)
+	else:
+		title_label.add_theme_font_size_override("font_size", 12)
 	title_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.42))
 	title_label.text = str(item_data.get("name", item_id))
 	title_label.clip_text = true
@@ -122,6 +124,8 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 	sort_btn.theme_type_variation = &"SmallButton"
 	sort_btn.text = "정렬"
 	sort_btn.custom_minimum_size = Vector2(38, 22)
+	if PixelAssetManager:
+		sort_btn.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 	sort_btn.add_theme_font_size_override("font_size", 10)
 	sort_btn.focus_mode = Control.FOCUS_NONE
 	sort_btn.pressed.connect(func():
@@ -135,6 +139,8 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 	close_btn.theme_type_variation = &"DangerButton"
 	close_btn.text = "X"
 	close_btn.custom_minimum_size = Vector2(24, 22)
+	if PixelAssetManager:
+		close_btn.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 	close_btn.add_theme_font_size_override("font_size", 10)
 	close_btn.focus_mode = Control.FOCUS_NONE
 	close_btn.pressed.connect(close_popup)

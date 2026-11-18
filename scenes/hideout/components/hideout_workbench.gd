@@ -325,15 +325,10 @@ func _populate_workbench_weapon_list() -> void:
 			btn.expand_icon = true
 			
 		var is_cur = (wb_selected_weapon.get("uid", "") == w_dict.get("uid", "") and not w_dict.get("uid", "").is_empty()) or (src == wb_weapon_source and not src.is_empty())
-		if is_cur:
-			var cur_style = StyleBoxFlat.new()
-			cur_style.bg_color = Color(0.12, 0.30, 0.18, 0.94)
-			cur_style.border_color = Color(0.3, 1.0, 0.5, 1.0)
-			cur_style.set_border_width_all(2)
-			cur_style.set_corner_radius_all(0)
-			cur_style.corner_detail = 1
-			cur_style.anti_aliasing = false
-			btn.add_theme_stylebox_override("normal", cur_style)
+		if is_cur and PixelAssetManager:
+			var cur_style: StyleBox = PixelAssetManager.get_pixel_stylebox("workbench_selected_btn", 8.0, 4.0, 8.0, 4.0, 4)
+			if cur_style != null:
+				btn.add_theme_stylebox_override("normal", cur_style)
 			
 		btn.pressed.connect(func():
 			_select_workbench_weapon(w_dict, src)
@@ -392,16 +387,10 @@ func _build_workbench_slots() -> void:
 		card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		
 		var is_active = (wb_active_slot == slot_name)
-		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.10, 0.20, 0.16, 0.94) if is_active else Color(0.08, 0.10, 0.14, 0.94)
-		style.border_color = Color(0.3, 1.0, 0.5, 1.0) if is_active else Color(0.28, 0.34, 0.42, 0.85)
-		style.set_border_width_all(2 if is_active else 1)
-		style.set_corner_radius_all(0)
-		style.corner_detail = 1
-		style.anti_aliasing = false
-		style.content_margin_left = 8
-		style.content_margin_right = 8
-		card.add_theme_stylebox_override("panel", style)
+		if PixelAssetManager:
+			var style: StyleBox = PixelAssetManager.get_pixel_stylebox("workbench_slot_active" if is_active else "workbench_slot", 8.0, 4.0, 8.0, 4.0, 4)
+			if style != null:
+				card.add_theme_stylebox_override("panel", style)
 		
 		var hbox = HBoxContainer.new()
 		hbox.add_theme_constant_override("separation", 6)

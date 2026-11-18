@@ -34,7 +34,7 @@
       "diffuse": "res://assets/pixel/ui/ui_theme_atlas_d.png",
       "normal": "res://assets/pixel/ui/ui_theme_atlas_n.png",
       "width": 192,
-      "height": 96
+      "height": 120
     }
   }
 }

@@ -55,36 +55,17 @@ static func style_quickslot_button(
 	btn.focus_mode = Control.FOCUS_NONE
 
 	var sb: StyleBox = null
+	var sb_pressed: StyleBox = null
 	if PixelAssetManager:
 		var slice_key := "quickslot_active" if is_active else ("quickslot_normal" if is_available else "quickslot_unavailable")
-		var base_qs := PixelAssetManager.get_ui_stylebox(slice_key, 4, 4, 4, 4, 4)
-		if base_qs != null:
-			if is_active and not active_color.is_equal_approx(Color(1.0, 0.82, 0.25)):
-				var dup_qs := base_qs.duplicate()
-				if dup_qs is StyleBoxTexture:
-					dup_qs.modulate_color = active_color
-				sb = dup_qs
-			else:
-				sb = base_qs
-	if sb == null:
-		var style := StyleBoxFlat.new()
-		style.corner_radius_top_left = 0
-		style.corner_radius_top_right = 0
-		style.corner_radius_bottom_left = 0
-		style.corner_radius_bottom_right = 0
-		style.corner_detail = 1
-		style.anti_aliasing = false
-		style.bg_color = Color(0.11, 0.14, 0.19, 0.96) if is_active else Color(0.055, 0.07, 0.095, 0.92)
-		var b_w := 2 if is_active else 1
-		style.set_border_width_all(b_w)
-		style.border_color = active_color if is_active else (Color(0.28, 0.34, 0.42, 0.9) if is_available else Color(0.18, 0.20, 0.24, 0.7))
-		style.shadow_color = Color(0, 0, 0, 0.75)
-		style.shadow_size = 1
-		style.shadow_offset = Vector2(2, 2)
-		sb = style
-	btn.add_theme_stylebox_override("normal", sb)
-	btn.add_theme_stylebox_override("hover", sb)
-	btn.add_theme_stylebox_override("pressed", sb)
+		var tint := active_color if (is_active and not active_color.is_equal_approx(Color(1.0, 0.82, 0.25))) else Color.WHITE
+		sb = PixelAssetManager.get_pixel_stylebox(slice_key, 4.0, 4.0, 4.0, 4.0, 4, tint)
+		sb_pressed = PixelAssetManager.get_pixel_stylebox(slice_key, 4.0, 5.0, 4.0, 3.0, 4, tint)
+	if sb != null:
+		btn.add_theme_stylebox_override("normal", sb)
+		btn.add_theme_stylebox_override("hover", sb)
+	if sb_pressed != null:
+		btn.add_theme_stylebox_override("pressed", sb_pressed)
 
 	var sweep_overlay: ColorRect = btn.get_node_or_null("SweepOverlay")
 	if not sweep_overlay:
@@ -137,6 +118,8 @@ static func style_quickslot_button(
 		key_lbl.name = "KeyBadge"
 		key_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		key_lbl.position = Vector2(5, 1)
+		if PixelAssetManager:
+			key_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 		key_lbl.add_theme_font_size_override("font_size", 10)
 		key_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 		key_lbl.add_theme_constant_override("outline_size", 2)
@@ -155,6 +138,8 @@ static func style_quickslot_button(
 		cnt_lbl.offset_right = -4
 		cnt_lbl.offset_bottom = -1
 		cnt_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		if PixelAssetManager:
+			cnt_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_micro())
 		cnt_lbl.add_theme_font_size_override("font_size", 10)
 		cnt_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 		cnt_lbl.add_theme_constant_override("outline_size", 2)
@@ -317,38 +302,23 @@ static func update_channeling_sweep(quickslot_hbox: HBoxContainer, slot_key: Str
 		else:
 			sw.visible = false
 
-static func _make_bar_stylebox(bg: Color, border: Color, bw: int = 1) -> StyleBoxFlat:
-	var sb := StyleBoxFlat.new()
-	sb.bg_color = bg
-	sb.border_color = border
-	sb.set_border_width_all(bw)
-	sb.corner_radius_top_left = 0
-	sb.corner_radius_top_right = 0
-	sb.corner_radius_bottom_left = 0
-	sb.corner_radius_bottom_right = 0
-	sb.corner_detail = 1
-	sb.anti_aliasing = false
-	return sb
-
 static func style_hud_bars(hp_bar: ProgressBar, stamina_bar: ProgressBar, hunger_bar: ProgressBar, thirst_bar: ProgressBar) -> void:
-	var bg_sb: StyleBox = PixelAssetManager.get_ui_stylebox("progress_bg", 2, 2, 2, 2, 3) if PixelAssetManager else null
-	if bg_sb == null:
-		bg_sb = _make_bar_stylebox(Color(0.035, 0.045, 0.062, 0.94), Color(0.20, 0.25, 0.33, 0.92), 1)
+	var bg_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("progress_bg", 2.0, 2.0, 2.0, 2.0, 3) if PixelAssetManager else null
 	if hp_bar:
-		hp_bar.add_theme_stylebox_override("background", bg_sb)
+		if bg_sb != null: hp_bar.add_theme_stylebox_override("background", bg_sb)
 		InventoryUIHelper.apply_dynamic_tint(hp_bar, "fill", Color(0.88, 0.24, 0.26, 0.98))
 	if stamina_bar:
-		stamina_bar.add_theme_stylebox_override("background", bg_sb)
+		if bg_sb != null: stamina_bar.add_theme_stylebox_override("background", bg_sb)
 		InventoryUIHelper.apply_dynamic_tint(stamina_bar, "fill", Color(0.24, 0.70, 0.92, 0.98))
 	if hunger_bar:
-		hunger_bar.add_theme_stylebox_override("background", bg_sb)
+		if bg_sb != null: hunger_bar.add_theme_stylebox_override("background", bg_sb)
 		InventoryUIHelper.apply_dynamic_tint(hunger_bar, "fill", Color(0.90, 0.60, 0.18, 0.98))
 	if thirst_bar:
-		thirst_bar.add_theme_stylebox_override("background", bg_sb)
+		if bg_sb != null: thirst_bar.add_theme_stylebox_override("background", bg_sb)
 		InventoryUIHelper.apply_dynamic_tint(thirst_bar, "fill", Color(0.22, 0.80, 0.72, 0.98))
 
 static func style_status_badges(badges: Array) -> void:
-	var badge_sb: StyleBox = PixelAssetManager.get_ui_stylebox("badge_frame", 6, 3, 6, 3, 3) if PixelAssetManager else null
+	var badge_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("toast", 6.0, 3.0, 6.0, 3.0, 3) if PixelAssetManager else null
 	for b in badges:
 		if is_instance_valid(b) and b is Control:
 			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -358,32 +328,9 @@ static func style_status_badges(badges: Array) -> void:
 
 static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) -> StyleBox:
 	if PixelAssetManager:
-		var base_sb := PixelAssetManager.get_ui_stylebox("badge_frame", 10, 6, 10, 6, 4)
-		if base_sb is StyleBoxTexture:
-			var dup := base_sb.duplicate() as StyleBoxTexture
-			dup.modulate_color = Color(accent_col.r, accent_col.g, accent_col.b, 0.96).lerp(Color.WHITE, 0.25)
-			return dup
-	var style := StyleBoxFlat.new()
-	style.bg_color = Color(0.05, 0.065, 0.095, 0.92)
-	style.border_width_left = 4
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = accent_col
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
-	style.corner_radius_top_left = 0
-	style.corner_radius_top_right = 0
-	style.corner_radius_bottom_left = 0
-	style.corner_radius_bottom_right = 0
-	style.corner_detail = 1
-	style.shadow_color = Color(0, 0, 0, 0.8)
-	style.shadow_size = 1
-	style.shadow_offset = Vector2(2, 2)
-	style.anti_aliasing = false
-	return style
+		var tint := Color(accent_col.r, accent_col.g, accent_col.b, 0.96).lerp(Color.WHITE, 0.25)
+		return PixelAssetManager.get_pixel_stylebox("toast", 10.0, 6.0, 10.0, 6.0, 4, tint)
+	return StyleBoxEmpty.new()
 
 static func spawn_event_toast(owner_node: Node, event_log_vbox: VBoxContainer, msg: String) -> void:
 	if not is_instance_valid(event_log_vbox) or not is_instance_valid(owner_node):
@@ -408,7 +355,7 @@ static func spawn_event_toast(owner_node: Node, event_log_vbox: VBoxContainer, m
 	panel.add_theme_stylebox_override("panel", make_event_toast_stylebox(accent_col))
 	var lbl := Label.new()
 	lbl.text = msg
-	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.add_theme_color_override("font_color", font_col)
 	panel.add_child(lbl)
 	event_log_vbox.add_child(panel)
