@@ -93,11 +93,30 @@
 
 ## 시작하기
 
-### 요구 사항
+### Windows 한 줄 설치 (PowerShell)
+
+PowerShell 한 줄로 **RuinHarvest**를 `C:\Program Files\RuinHarvest`에 일반 Windows 응용프로그램처럼 설치합니다(필요 시 UAC 관리자 권한을 자동으로 요청하며, 시작 메뉴·바탕화면 바로가기 생성 및 Windows **설치된 앱**에 제거 항목을 등록합니다).
+
+```powershell
+irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
+```
+
+> [!IMPORTANT]
+> [install.ps1](install.ps1)은 최신 [GitHub Release](https://github.com/SDXMQ/RuinHarvest/releases/latest)에 업로드된 `RuinHarvest.exe`(또는 Windows `.zip` 빌드)를 내려받아 설치합니다. 이 명령을 사용하려면 먼저 GitHub Releases에 Windows 실행 파일이 등록되어 있어야 합니다.
+
+제거할 때는 **Windows 설정 → 앱 → 설치된 앱 → RuinHarvest**에서 제거하거나 아래 명령을 실행하세요(세이브 파일은 `%APPDATA%\Godot\app_userdata\RuinHarvest`에 보존됩니다).
+
+```powershell
+& "$env:ProgramFiles\RuinHarvest\uninstall.ps1"
+```
+
+### 소스 코드에서 직접 실행 (Godot 4.7)
+
+#### 요구 사항
 - **Godot Engine 4.7** (Forward Plus 렌더러, `project.godot` 기준)
 - *(선택 사항 — 픽셀 스프라이트 시트 재생성 시에만 필요)* **Python 3**, `numpy`, `Pillow`
 
-### 실행 방법
+#### 실행 방법
 1. 저장소를 클론합니다.
    ```bash
    git clone https://github.com/SDXMQ/RuinHarvest.git
@@ -105,7 +124,7 @@
 2. **Godot Engine 4.7**을 실행하고 `project.godot` 파일을 가져옵니다(Import).
 3. **F5** 키(또는 **프로젝트 실행**)를 눌러 `res://scenes/main_menu/main_menu.tscn`에서 게임을 시작합니다.
 
-### 픽셀 아트 아틀라스 재생성 (선택 사항)
+#### 픽셀 아트 아틀라스 재생성 (선택 사항)
 디퓨즈(`*_d.png`) 및 OpenGL 노말 맵(`*_n.png`) 아틀라스는 이미 `assets/pixel/` 경로에 포함되어 있습니다. `scripts/tools/bake_pixel_assets.py`를 수정한 경우 아래 명령으로 다시 생성할 수 있습니다.
 ```bash
 pip install numpy pillow
@@ -133,7 +152,8 @@ RuinHarvest/
 ├── scripts/tools/             # 에셋 파이프라인 스크립트 (bake_pixel_assets.py)
 ├── systems/                   # 핵심 시스템 (2D 인벤토리 그리드, 무기 부품 DB, 성장, 날씨, 이벤트 등)
 ├── ui/theme/                  # 전술 픽셀 UI 테마 (tactical_theme.tres)
-└── world/interior/            # 건물 내부 레이아웃 생성기
+├── world/interior/            # 건물 내부 레이아웃 생성기
+└── install.ps1                # Windows 한 줄 PowerShell 설치 스크립트 (Program Files + 바로가기 + 앱 등록)
 ```
 
 ---

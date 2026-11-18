@@ -93,11 +93,30 @@ Surviving a raid lets you bring everything in your backpack back to your hideout
 
 ## Getting Started
 
-### Prerequisites
+### Windows One-Line Installer (PowerShell)
+
+Install **RuinHarvest** as a Windows desktop application into `C:\Program Files\RuinHarvest` (automatically requests Administrator permission via UAC, creates Start Menu & Desktop shortcuts, and registers the app in Windows **Installed apps**):
+
+```powershell
+irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
+```
+
+> [!IMPORTANT]
+> [install.ps1](install.ps1) downloads `RuinHarvest.exe` (or a Windows `.zip` build) from the latest [GitHub Release](https://github.com/SDXMQ/RuinHarvest/releases/latest). Make sure a Windows release asset is published on GitHub Releases before running this command.
+
+To uninstall, remove **RuinHarvest** from **Windows Settings → Apps → Installed apps** (save data under `%APPDATA%\Godot\app_userdata\RuinHarvest` is preserved), or run:
+
+```powershell
+& "$env:ProgramFiles\RuinHarvest\uninstall.ps1"
+```
+
+### Run from Source (Godot 4.7)
+
+#### Prerequisites
 - **Godot Engine 4.7** (Forward Plus renderer; see `project.godot`)
 - *(Optional, only if regenerating pixel sprite sheets)* **Python 3** with `numpy` and `Pillow`
 
-### Run the Project
+#### Run the Project
 1. Clone the repository:
    ```bash
    git clone https://github.com/SDXMQ/RuinHarvest.git
@@ -105,7 +124,7 @@ Surviving a raid lets you bring everything in your backpack back to your hideout
 2. Open **Godot Engine 4.7** and import `project.godot`.
 3. Press **F5** (or click **Run Project**) to launch from `res://scenes/main_menu/main_menu.tscn`.
 
-### Regenerate Pixel Art Atlases (Optional)
+#### Regenerate Pixel Art Atlases (Optional)
 All pre-baked diffuse (`*_d.png`) and OpenGL normal-map (`*_n.png`) atlases are already committed under `assets/pixel/`. If you modify `scripts/tools/bake_pixel_assets.py`, re-bake them with:
 ```bash
 pip install numpy pillow
@@ -133,7 +152,8 @@ RuinHarvest/
 ├── scripts/tools/             # Asset pipeline scripts (bake_pixel_assets.py)
 ├── systems/                   # Core gameplay systems (2D inventory grid, weapon parts DB, progression, weather, events)
 ├── ui/theme/                  # Tactical pixel UI theme (tactical_theme.tres)
-└── world/interior/            # Interior layout generator
+├── world/interior/            # Interior layout generator
+└── install.ps1                # Windows one-line PowerShell installer (Program Files + shortcuts + Apps registry)
 ```
 
 ---
