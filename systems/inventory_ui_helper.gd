@@ -97,6 +97,28 @@ static func build_drag_preview(item: Dictionary, is_rot: bool, cell_size: float 
 		preview.add_child(amt_lbl)
 	return preview
 
+static func calc_drag_drop_cell(grid_ctrl: Control, m_global_pos: Vector2, grid_mgr: InventoryGrid, drag_data: Dictionary, cell_size: float = CELL_SIZE) -> Vector2i:
+	if not is_instance_valid(grid_ctrl) or grid_mgr == null:
+		return Vector2i(-1, -1)
+	if not grid_ctrl.get_global_rect().has_point(m_global_pos):
+		return Vector2i(-1, -1)
+	var item: Dictionary = drag_data.get("item", {})
+	var is_rot: bool = bool(drag_data.get("rotated", false))
+	var base_size: Vector2i = ItemDatabase.get_item_grid_size(str(item.get("id", "")))
+	var base_w: int = int(item.get("w", base_size.x))
+	var base_h: int = int(item.get("h", base_size.y))
+	var cur_w: int = base_h if is_rot else base_w
+	var cur_h: int = base_w if is_rot else base_h
+	var local_pos: Vector2 = m_global_pos - grid_ctrl.get_global_rect().position
+	var cx: int = roundi((local_pos.x - float(cur_w) * cell_size * 0.5) / cell_size)
+	var cy: int = roundi((local_pos.y - float(cur_h) * cell_size * 0.5) / cell_size)
+	# 그리드 경계 바로 안쪽 가장자리에서 -1로 벗어나는 경우 보정
+	if cx < 0 and local_pos.x >= 0.0 and local_pos.x < cell_size:
+		cx = 0
+	if cy < 0 and local_pos.y >= 0.0 and local_pos.y < cell_size:
+		cy = 0
+	return Vector2i(cx, cy)
+
 static func init_cached_styleboxes() -> void:
 	if _sb_hover_compat != null:
 		return

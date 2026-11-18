@@ -418,10 +418,11 @@ static func spawn_event_toast(owner_node: Node, event_log_vbox: VBoxContainer, m
 		oldest.queue_free()
 		event_log_vbox.remove_child(oldest)
 
-	var tween := owner_node.create_tween()
-	tween.tween_interval(5.0)
-	tween.tween_property(panel, "modulate:a", 0.0, 1.0)
-	tween.tween_callback(panel.queue_free)
+	if owner_node.is_inside_tree():
+		var tween := owner_node.create_tween()
+		tween.tween_interval(5.0)
+		tween.tween_property(panel, "modulate:a", 0.0, 1.0)
+		tween.tween_callback(panel.queue_free)
 
 static func update_player_hud(
 	player: Node,
@@ -575,7 +576,7 @@ static func draw_pixel_crosshair(ctrl: Control, m_pos: Vector2, spread: float, i
 	ctrl.draw_rect(Rect2(cx - 2.0, cy - 2.0, 4.0, 4.0), shadow_col, true)
 	ctrl.draw_rect(Rect2(cx - 1.0, cy - 1.0, 2.0, 2.0), col, true)
 
-	if is_jammed and (Time.get_ticks_msec() / 250) % 2 == 0:
+	if is_jammed and floori(float(Time.get_ticks_msec()) / 250.0) % 2 == 0:
 		var jam_pos := Vector2(cx + 16.0, cy + 16.0)
 		ctrl.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.9))
 		ctrl.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))

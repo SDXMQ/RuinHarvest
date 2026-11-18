@@ -197,9 +197,34 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 	elif not current_world_data["hideout"].has("stash"):
 		current_world_data["hideout"]["stash"] = []
 	
-	# 플리마켓 등록 물품 판매 정산 및 일별 시세 갱신
+	# 플리마켓 등록 물품 판매 정산 및 일별 시세 갱신 (만료 유찰 물품 창고 반송)
 	if FleaMarket:
 		var sales_report = FleaMarket.process_player_sales(current_world_data["player"])
+		var failed_sales: Array = sales_report.get("failed", [])
+		var returned_items: Array = []
+		if not failed_sales.is_empty():
+			var stash_arr: Array = current_world_data["hideout"].get("stash", [])
+			for sale in failed_sales:
+				if not (sale is Dictionary):
+					continue
+				var ret_id := str(sale.get("item_name", ""))
+				var ret_amt := maxi(1, int(sale.get("count", 1)))
+				if ret_id == "":
+					continue
+				var bsize := ItemDatabase.get_item_grid_size(ret_id) if ItemDatabase else Vector2i(1, 1)
+				var ret_entry := {
+					"uid": InventoryGrid.next_uid(),
+					"id": ret_id,
+					"amount": ret_amt,
+					"w": bsize.x,
+					"h": bsize.y,
+					"rotated": false
+				}
+				InventoryGrid.ensure_container_defaults(ret_entry)
+				stash_arr.append(ret_entry)
+				returned_items.append({"item_name": ret_id, "count": ret_amt})
+			current_world_data["hideout"]["stash"] = stash_arr
+		sales_report["returned_items"] = returned_items
 		last_raid_result["sales_report"] = sales_report
 		FleaMarket.advance_day()
 		current_world_data["flea_market"] = FleaMarket.to_save_dict()

@@ -21,6 +21,10 @@ func run_all() -> void:
 	_test_bulk_sell_protection_and_wishlist()
 	await _test_scene_instantiation()
 	_test_serialization_and_raid_pouch()
+	await _test_centered_drag_drop_and_click_guard()
+	await _test_hideout_to_raid_pouch_and_inventory_window_guards()
+	await _test_popup_rebind_and_sort_survival()
+	await _test_recursive_container_gameplay_integrations()
 
 	print("=== Summary: %d passed, %d failed ===" % [_passed, _failed])
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -441,3 +445,528 @@ func _test_serialization_and_raid_pouch() -> void:
 	SaveManager.delete_save(slot_name)
 	p_grid.queue_free()
 	verify_grid.queue_free()
+
+func _test_centered_drag_drop_and_click_guard() -> void:
+	print("-- [Test 7] Centered Drag Drop, Click Guard & Hideout Equip Overflow --")
+	FleaMarket.supply_pressure.clear()
+	FleaMarket.player_listings.clear()
+	var root := get_tree().get_root()
+
+	# 1) Direct calc_drag_drop_cell test for 2x2 item dropped near its visual center
+	var dummy_ctrl := Control.new()
+	dummy_ctrl.position = Vector2(100.0, 100.0)
+	dummy_ctrl.size = Vector2(6.0 * InventoryUIHelper.CELL_SIZE, 5.0 * InventoryUIHelper.CELL_SIZE)
+	root.add_child(dummy_ctrl)
+	var c_grid := InventoryGrid.new()
+	c_grid.grid_width = 6
+	c_grid.grid_height = 5
+	c_grid.has_secure_container = true
+	root.add_child(c_grid)
+	await get_tree().process_frame
+
+	var wallet_dummy := {"uid": InventoryGrid.next_uid(), "id": "인식표 지갑", "amount": 1, "w": 2, "h": 2, "rotated": false}
+	var drag_dummy := {"item": wallet_dummy, "rotated": false}
+	var center_hover_pos := dummy_ctrl.global_position + Vector2(1.15 * InventoryUIHelper.CELL_SIZE, 1.15 * InventoryUIHelper.CELL_SIZE)
+	var calc_cell := InventoryUIHelper.calc_drag_drop_cell(dummy_ctrl, center_hover_pos, c_grid, drag_dummy, InventoryUIHelper.CELL_SIZE)
+	_assert(calc_cell == Vector2i(0, 0), "calc_drag_drop_cell maps 2x2 centered cursor near (1.15,1.15) to (0,0) SECURE cell (got %s)" % [calc_cell])
+	dummy_ctrl.queue_free()
+	c_grid.queue_free()
+
+	# 2) Hideout centered drop of 2x2 인식표 지갑 onto SECURE (0,0) + click-without-drag guard
+	var w_data := _make_test_world_data()
+	var keycard_uid := InventoryGrid.next_uid()
+	var wallet_uid := InventoryGrid.next_uid()
+	var stash_wallet := {
+		"uid": wallet_uid,
+		"id": "인식표 지갑",
+		"amount": 1,
+		"w": 2,
+		"h": 2,
+		"x": 0,
+		"y": 0,
+		"rotated": false,
+		"locked": true,
+		"inner_grid_w": 6,
+		"inner_grid_h": 6,
+		"inner_items": [
+			{"uid": keycard_uid, "id": "보안 키카드", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0, "rotated": false, "locked": true}
+		]
+	}
+	w_data["hideout"]["stash"] = [stash_wallet]
+	GameManager.current_world_data = w_data.duplicate(true)
+
+	var hideout_scene := load("res://scenes/hideout/hideout.tscn")
+	var hideout: Control = hideout_scene.instantiate()
+	root.add_child(hideout)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var loaded_wallet: Dictionary = hideout.stash_grid_mgr.get_item_by_uid(wallet_uid)
+	_assert(not loaded_wallet.is_empty(), "Hideout loaded 인식표 지갑 into stash")
+
+	var drop_center_pos: Vector2 = hideout.player_grid_control.global_position + Vector2(1.15 * hideout.CELL_SIZE, 1.15 * hideout.CELL_SIZE)
+	hideout.is_dragging = true
+	hideout.drag_data = {
+		"source": "stash_grid",
+		"item": loaded_wallet,
+		"rotated": false,
+		"orig_rotated": false,
+		"start_mouse_pos": Vector2(-500.0, -500.0),
+		"source_grid": hideout.stash_grid_mgr
+	}
+	hideout._handle_hideout_global_drop(drop_center_pos)
+
+	var placed_in_secure: Dictionary = hideout.player_grid_mgr.get_item_at(0, 0)
+	_assert(String(placed_in_secure.get("id", "")) == "인식표 지갑", "Hideout centered drop places 2x2 인식표 지갑 onto SECURE (0,0)")
+	_assert(hideout.stash_grid_mgr.get_item_by_uid(wallet_uid).is_empty(), "Moved 인식표 지갑 removed from stash")
+	_assert(placed_in_secure.get("inner_items", []).size() == 1 and bool(placed_in_secure.get("locked", false)), "Moved 인식표 지갑 keeps inner_items and locked state")
+
+	# Click-without-drag (< 5px movement) must leave wallet at (0,0) instead of offsetting to (1,1)
+	hideout.is_dragging = true
+	hideout.drag_data = {
+		"source": "player_grid",
+		"item": placed_in_secure,
+		"rotated": false,
+		"orig_rotated": false,
+		"start_mouse_pos": drop_center_pos,
+		"source_grid": hideout.player_grid_mgr
+	}
+	hideout._handle_hideout_global_drop(drop_center_pos + Vector2(2.0, 2.0))
+	var after_click: Dictionary = hideout.player_grid_mgr.get_item_at(0, 0)
+	_assert(String(after_click.get("uid", "")) == wallet_uid and not hideout.is_dragging, "Click-without-drag (<5px) keeps 인식표 지갑 at (0,0) without ejecting")
+
+	# 3) Hideout equipment swap overflow fallback when stash is full
+	hideout.stash_grid_mgr.resize_grid(2, 2)
+	hideout.stash_grid_mgr.auto_add_item("탄약 케이스", 1)
+	var extra_vest := {"uid": InventoryGrid.next_uid(), "id": "1레벨_방탄복", "name": "1레벨 예비 조끼", "amount": 1, "w": 2, "h": 2, "durability": 40.0, "max_durability": 40.0}
+	_assert(hideout.player_grid_mgr.auto_add_item("1레벨_방탄복", 1, extra_vest) == 0, "Spare vest placed in player grid for swap overflow check")
+	var placed_spare: Dictionary = {}
+	for it in hideout.player_grid_mgr.items:
+		if String(it.get("id", "")) == "1레벨_방탄복":
+			placed_spare = it
+			break
+	hideout.is_dragging = true
+	hideout.drag_data = {
+		"source": "player_grid",
+		"item": placed_spare,
+		"rotated": false,
+		"orig_rotated": false,
+		"start_mouse_pos": Vector2(-100.0, -100.0),
+		"source_grid": hideout.player_grid_mgr
+	}
+	hideout._try_equip_hideout_item("vest")
+	var remaining_vests_in_player := 0
+	for it in hideout.player_grid_mgr.items:
+		if String(it.get("id", "")) == "1레벨_방탄복":
+			remaining_vests_in_player += 1
+	_assert(String(hideout.equipment_data.get("vest", {}).get("id", "")) == "1레벨_방탄복" and remaining_vests_in_player == 1, "Hideout equip swap preserves prev_equipped via player_grid fallback when stash is full")
+
+	hideout.queue_free()
+	await get_tree().process_frame
+
+func _test_hideout_to_raid_pouch_and_inventory_window_guards() -> void:
+	print("-- [Test 8] Hideout->Raid Pouch Persistence & InventoryWindow Hideout Guards --")
+	var root := get_tree().get_root()
+	var slot_name := "__test_hideout_to_raid_pouch__"
+	var w_data := _make_test_world_data()
+	var wallet_uid := InventoryGrid.next_uid()
+	var keycard_uid := InventoryGrid.next_uid()
+	w_data["player"]["inventory"] = [
+		{
+			"uid": wallet_uid,
+			"id": "인식표 지갑",
+			"amount": 1,
+			"w": 2,
+			"h": 2,
+			"x": 0,
+			"y": 0,
+			"rotated": false,
+			"locked": true,
+			"inner_grid_w": 6,
+			"inner_grid_h": 6,
+			"inner_items": [
+				{"uid": keycard_uid, "id": "보안 키카드", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0, "rotated": false, "locked": true}
+			]
+		}
+	]
+	GameManager.current_world_data = w_data.duplicate(true)
+
+	# 1) Hideout _sync_save_data -> SaveManager -> Player _ready() (raid load path)
+	var hideout: Control = load("res://scenes/hideout/hideout.tscn").instantiate()
+	root.add_child(hideout)
+	await get_tree().process_frame
+	hideout._sync_save_data()
+	_assert(SaveManager.save_game(GameManager.current_world_data, slot_name), "Save after Hideout sync succeeds")
+	hideout.queue_free()
+	await get_tree().process_frame
+
+	GameManager.current_world_data = SaveManager.load_game(slot_name)
+	var mw_scene: PackedScene = load("res://scenes/world/main_world.tscn")
+	var mw_e2e: Node = mw_scene.instantiate()
+	root.add_child(mw_e2e)
+	await get_tree().process_frame
+
+	var mw_player: Node = mw_e2e.get("player")
+	var raid_wallet: Dictionary = mw_player.inventory_grid.get_item_at(0, 0) if mw_player and mw_player.inventory_grid else {}
+	_assert(String(raid_wallet.get("id", "")) == "인식표 지갑" and bool(raid_wallet.get("locked", false)), "MainWorld._ready loads 인식표 지갑 into SECURE (0,0) on raid start")
+	_assert(raid_wallet.get("inner_items", []).size() == 1 and String(raid_wallet["inner_items"][0].get("id", "")) == "보안 키카드", "MainWorld._ready preserves nested inner_items inside 인식표 지갑")
+	mw_e2e.queue_free()
+	SaveManager.delete_save(slot_name)
+	await get_tree().process_frame
+
+	# 2) InventoryWindow opened in Hideout mode (player == null, hideout_stash_grid bound)
+	var p_grid := InventoryGrid.new()
+	p_grid.grid_width = 6
+	p_grid.grid_height = 5
+	p_grid.has_secure_container = true
+	root.add_child(p_grid)
+
+	var s_grid := InventoryGrid.new()
+	s_grid.grid_width = 8
+	s_grid.grid_height = 8
+	s_grid.has_secure_container = false
+	root.add_child(s_grid)
+
+	var inv_wallet := {
+		"uid": InventoryGrid.next_uid(),
+		"id": "인식표 지갑",
+		"amount": 1,
+		"w": 2,
+		"h": 2,
+		"x": 0,
+		"y": 0,
+		"rotated": false,
+		"locked": true,
+		"inner_items": []
+	}
+	_assert(p_grid.place_item(inv_wallet, 0, 0, false), "Placed wallet at SECURE (0,0) for InventoryWindow test")
+	# Fill all remaining cells in the upper 6x3 area so shrinking 6x5 -> 6x3 must overflow row 4 item
+	for fy in range(3):
+		for fx in range(6):
+			if fx < 2 and fy < 2:
+				continue
+			p_grid.place_item({"uid": InventoryGrid.next_uid(), "id": "고철", "amount": 1, "w": 1, "h": 1}, fx, fy, false)
+	var row4_item := {"uid": InventoryGrid.next_uid(), "id": "생수", "amount": 1, "w": 1, "h": 1}
+	_assert(p_grid.place_item(row4_item, 0, 4, false), "Placed 생수 at (0,4) before backpack shrink test")
+
+	var inv_win: Control = load("res://scenes/ui/inventory_window.tscn").instantiate()
+	root.add_child(inv_win)
+	inv_win.hideout_stash_grid = s_grid
+	inv_win.setup(null, p_grid, {"backpack": {"id": "2레벨_가방"}})
+	await get_tree().process_frame
+
+	# Click-without-drag (<5px) guard in InventoryWindow (headless mouse pos is Vector2.ZERO)
+	inv_win.is_dragging = true
+	inv_win.drag_data = {
+		"source": "grid",
+		"item": inv_wallet,
+		"rotated": false,
+		"orig_rotated": false,
+		"start_mouse_pos": Vector2(2.0, 2.0),
+		"source_grid": p_grid
+	}
+	inv_win._handle_global_drop()
+	_assert(String(p_grid.get_item_at(0, 0).get("id", "")) == "인식표 지갑", "InventoryWindow click-without-drag (<5px) keeps wallet at (0,0)")
+
+	# Dropping onto VicinityCol while in Hideout (player == null) must NOT delete item
+	inv_win.vicinity_section.global_position = Vector2(-50.0, -50.0)
+	inv_win.vicinity_section.size = Vector2(300.0, 300.0)
+	inv_win.is_dragging = true
+	inv_win.drag_data = {
+		"source": "grid",
+		"item": inv_wallet,
+		"rotated": false,
+		"orig_rotated": false,
+		"start_mouse_pos": Vector2(200.0, 200.0),
+		"source_grid": p_grid
+	}
+	inv_win._handle_global_drop()
+	_assert(String(p_grid.get_item_at(0, 0).get("id", "")) == "인식표 지갑", "InventoryWindow in Hideout blocks dropping items into Vicinity (prevents silent deletion)")
+
+	# Overflow routing via _handle_overflow_item + shrinking backpack moves overflow to hideout_stash_grid
+	inv_win._handle_overflow_item({"uid": InventoryGrid.next_uid(), "id": "붕대", "amount": 2, "w": 1, "h": 1})
+	_assert(s_grid.has_item("붕대", 2), "InventoryWindow._handle_overflow_item routes overflow to hideout_stash_grid")
+	inv_win.equipment_data["backpack"] = {}
+	inv_win._apply_backpack_grid_size()
+	_assert(s_grid.has_item("생수", 1), "Shrinking backpack in Hideout InventoryWindow sends overflow items to hideout_stash_grid instead of losing them")
+
+	inv_win.queue_free()
+	p_grid.queue_free()
+	s_grid.queue_free()
+	await get_tree().process_frame
+
+func _test_popup_rebind_and_sort_survival() -> void:
+	print("-- [Test 9] Popup Rebind & Sort Survival (Hideout & InventoryWindow) --")
+	var root := get_tree().get_root()
+	var w_data := _make_test_world_data()
+	var vest_uid := InventoryGrid.next_uid()
+	w_data["player"]["equipment"]["vest"]["uid"] = vest_uid
+	var ammo_case_uid := InventoryGrid.next_uid()
+	w_data["player"]["inventory"] = [
+		{"uid": ammo_case_uid, "id": "탄약 케이스", "amount": 1, "w": 2, "h": 2, "x": 2, "y": 0, "rotated": false, "inner_grid_w": 6, "inner_grid_h": 6, "inner_items": []}
+	]
+	var med_case_uid := InventoryGrid.next_uid()
+	w_data["hideout"]["stash"] = [
+		{"uid": med_case_uid, "id": "의약품 케이스", "amount": 1, "w": 2, "h": 2, "x": 0, "y": 0, "rotated": false, "inner_grid_w": 7, "inner_grid_h": 7, "inner_items": []}
+	]
+	GameManager.current_world_data = w_data.duplicate(true)
+
+	# 1) Hideout popup rebinding after sort_items() & vest ownership preservation
+	var hideout: Control = load("res://scenes/hideout/hideout.tscn").instantiate()
+	root.add_child(hideout)
+	await get_tree().process_frame
+
+	var p_case: Dictionary = hideout.player_grid_mgr.get_item_by_uid(ammo_case_uid)
+	var s_case: Dictionary = hideout.stash_grid_mgr.get_item_by_uid(med_case_uid)
+	hideout.open_container_popup(hideout.equipment_data["vest"], null)
+	hideout.open_container_popup(p_case, hideout.player_grid_mgr)
+	hideout.open_container_popup(s_case, hideout.stash_grid_mgr)
+	_assert(hideout.open_container_popups.size() == 3, "Hideout opens 3 container popups (equipped vest + player case + stash case)")
+
+	hideout.player_grid_mgr.sort_items()
+	hideout.stash_grid_mgr.sort_items()
+	hideout._prune_stale_popups()
+	_assert(hideout.open_container_popups.size() == 3 and hideout.open_container_popups.has(vest_uid), "Hideout._prune_stale_popups keeps all 3 popups open after sort_items() including equipped vest")
+
+	var p_popup: ContainerPopupWindow = hideout.open_container_popups[ammo_case_uid] as ContainerPopupWindow
+	_assert(p_popup != null and p_popup.inner_grid.auto_add_item("5.56mm", 30) == 0, "Added 30x 5.56mm into post-sort rebound popup")
+	var sorted_p_case: Dictionary = hideout.player_grid_mgr.get_item_by_uid(ammo_case_uid)
+	_assert(sorted_p_case.get("inner_items", []).size() == 1 and int(sorted_p_case["inner_items"][0].get("amount", 0)) == 30, "Hideout popup rebound container_item to live dictionary after sort_items()")
+
+	hideout.queue_free()
+	await get_tree().process_frame
+
+	# 2) InventoryWindow _prune_and_rebind_popups after sort_items()
+	var p_grid := InventoryGrid.new()
+	p_grid.grid_width = 6
+	p_grid.grid_height = 5
+	p_grid.has_secure_container = true
+	root.add_child(p_grid)
+	var iw_case_uid := InventoryGrid.next_uid()
+	var iw_case := {"uid": iw_case_uid, "id": "탄약 케이스", "amount": 1, "w": 2, "h": 2, "inner_grid_w": 6, "inner_grid_h": 6, "inner_items": []}
+	p_grid.place_item(iw_case, 2, 0, false)
+	var eq_vest := {"uid": vest_uid, "id": "1레벨_방탄복", "name": "1레벨 경찰 조끼", "durability": 40.0, "max_durability": 40.0}
+
+	var inv_win: Control = load("res://scenes/ui/inventory_window.tscn").instantiate()
+	root.add_child(inv_win)
+	inv_win.setup(null, p_grid, {"vest": eq_vest, "backpack": {"id": "2레벨_가방"}})
+	await get_tree().process_frame
+
+	inv_win.open_container_popup(iw_case, p_grid)
+	inv_win.open_container_popup(eq_vest, null)
+	_assert(inv_win.open_container_popups.size() == 2, "InventoryWindow opens 2 popups (grid case + equipped vest)")
+	p_grid.sort_items()
+	inv_win._prune_and_rebind_popups()
+	_assert(inv_win.open_container_popups.size() == 2, "InventoryWindow._prune_and_rebind_popups preserves both popups after sort_items()")
+	var iw_popup: ContainerPopupWindow = inv_win.open_container_popups[iw_case_uid] as ContainerPopupWindow
+	iw_popup.inner_grid.auto_add_item("9mm", 20)
+	_assert(p_grid.get_item_by_uid(iw_case_uid).get("inner_items", []).size() == 1, "InventoryWindow popup stays synced to rebound grid item after sort_items()")
+
+	inv_win.queue_free()
+	p_grid.queue_free()
+	await get_tree().process_frame
+
+func _test_recursive_container_gameplay_integrations() -> void:
+	print("-- [Test 10] Recursive Container Support (Grid, 1D Inv, Reload, Quickslot, Door/Radio, Crafting/WB, Flea Return) --")
+	var root := get_tree().get_root()
+
+	# 1) InventoryGrid recursive helpers + 1D Inventory metadata preservation
+	var r_grid := InventoryGrid.new()
+	r_grid.grid_width = 6
+	r_grid.grid_height = 5
+	r_grid.has_secure_container = true
+	root.add_child(r_grid)
+
+	var kc_uid := InventoryGrid.next_uid()
+	var tag_uid := InventoryGrid.next_uid()
+	var key1_uid := InventoryGrid.next_uid()
+	var keycard_uid := InventoryGrid.next_uid()
+	var wallet := {
+		"uid": InventoryGrid.next_uid(),
+		"id": "인식표 지갑",
+		"amount": 1,
+		"w": 2,
+		"h": 2,
+		"locked": true,
+		"inner_grid_w": 6,
+		"inner_grid_h": 6,
+		"inner_items": [
+			{"uid": kc_uid, "id": "무기고 열쇠", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0, "durability": 1.0, "max_durability": 5.0},
+			{"uid": tag_uid, "id": "Scav 인식표", "amount": 1, "w": 1, "h": 1, "x": 1, "y": 0},
+			{"uid": keycard_uid, "id": "보안 키카드", "amount": 1, "w": 1, "h": 1, "x": 2, "y": 0, "durability": 3.0, "max_durability": 3.0}
+		]
+	}
+	r_grid.place_item(wallet, 0, 0, false)
+	var ammo_case := {
+		"uid": InventoryGrid.next_uid(),
+		"id": "탄약 케이스",
+		"amount": 1,
+		"w": 2,
+		"h": 2,
+		"inner_grid_w": 6,
+		"inner_grid_h": 6,
+		"inner_items": [
+			{"uid": key1_uid, "id": "5.56mm", "amount": 30, "w": 1, "h": 1, "x": 0, "y": 0}
+		]
+	}
+	r_grid.place_item(ammo_case, 2, 0, false)
+	var med_case := {
+		"uid": InventoryGrid.next_uid(),
+		"id": "의약품 케이스",
+		"amount": 1,
+		"w": 2,
+		"h": 2,
+		"inner_grid_w": 7,
+		"inner_grid_h": 7,
+		"inner_items": [
+			{"uid": InventoryGrid.next_uid(), "id": "붕대", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0}
+		]
+	}
+	r_grid.place_item(med_case, 4, 0, false)
+
+	_assert(r_grid.get_all_items_flat(true).size() == 8, "get_all_items_flat(true) returns top-level + nested items (%d)" % r_grid.get_all_items_flat(true).size())
+	var f_res := r_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool: return String(it.get("id", "")) == "Scav 인식표")
+	_assert(bool(f_res.get("found", false)) and bool(f_res.get("is_nested", false)), "find_item_recursive_by_predicate locates nested dogtag")
+	var removed_tag := r_grid.remove_item_by_uid_recursive(tag_uid)
+	_assert(String(removed_tag.get("id", "")) == "Scav 인식표" and wallet["inner_items"].size() == 2, "remove_item_by_uid_recursive removes nested item cleanly")
+
+	# 1D Inventory preservation (loot crates / corpses)
+	var inv1 := Inventory.new()
+	var inv2 := Inventory.new()
+	if inv1 is Node: root.add_child(inv1)
+	if inv2 is Node: root.add_child(inv2)
+	inv1.add_item("인식표 지갑", 1, wallet)
+	var slot0_1 = inv1.items[0] if not inv1.items.is_empty() else null
+	_assert(slot0_1 is Dictionary and slot0_1.get("inner_items", []).size() == 2 and bool(slot0_1.get("locked", false)), "1D Inventory.add_item preserves inner_items and locked")
+	var moved_ok := inv1.move_item(0, 0, inv2)
+	var slot0_2 = inv2.items[0] if not inv2.items.is_empty() else null
+	_assert(moved_ok and inv1.items[0] == null and slot0_2 is Dictionary and slot0_2.get("inner_items", []).size() == 2, "1D Inventory.move_item deep-copies inner_items across containers")
+
+	# 2) Player + WeaponHandler reload from 탄약 케이스 & quickslot heal from 의약품 케이스 & MainWorld door/radio
+	var w_data := _make_test_world_data()
+	w_data["player"]["inventory"] = r_grid.items.duplicate(true)
+	w_data["player"]["equipment"]["primary1"]["current_magazine_ammo"] = 0
+	GameManager.current_world_data = w_data.duplicate(true)
+
+	var player: CharacterBody2D = load("res://scenes/entities/player/player.tscn").instantiate()
+	root.add_child(player)
+	await get_tree().process_frame
+	player.equipment = w_data["player"]["equipment"].duplicate(true)
+	player.inventory_grid.load_items(w_data["player"]["inventory"])
+	if player.weapon_handler:
+		player.weapon_handler.equipment = player.equipment
+
+	player.weapon_handler.switch_weapon_slot("primary1")
+	_assert(player.weapon_handler.get_available_ammo_count() == 30, "WeaponHandler counts 30x 5.56mm inside nested 탄약 케이스")
+	player.weapon_handler._finish_reload()
+	_assert(int(player.weapon_handler.equipped_weapon_data.get("current_magazine_ammo", 0)) == 30 and player.weapon_handler.get_available_ammo_count() == 0, "WeaponHandler._finish_reload loads magazine from 탄약 케이스 and consumes it")
+
+	player.is_bleeding = true
+	player._use_quickslot_item("bleed")
+	_assert(player.is_channeling, "Player quickslot 'bleed' starts channeling using 붕대 inside 의약품 케이스")
+	player._handle_channeling(player.channel_duration + 0.1)
+	var bandage_after: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool: return String(it.get("id", "")) == "붕대")
+	_assert(not player.is_bleeding and not bool(bandage_after.get("found", false)), "Completing quickslot channel cures bleeding and consumes nested 붕대")
+
+	# MainWorld radio + locked door recursion
+	var bag_with_radio := {
+		"uid": InventoryGrid.next_uid(),
+		"id": "1레벨_가방",
+		"amount": 1,
+		"w": 3,
+		"h": 3,
+		"inner_grid_w": 5,
+		"inner_grid_h": 4,
+		"inner_items": [
+			{"uid": InventoryGrid.next_uid(), "id": "무전기", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0}
+		]
+	}
+	player.inventory_grid.auto_add_item("1레벨_가방", 1, bag_with_radio)
+
+	var mw: Node = load("res://scenes/world/main_world.gd").new()
+	mw.player = player
+	_assert(mw.player_has_radio(), "MainWorld.player_has_radio finds radio inside nested sub-bag")
+
+	var toggle_state := {"count": 0}
+	var toggle_cb := func(_tpos: Vector2i, is_open: bool) -> void:
+		if is_open: toggle_state["count"] += 1
+	EventBus.door_toggled.connect(toggle_cb)
+	mw._on_object_interacted(Vector2.ZERO, Vector2i(10, 10), TileManager.OBJ_DOOR_LOCKED)
+	mw._on_object_interacted(Vector2.ZERO, Vector2i(12, 12), TileManager.OBJ_DOOR_LOCKED)
+	EventBus.door_toggled.disconnect(toggle_cb)
+	_assert(int(toggle_state["count"]) == 2, "MainWorld unlocks OBJ_DOOR_LOCKED twice using keys/keycard inside SECURE 인식표 지갑")
+	var armory_after: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool: return String(it.get("id", "")) == "무기고 열쇠")
+	var keycard_after: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool: return String(it.get("id", "")) == "보안 키카드")
+	_assert(not bool(armory_after.get("found", false)), "1-use 무기고 열쇠 inside wallet is destroyed when uses reach 0")
+	_assert(bool(keycard_after.get("found", false)) and int(round(float(keycard_after.get("item", {}).get("durability", 0.0)))) == 2, "보안 키카드 inside wallet decrements durability (3->2)")
+
+	mw.free()
+	player.queue_free()
+
+	# 3) CraftingWindow._count_material & HideoutWorkbench nested part discovery/consume
+	var bag_mat_grid := InventoryGrid.new()
+	bag_mat_grid.grid_width = 6
+	bag_mat_grid.grid_height = 5
+	root.add_child(bag_mat_grid)
+	bag_mat_grid.auto_add_item("1레벨_가방", 1, {
+		"uid": InventoryGrid.next_uid(),
+		"id": "1레벨_가방",
+		"amount": 1,
+		"w": 3,
+		"h": 3,
+		"inner_grid_w": 5,
+		"inner_grid_h": 4,
+		"inner_items": [
+			{"uid": InventoryGrid.next_uid(), "id": "고철", "amount": 5, "w": 1, "h": 1, "x": 0, "y": 0}
+		]
+	})
+	var cw: Control = load("res://scenes/ui/crafting_window.gd").new()
+	cw.player_inv = bag_mat_grid
+	_assert(cw._count_material("고철") == 5, "CraftingWindow._count_material counts materials stored in nested container")
+	cw.free()
+
+	var part_case_grid := InventoryGrid.new()
+	part_case_grid.grid_width = 6
+	part_case_grid.grid_height = 5
+	root.add_child(part_case_grid)
+	part_case_grid.auto_add_item("무기 부품 상자", 1, {
+		"uid": InventoryGrid.next_uid(),
+		"id": "무기 부품 상자",
+		"amount": 1,
+		"w": 2,
+		"h": 2,
+		"inner_grid_w": 6,
+		"inner_grid_h": 6,
+		"inner_items": [
+			{"uid": InventoryGrid.next_uid(), "id": "수직_포어그립", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0}
+		]
+	})
+	var wb: Control = load("res://scenes/hideout/components/hideout_workbench.gd").new()
+	wb.player_grid_mgr = bag_mat_grid
+	wb.stash_grid_mgr = part_case_grid
+	_assert(int(wb._get_owned_parts_list().get("수직_포어그립", 0)) == 1, "HideoutWorkbench finds parts stored inside 무기 부품 상자")
+	_assert(wb._remove_owned_part_from_inv("수직_포어그립") and int(wb._get_owned_parts_list().get("수직_포어그립", 0)) == 0, "HideoutWorkbench removes used part from inside 무기 부품 상자")
+	wb.free()
+
+	# 4) GameManager.end_raid returns expired Flea Market listings to hideout stash
+	FleaMarket.player_listings.clear()
+	_assert(FleaMarket.register_item("그래픽카드", 1, 9999999, true), "Overpriced player listing registers for expiry test")
+	FleaMarket.player_listings[-1]["timer"] = 1.0
+	GameManager.current_world_data = _make_test_world_data()
+	GameManager.current_save_slot = ""
+	GameManager.end_raid("survived", [])
+	var stash_after_expiry: Array = GameManager.current_world_data.get("hideout", {}).get("stash", [])
+	var returned_list: Array = GameManager.last_raid_result.get("sales_report", {}).get("returned_items", [])
+	var found_gpu_in_stash := false
+	for s_it in stash_after_expiry:
+		if String(s_it.get("id", "")) == "그래픽카드":
+			found_gpu_in_stash = true
+			break
+	_assert(found_gpu_in_stash and returned_list.size() == 1, "GameManager.end_raid returns expired Flea Market listings into hideout stash")
+
+	if inv1 is Node: inv1.queue_free()
+	if inv2 is Node: inv2.queue_free()
+	r_grid.queue_free()
+	bag_mat_grid.queue_free()
+	part_case_grid.queue_free()
+	await get_tree().process_frame

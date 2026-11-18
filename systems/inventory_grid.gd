@@ -295,8 +295,8 @@ func load_items(saved_items: Array) -> void:
 			item["id"] = "9mm"
 		elif String(item["id"]) == "나침반":
 			item["id"] = "군용 나침반"
-		var ix = item.get("x", -1)
-		var iy = item.get("y", -1)
+		var ix: int = int(item.get("x", -1))
+		var iy: int = int(item.get("y", -1))
 		var is_rot = item.get("rotated", false)
 		var base_size = ItemDatabase.get_item_grid_size(item["id"])
 		var cur_w = base_size.y if is_rot else base_size.x
@@ -525,6 +525,122 @@ func get_item_by_uid(uid: String) -> Dictionary:
 		if item.get("uid", "") == uid:
 			return item
 	return {}
+
+func _find_item_recursive_in_list(item_list: Array, pred: Callable, parent_item: Dictionary = {}) -> Dictionary:
+	for it in item_list:
+		if not (it is Dictionary) or it.is_empty():
+			continue
+		if pred.call(it):
+			return {
+				"found": true,
+				"item": it,
+				"parent_container": parent_item,
+				"is_nested": not parent_item.is_empty()
+			}
+		var inner = it.get("inner_items", [])
+		if inner is Array and not inner.is_empty():
+			var nested := _find_item_recursive_in_list(inner, pred, it)
+			if bool(nested.get("found", false)):
+				return nested
+	return {"found": false, "item": {}, "parent_container": {}, "is_nested": false}
+
+func find_item_recursive_by_predicate(pred: Callable) -> Dictionary:
+	return _find_item_recursive_in_list(items, pred)
+
+func _collect_items_flat_in_list(item_list: Array, out: Array[Dictionary], include_nested: bool) -> void:
+	for it in item_list:
+		if not (it is Dictionary) or it.is_empty():
+			continue
+		out.append(it)
+		if include_nested:
+			var inner = it.get("inner_items", [])
+			if inner is Array and not inner.is_empty():
+				_collect_items_flat_in_list(inner, out, true)
+
+func get_all_items_flat(include_nested: bool = true) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	_collect_items_flat_in_list(items, out, include_nested)
+	return out
+
+func remove_item_by_uid_recursive(uid: String, should_emit: bool = true) -> Dictionary:
+	if uid == "":
+		return {}
+	var top_removed := remove_item_by_uid(uid, false)
+	if not top_removed.is_empty():
+		if should_emit:
+			grid_changed.emit()
+		return top_removed
+	var removed := _remove_uid_from_nested_lists(items, uid)
+	if not removed.is_empty() and should_emit:
+		grid_changed.emit()
+	return removed
+
+func _remove_uid_from_nested_lists(item_list: Array, uid: String) -> Dictionary:
+	for it in item_list:
+		if not (it is Dictionary) or it.is_empty():
+			continue
+		var inner = it.get("inner_items", [])
+		if inner is Array and not inner.is_empty():
+			for j in range(inner.size()):
+				var sub = inner[j]
+				if sub is Dictionary and str(sub.get("uid", "")) == uid:
+					var popped: Dictionary = sub
+					inner.remove_at(j)
+					return popped
+			var deeper := _remove_uid_from_nested_lists(inner, uid)
+			if not deeper.is_empty():
+				return deeper
+	return {}
+
+func consume_items_matching(pred: Callable, amount: int, should_emit: bool = true) -> int:
+	if amount <= 0:
+		return 0
+	var taken := 0
+	var i := items.size() - 1
+	while i >= 0 and taken < amount:
+		var it: Dictionary = items[i]
+		if not it.is_empty() and pred.call(it):
+			var amt := maxi(1, int(it.get("amount", 1)))
+			var take := mini(amt, amount - taken)
+			taken += take
+			if amt - take <= 0:
+				remove_item_by_uid(str(it.get("uid", "")), false)
+			else:
+				it["amount"] = amt - take
+		i -= 1
+	if taken < amount:
+		taken += _consume_matching_in_nested(items, pred, amount - taken)
+	if taken > 0 and should_emit:
+		grid_changed.emit()
+	return taken
+
+func _consume_matching_in_nested(item_list: Array, pred: Callable, needed: int) -> int:
+	var taken := 0
+	for container_it in item_list:
+		if taken >= needed:
+			break
+		if not (container_it is Dictionary) or container_it.is_empty():
+			continue
+		var inner = container_it.get("inner_items", [])
+		if inner is Array and not inner.is_empty():
+			for j in range(inner.size() - 1, -1, -1):
+				if taken >= needed:
+					break
+				var sub = inner[j]
+				if sub is Dictionary and not sub.is_empty():
+					if pred.call(sub):
+						var s_amt := maxi(1, int(sub.get("amount", 1)))
+						var take := mini(s_amt, needed - taken)
+						taken += take
+						if s_amt - take <= 0:
+							inner.remove_at(j)
+						else:
+							sub["amount"] = s_amt - take
+					else:
+						var sub_inner = sub.get("inner_items", [])
+						if sub_inner is Array and not sub_inner.is_empty():
+							taken += _consume_matching_in_nested([sub], pred, needed - taken)
+	return taken
 
 func get_item_at(grid_x: int, grid_y: int) -> Dictionary:
 	if grid_y < 0 or grid_y >= grid_map.size(): return {}
@@ -765,7 +881,7 @@ func sort_items() -> void:
 	for it in merged:
 		var bw = int(it.get("w", 1))
 		var bh = int(it.get("h", 1))
-		var fit = find_first_fit(bw, bh, it.get("id", ""))
+		var fit = find_first_fit(bw, bh, it.get("id", ""), it)
 		if fit["found"]:
 			place_item(it, fit["x"], fit["y"], fit["rotated"])
 		else:

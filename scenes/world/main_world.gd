@@ -218,7 +218,7 @@ func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO
 				for idx in range(objs.size()):
 					if TileManager.is_door_locked(objs[idx]):
 						var lx := idx % 16
-						var ly := int(idx / 16)
+						var ly := floori(float(idx) / 16.0)
 						var wx := int(cpos.x) * 16 + lx
 						var wy := int(cpos.y) * 16 + ly
 						if abs(wx - tile_pos.x) <= 14 and abs(wy - tile_pos.y) <= 14:
@@ -632,10 +632,10 @@ func player_has_radio() -> bool:
 		return false
 	if player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("군용 무전기", 1) or player.inventory_grid.has_item("무전기", 1):
 		return true
-	for it in player.inventory_grid.items:
-		if String(it.get("id", "")).contains("무전기"):
-			return true
-	return false
+	var match_res: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+		return String(it.get("id", "")).contains("무전기")
+	)
+	return bool(match_res.get("found", false))
 
 func open_radio_window() -> Control:
 	if current_radio_window != null:
@@ -1428,21 +1428,21 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		var used_key_name = req_key
 		var key_item_ref: Dictionary = {}
 		if player and player.inventory_grid:
-			for it in player.inventory_grid.items:
-				var it_id := String(it.get("id", ""))
-				if InventoryGrid.is_same_item_id(it_id, req_key):
+			var req_match: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+				return InventoryGrid.is_same_item_id(String(it.get("id", "")), req_key)
+			)
+			if bool(req_match.get("found", false)):
+				has_valid_key = true
+				used_key_name = req_key
+				key_item_ref = req_match.get("item", {})
+			elif req_key == "무기고 열쇠":
+				var card_match: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+					return InventoryGrid.is_same_item_id(String(it.get("id", "")), "보안 키카드")
+				)
+				if bool(card_match.get("found", false)):
 					has_valid_key = true
-					used_key_name = req_key
-					key_item_ref = it
-					break
-			if not has_valid_key and req_key == "무기고 열쇠":
-				for it in player.inventory_grid.items:
-					var it_id := String(it.get("id", ""))
-					if InventoryGrid.is_same_item_id(it_id, "보안 키카드"):
-						has_valid_key = true
-						used_key_name = "보안 키카드"
-						key_item_ref = it
-						break
+					used_key_name = "보안 키카드"
+					key_item_ref = card_match.get("item", {})
 		if not has_valid_key:
 			if SoundManager: SoundManager.play("hit_melee")
 			EventBus.event_logged.emit("🔒 잠겨 있습니다! [%s]가 가방 또는 안전 컨테이너에 필요합니다." % req_key)
@@ -1466,7 +1466,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 					key_item_ref["durability"] = float(max_uses)
 					player.inventory_grid.grid_changed.emit()
 				else:
-					player.inventory_grid.remove_item_by_uid(String(key_item_ref.get("uid", "")))
+					player.inventory_grid.remove_item_by_uid_recursive(String(key_item_ref.get("uid", "")))
 			else:
 				player.inventory_grid.grid_changed.emit()
 		if chunk_manager and chunk_manager.object_layer:

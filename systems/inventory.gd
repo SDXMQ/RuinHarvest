@@ -69,10 +69,14 @@ func add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
 			var to_add = min(max_stack, remaining)
 			var item_dict = {"id": id, "amount": to_add}
 			if not clean_custom.is_empty():
-				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+				for k in InventoryGrid.PRESERVED_CUSTOM_KEYS:
 					if clean_custom.has(k):
-						item_dict[k] = clean_custom[k]
-				item_dict["custom_data"] = clean_custom.duplicate(true)
+						item_dict[k] = clean_custom[k].duplicate(true) if (clean_custom[k] is Dictionary or clean_custom[k] is Array) else clean_custom[k]
+				var stripped_cd := clean_custom.duplicate(true)
+				stripped_cd.erase("inner_items")
+				stripped_cd.erase("inner_grid_w")
+				stripped_cd.erase("inner_grid_h")
+				item_dict["custom_data"] = stripped_cd
 			if not item_dict.has("durability") and item_data.has("max_durability"):
 				item_dict["durability"] = item_data["max_durability"]
 			items[i] = item_dict
@@ -111,7 +115,7 @@ func move_item(from_index: int, to_index: int, target_inv: Inventory = null) -> 
 	var dest_item = target_inv.items[to_index]
 	
 	if dest_item == null:
-		target_inv.items[to_index] = src_item.duplicate()
+		target_inv.items[to_index] = src_item.duplicate(true)
 		items[from_index] = null
 	elif dest_item["id"] == src_item["id"]:
 		var item_data = ItemDatabase.get_item_data(dest_item["id"])

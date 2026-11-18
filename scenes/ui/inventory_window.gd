@@ -47,6 +47,7 @@ var active_compact_tab: int = 1 # 0: Vicinity, 1: Inventory, 2: Character, 3: We
 
 var player: CharacterBody2D = null
 var inventory_grid: InventoryGrid = null
+var hideout_stash_grid: InventoryGrid = null
 var target_inventory: Inventory = null
 var target_title: String = ""
 var tooltip: PanelContainer = null
@@ -264,6 +265,7 @@ func _refresh_all() -> void:
 		grid_control.queue_redraw()
 
 func _on_grid_changed() -> void:
+	_prune_and_rebind_popups()
 	_update_weight_ui()
 	if grid_control:
 		grid_control.queue_redraw()
@@ -285,24 +287,7 @@ func _on_grid_draw() -> void:
 func _calc_grid_hover_cell(m_global_pos: Vector2) -> Vector2i:
 	if not is_dragging or not inventory_grid:
 		return Vector2i(-1, -1)
-		
-	var item = drag_data.get("item", {})
-	var is_rot = drag_data.get("rotated", false)
-	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
-	var cur_w = item.get("h", base_size.y) if is_rot else item.get("w", base_size.x)
-	var cur_h = item.get("w", base_size.x) if is_rot else item.get("h", base_size.y)
-	
-	var grid_rect = grid_control.get_global_rect()
-	if grid_rect.has_point(m_global_pos):
-		var local_pos = grid_control.get_local_mouse_position()
-		var center_cell_x = int(local_pos.x / CELL_SIZE)
-		var center_cell_y = int(local_pos.y / CELL_SIZE)
-		
-		# 1x1 이상의 아이템을 획득/드래그할 때 포커스를 좌상단이 아니라 중앙에 두기
-		var offset_x = int(cur_w / 2)
-		var offset_y = int(cur_h / 2)
-		return Vector2i(center_cell_x - offset_x, center_cell_y - offset_y)
-	return Vector2i(-1, -1)
+	return InventoryUIHelper.calc_drag_drop_cell(grid_control, m_global_pos, inventory_grid, drag_data, CELL_SIZE)
 
 func _input(event: InputEvent) -> void:
 	if not visible: return
@@ -381,6 +366,11 @@ func _handle_global_drop() -> void:
 	if not is_dragging: return
 	
 	var m_pos = get_global_mouse_position()
+	if not bool(drag_data.get("is_split", false)) and drag_data.has("start_mouse_pos"):
+		var start_m: Vector2 = drag_data.get("start_mouse_pos", m_pos)
+		if start_m.distance_to(m_pos) < 5.0 and bool(drag_data.get("rotated", false)) == bool(drag_data.get("orig_rotated", false)):
+			_end_drag()
+			return
 
 	# 0. 열려있는 중첩 컨테이너 팝업(최상단 우선) 위인지 검사
 	var children := get_children()
@@ -428,9 +418,14 @@ func _handle_global_drop() -> void:
 		_try_drop_on_container()
 		return
 			
-	# 4. 주변(Vicinity) 컬럼으로 드롭했는지 검사 (오직 VICINITY 영역에 드롭했을 때만 월드에 버리기 허용)
+	# 4. 주변(Vicinity) 컬럼으로 드롭했는지 검사 (인레이드에서만 바닥에 버리기 허용)
 	var vicinity_rect = vicinity_section.get_global_rect() if is_instance_valid(vicinity_section) else $MainLayout/VicinityCol.get_global_rect()
 	if vicinity_rect.has_point(m_pos):
+		if player == null:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 은신처 인벤토리 창에서는 바닥에 버릴 수 없습니다.")
+			_end_drag()
+			return
 		var src = drag_data.get("source", "")
 		var item = drag_data.get("item", {})
 		if bool(item.get("locked", false)):
@@ -515,8 +510,8 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 						_handle_item_quick_action(item, false, true)
 				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
-						var split_item = item.duplicate()
-						split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+						var split_item = item.duplicate(true)
+						split_item["uid"] = InventoryGrid.next_uid()
 						split_item["amount"] = split_amt
 						item["amount"] -= split_amt
 						inventory_grid.grid_changed.emit()
@@ -654,8 +649,8 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			_add_context_menu_btn(vbox, "✂️ 수량 분할", func():
 				_close_context_menu()
 				_open_split_dialog(item, func(split_amt):
-					var split_item = item.duplicate()
-					split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+					var split_item = item.duplicate(true)
+					split_item["uid"] = InventoryGrid.next_uid()
 					split_item["amount"] = split_amt
 					item["amount"] -= split_amt
 					inventory_grid.grid_changed.emit()
@@ -711,7 +706,7 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			_close_context_menu()
 			var rem = inventory_grid.auto_add_item(loaded_ammo_type, cur_mag_ammo) if inventory_grid else cur_mag_ammo
 			if rem > 0:
-				_spawn_ground_item(loaded_ammo_type, rem)
+				_handle_overflow_item({"id": loaded_ammo_type, "amount": rem})
 			item["current_magazine_ammo"] = 0
 			if inventory_grid:
 				inventory_grid.grid_changed.emit()
@@ -739,8 +734,12 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 		, user_funds < repair_cost)
 
 	var is_item_locked := bool(item.get("locked", false))
-	_add_context_menu_btn(vbox, "🔒 잠금됨 (버리기 불가)" if is_item_locked else "🗑️ 바닥에 버리기", func():
+	var drop_disabled := is_item_locked or (player == null)
+	var drop_lbl := "🔒 은신처 버리기 불가" if player == null else ("🔒 잠금됨 (버리기 불가)" if is_item_locked else "🗑️ 바닥에 버리기")
+	_add_context_menu_btn(vbox, drop_lbl, func():
 		_close_context_menu()
+		if player == null:
+			return
 		if bool(item.get("locked", false)):
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("🔒 잠금된 아이템은 바닥에 버릴 수 없습니다.")
@@ -758,7 +757,7 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			_sync_weapon_to_player(slot_ref)
 			_update_weapons_ui()
 		_drop_item_to_world(item)
-	, is_item_locked)
+	, drop_disabled)
 
 	add_child(context_menu_panel)
 	var mpos = get_global_mouse_position() - global_position
@@ -784,7 +783,7 @@ func _detach_all_item_parts(item: Dictionary) -> void:
 				if p_id != "":
 					var rem = inventory_grid.auto_add_item(p_id, 1) if inventory_grid else 1
 					if rem > 0:
-						_spawn_ground_item(p_id, rem)
+						_handle_overflow_item({"id": p_id, "amount": rem})
 						dropped_count += rem
 					else:
 						detached_count += 1
@@ -792,7 +791,7 @@ func _detach_all_item_parts(item: Dictionary) -> void:
 			var p_id = String(pv)
 			var rem = inventory_grid.auto_add_item(p_id, 1) if inventory_grid else 1
 			if rem > 0:
-				_spawn_ground_item(p_id, rem)
+				_handle_overflow_item({"id": p_id, "amount": rem})
 				dropped_count += rem
 			else:
 				detached_count += 1
@@ -810,7 +809,7 @@ func _detach_all_item_parts(item: Dictionary) -> void:
 		if excess > 0 and l_ammo != "":
 			var rem = inventory_grid.auto_add_item(l_ammo, excess) if inventory_grid else excess
 			if rem > 0:
-				_spawn_ground_item(l_ammo, rem)
+				_handle_overflow_item({"id": l_ammo, "amount": rem})
 		item["current_magazine_ammo"] = max_mag
 	if inventory_grid:
 		inventory_grid.grid_changed.emit()
@@ -831,7 +830,7 @@ func _clamp_weapon_excess_ammo(w_dict: Dictionary) -> void:
 		if excess > 0 and l_ammo != "":
 			var rem = inventory_grid.auto_add_item(l_ammo, excess) if inventory_grid else excess
 			if rem > 0:
-				_spawn_ground_item(l_ammo, rem)
+				_handle_overflow_item({"id": l_ammo, "amount": rem})
 		w_dict["current_magazine_ammo"] = max_mag
 
 func _get_player_rubles() -> int:
@@ -881,7 +880,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 	if target_item.is_empty():
 		target_item = inventory_grid.get_item_at(cell_x, cell_y)
 		
-	if not target_item.is_empty() and target_item.get("id", "") == item.get("id", "") and target_item.get("uid", "") != uid:
+	if not target_item.is_empty() and InventoryGrid.is_same_item_id(str(target_item.get("id", "")), str(item.get("id", ""))) and target_item.get("uid", "") != uid:
 		var item_data = ItemDatabase.get_item_data(item.get("id", ""))
 		var max_stack = int(item_data.get("max_stack", 1))
 		if max_stack > 1:
@@ -1390,6 +1389,27 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	
 	vicinity_list.add_child(btn)
 
+func _handle_overflow_item(item: Dictionary) -> void:
+	if item.is_empty():
+		return
+	if player != null:
+		_drop_item_to_world(item)
+		return
+	var item_id := str(item.get("id", ""))
+	var amt := maxi(1, int(item.get("amount", 1)))
+	if hideout_stash_grid != null:
+		var rem := hideout_stash_grid.auto_add_item(item_id, amt, item)
+		if rem <= 0:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("📦 공간 부족으로 [%s]을(를) 은신처 창고로 이동했습니다." % ItemDatabase.get_item_data(item_id).get("name", item_id))
+			return
+	if inventory_grid != null:
+		var rem2 := inventory_grid.auto_add_item(item_id, amt, item)
+		if rem2 <= 0:
+			return
+	if EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 모두 부족합니다.")
+
 func _drop_item_to_world(item: Dictionary) -> void:
 	if not player: return
 	
@@ -1507,10 +1527,14 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 	var prev_equipped = equipment_data.get(slot_name, {})
 	equipment_data[slot_name] = item
 	
-	if not prev_equipped.is_empty():
-		inventory_grid.auto_add_item(prev_equipped.get("id", ""), prev_equipped.get("amount", 1), prev_equipped)
-		
 	_apply_backpack_grid_size()
+	if not prev_equipped.is_empty():
+		var rem = inventory_grid.auto_add_item(prev_equipped.get("id", ""), prev_equipped.get("amount", 1), prev_equipped)
+		if rem > 0:
+			var overflow_eq = prev_equipped.duplicate(true)
+			overflow_eq["amount"] = rem
+			_handle_overflow_item(overflow_eq)
+		
 	_update_equipment_ui()
 	if SoundManager: SoundManager.play("menu_select")
 	_end_drag()
@@ -1533,7 +1557,7 @@ func _apply_backpack_grid_size() -> void:
 	if inventory_grid:
 		var dropped = inventory_grid.resize_grid(new_w, new_h)
 		for it in dropped:
-			_drop_item_to_world(it)
+			_handle_overflow_item(it)
 	_update_grid_ui_size()
 
 func _update_equipment_ui() -> void:
@@ -2179,6 +2203,8 @@ func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = V
 		"source": source_type,
 		"item": item,
 		"rotated": item.get("rotated", false),
+		"orig_rotated": item.get("rotated", false),
+		"start_mouse_pos": get_global_mouse_position(),
 		"origin_pos": origin_pos,
 		"slot_name": slot_name,
 		"ground_ref": ground_ref,
@@ -2544,6 +2570,40 @@ func close_all_container_popups() -> void:
 			p.queue_free()
 	open_container_popups.clear()
 
+func _prune_and_rebind_popups() -> void:
+	var stale: Array[String] = []
+	var eq_vest: Dictionary = equipment_data.get("vest", {})
+	var eq_vest_uid: String = str(eq_vest.get("uid", ""))
+	for cuid in open_container_popups.keys():
+		var p = open_container_popups[cuid]
+		if not is_instance_valid(p):
+			stale.append(str(cuid))
+			continue
+		var s_uid := str(p.container_item.get("uid", ""))
+		if s_uid != "":
+			var live_item: Dictionary = {}
+			var live_grid: InventoryGrid = null
+			if inventory_grid:
+				var gi := inventory_grid.get_item_by_uid(s_uid)
+				if not gi.is_empty():
+					live_item = gi
+					live_grid = inventory_grid
+			if live_item.is_empty() and not eq_vest.is_empty() and eq_vest_uid == s_uid:
+				live_item = eq_vest
+				live_grid = null
+			if live_item.is_empty():
+				stale.append(str(cuid))
+			else:
+				p.container_item = live_item
+				p.source_grid = live_grid
+				if p.inner_grid:
+					InventoryGrid.sync_container_item_contents(live_item, p.inner_grid)
+	for ek in stale:
+		var p = open_container_popups.get(ek, null)
+		if is_instance_valid(p):
+			p.queue_free()
+		open_container_popups.erase(ek)
+
 func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = null) -> void:
 	if container_item.is_empty() or not InventoryGrid.is_container_item(container_item):
 		return
@@ -2583,8 +2643,8 @@ func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = 
 	)
 	popup.item_split_requested.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
 		_open_split_dialog(it, func(split_amt):
-			var split_item = it.duplicate()
-			split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+			var split_item = it.duplicate(true)
+			split_item["uid"] = InventoryGrid.next_uid()
 			split_item["amount"] = split_amt
 			it["amount"] -= split_amt
 			if p_win.inner_grid:
@@ -2689,7 +2749,7 @@ func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -
 	var target_item := target_grid.get_item_at(m_cx, m_cy)
 	if target_item.is_empty():
 		target_item = target_grid.get_item_at(cell_x, cell_y)
-	if not target_item.is_empty() and str(target_item.get("id", "")) == item_id and str(target_item.get("uid", "")) != uid:
+	if not target_item.is_empty() and InventoryGrid.is_same_item_id(str(target_item.get("id", "")), item_id) and str(target_item.get("uid", "")) != uid:
 		var idata := ItemDatabase.get_item_data(item_id)
 		var max_stack := int(idata.get("max_stack", 1))
 		if max_stack > 1:

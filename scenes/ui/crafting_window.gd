@@ -112,6 +112,8 @@ func _refresh_ui() -> void:
 
 func _count_material(mat_id: String) -> int:
 	if not player_inv: return 0
+	if player_inv.has_method("get_item_count"):
+		return int(player_inv.get_item_count(mat_id))
 	var total = 0
 	for item in player_inv.items:
 		if item and item.get("id", "") == mat_id:

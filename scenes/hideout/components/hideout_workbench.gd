@@ -471,9 +471,9 @@ func _populate_workbench_compat_parts(slot_name: String) -> void:
 	# 내 인벤토리에서 해당 슬롯에 맞는 부품 검색
 	var owned_compat_parts = []
 	
-	# 1. 창고 탐색
+	# 1. 창고 탐색 (부품 상자 포함)
 	if stash_grid_mgr:
-		for it in stash_grid_mgr.items:
+		for it in stash_grid_mgr.get_all_items_flat(true):
 			var it_id = it.get("id", "")
 			if WeaponPartsDatabase.PARTS.has(it_id):
 				var p_info = WeaponPartsDatabase.PARTS[it_id]
@@ -482,9 +482,9 @@ func _populate_workbench_compat_parts(slot_name: String) -> void:
 					if "all" in comps or cat in comps:
 						owned_compat_parts.append({"id": it_id, "source": "stash", "item": it})
 						
-	# 2. 배낭 탐색
+	# 2. 배낭 탐색 (부품 상자 포함)
 	if player_grid_mgr:
-		for it in player_grid_mgr.items:
+		for it in player_grid_mgr.get_all_items_flat(true):
 			var it_id = it.get("id", "")
 			if WeaponPartsDatabase.PARTS.has(it_id):
 				var p_info = WeaponPartsDatabase.PARTS[it_id]
@@ -602,23 +602,13 @@ func _detach_workbench_part(slot_name: String) -> void:
 
 func _remove_owned_part_from_inv(part_id: String) -> bool:
 	if stash_grid_mgr:
-		for it in stash_grid_mgr.items:
-			if it.get("id", "") == part_id:
-				var amt = it.get("amount", 1)
-				if amt <= 1: stash_grid_mgr.remove_item_by_uid(it.get("uid", ""))
-				else:
-					it["amount"] -= 1
-					stash_grid_mgr.grid_changed.emit()
-				return true
+		var rem_s := stash_grid_mgr.remove_item(part_id, 1)
+		if rem_s == 0:
+			return true
 	if player_grid_mgr:
-		for it in player_grid_mgr.items:
-			if it.get("id", "") == part_id:
-				var amt = it.get("amount", 1)
-				if amt <= 1: player_grid_mgr.remove_item_by_uid(it.get("uid", ""))
-				else:
-					it["amount"] -= 1
-					player_grid_mgr.grid_changed.emit()
-				return true
+		var rem_p := player_grid_mgr.remove_item(part_id, 1)
+		if rem_p == 0:
+			return true
 	return false
 
 func _refresh_workbench_stats_comparison() -> void:
@@ -980,13 +970,13 @@ func _buy_and_assemble_preset() -> void:
 func _get_owned_parts_list() -> Dictionary:
 	var pool = {}
 	if stash_grid_mgr:
-		for it in stash_grid_mgr.items:
+		for it in stash_grid_mgr.get_all_items_flat(true):
 			var id = it.get("id", "")
-			pool[id] = pool.get(id, 0) + it.get("amount", 1)
+			pool[id] = pool.get(id, 0) + int(it.get("amount", 1))
 	if player_grid_mgr:
-		for it in player_grid_mgr.items:
+		for it in player_grid_mgr.get_all_items_flat(true):
 			var id = it.get("id", "")
-			pool[id] = pool.get(id, 0) + it.get("amount", 1)
+			pool[id] = pool.get(id, 0) + int(it.get("amount", 1))
 	return pool
 
 func _save_workbench_weapon() -> void:

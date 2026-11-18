@@ -477,23 +477,18 @@ func _finish_reload() -> void:
 		ammo_types.push_front(preferred_ammo_type)
 	
 	var loaded = 0
-	var inv_grid = player.get_node("InventoryGrid")
-	for a_type in ammo_types:
-		if loaded >= needed:
-			break
-		for it in inv_grid.items.duplicate():
-			var it_id = String(it.get("id", ""))
-			var is_match = (it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"))
-			if is_match:
-				var amt = it.get("amount", 1)
-				var take = min(amt, needed - loaded)
-				loaded += take
-				if amt - take <= 0:
-					inv_grid.remove_item_by_uid(it.get("uid", ""))
-				else:
-					it["amount"] -= take
-					inv_grid.grid_changed.emit()
-				if loaded >= needed: break
+	var inv_grid: InventoryGrid = player.get_node("InventoryGrid") as InventoryGrid
+	if inv_grid:
+		for a_type in ammo_types:
+			if loaded >= needed:
+				break
+			var take := inv_grid.consume_items_matching(func(it: Dictionary) -> bool:
+				var it_id := String(it.get("id", ""))
+				return it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약")
+			, needed - loaded, false)
+			loaded += take
+		if loaded > 0:
+			inv_grid.grid_changed.emit()
 				
 	equipped_weapon_data["current_magazine_ammo"] = cur_mag + loaded
 	if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
@@ -522,12 +517,14 @@ func get_available_ammo_count() -> int:
 	if not player.has_node("InventoryGrid"): return 0
 	var ammo_types = get_compatible_ammo_types()
 	var total = 0
-	for it in player.get_node("InventoryGrid").items:
-		var it_id = it.get("id", "")
-		for a_type in ammo_types:
-			if it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"):
-				total += it.get("amount", 1)
-				break
+	var inv_grid: InventoryGrid = player.get_node("InventoryGrid") as InventoryGrid
+	if inv_grid:
+		for it in inv_grid.get_all_items_flat(true):
+			var it_id = String(it.get("id", ""))
+			for a_type in ammo_types:
+				if it_id == a_type or it_id.contains(a_type) or (a_type == "9mm" and it_id == "탄약"):
+					total += int(it.get("amount", 1))
+					break
 	return total
 
 func get_slot_display_name(slot_name: String) -> String:

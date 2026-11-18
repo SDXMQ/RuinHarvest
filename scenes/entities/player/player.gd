@@ -385,24 +385,27 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 
 		if inventory_grid:
 			var cur_item: Dictionary = {}
-			for it in inventory_grid.items:
-				if target_uid != "" and String(it.get("uid", "")) == target_uid:
-					cur_item = it
-					break
+			if target_uid != "":
+				var uid_res := inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+					return String(it.get("uid", "")) == target_uid
+				)
+				if bool(uid_res.get("found", false)):
+					cur_item = uid_res.get("item", {})
 			if cur_item.is_empty():
-				for it in inventory_grid.items:
-					if String(it.get("id", "")) == item_id:
-						cur_item = it
-						break
+				var id_res := inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+					return String(it.get("id", "")) == item_id
+				)
+				if bool(id_res.get("found", false)):
+					cur_item = id_res.get("item", {})
 			if not cur_item.is_empty():
 				var amt := int(cur_item.get("amount", 1))
 				if amt > 1:
 					cur_item["amount"] = amt - 1
 					inventory_grid.grid_changed.emit()
 				else:
-					inventory_grid.remove_item_by_uid(String(cur_item.get("uid", "")))
+					inventory_grid.remove_item_by_uid_recursive(String(cur_item.get("uid", "")))
 			elif target_uid != "":
-				inventory_grid.remove_item_by_uid(target_uid)
+				inventory_grid.remove_item_by_uid_recursive(target_uid)
 
 		stats_changed.emit()
 		if SoundManager:
@@ -421,7 +424,7 @@ func _use_quickslot_item(slot_kind: String) -> void:
 		return
 	var target_item: Dictionary = {}
 	var target_data: Dictionary = {}
-	for item in inventory_grid.items:
+	for item in inventory_grid.get_all_items_flat(true):
 		var id = item.get("id", "")
 		var d = ItemDatabase.get_item_data(id)
 		var cat = d.get("category", -1)

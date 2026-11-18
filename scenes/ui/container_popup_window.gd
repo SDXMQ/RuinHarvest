@@ -270,16 +270,9 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 func update_drag_hover(m_global_pos: Vector2, drag_item: Dictionary, is_rot: bool) -> bool:
 	if not grid_control or not inner_grid or not is_visible_in_tree():
 		return false
-	if grid_control.get_global_rect().has_point(m_global_pos):
-		var local_pos := m_global_pos - grid_control.get_global_rect().position
-		var base_size := ItemDatabase.get_item_grid_size(str(drag_item.get("id", ""))) if ItemDatabase else Vector2i(1, 1)
-		var base_w := int(drag_item.get("w", base_size.x))
-		var base_h := int(drag_item.get("h", base_size.y))
-		var cur_w := base_h if is_rot else base_w
-		var cur_h := base_w if is_rot else base_h
-		var cx := int(floor(local_pos.x / POPUP_CELL_SIZE)) - floori(float(cur_w) * 0.5)
-		var cy := int(floor(local_pos.y / POPUP_CELL_SIZE)) - floori(float(cur_h) * 0.5)
-		hovered_cell = Vector2i(cx, cy)
+	var cell := InventoryUIHelper.calc_drag_drop_cell(grid_control, m_global_pos, inner_grid, {"item": drag_item, "rotated": is_rot}, POPUP_CELL_SIZE)
+	if cell != Vector2i(-1, -1):
+		hovered_cell = cell
 		grid_control.queue_redraw()
 		return true
 	if hovered_cell != Vector2i(-1, -1):
@@ -288,17 +281,9 @@ func update_drag_hover(m_global_pos: Vector2, drag_item: Dictionary, is_rot: boo
 	return false
 
 func get_drop_cell(m_global_pos: Vector2, drag_item: Dictionary, is_rot: bool) -> Vector2i:
-	if not grid_control or not grid_control.get_global_rect().has_point(m_global_pos):
+	if not grid_control or not inner_grid:
 		return Vector2i(-1, -1)
-	var local_pos := m_global_pos - grid_control.get_global_rect().position
-	var base_size := ItemDatabase.get_item_grid_size(str(drag_item.get("id", ""))) if ItemDatabase else Vector2i(1, 1)
-	var base_w := int(drag_item.get("w", base_size.x))
-	var base_h := int(drag_item.get("h", base_size.y))
-	var cur_w := base_h if is_rot else base_w
-	var cur_h := base_w if is_rot else base_h
-	var cx := int(floor(local_pos.x / POPUP_CELL_SIZE)) - floori(float(cur_w) * 0.5)
-	var cy := int(floor(local_pos.y / POPUP_CELL_SIZE)) - floori(float(cur_h) * 0.5)
-	return Vector2i(cx, cy)
+	return InventoryUIHelper.calc_drag_drop_cell(grid_control, m_global_pos, inner_grid, {"item": drag_item, "rotated": is_rot}, POPUP_CELL_SIZE)
 
 func get_hovered_item() -> Dictionary:
 	if not grid_control or not inner_grid:
