@@ -146,6 +146,7 @@ func _ready() -> void:
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
 
 func _ensure_tactical_hud_widgets() -> void:
+	HudTacticalHelper.style_hud_bars(hp_bar, stamina_bar, hunger_bar, thirst_bar)
 	var hud = $UI/HUD
 	var vbox = get_node_or_null("UI/HUD/Panel/VBox")
 	if vbox:
@@ -632,25 +633,10 @@ func _on_crosshair_draw() -> void:
 	if not crosshair_overlay or not player or get_tree().paused:
 		return
 	var m_pos = crosshair_overlay.get_local_mouse_position()
-	var gap = clamp(crosshair_spread, 4.0, 48.0)
-	var line_len = 7.0
 	var is_ads = player.player_camera.is_aiming_ads if player.player_camera else false
-	var col = Color(0.25, 1.0, 0.45, 0.88) if is_ads else Color(1.0, 0.96, 0.82, 0.82)
-	var shadow_col = Color(0.0, 0.0, 0.0, 0.65)
-	for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
-		var p1 = m_pos + d * gap
-		var p2 = m_pos + d * (gap + line_len)
-		crosshair_overlay.draw_line(p1, p2, shadow_col, 3.0)
-		crosshair_overlay.draw_line(p1, p2, col, 1.6)
-	crosshair_overlay.draw_circle(m_pos, 1.8, col)
-
-	# 총기 기능고장 (JAM) 발생 시 우하단 붉은색 점멸 라벨 표시
 	var w_handler = player.weapon_handler if player and "weapon_handler" in player else null
-	if w_handler and bool(w_handler.get("is_jammed")):
-		if (Time.get_ticks_msec() / 250) % 2 == 0:
-			var jam_pos = m_pos + Vector2(16, 16)
-			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.8))
-			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
+	var is_jammed = bool(w_handler.get("is_jammed")) if w_handler else false
+	HudTacticalHelper.draw_pixel_crosshair(crosshair_overlay, m_pos, crosshair_spread, is_ads, is_jammed)
 
 func _on_player_hit_direction(attacker_pos: Vector2) -> void:
 	if not player: return
@@ -1005,14 +991,7 @@ func _on_event_logged(msg: String) -> void:
 	var max_logs = GameSettings.max_event_logs if GameSettings else 3
 	
 	var panel = PanelContainer.new()
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.08, 0.12, 0.85)
-	style.border_width_left = 4
-	style.border_color = Color(1.0, 0.8, 0.2)
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
+	var style = HudTacticalHelper.make_event_toast_stylebox(Color(1.0, 0.8, 0.2))
 	panel.add_theme_stylebox_override("panel", style)
 	
 	var lbl = Label.new()

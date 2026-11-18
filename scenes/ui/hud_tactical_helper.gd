@@ -4,6 +4,37 @@ extends RefCounted
 
 ## 외부 월드(main_world.gd)와 건물 내부(building_interior_scene.gd) 공용 HUD 및 52x52 아이콘 퀵슬롯 헬퍼
 
+static func _on_quickslot_decor_draw(decor: Control) -> void:
+	if not is_instance_valid(decor):
+		return
+	var is_active: bool = bool(decor.get_meta("is_active", false))
+	var is_available: bool = bool(decor.get_meta("is_available", true))
+	var active_col: Color = decor.get_meta("active_color", Color(1.0, 0.82, 0.25))
+	var sz := decor.size
+	if sz.x <= 4.0 or sz.y <= 4.0:
+		sz = Vector2(52.0, 52.0)
+
+	# 1. 좌상단 픽셀 키캡 박스 (13x12)
+	var kc_rect := Rect2(2.0, 2.0, 13.0, 12.0)
+	var kc_bg := Color(0.18, 0.14, 0.06, 0.95) if is_active else Color(0.04, 0.05, 0.07, 0.92)
+	var kc_border := active_col if is_active else Color(0.28, 0.34, 0.42, 0.9)
+	decor.draw_rect(kc_rect, kc_bg, true)
+	decor.draw_rect(kc_rect, kc_border, false, 1.0)
+
+	# 2. 우상단 3x3 픽셀 상태 LED 도트
+	var led_col := active_col if is_active else (Color(0.24, 0.78, 0.42, 0.85) if is_available else Color(0.22, 0.25, 0.30, 0.7))
+	decor.draw_rect(Rect2(sz.x - 6.0, 3.0, 3.0, 3.0), led_col, true)
+	if is_active:
+		decor.draw_rect(Rect2(sz.x - 5.0, 4.0, 1.0, 1.0), Color(1.0, 0.98, 0.9, 0.95), true)
+
+	# 3. 4모서리 도트 L-브래킷
+	var br_col := active_col if is_active else (Color(0.42, 0.50, 0.62, 0.85) if is_available else Color(0.22, 0.25, 0.30, 0.6))
+	var arm := 4.0
+	decor.draw_rect(Rect2(1.0, sz.y - 2.0, arm, 1.0), br_col, true)
+	decor.draw_rect(Rect2(1.0, sz.y - 1.0 - arm, 1.0, arm), br_col, true)
+	decor.draw_rect(Rect2(sz.x - 1.0 - arm, sz.y - 2.0, arm, 1.0), br_col, true)
+	decor.draw_rect(Rect2(sz.x - 2.0, sz.y - 1.0 - arm, 1.0, arm), br_col, true)
+
 static func style_quickslot_button(
 	btn: Button,
 	key_str: String,
@@ -28,21 +59,26 @@ static func style_quickslot_button(
 		style = btn.get_theme_stylebox("normal") as StyleBoxFlat
 	if not style:
 		style = StyleBoxFlat.new()
-		style.corner_radius_top_left = 5
-		style.corner_radius_top_right = 5
-		style.corner_radius_bottom_left = 5
-		style.corner_radius_bottom_right = 5
 		btn.add_theme_stylebox_override("normal", style)
 		btn.add_theme_stylebox_override("hover", style)
 		btn.add_theme_stylebox_override("pressed", style)
 
-	style.bg_color = Color(0.11, 0.14, 0.19, 0.94) if is_active else Color(0.06, 0.08, 0.11, 0.88)
+	style.corner_radius_top_left = 0
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_left = 0
+	style.corner_radius_bottom_right = 0
+	style.corner_detail = 1
+	style.anti_aliasing = false
+	style.bg_color = Color(0.11, 0.14, 0.19, 0.96) if is_active else Color(0.055, 0.07, 0.095, 0.92)
 	var b_w = 2 if is_active else 1
 	style.border_width_left = b_w
 	style.border_width_top = b_w
 	style.border_width_right = b_w
 	style.border_width_bottom = b_w
-	style.border_color = active_color if is_active else (Color(0.28, 0.34, 0.42, 0.85) if is_available else Color(0.18, 0.20, 0.24, 0.65))
+	style.border_color = active_color if is_active else (Color(0.28, 0.34, 0.42, 0.9) if is_available else Color(0.18, 0.20, 0.24, 0.7))
+	style.shadow_color = Color(0, 0, 0, 0.75)
+	style.shadow_size = 1
+	style.shadow_offset = Vector2(2, 2)
 
 	var sweep_overlay: ColorRect = btn.get_node_or_null("SweepOverlay")
 	if not sweep_overlay:
@@ -60,6 +96,7 @@ static func style_quickslot_button(
 		icon_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 		icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon_rect.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		icon_rect.set_anchors_preset(Control.PRESET_CENTER)
 		icon_rect.offset_left = -15
 		icon_rect.offset_top = -13
@@ -75,18 +112,31 @@ static func style_quickslot_button(
 		icon_rect.texture = null
 		icon_rect.visible = false
 
+	var pixel_decor: Control = btn.get_node_or_null("PixelDecor")
+	if not pixel_decor:
+		pixel_decor = Control.new()
+		pixel_decor.name = "PixelDecor"
+		pixel_decor.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		pixel_decor.set_anchors_preset(Control.PRESET_FULL_RECT)
+		pixel_decor.draw.connect(_on_quickslot_decor_draw.bind(pixel_decor))
+		btn.add_child(pixel_decor)
+	pixel_decor.set_meta("is_active", is_active)
+	pixel_decor.set_meta("is_available", is_available)
+	pixel_decor.set_meta("active_color", active_color)
+	pixel_decor.queue_redraw()
+
 	var key_lbl: Label = btn.get_node_or_null("KeyBadge")
 	if not key_lbl:
 		key_lbl = Label.new()
 		key_lbl.name = "KeyBadge"
 		key_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		key_lbl.position = Vector2(4, 2)
+		key_lbl.position = Vector2(5, 1)
 		key_lbl.add_theme_font_size_override("font_size", 10)
-		key_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+		key_lbl.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.95))
 		key_lbl.add_theme_constant_override("outline_size", 2)
 		btn.add_child(key_lbl)
 	key_lbl.text = key_str
-	key_lbl.add_theme_color_override("font_color", active_color if is_active else Color(0.75, 0.80, 0.88))
+	key_lbl.add_theme_color_override("font_color", active_color if is_active else Color(0.78, 0.83, 0.90))
 
 	var cnt_lbl: Label = btn.get_node_or_null("CountBadge")
 	if not cnt_lbl:
@@ -260,3 +310,87 @@ static func update_channeling_sweep(quickslot_hbox: HBoxContainer, slot_key: Str
 			sw.position = Vector2(0, 52.0 - h)
 		else:
 			sw.visible = false
+
+static func _make_bar_stylebox(bg: Color, border: Color, bw: int = 1) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.set_border_width_all(bw)
+	sb.corner_radius_top_left = 0
+	sb.corner_radius_top_right = 0
+	sb.corner_radius_bottom_left = 0
+	sb.corner_radius_bottom_right = 0
+	sb.corner_detail = 1
+	sb.anti_aliasing = false
+	return sb
+
+static func style_hud_bars(hp_bar: ProgressBar, stamina_bar: ProgressBar, hunger_bar: ProgressBar, thirst_bar: ProgressBar) -> void:
+	var bg_sb := _make_bar_stylebox(Color(0.035, 0.045, 0.062, 0.94), Color(0.20, 0.25, 0.33, 0.92), 1)
+	if hp_bar:
+		hp_bar.add_theme_stylebox_override("background", bg_sb)
+		hp_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.82, 0.22, 0.24, 0.96), Color(1.0, 0.45, 0.42, 0.95), 1))
+	if stamina_bar:
+		stamina_bar.add_theme_stylebox_override("background", bg_sb)
+		stamina_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.22, 0.66, 0.88, 0.96), Color(0.48, 0.85, 1.0, 0.95), 1))
+	if hunger_bar:
+		hunger_bar.add_theme_stylebox_override("background", bg_sb)
+		hunger_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.85, 0.56, 0.16, 0.96), Color(1.0, 0.76, 0.32, 0.95), 1))
+	if thirst_bar:
+		thirst_bar.add_theme_stylebox_override("background", bg_sb)
+		thirst_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.20, 0.76, 0.68, 0.96), Color(0.45, 0.95, 0.86, 0.95), 1))
+
+static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.05, 0.065, 0.095, 0.92)
+	style.border_width_left = 4
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
+	style.border_color = accent_col
+	style.content_margin_left = 10
+	style.content_margin_right = 10
+	style.content_margin_top = 6
+	style.content_margin_bottom = 6
+	style.corner_radius_top_left = 0
+	style.corner_radius_top_right = 0
+	style.corner_radius_bottom_left = 0
+	style.corner_radius_bottom_right = 0
+	style.corner_detail = 1
+	style.shadow_color = Color(0, 0, 0, 0.8)
+	style.shadow_size = 1
+	style.shadow_offset = Vector2(2, 2)
+	style.anti_aliasing = false
+	return style
+
+static func draw_pixel_crosshair(ctrl: Control, m_pos: Vector2, spread: float, is_ads: bool, is_jammed: bool) -> void:
+	if not ctrl:
+		return
+	var cx := floorf(m_pos.x)
+	var cy := floorf(m_pos.y)
+	var gap := floorf(clampf(spread, 4.0, 48.0))
+	var bar_len := 7.0
+	var col := Color(0.25, 1.0, 0.45, 0.92) if is_ads else Color(1.0, 0.96, 0.82, 0.88)
+	var shadow_col := Color(0.0, 0.0, 0.0, 0.82)
+
+	# 상/하/좌/우 정수 스냅 픽셀 레티클 바 (1px 다크 아웃라인 + 2px 코어)
+	# Top
+	ctrl.draw_rect(Rect2(cx - 2.0, cy - gap - bar_len - 1.0, 4.0, bar_len + 2.0), shadow_col, true)
+	ctrl.draw_rect(Rect2(cx - 1.0, cy - gap - bar_len, 2.0, bar_len), col, true)
+	# Bottom
+	ctrl.draw_rect(Rect2(cx - 2.0, cy + gap - 1.0, 4.0, bar_len + 2.0), shadow_col, true)
+	ctrl.draw_rect(Rect2(cx - 1.0, cy + gap, 2.0, bar_len), col, true)
+	# Left
+	ctrl.draw_rect(Rect2(cx - gap - bar_len - 1.0, cy - 2.0, bar_len + 2.0, 4.0), shadow_col, true)
+	ctrl.draw_rect(Rect2(cx - gap - bar_len, cy - 1.0, bar_len, 2.0), col, true)
+	# Right
+	ctrl.draw_rect(Rect2(cx + gap - 1.0, cy - 2.0, bar_len + 2.0, 4.0), shadow_col, true)
+	ctrl.draw_rect(Rect2(cx + gap, cy - 1.0, bar_len, 2.0), col, true)
+
+	# 정중앙 2x2 도트 포인트
+	ctrl.draw_rect(Rect2(cx - 2.0, cy - 2.0, 4.0, 4.0), shadow_col, true)
+	ctrl.draw_rect(Rect2(cx - 1.0, cy - 1.0, 2.0, 2.0), col, true)
+
+	if is_jammed and (Time.get_ticks_msec() / 250) % 2 == 0:
+		var jam_pos := Vector2(cx + 16.0, cy + 16.0)
+		ctrl.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.9))
+		ctrl.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))

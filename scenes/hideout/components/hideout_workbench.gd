@@ -327,9 +327,12 @@ func _populate_workbench_weapon_list() -> void:
 		var is_cur = (wb_selected_weapon.get("uid", "") == w_dict.get("uid", "") and not w_dict.get("uid", "").is_empty()) or (src == wb_weapon_source and not src.is_empty())
 		if is_cur:
 			var cur_style = StyleBoxFlat.new()
-			cur_style.bg_color = Color(0.15, 0.35, 0.22, 0.9)
+			cur_style.bg_color = Color(0.12, 0.30, 0.18, 0.94)
 			cur_style.border_color = Color(0.3, 1.0, 0.5, 1.0)
 			cur_style.set_border_width_all(2)
+			cur_style.set_corner_radius_all(0)
+			cur_style.corner_detail = 1
+			cur_style.anti_aliasing = false
 			btn.add_theme_stylebox_override("normal", cur_style)
 			
 		btn.pressed.connect(func():
@@ -390,10 +393,12 @@ func _build_workbench_slots() -> void:
 		
 		var is_active = (wb_active_slot == slot_name)
 		var style = StyleBoxFlat.new()
-		style.bg_color = Color(0.12, 0.22, 0.18, 0.9) if is_active else Color(0.12, 0.14, 0.18, 0.9)
-		style.border_color = Color(0.3, 1.0, 0.5, 1.0) if is_active else Color(0.3, 0.35, 0.42, 0.6)
+		style.bg_color = Color(0.10, 0.20, 0.16, 0.94) if is_active else Color(0.08, 0.10, 0.14, 0.94)
+		style.border_color = Color(0.3, 1.0, 0.5, 1.0) if is_active else Color(0.28, 0.34, 0.42, 0.85)
 		style.set_border_width_all(2 if is_active else 1)
-		style.set_corner_radius_all(4)
+		style.set_corner_radius_all(0)
+		style.corner_detail = 1
+		style.anti_aliasing = false
 		style.content_margin_left = 8
 		style.content_margin_right = 8
 		card.add_theme_stylebox_override("panel", style)

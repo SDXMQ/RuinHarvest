@@ -371,6 +371,7 @@ func _ready() -> void:
 	
 	# 초기 청크 로드
 	chunk_manager.update_chunks(player.global_position)
+	HudTacticalHelper.style_hud_bars(hp_bar, stamina_bar, hunger_bar, thirst_bar)
 	_on_player_stats_changed()
 	
 	# 시작 시 주변에 초기 좀비 스폰 (설정된 밀도 반영)
@@ -531,16 +532,7 @@ func _on_event_logged(msg: String) -> void:
 	var max_logs = GameSettings.max_event_logs if GameSettings else 3
 	
 	var panel = PanelContainer.new()
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.06, 0.08, 0.12, 0.85)
-	style.border_width_left = 4
-	style.border_color = Color(1.0, 0.8, 0.2)
-	style.content_margin_left = 10
-	style.content_margin_right = 10
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_right = 4
+	var style = HudTacticalHelper.make_event_toast_stylebox(Color(1.0, 0.8, 0.2))
 	panel.add_theme_stylebox_override("panel", style)
 	
 	var lbl = Label.new()
@@ -858,19 +850,32 @@ func _on_compass_draw() -> void:
 	if not player: return
 	var w = compass_bar.size.x
 	var h = compass_bar.size.y
-	var center_x = w / 2.0
+	var center_x = floorf(w / 2.0)
 	
-	# 반투명 배경
-	compass_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.1, 0.1, 0.15, 0.6))
-	compass_bar.draw_line(Vector2(0, h), Vector2(w, h), Color(0.5, 0.5, 0.5, 0.5), 1.0)
+	# 다크 택티컬 픽셀 프레임 배경 + 4모서리 코너 브래킷
+	compass_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.04, 0.05, 0.075, 0.88), true)
+	compass_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.24, 0.30, 0.38, 0.92), false, 1.0)
+	InventoryUIHelper._draw_pixel_corner_brackets(compass_bar, Rect2(1, 1, w - 2, h - 2), Color(0.92, 0.65, 0.22, 0.85), 5.0, 1.0)
 	
 	# 플레이어 시선 각도 (도)
 	var player_deg = rad_to_deg(player.rotation)
 	if player_deg < 0: player_deg += 360.0
 	
-	# 시야각 FOV (180도)
+	# 시야각 FOV (160도)
 	var fov = 160.0
 	var pixels_per_deg = w / fov
+	
+	# 15도 단위 픽셀 눈금 틱
+	for step_deg in range(0, 360, 15):
+		if step_deg % 90 == 0:
+			continue
+		var s_diff = float(step_deg) - player_deg
+		while s_diff < -180.0: s_diff += 360.0
+		while s_diff > 180.0: s_diff -= 360.0
+		if abs(s_diff) <= fov / 2.0:
+			var sx := floorf(center_x + s_diff * pixels_per_deg)
+			var tick_h := 4.0 if (step_deg % 45 == 0) else 2.0
+			compass_bar.draw_rect(Rect2(sx, h - 1.0 - tick_h, 1.0, tick_h), Color(0.42, 0.48, 0.58, 0.75), true)
 	
 	# N, E, S, W 방위각 눈금
 	var cardinal_dirs = {
@@ -886,9 +891,9 @@ func _on_compass_draw() -> void:
 		while diff > 180.0: diff -= 360.0
 		
 		if abs(diff) <= fov / 2.0:
-			var x = center_x + diff * pixels_per_deg
-			compass_bar.draw_line(Vector2(x, h - 8), Vector2(x, h), Color.WHITE, 1.5)
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 4, h - 10), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
+			var x = floorf(center_x + diff * pixels_per_deg)
+			compass_bar.draw_rect(Rect2(x - 1.0, h - 7.0, 2.0, 6.0), Color(0.92, 0.68, 0.22, 0.95), true)
+			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 4, h - 9), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
 			
 	# 탈출구 마커 (초록색 다이아몬드)
 	for pt in extraction_points_data:
@@ -901,9 +906,8 @@ func _on_compass_draw() -> void:
 		while diff > 180.0: diff -= 360.0
 		
 		if abs(diff) <= fov / 2.0:
-			var x = center_x + diff * pixels_per_deg
+			var x = floorf(center_x + diff * pixels_per_deg)
 			var dist = player.global_position.distance_to(pt["pos"])
-			# 다이아몬드 마커
 			var diamond = PackedVector2Array([
 				Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)
 			])
@@ -943,7 +947,7 @@ func _on_compass_draw() -> void:
 			compass_bar.draw_colored_polygon(diamond, pt_col)
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
-	# 항공 보급품 마커 (주황/붉은 다이아몬드)
+	# 항공 보급품 마커 (주황/붉은 픽셀 박스)
 	for ad in airdrop_points_data:
 		var dir_to_ad = player.global_position.direction_to(ad["pos"])
 		var ad_deg = rad_to_deg(dir_to_ad.angle())
@@ -952,12 +956,9 @@ func _on_compass_draw() -> void:
 		while diff < -180.0: diff += 360.0
 		while diff > 180.0: diff -= 360.0
 		if abs(diff) <= fov / 2.0:
-			var x = center_x + diff * pixels_per_deg
+			var x = floorf(center_x + diff * pixels_per_deg)
 			var dist = player.global_position.distance_to(ad["pos"])
-			var box_mark = PackedVector2Array([
-				Vector2(x - 4, 5), Vector2(x + 4, 5), Vector2(x + 4, 13), Vector2(x - 4, 13)
-			])
-			compass_bar.draw_colored_polygon(box_mark, Color(1.0, 0.45, 0.15))
+			compass_bar.draw_rect(Rect2(x - 4.0, 5.0, 8.0, 8.0), Color(1.0, 0.45, 0.15), true)
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 14, 22), "📦%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
 			
 	# 랜드마크 보스 마커 (붉은 왕관/해골 표식)
@@ -969,9 +970,9 @@ func _on_compass_draw() -> void:
 		while b_diff < -180.0: b_diff += 360.0
 		while b_diff > 180.0: b_diff -= 360.0
 		if abs(b_diff) <= fov / 2.0:
-			var bx = center_x + b_diff * pixels_per_deg
+			var bx = floorf(center_x + b_diff * pixels_per_deg)
 			var b_dist = player.global_position.distance_to(boss_entity.global_position)
-			compass_bar.draw_circle(Vector2(bx, 9), 4.5, Color(0.95, 0.15, 0.2))
+			compass_bar.draw_rect(Rect2(bx - 4.0, 5.0, 8.0, 8.0), Color(0.95, 0.15, 0.2), true)
 			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
 			
 	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 지원)
@@ -985,17 +986,16 @@ func _on_compass_draw() -> void:
 			while o_diff < -180.0: o_diff += 360.0
 			while o_diff > 180.0: o_diff -= 360.0
 			if abs(o_diff) <= fov / 2.0:
-				var ox = center_x + o_diff * pixels_per_deg
+				var ox = floorf(center_x + o_diff * pixels_per_deg)
 				var o_dist = player.global_position.distance_to(obj_ref.global_position)
 				var icon_str = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "📡"
-				compass_bar.draw_circle(Vector2(ox, 9), 4.0, Color(0.2, 0.88, 1.0))
+				compass_bar.draw_rect(Rect2(ox - 3.0, 6.0, 6.0, 6.0), Color(0.2, 0.88, 1.0), true)
 				compass_bar.draw_string(ThemeDB.fallback_font, Vector2(ox - 16, 22), "%s%.0fm" % [icon_str, o_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
 
-	# 정중앙 조준 눈금 (노란 역삼각형)
-	var pointer = PackedVector2Array([
-		Vector2(center_x - 4, 0), Vector2(center_x + 4, 0), Vector2(center_x, 6)
-	])
-	compass_bar.draw_colored_polygon(pointer, Color(1.0, 0.85, 0.2))
+	# 정중앙 조준 눈금 (픽셀 스텝 역삼각형 포인터)
+	compass_bar.draw_rect(Rect2(center_x - 3.0, 1.0, 6.0, 2.0), Color(1.0, 0.85, 0.2), true)
+	compass_bar.draw_rect(Rect2(center_x - 2.0, 3.0, 4.0, 2.0), Color(1.0, 0.85, 0.2), true)
+	compass_bar.draw_rect(Rect2(center_x - 1.0, 5.0, 2.0, 2.0), Color(1.0, 0.85, 0.2), true)
 
 func _spawn_landmark_boss() -> void:
 	if not player: return
@@ -1042,27 +1042,10 @@ func _on_crosshair_draw() -> void:
 	if not crosshair_overlay or not player or get_tree().paused:
 		return
 	var m_pos = crosshair_overlay.get_local_mouse_position()
-	var gap = clamp(crosshair_spread, 4.0, 48.0)
-	var line_len = 7.0
 	var is_ads = player.player_camera.is_aiming_ads if player.player_camera else false
-	var col = Color(0.25, 1.0, 0.45, 0.88) if is_ads else Color(1.0, 0.96, 0.82, 0.82)
-	var shadow_col = Color(0.0, 0.0, 0.0, 0.65)
-	
-	var dirs = [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]
-	for d in dirs:
-		var p1 = m_pos + d * gap
-		var p2 = m_pos + d * (gap + line_len)
-		crosshair_overlay.draw_line(p1, p2, shadow_col, 3.0)
-		crosshair_overlay.draw_line(p1, p2, col, 1.6)
-	crosshair_overlay.draw_circle(m_pos, 1.8, col)
-
-	# 총기 기능고장 (JAM) 발생 시 우하단 붉은색 점멸 라벨 표시
 	var w_handler = player.weapon_handler if player and "weapon_handler" in player else null
-	if w_handler and bool(w_handler.get("is_jammed")):
-		if (Time.get_ticks_msec() / 250) % 2 == 0:
-			var jam_pos = m_pos + Vector2(16, 16)
-			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.8))
-			crosshair_overlay.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
+	var is_jammed = bool(w_handler.get("is_jammed")) if w_handler else false
+	HudTacticalHelper.draw_pixel_crosshair(crosshair_overlay, m_pos, crosshair_spread, is_ads, is_jammed)
 
 func _on_player_hit_direction(attacker_pos: Vector2) -> void:
 	if not player: return

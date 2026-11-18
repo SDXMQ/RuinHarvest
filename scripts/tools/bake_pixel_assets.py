@@ -21,7 +21,7 @@ OUT_DIR = os.path.join(ROOT_DIR, "assets", "pixel")
 
 
 def ensure_dirs() -> None:
-    for sub in ["tiles", "entities", "weapons", "props", "icons"]:
+    for sub in ["tiles", "entities", "weapons", "props", "icons", "ui"]:
         os.makedirs(os.path.join(OUT_DIR, sub), exist_ok=True)
 
 
@@ -2024,6 +2024,476 @@ def bake_world_props():
 
 
 # ==============================================================================
+# 6. TACTICAL PIXEL UI 9-SLICE ATLAS BAKER (192 x 96 = 8x4 cells of 24x24)
+# ==============================================================================
+def bake_ui_theme_atlas():
+    CS = 24
+    c = Canvas(8 * CS, 4 * CS)
+
+    def draw_9slice_plate(
+        col_idx: int,
+        row_idx: int,
+        bg_col,
+        outer_col,
+        top_bevel,
+        bot_bevel,
+        left_led=None,
+        led_core=None,
+        corner_bracket=None,
+        rivets: bool = True,
+        chamfer: bool = True,
+        recessed: bool = False,
+        top_led=None,
+    ):
+        ox = col_idx * CS
+        oy = row_idx * CS
+        # Base fill
+        z_bg = 0.25 if recessed else 0.55
+        c.fill_rect(ox + 1, oy + 1, CS - 2, CS - 2, bg_col, z_bg)
+
+        # Outer 1px border
+        c.fill_rect(ox, oy, CS, 1, outer_col, 0.15)
+        c.fill_rect(ox, oy + CS - 1, CS, 1, outer_col, 0.15)
+        c.fill_rect(ox, oy, 1, CS, outer_col, 0.15)
+        c.fill_rect(ox + CS - 1, oy, 1, CS, outer_col, 0.15)
+
+        # Inner 1px bevel (y=1, y=CS-2, x=1, x=CS-2)
+        z_top = 0.20 if recessed else 0.78
+        z_bot = 0.72 if recessed else 0.30
+        c.fill_rect(ox + 1, oy + 1, CS - 2, 1, top_bevel, z_top)
+        c.fill_rect(ox + 1, oy + 1, 1, CS - 2, top_bevel, z_top)
+        c.fill_rect(ox + 1, oy + CS - 2, CS - 2, 1, bot_bevel, z_bot)
+        c.fill_rect(ox + CS - 2, oy + 1, 1, CS - 2, bot_bevel, z_bot)
+
+        # Optional 2nd inner step frame for tactile depth
+        if not recessed:
+            inner_rim = lerp_rgba(bg_col, top_bevel, 0.28)
+            c.fill_rect(ox + 2, oy + 2, CS - 4, 1, inner_rim, 0.65)
+            c.fill_rect(ox + 2, oy + CS - 3, CS - 4, 1, lerp_rgba(bg_col, bot_bevel, 0.55), 0.38)
+
+        # Left tactical LED accent strip (3px wide inside border: x=1..3)
+        if left_led is not None:
+            c.fill_rect(ox + 1, oy + 2, 2, CS - 4, left_led, 0.88)
+            c.fill_rect(ox + 3, oy + 2, 1, CS - 4, lerp_rgba(left_led, bg_col, 0.45), 0.72)
+            if led_core is not None:
+                c.fill_rect(ox + 1, oy + 3, 1, CS - 6, led_core, 0.95)
+
+        # Top tactical LED strip (for selected tabs)
+        if top_led is not None:
+            c.fill_rect(ox + 2, oy + 1, CS - 4, 2, top_led, 0.92)
+            if led_core is not None:
+                c.fill_rect(ox + 4, oy + 1, CS - 8, 1, led_core, 0.98)
+
+        # 4x4 L-shaped pixel corner targeting brackets
+        if corner_bracket is not None:
+            # Top-Left (2..5, 2..5)
+            c.fill_rect(ox + 2, oy + 2, 4, 1, corner_bracket, 0.88)
+            c.fill_rect(ox + 2, oy + 2, 1, 4, corner_bracket, 0.88)
+            # Top-Right (CS-6..CS-3, 2..5)
+            c.fill_rect(ox + CS - 6, oy + 2, 4, 1, corner_bracket, 0.88)
+            c.fill_rect(ox + CS - 3, oy + 2, 1, 4, corner_bracket, 0.88)
+            # Bottom-Left (2..5, CS-6..CS-3)
+            c.fill_rect(ox + 2, oy + CS - 3, 4, 1, corner_bracket, 0.88)
+            c.fill_rect(ox + 2, oy + CS - 6, 1, 4, corner_bracket, 0.88)
+            # Bottom-Right (CS-6..CS-3, CS-6..CS-3)
+            c.fill_rect(ox + CS - 6, oy + CS - 3, 4, 1, corner_bracket, 0.88)
+            c.fill_rect(ox + CS - 3, oy + CS - 6, 1, 4, corner_bracket, 0.88)
+
+        # Steel corner rivets (in 6x6 corner zones so they never stretch)
+        if rivets:
+            r_hi = PAL["STEEL_BRIGHT"]
+            r_lo = PAL["OUTLINE"]
+            for rx, ry in [(3, 3), (CS - 4, 3), (3, CS - 4), (CS - 4, CS - 4)]:
+                if left_led is not None and rx <= 4:
+                    continue
+                c.set_px(ox + rx, oy + ry, r_hi, 0.90)
+                c.set_px(ox + rx + 1, oy + ry + 1, r_lo, 0.25)
+
+        # Crisp 1px notched pixel chamfer at outer corners
+        if chamfer:
+            for cx, cy in [(0, 0), (CS - 1, 0), (0, CS - 1), (CS - 1, CS - 1)]:
+                c.set_px(ox + cx, oy + cy, PAL["TRANS"], 0.0)
+            for cx, cy in [(1, 1), (CS - 2, 1), (1, CS - 2), (CS - 2, CS - 2)]:
+                c.set_px(ox + cx, oy + cy, outer_col, 0.15)
+
+    # --- ROW 0: PANELS & TABS ---
+    # (0, 0) panel_main: Dark tactical steel panel with corner rivets & bevel
+    draw_9slice_plate(
+        0, 0,
+        bg_col=hex_rgba("#13171F", 246),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_MID"],
+        bot_bevel=hex_rgba("#0B0D12", 250),
+        corner_bracket=PAL["SLATE_LIGHT"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (1, 0) panel_header: Tactical header bar with 3px amber LED strip
+    draw_9slice_plate(
+        1, 0,
+        bg_col=hex_rgba("#1A202B", 250),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_LIGHT"],
+        bot_bevel=hex_rgba("#0B0D12", 252),
+        left_led=PAL["ROAD_YELLOW"],
+        led_core=PAL["MUZZLE_CORE"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (2, 0) panel_grid_surface: Recessed bunker equipment/stash well
+    draw_9slice_plate(
+        2, 0,
+        bg_col=hex_rgba("#0B0D12", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#07080B", 252),
+        bot_bevel=PAL["SLATE_DARK"],
+        corner_bracket=PAL["SLATE_MID"],
+        rivets=False,
+        chamfer=False,
+        recessed=True,
+    )
+    # (3, 0) panel_tooltip: High-contrast tactical HUD floating readout
+    draw_9slice_plate(
+        3, 0,
+        bg_col=hex_rgba("#0E131B", 250),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["CYAN_GLASS"],
+        bot_bevel=PAL["SLATE_DARK"],
+        corner_bracket=PAL["CYAN_GLOW"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (4, 0) panel_line_edit: Recessed terminal input box
+    draw_9slice_plate(
+        4, 0,
+        bg_col=hex_rgba("#090B0F", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#06070A", 252),
+        bot_bevel=PAL["SLATE_MID"],
+        corner_bracket=PAL["CYAN_GLASS"],
+        rivets=False,
+        chamfer=False,
+        recessed=True,
+    )
+    # (5, 0) tab_selected: Active folder tab with top amber LED strip
+    draw_9slice_plate(
+        5, 0,
+        bg_col=hex_rgba("#1E2531", 250),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_LIGHT"],
+        bot_bevel=hex_rgba("#13171F", 250),
+        top_led=PAL["ROAD_YELLOW"],
+        led_core=PAL["MUZZLE_CORE"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (6, 0) tab_unselected: Inactive dark slate tab
+    draw_9slice_plate(
+        6, 0,
+        bg_col=hex_rgba("#10141B", 235),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_DARK"],
+        bot_bevel=PAL["OUTLINE"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (7, 0) panel_bounty: Gold/Brass mastery & bounty card
+    draw_9slice_plate(
+        7, 0,
+        bg_col=hex_rgba("#221A0B", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["BRASS"],
+        bot_bevel=PAL["BRASS_DARK"],
+        left_led=PAL["ROAD_YELLOW"],
+        led_core=PAL["MUZZLE_CORE"],
+        corner_bracket=PAL["MUZZLE_CORE"],
+        rivets=True,
+        chamfer=True,
+    )
+
+    # --- ROW 1: BUTTONS ---
+    # (0, 1) btn_normal: Raised steel tactical button
+    draw_9slice_plate(
+        0, 1,
+        bg_col=hex_rgba("#1B212C", 246),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_LIGHT"],
+        bot_bevel=hex_rgba("#0E1117", 252),
+        left_led=PAL["SLATE_LIGHT"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (1, 1) btn_hover: Hovered tactical button with glowing amber LED bar
+    draw_9slice_plate(
+        1, 1,
+        bg_col=hex_rgba("#263040", 252),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["ROAD_YELLOW"],
+        bot_bevel=PAL["BRASS_DARK"],
+        left_led=PAL["ROAD_YELLOW"],
+        led_core=PAL["MUZZLE_CORE"],
+        corner_bracket=PAL["MUZZLE_CORE"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (2, 1) btn_pressed: Depressed steel button
+    draw_9slice_plate(
+        2, 1,
+        bg_col=hex_rgba("#12161E", 255),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#090B0E", 255),
+        bot_bevel=PAL["ROAD_YELLOW"],
+        left_led=PAL["MUZZLE_CORE"],
+        rivets=False,
+        chamfer=True,
+        recessed=True,
+    )
+    # (3, 1) btn_disabled: Disabled dark steel button
+    draw_9slice_plate(
+        3, 1,
+        bg_col=hex_rgba("#101319", 185),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_DARK"],
+        bot_bevel=hex_rgba("#0B0D12", 185),
+        rivets=False,
+        chamfer=True,
+    )
+    # (4, 1) btn_primary_normal: Command/Deploy amber-brass button
+    draw_9slice_plate(
+        4, 1,
+        bg_col=hex_rgba("#2A1F0F", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["BRASS"],
+        bot_bevel=hex_rgba("#161007", 252),
+        left_led=PAL["ROAD_YELLOW"],
+        led_core=PAL["MUZZLE_CORE"],
+        corner_bracket=PAL["BRASS"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (5, 1) btn_primary_hover: Command/Deploy highlighted button
+    draw_9slice_plate(
+        5, 1,
+        bg_col=hex_rgba("#3D2D15", 254),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["MUZZLE_CORE"],
+        bot_bevel=PAL["BRASS"],
+        left_led=PAL["MUZZLE_CORE"],
+        led_core=PAL["WHITE_MUTED"],
+        corner_bracket=PAL["MUZZLE_CORE"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (6, 1) btn_danger_normal: Crimson alert button
+    draw_9slice_plate(
+        6, 1,
+        bg_col=hex_rgba("#281114", 246),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["BLOOD_BRIGHT"],
+        bot_bevel=hex_rgba("#14080A", 252),
+        left_led=PAL["RED_LED"],
+        corner_bracket=PAL["BLOOD_BRIGHT"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (7, 1) btn_danger_hover: Highlighted crimson alert button
+    draw_9slice_plate(
+        7, 1,
+        bg_col=hex_rgba("#3D181C", 254),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#FF6E6E", 255),
+        bot_bevel=PAL["BLOOD_BRIGHT"],
+        left_led=hex_rgba("#FF6E6E", 255),
+        led_core=PAL["MUZZLE_CORE"],
+        corner_bracket=hex_rgba("#FF6E6E", 255),
+        rivets=True,
+        chamfer=True,
+    )
+
+    # --- ROW 2: EQUIPMENT SLOTS & HUD QUICKSLOTS ---
+    # (0, 2) equip_normal: Tactical rig slot with corner brackets
+    draw_9slice_plate(
+        0, 2,
+        bg_col=hex_rgba("#10141B", 244),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#090B0F", 250),
+        bot_bevel=PAL["SLATE_DARK"],
+        corner_bracket=PAL["SLATE_LIGHT"],
+        rivets=False,
+        chamfer=True,
+        recessed=True,
+    )
+    # (1, 2) equip_hover: Hovered rig slot with cyan brackets
+    draw_9slice_plate(
+        1, 2,
+        bg_col=hex_rgba("#18222E", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["CYAN_GLASS"],
+        bot_bevel=PAL["CYAN_GLASS"],
+        corner_bracket=PAL["CYAN_GLOW"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (2, 2) equip_filled: Equipped rig slot with emerald lock brackets
+    draw_9slice_plate(
+        2, 2,
+        bg_col=hex_rgba("#11211B", 246),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#267347", 250),
+        bot_bevel=hex_rgba("#16442A", 250),
+        corner_bracket=PAL["NVG_GREEN"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (3, 2) equip_gold: Mastery Lv.3 gold rig slot
+    draw_9slice_plate(
+        3, 2,
+        bg_col=hex_rgba("#241B0B", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["ROAD_YELLOW"],
+        bot_bevel=PAL["BRASS_DARK"],
+        corner_bracket=PAL["MUZZLE_CORE"],
+        rivets=True,
+        chamfer=True,
+    )
+    # (4, 2) quickslot_normal: HUD 52x52 quickslot frame
+    draw_9slice_plate(
+        4, 2,
+        bg_col=hex_rgba("#0D1117", 238),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_MID"],
+        bot_bevel=hex_rgba("#080A0E", 250),
+        corner_bracket=PAL["SLATE_LIGHT"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (5, 2) quickslot_active: Active HUD quickslot with bright amber frame
+    draw_9slice_plate(
+        5, 2,
+        bg_col=hex_rgba("#18202B", 248),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["ROAD_YELLOW"],
+        bot_bevel=PAL["BRASS"],
+        corner_bracket=PAL["MUZZLE_CORE"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (6, 2) quickslot_unavailable: Unavailable/empty HUD quickslot
+    draw_9slice_plate(
+        6, 2,
+        bg_col=hex_rgba("#080A0E", 215),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["CHARCOAL"],
+        bot_bevel=PAL["SHADOW_DARK"],
+        corner_bracket=PAL["SLATE_DARK"],
+        rivets=False,
+        chamfer=True,
+        recessed=True,
+    )
+    # (7, 2) slot_compat_green: Drag-drop compatible slot highlight
+    draw_9slice_plate(
+        7, 2,
+        bg_col=hex_rgba("#143820", 235),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["NVG_GREEN"],
+        bot_bevel=hex_rgba("#1E7A38", 250),
+        corner_bracket=PAL["WHITE_MUTED"],
+        rivets=False,
+        chamfer=True,
+    )
+
+    # --- ROW 3: GAUGES, SCROLLBARS & BADGES ---
+    # (0, 3) progress_bg: Recessed pixel bar housing
+    draw_9slice_plate(
+        0, 3,
+        bg_col=hex_rgba("#080A0E", 246),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#050609", 252),
+        bot_bevel=PAL["SLATE_DARK"],
+        corner_bracket=PAL["SLATE_MID"],
+        rivets=False,
+        chamfer=False,
+        recessed=True,
+    )
+    # (1, 3) progress_fill_amber: Pixel LED bar fill
+    ox, oy = 1 * CS, 3 * CS
+    c.fill_rect(ox, oy, CS, CS, PAL["ROAD_YELLOW"], 0.78)
+    c.fill_rect(ox, oy, CS, 2, PAL["MUZZLE_CORE"], 0.92)
+    c.fill_rect(ox, oy + CS - 2, CS, 2, PAL["ROAD_YELLOW_DIM"], 0.45)
+    c.fill_rect(ox, oy, 1, CS, PAL["MUZZLE_CORE"], 0.88)
+    c.fill_rect(ox + CS - 1, oy, 1, CS, PAL["BRASS_DARK"], 0.50)
+
+    # (2, 3) scroll_bg: Recessed scrollbar track
+    draw_9slice_plate(
+        2, 3,
+        bg_col=hex_rgba("#07090C", 200),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["CHARCOAL"],
+        bot_bevel=PAL["SLATE_DARK"],
+        rivets=False,
+        chamfer=False,
+        recessed=True,
+    )
+    # (3, 3) scroll_grabber: Knurled steel scrollbar thumb
+    draw_9slice_plate(
+        3, 3,
+        bg_col=PAL["SLATE_MID"],
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["STEEL_BRIGHT"],
+        bot_bevel=PAL["CHARCOAL"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (4, 3) badge_frame: Status badge & event log toast frame
+    draw_9slice_plate(
+        4, 3,
+        bg_col=hex_rgba("#0C1017", 238),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_MID"],
+        bot_bevel=hex_rgba("#080A0E", 248),
+        left_led=PAL["ROAD_YELLOW"],
+        led_core=PAL["MUZZLE_CORE"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (5, 3) slot_incompat_red: Drag-drop incompatible slot highlight
+    draw_9slice_plate(
+        5, 3,
+        bg_col=hex_rgba("#381416", 235),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["RED_LED"],
+        bot_bevel=PAL["BLOOD_DARK"],
+        corner_bracket=PAL["MUZZLE_CORE"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (6, 3) slot_guide_compat: Drag-drop compatible guide slot
+    draw_9slice_plate(
+        6, 3,
+        bg_col=hex_rgba("#0F2618", 190),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=hex_rgba("#2CA854", 220),
+        bot_bevel=hex_rgba("#16442A", 220),
+        corner_bracket=PAL["NVG_GREEN"],
+        rivets=False,
+        chamfer=True,
+    )
+    # (7, 3) slot_guide_default: Drag-drop neutral guide slot
+    draw_9slice_plate(
+        7, 3,
+        bg_col=hex_rgba("#11141B", 160),
+        outer_col=PAL["OUTLINE"],
+        top_bevel=PAL["SLATE_DARK"],
+        bot_bevel=PAL["CHARCOAL"],
+        corner_bracket=PAL["SLATE_MID"],
+        rivets=False,
+        chamfer=True,
+    )
+
+    return c.save_pair("ui/ui_theme_atlas", CS, CS, strength=1.8)
+
+
+# ==============================================================================
 # MAIN
 # ==============================================================================
 def main():
@@ -2034,6 +2504,7 @@ def main():
     generated.append(("weapons/weapon_parts", bake_weapon_parts()))
     generated.append(("entities/enemies", bake_enemies()))
     generated.append(("props/world_props", bake_world_props()))
+    generated.append(("ui/ui_theme_atlas", bake_ui_theme_atlas()))
 
     manifest = {"atlases": {}}
     print("=== PIXEL ASSETS BAKED SUCCESSFULLY ===")

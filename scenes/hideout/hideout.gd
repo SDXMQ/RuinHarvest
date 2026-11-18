@@ -916,16 +916,15 @@ func _refresh_trader_sell_ui() -> void:
 				btn.custom_minimum_size = Vector2(110, 50)
 				
 				var btn_style = StyleBoxFlat.new()
-				btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
-				btn_style.border_width_left = 1
+				btn_style.bg_color = Color(0.11, 0.14, 0.18, 0.96)
+				btn_style.border_width_left = 2
 				btn_style.border_width_top = 1
 				btn_style.border_width_right = 1
-				btn_style.border_width_bottom = 1
-				btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
-				btn_style.corner_radius_top_left = 4
-				btn_style.corner_radius_top_right = 4
-				btn_style.corner_radius_bottom_right = 4
-				btn_style.corner_radius_bottom_left = 4
+				btn_style.border_width_bottom = 2
+				btn_style.border_color = Color(0.32, 0.38, 0.48, 1.0)
+				btn_style.set_corner_radius_all(0)
+				btn_style.corner_detail = 1
+				btn_style.anti_aliasing = false
 				btn.add_theme_stylebox_override("normal", btn_style)
 				
 				if ItemIconManager:
@@ -984,21 +983,23 @@ func _refresh_market_ui() -> void:
 	if not bounties.is_empty():
 		var bounty_panel = PanelContainer.new()
 		bounty_panel.name = "BountyOrderPanel"
-		var bounty_sb := StyleBoxFlat.new()
-		bounty_sb.bg_color = Color(0.18, 0.14, 0.05, 0.96)
-		bounty_sb.border_width_left = 4
-		bounty_sb.border_width_top = 2
-		bounty_sb.border_width_right = 2
-		bounty_sb.border_width_bottom = 2
-		bounty_sb.border_color = Color(1.0, 0.82, 0.22, 0.98)
-		bounty_sb.corner_radius_top_left = 6
-		bounty_sb.corner_radius_top_right = 6
-		bounty_sb.corner_radius_bottom_left = 6
-		bounty_sb.corner_radius_bottom_right = 6
-		bounty_sb.content_margin_left = 12
-		bounty_sb.content_margin_right = 12
-		bounty_sb.content_margin_top = 10
-		bounty_sb.content_margin_bottom = 10
+		var bounty_sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_bounty") if PixelAssetManager else null
+		if bounty_sb == null:
+			var flat_bounty := StyleBoxFlat.new()
+			flat_bounty.bg_color = Color(0.18, 0.14, 0.05, 0.96)
+			flat_bounty.border_width_left = 4
+			flat_bounty.border_width_top = 2
+			flat_bounty.border_width_right = 2
+			flat_bounty.border_width_bottom = 2
+			flat_bounty.border_color = Color(1.0, 0.82, 0.22, 0.98)
+			flat_bounty.set_corner_radius_all(0)
+			flat_bounty.corner_detail = 1
+			flat_bounty.anti_aliasing = false
+			flat_bounty.content_margin_left = 12
+			flat_bounty.content_margin_right = 12
+			flat_bounty.content_margin_top = 10
+			flat_bounty.content_margin_bottom = 10
+			bounty_sb = flat_bounty
 		bounty_panel.add_theme_stylebox_override("panel", bounty_sb)
 
 		var b_vbox = VBoxContainer.new()
@@ -1121,16 +1122,15 @@ func _refresh_market_register_ui() -> void:
 				btn.custom_minimum_size = Vector2(110, 50)
 				
 				var btn_style = StyleBoxFlat.new()
-				btn_style.bg_color = Color(0.18, 0.20, 0.25, 0.95)
-				btn_style.border_width_left = 1
+				btn_style.bg_color = Color(0.11, 0.14, 0.18, 0.96)
+				btn_style.border_width_left = 2
 				btn_style.border_width_top = 1
 				btn_style.border_width_right = 1
-				btn_style.border_width_bottom = 1
-				btn_style.border_color = Color(0.35, 0.40, 0.48, 1.0)
-				btn_style.corner_radius_top_left = 4
-				btn_style.corner_radius_top_right = 4
-				btn_style.corner_radius_bottom_right = 4
-				btn_style.corner_radius_bottom_left = 4
+				btn_style.border_width_bottom = 2
+				btn_style.border_color = Color(0.32, 0.38, 0.48, 1.0)
+				btn_style.set_corner_radius_all(0)
+				btn_style.corner_detail = 1
+				btn_style.anti_aliasing = false
 				btn.add_theme_stylebox_override("normal", btn_style)
 				
 				if ItemIconManager:

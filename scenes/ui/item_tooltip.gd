@@ -73,11 +73,17 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 		
 	name_label.add_theme_color_override("font_color", name_color)
 	
-	# 테두리 색상 갱신
+	# 테두리 색상 갱신 (픽셀 코너 및 안티앨리어싱 비활성화)
 	var current_sb = get_theme_stylebox("panel")
 	if current_sb is StyleBoxFlat:
 		var custom_sb = current_sb.duplicate() as StyleBoxFlat
 		custom_sb.border_color = border_color
+		custom_sb.corner_radius_top_left = 0
+		custom_sb.corner_radius_top_right = 0
+		custom_sb.corner_radius_bottom_left = 0
+		custom_sb.corner_radius_bottom_right = 0
+		custom_sb.corner_detail = 1
+		custom_sb.anti_aliasing = false
 		add_theme_stylebox_override("panel", custom_sb)
 		
 	# 3. 카테고리 / 무게 / 가격 메타데이터
@@ -133,10 +139,12 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 		
 		var ratio = cur_dur / max_dur
 		var fill_style = StyleBoxFlat.new()
-		fill_style.corner_radius_top_left = 2
-		fill_style.corner_radius_top_right = 2
-		fill_style.corner_radius_bottom_right = 2
-		fill_style.corner_radius_bottom_left = 2
+		fill_style.corner_radius_top_left = 0
+		fill_style.corner_radius_top_right = 0
+		fill_style.corner_radius_bottom_right = 0
+		fill_style.corner_radius_bottom_left = 0
+		fill_style.corner_detail = 1
+		fill_style.anti_aliasing = false
 		if ratio > 0.6:
 			fill_style.bg_color = Color(0.2, 0.8, 0.3)
 		elif ratio > 0.3:

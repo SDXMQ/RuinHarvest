@@ -34,15 +34,19 @@ func _create_save_slot_card(info: Dictionary) -> Control:
 	panel.custom_minimum_size = Vector2(0, 64)
 	
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.12, 0.16, 0.9)
-	style.border_width_left = 3
+	style.bg_color = Color(0.07, 0.09, 0.13, 0.95)
+	style.border_width_left = 4
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 2
 	style.border_color = Color(0.3, 0.6, 0.9)
 	style.content_margin_left = 12
 	style.content_margin_right = 12
 	style.content_margin_top = 8
 	style.content_margin_bottom = 8
-	style.corner_radius_top_right = 4
-	style.corner_radius_bottom_right = 4
+	style.set_corner_radius_all(0)
+	style.corner_detail = 1
+	style.anti_aliasing = false
 	panel.add_theme_stylebox_override("panel", style)
 	
 	var hbox = HBoxContainer.new()

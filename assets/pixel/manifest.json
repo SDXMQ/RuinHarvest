@@ -29,6 +29,12 @@
       "normal": "res://assets/pixel/props/world_props_n.png",
       "width": 256,
       "height": 192
+    },
+    "ui/ui_theme_atlas": {
+      "diffuse": "res://assets/pixel/ui/ui_theme_atlas_d.png",
+      "normal": "res://assets/pixel/ui/ui_theme_atlas_n.png",
+      "width": 192,
+      "height": 96
     }
   }
 }

@@ -26,10 +26,12 @@ static func _make_stylebox(bg: Color, border: Color, bw: int) -> StyleBoxFlat:
 	sb.bg_color = bg
 	sb.border_color = border
 	sb.set_border_width_all(bw)
-	sb.corner_radius_top_left = 4
-	sb.corner_radius_top_right = 4
-	sb.corner_radius_bottom_left = 4
-	sb.corner_radius_bottom_right = 4
+	sb.corner_radius_top_left = 0
+	sb.corner_radius_top_right = 0
+	sb.corner_radius_bottom_left = 0
+	sb.corner_radius_bottom_right = 0
+	sb.corner_detail = 1
+	sb.anti_aliasing = false
 	return sb
 
 static func is_slot_compatible(item_id: String, slot_name: String) -> bool:
@@ -55,6 +57,24 @@ static func is_slot_compatible(item_id: String, slot_name: String) -> bool:
 		return false
 	return false
 
+static func _draw_pixel_corner_brackets(ctrl: Control, rect: Rect2, col: Color, arm_len: float = 4.0, thick: float = 1.0) -> void:
+	var x0 := floorf(rect.position.x)
+	var y0 := floorf(rect.position.y)
+	var x1 := floorf(rect.position.x + rect.size.x)
+	var y1 := floorf(rect.position.y + rect.size.y)
+	# Top-Left
+	ctrl.draw_rect(Rect2(x0, y0, arm_len, thick), col, true)
+	ctrl.draw_rect(Rect2(x0, y0, thick, arm_len), col, true)
+	# Top-Right
+	ctrl.draw_rect(Rect2(x1 - arm_len, y0, arm_len, thick), col, true)
+	ctrl.draw_rect(Rect2(x1 - thick, y0, thick, arm_len), col, true)
+	# Bottom-Left
+	ctrl.draw_rect(Rect2(x0, y1 - thick, arm_len, thick), col, true)
+	ctrl.draw_rect(Rect2(x0, y1 - arm_len, thick, arm_len), col, true)
+	# Bottom-Right
+	ctrl.draw_rect(Rect2(x1 - arm_len, y1 - thick, arm_len, thick), col, true)
+	ctrl.draw_rect(Rect2(x1 - thick, y1 - arm_len, thick, arm_len), col, true)
+
 static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2i, is_player_grid: bool, is_dragging: bool = false, drag_data: Dictionary = {}, cell_size: float = CELL_SIZE) -> void:
 	if not ctrl or not grid_mgr: return
 	
@@ -62,29 +82,53 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 	var h = grid_mgr.grid_height
 	var font = ThemeDB.fallback_font
 	
-	# 0. 전체 그리드 베이스 배경
+	# 0. 전체 그리드 베이스 배경 (다크 택티컬 스틸 웰)
 	var full_rect = Rect2(0, 0, w * cell_size, h * cell_size)
-	ctrl.draw_rect(full_rect, Color(0.055, 0.065, 0.085, 0.92), true)
+	ctrl.draw_rect(full_rect, Color(0.035, 0.045, 0.062, 0.96), true)
+	
+	# 각 셀 내부의 리세스(오목) 도트 슬롯 디테일
+	var cell_well_col := Color(0.055, 0.068, 0.092, 0.94)
+	var cell_shadow_col := Color(0.02, 0.025, 0.038, 0.95)
+	for cy in range(h):
+		for cx in range(w):
+			var c_rect := Rect2(cx * cell_size + 2.0, cy * cell_size + 2.0, cell_size - 4.0, cell_size - 4.0)
+			ctrl.draw_rect(c_rect, cell_well_col, true)
+			ctrl.draw_rect(Rect2(c_rect.position.x, c_rect.position.y, c_rect.size.x, 1.0), cell_shadow_col, true)
+			ctrl.draw_rect(Rect2(c_rect.position.x, c_rect.position.y, 1.0, c_rect.size.y), cell_shadow_col, true)
 	
 	# 1. 배경 격자선 및 플레이어 배낭 좌상단 2x2 안전 컨테이너(Secure Pouch) 구역 표시
 	if is_player_grid and w >= 2 and h >= 2:
 		var pouch_rect = Rect2(0, 0, 2 * cell_size, 2 * cell_size)
-		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.07), true)
-		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.55), false, 1.5)
-		ctrl.draw_string(font, Vector2(4, 2 * cell_size - 5), "SECURE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.92, 0.68, 0.22, 0.35))
+		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.08), true)
+		# 상단 해저드 도트 스트라이프 틱
+		for hx in range(0, int(2 * cell_size) - 4, 8):
+			ctrl.draw_rect(Rect2(hx + 2, 2, 4, 2), Color(0.92, 0.68, 0.22, 0.38), true)
+		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.62), false, 1.0)
+		_draw_pixel_corner_brackets(ctrl, Rect2(1, 1, 2 * cell_size - 2, 2 * cell_size - 2), Color(1.0, 0.78, 0.28, 0.9), 6.0, 2.0)
+		ctrl.draw_string(font, Vector2(5, 2 * cell_size - 5), "SECURE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.95, 0.72, 0.24, 0.55))
 		
-	var line_col = Color(0.19, 0.23, 0.29, 0.85)
+	var line_col = Color(0.16, 0.20, 0.26, 0.9)
 	for x in range(w + 1):
 		ctrl.draw_line(Vector2(x * cell_size, 0), Vector2(x * cell_size, h * cell_size), line_col, 1.0)
 	for y in range(h + 1):
 		ctrl.draw_line(Vector2(0, y * cell_size), Vector2(w * cell_size, y * cell_size), line_col, 1.0)
+	
+	# 격자 교차점 도트 크로스헤어(+) 리벳 포인트
+	var cross_col := Color(0.24, 0.30, 0.38, 0.85)
+	for cy in range(1, h):
+		for cx in range(1, w):
+			var px := floorf(cx * cell_size)
+			var py := floorf(cy * cell_size)
+			ctrl.draw_rect(Rect2(px - 1.0, py, 3.0, 1.0), cross_col, true)
+			ctrl.draw_rect(Rect2(px, py - 1.0, 1.0, 3.0), cross_col, true)
 		
-	# 마우스 호버 셀 미세 하이라이트 (비드래그 상태)
+	# 마우스 호버 셀 미세 하이라이트 + 픽셀 코너 브래킷 (비드래그 상태)
 	if not is_dragging and hovered_cell.x >= 0 and hovered_cell.x < w and hovered_cell.y >= 0 and hovered_cell.y < h:
 		var hover_cell_rect = Rect2(hovered_cell.x * cell_size + 1, hovered_cell.y * cell_size + 1, cell_size - 2, cell_size - 2)
-		ctrl.draw_rect(hover_cell_rect, Color(0.88, 0.65, 0.22, 0.08), true)
+		ctrl.draw_rect(hover_cell_rect, Color(0.92, 0.65, 0.20, 0.10), true)
+		_draw_pixel_corner_brackets(ctrl, hover_cell_rect, Color(0.95, 0.68, 0.22, 0.75), 5.0, 1.0)
 		
-	# 2. 배치된 아이템 렌더링
+	# 2. 배치된 아이템 렌더링 (픽셀 베벨 카드 + 희귀도 LED 바 + 코너 브래킷)
 	for item in grid_mgr.items:
 		if item.is_empty(): continue
 		if is_dragging and (drag_data.get("source") == "grid" or drag_data.get("source") == "player_grid") and drag_data.get("item", {}).get("uid") == item.get("uid"):
@@ -104,18 +148,31 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		elif rarity <= 0.35:
 			rarity_accent = Color(0.35, 0.72, 0.98, 0.95)
 			
-		var item_bg = Color(0.12, 0.145, 0.185, 0.96) if is_player_grid else Color(0.11, 0.13, 0.165, 0.96)
-		var item_border = Color(0.28, 0.35, 0.44, 0.95)
+		var item_bg = Color(0.11, 0.135, 0.175, 0.96) if is_player_grid else Color(0.10, 0.12, 0.155, 0.96)
+		# 외곽 1px 암색 림 + 내부 스텝 베벨
+		ctrl.draw_rect(Rect2(item_rect.position.x - 1.0, item_rect.position.y - 1.0, item_rect.size.x + 2.0, item_rect.size.y + 2.0), Color(0.02, 0.03, 0.04, 0.95), false, 1.0)
 		ctrl.draw_rect(item_rect, item_bg, true)
-		ctrl.draw_rect(item_rect, item_border, false, 1.0)
-		# 좌측 상단 희귀도 액센트 바
+		# 상단/좌측 밝은 베벨, 하단/우측 어두운 베벨
+		ctrl.draw_rect(Rect2(item_rect.position.x, item_rect.position.y, item_rect.size.x, 1.0), Color(0.28, 0.35, 0.45, 0.95), true)
+		ctrl.draw_rect(Rect2(item_rect.position.x, item_rect.position.y + item_rect.size.y - 1.0, item_rect.size.x, 1.0), Color(0.16, 0.20, 0.27, 0.95), true)
+		ctrl.draw_rect(Rect2(item_rect.position.x + item_rect.size.x - 1.0, item_rect.position.y, 1.0, item_rect.size.y), Color(0.16, 0.20, 0.27, 0.95), true)
+		# 좌측 희귀도 LED 액센트 바 + 상단 스페큘러 픽셀 도트
 		ctrl.draw_rect(Rect2(item_rect.position.x, item_rect.position.y, 3.0, item_rect.size.y), rarity_accent, true)
+		ctrl.draw_rect(Rect2(item_rect.position.x + 1.0, item_rect.position.y + 1.0, 1.0, 2.0), Color(1.0, 0.98, 0.92, 0.9), true)
+		# 우상단/우하단 희귀도 도트 코너 브래킷
+		var rx1 := item_rect.position.x + item_rect.size.x
+		var ry0 := item_rect.position.y
+		var ry1 := item_rect.position.y + item_rect.size.y
+		ctrl.draw_rect(Rect2(rx1 - 4.0, ry0, 4.0, 1.0), rarity_accent, true)
+		ctrl.draw_rect(Rect2(rx1 - 1.0, ry0, 1.0, 4.0), rarity_accent, true)
+		ctrl.draw_rect(Rect2(rx1 - 4.0, ry1 - 1.0, 4.0, 1.0), rarity_accent, true)
+		ctrl.draw_rect(Rect2(rx1 - 1.0, ry1 - 4.0, 1.0, 4.0), rarity_accent, true)
 		
 		# 아이콘
 		var icon_tex = ItemIconManager.get_icon(item.get("id", "")) if ItemIconManager else null
 		if icon_tex:
-			var icon_size = Vector2(min(item_rect.size.x, item_rect.size.y) * 0.72, min(item_rect.size.x, item_rect.size.y) * 0.72)
-			var icon_pos = item_rect.position + (item_rect.size - icon_size) / 2.0
+			var icon_size = Vector2(floorf(min(item_rect.size.x, item_rect.size.y) * 0.72), floorf(min(item_rect.size.x, item_rect.size.y) * 0.72))
+			var icon_pos = (item_rect.position + (item_rect.size - icon_size) / 2.0).floor()
 			ctrl.draw_texture_rect(icon_tex, Rect2(icon_pos, icon_size), false)
 			
 		# 수량
@@ -150,26 +207,31 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			var text_w = 42.0
 			ctrl.draw_string(font, item_rect.position + Vector2(item_rect.size.x - text_w - 4, item_rect.size.y - 4), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, font_sz, ammo_col)
 
-		# 방어구/헬멧 내구도 바 표기 (셀 하단)
+		# 방어구/헬멧 내구도 바 표기 (셀 하단 세그먼트 픽셀 LED 바)
 		var is_armor = cat == ItemDatabase.ItemCategory.EQUIPMENT and (d.get("equip_slot") in ["vest", "helmet"] or item_id_str.contains("방탄") or item_id_str.contains("헬멧") or item_id_str.contains("조끼") or item_id_str.contains("방독면"))
 		if is_armor:
 			var max_dur = float(item.get("max_durability", d.get("max_durability", 100.0)))
 			if max_dur > 0.0:
 				var cur_dur = float(item.get("durability", max_dur))
 				var ratio = clamp(cur_dur / max_dur, 0.0, 1.0)
-				var bar_w = item_rect.size.x - 6.0
+				var bar_w = item_rect.size.x - 8.0
 				var bar_h = 3.0
-				var bar_rect = Rect2(item_rect.position.x + 3.0, item_rect.position.y + item_rect.size.y - bar_h - 2.0, bar_w, bar_h)
-				ctrl.draw_rect(bar_rect, Color(0.1, 0.12, 0.15, 0.85), true)
+				var bar_rect = Rect2(item_rect.position.x + 4.0, item_rect.position.y + item_rect.size.y - bar_h - 2.0, bar_w, bar_h)
+				ctrl.draw_rect(bar_rect, Color(0.05, 0.07, 0.09, 0.92), true)
 				var dur_col = Color(0.25, 0.85, 0.4, 0.95)
 				if ratio < 0.25:
 					dur_col = Color(0.95, 0.25, 0.25, 0.95)
 				elif ratio < 0.6:
 					dur_col = Color(0.95, 0.75, 0.2, 0.95)
 				if ratio > 0.0:
-					ctrl.draw_rect(Rect2(bar_rect.position.x, bar_rect.position.y, bar_w * ratio, bar_h), dur_col, true)
+					var filled_w := floorf(bar_w * ratio)
+					var seg_x := 0.0
+					while seg_x < filled_w:
+						var seg_w := minf(3.0, filled_w - seg_x)
+						ctrl.draw_rect(Rect2(bar_rect.position.x + seg_x, bar_rect.position.y, seg_w, bar_h), dur_col, true)
+						seg_x += 4.0
 
-	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강)
+	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강 픽셀 타겟 브래킷)
 	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
 		var item = drag_data.get("item", {})
 		var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
@@ -185,11 +247,12 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		var can_place = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid, item.get("id", ""))
 		var ghost_rect = Rect2(hovered_cell.x * cell_size, hovered_cell.y * cell_size, place_w * cell_size, place_h * cell_size)
 		
-		var col = Color(0.2, 0.8, 0.3, 0.4) if can_place else Color(0.9, 0.2, 0.2, 0.4)
-		var border_col = Color(0.3, 1.0, 0.4, 0.9) if can_place else Color(1.0, 0.3, 0.3, 0.9)
+		var col = Color(0.16, 0.72, 0.28, 0.35) if can_place else Color(0.85, 0.18, 0.18, 0.35)
+		var border_col = Color(0.32, 1.0, 0.45, 0.95) if can_place else Color(1.0, 0.32, 0.32, 0.95)
 		
 		ctrl.draw_rect(ghost_rect, col, true)
-		ctrl.draw_rect(ghost_rect, border_col, false, 2.0)
+		ctrl.draw_rect(ghost_rect, border_col, false, 1.0)
+		_draw_pixel_corner_brackets(ctrl, Rect2(ghost_rect.position.x + 1, ghost_rect.position.y + 1, ghost_rect.size.x - 2, ghost_rect.size.y - 2), border_col, 6.0, 2.0)
 
 static func highlight_compatible_slots(drop_targets: Array, item: Dictionary, hovered_ctrl: Control = null) -> void:
 	init_cached_styleboxes()
@@ -221,11 +284,17 @@ static func highlight_compatible_slots(drop_targets: Array, item: Dictionary, ho
 			var p_data = WeaponPartsDatabase.PARTS.get(item_id, {})
 			is_compat = (p_data.get("slot", "") == attach_type)
 			
-		var sb: StyleBoxFlat
-		if ctrl == hovered_ctrl:
-			sb = _sb_hover_compat if is_compat else _sb_hover_incompat
-		else:
-			sb = _sb_guide_compat if is_compat else _sb_guide_default
+		var sb: StyleBox = null
+		if PixelAssetManager:
+			if ctrl == hovered_ctrl:
+				sb = PixelAssetManager.get_ui_stylebox("slot_compat_green" if is_compat else "slot_incompat_red")
+			else:
+				sb = PixelAssetManager.get_ui_stylebox("slot_guide_compat" if is_compat else "slot_guide_default")
+		if sb == null:
+			if ctrl == hovered_ctrl:
+				sb = _sb_hover_compat if is_compat else _sb_hover_incompat
+			else:
+				sb = _sb_guide_compat if is_compat else _sb_guide_default
 				
 		ctrl.add_theme_stylebox_override("normal", sb)
 		ctrl.add_theme_stylebox_override("hover", sb)
@@ -269,17 +338,24 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 			var m_info := HideoutProgression.get_weapon_mastery_bonus(w_data, item_id)
 			is_gold_master = bool(m_info.get("gold_border", false))
 
-		var eq_sb := StyleBoxFlat.new()
-		eq_sb.bg_color = Color(0.16, 0.13, 0.06, 0.94) if is_gold_master else Color(0.11, 0.17, 0.22, 0.94)
-		eq_sb.border_width_left = 2
-		eq_sb.border_width_top = 2
-		eq_sb.border_width_right = 2
-		eq_sb.border_width_bottom = 2
-		eq_sb.border_color = Color(1.0, 0.84, 0.22, 0.98) if is_gold_master else Color(0.32, 0.82, 0.55, 0.92)
-		eq_sb.corner_radius_top_left = 4
-		eq_sb.corner_radius_top_right = 4
-		eq_sb.corner_radius_bottom_left = 4
-		eq_sb.corner_radius_bottom_right = 4
+		var eq_sb: StyleBox = null
+		if PixelAssetManager:
+			eq_sb = PixelAssetManager.get_ui_stylebox("equip_gold" if is_gold_master else "equip_filled")
+		if eq_sb == null:
+			var flat_sb := StyleBoxFlat.new()
+			flat_sb.bg_color = Color(0.16, 0.13, 0.06, 0.94) if is_gold_master else Color(0.11, 0.17, 0.22, 0.94)
+			flat_sb.border_width_left = 2
+			flat_sb.border_width_top = 2
+			flat_sb.border_width_right = 2
+			flat_sb.border_width_bottom = 2
+			flat_sb.border_color = Color(1.0, 0.84, 0.22, 0.98) if is_gold_master else Color(0.32, 0.82, 0.55, 0.92)
+			flat_sb.corner_radius_top_left = 0
+			flat_sb.corner_radius_top_right = 0
+			flat_sb.corner_radius_bottom_left = 0
+			flat_sb.corner_radius_bottom_right = 0
+			flat_sb.corner_detail = 1
+			flat_sb.anti_aliasing = false
+			eq_sb = flat_sb
 		btn.add_theme_stylebox_override("normal", eq_sb)
 
 		if is_tall_slot:
@@ -353,7 +429,8 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 				dur_bar.offset_top = -6.0
 				dur_bar.offset_bottom = -2.0
 				var bg_style = StyleBoxFlat.new()
-				bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.65)
+				bg_style.bg_color = Color(0.05, 0.06, 0.08, 0.85)
+				bg_style.anti_aliasing = false
 				dur_bar.add_theme_stylebox_override("background", bg_style)
 				btn.add_child(dur_bar)
 			dur_bar.max_value = max_dur
@@ -361,6 +438,7 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 			var ratio = cur_dur / max_dur
 			var fill_style = StyleBoxFlat.new()
 			fill_style.bg_color = Color(0.2, 0.85, 0.3) if ratio > 0.5 else (Color(0.9, 0.7, 0.1) if ratio > 0.25 else Color(0.9, 0.2, 0.2))
+			fill_style.anti_aliasing = false
 			dur_bar.add_theme_stylebox_override("fill", fill_style)
 			dur_bar.visible = true
 		elif dur_bar:

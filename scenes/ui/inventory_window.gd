@@ -559,10 +559,15 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	context_menu_panel.z_index = 300
 
 	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.08, 0.10, 0.14, 0.98)
-	sb.border_color = Color(0.35, 0.45, 0.60, 0.9)
-	sb.set_border_width_all(1)
-	sb.set_corner_radius_all(4)
+	sb.bg_color = Color(0.055, 0.07, 0.095, 0.98)
+	sb.border_color = Color(0.35, 0.45, 0.60, 0.95)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(0)
+	sb.corner_detail = 1
+	sb.anti_aliasing = false
+	sb.shadow_color = Color(0, 0, 0, 0.85)
+	sb.shadow_size = 1
+	sb.shadow_offset = Vector2(3, 3)
 	sb.content_margin_left = 6
 	sb.content_margin_right = 6
 	sb.content_margin_top = 6
@@ -1528,9 +1533,15 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	var panel = PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.1, 0.12, 0.16, 0.9)
+	style.bg_color = Color(0.065, 0.08, 0.11, 0.95)
 	style.border_width_left = 3
+	style.border_width_top = 1
+	style.border_width_right = 1
+	style.border_width_bottom = 1
 	style.border_color = Color(0.9, 0.4, 0.4) if slot_key.begins_with("primary") else Color(0.4, 0.7, 1.0)
+	style.set_corner_radius_all(0)
+	style.corner_detail = 1
+	style.anti_aliasing = false
 	style.content_margin_left = 8
 	style.content_margin_right = 8
 	style.content_margin_top = 6
@@ -1568,12 +1579,15 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	if not weapon_dict.is_empty() and ItemIconManager:
 		var icon_frame := PanelContainer.new()
 		var ic_sb := StyleBoxFlat.new()
-		ic_sb.bg_color = Color(0.07, 0.09, 0.13, 0.95)
+		ic_sb.bg_color = Color(0.05, 0.065, 0.095, 0.96)
 		ic_sb.border_width_left = 2 if is_gold_master else 1
 		ic_sb.border_width_top = 2 if is_gold_master else 1
 		ic_sb.border_width_right = 2 if is_gold_master else 1
 		ic_sb.border_width_bottom = 2 if is_gold_master else 1
-		ic_sb.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gold_master else Color(0.35, 0.78, 0.55, 0.9)
+		ic_sb.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gold_master else Color(0.35, 0.78, 0.55, 0.92)
+		ic_sb.set_corner_radius_all(0)
+		ic_sb.corner_detail = 1
+		ic_sb.anti_aliasing = false
 		icon_frame.add_theme_stylebox_override("panel", ic_sb)
 		var wep_icon := TextureRect.new()
 		wep_icon.name = "EquippedWeaponIcon"
@@ -1634,9 +1648,11 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 			var dur_style = StyleBoxFlat.new()
 			var ratio = cur_dur / max_dur
 			dur_style.bg_color = Color(0.2, 0.85, 0.3) if ratio > 0.5 else (Color(0.9, 0.7, 0.1) if ratio > 0.25 else Color(0.9, 0.2, 0.2))
+			dur_style.anti_aliasing = false
 			dur_bar.add_theme_stylebox_override("fill", dur_style)
 			var bg_style = StyleBoxFlat.new()
-			bg_style.bg_color = Color(0.1, 0.1, 0.1, 0.6)
+			bg_style.bg_color = Color(0.05, 0.06, 0.08, 0.85)
+			bg_style.anti_aliasing = false
 			dur_bar.add_theme_stylebox_override("background", bg_style)
 			vbox.add_child(dur_bar)
 	
@@ -2128,13 +2144,12 @@ func _rebuild_drag_preview() -> void:
 	bg_panel.size = Vector2(total_w - 4, total_h - 4)
 	
 	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.12, 0.15, 0.20, 0.85)
-	sb.border_color = Color(0.92, 0.68, 0.24, 0.95)
+	sb.bg_color = Color(0.09, 0.12, 0.16, 0.88)
+	sb.border_color = Color(0.92, 0.68, 0.24, 0.98)
 	sb.set_border_width_all(2)
-	sb.corner_radius_top_left = 3
-	sb.corner_radius_top_right = 3
-	sb.corner_radius_bottom_right = 3
-	sb.corner_radius_bottom_left = 3
+	sb.set_corner_radius_all(0)
+	sb.corner_detail = 1
+	sb.anti_aliasing = false
 	bg_panel.add_theme_stylebox_override("panel", sb)
 	drag_preview.add_child(bg_panel)
 	

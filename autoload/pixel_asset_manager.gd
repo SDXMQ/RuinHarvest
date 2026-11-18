@@ -10,7 +10,44 @@ var _canvas_cache: Dictionary = {}
 var _diffuse_cache: Dictionary = {}
 var _normal_cache: Dictionary = {}
 var _slice_cache: Dictionary = {}
+var _ui_stylebox_cache: Dictionary = {}
 var _radial_light_tex: GradientTexture2D = null
+
+const UI_CELL_SIZE := 24
+const UI_SLICE_COORDS := {
+	"panel_main": Vector2i(0, 0),
+	"panel_header": Vector2i(1, 0),
+	"panel_grid_surface": Vector2i(2, 0),
+	"panel_tooltip": Vector2i(3, 0),
+	"panel_line_edit": Vector2i(4, 0),
+	"tab_selected": Vector2i(5, 0),
+	"tab_unselected": Vector2i(6, 0),
+	"panel_bounty": Vector2i(7, 0),
+	"btn_normal": Vector2i(0, 1),
+	"btn_hover": Vector2i(1, 1),
+	"btn_pressed": Vector2i(2, 1),
+	"btn_disabled": Vector2i(3, 1),
+	"btn_primary_normal": Vector2i(4, 1),
+	"btn_primary_hover": Vector2i(5, 1),
+	"btn_danger_normal": Vector2i(6, 1),
+	"btn_danger_hover": Vector2i(7, 1),
+	"equip_normal": Vector2i(0, 2),
+	"equip_hover": Vector2i(1, 2),
+	"equip_filled": Vector2i(2, 2),
+	"equip_gold": Vector2i(3, 2),
+	"quickslot_normal": Vector2i(4, 2),
+	"quickslot_active": Vector2i(5, 2),
+	"quickslot_unavailable": Vector2i(6, 2),
+	"slot_compat_green": Vector2i(7, 2),
+	"progress_bg": Vector2i(0, 3),
+	"progress_fill_amber": Vector2i(1, 3),
+	"scroll_bg": Vector2i(2, 3),
+	"scroll_grabber": Vector2i(3, 3),
+	"badge_frame": Vector2i(4, 3),
+	"slot_incompat_red": Vector2i(5, 3),
+	"slot_guide_compat": Vector2i(6, 3),
+	"slot_guide_default": Vector2i(7, 3),
+}
 
 func _ready() -> void:
 	# 핵심 시트 선행 워밍업 (게임/테스트 진입 시 즉시 사용 가능)
@@ -19,9 +56,11 @@ func _ready() -> void:
 		"entities/player_parts",
 		"weapons/weapon_parts",
 		"entities/enemies",
-		"props/world_props"
+		"props/world_props",
+		"ui/ui_theme_atlas"
 	]:
 		get_canvas_texture(key)
+	apply_pixel_ui_theme()
 
 func create_pixel_entity_material(rim: float = 0.22, local_to_scene: bool = false) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
@@ -216,3 +255,134 @@ func _resolve_base_path(key: String) -> String:
 	if k.begins_with("res://"):
 		return k
 	return PIXEL_ROOT + k
+
+static func make_pixel_stylebox_flat(
+	bg: Color,
+	border: Color,
+	bw_left: int = 2,
+	bw_top: int = 2,
+	bw_right: int = 2,
+	bw_bottom: int = 2,
+	cm_h: float = 8.0,
+	cm_v: float = 6.0,
+	with_shadow: bool = false
+) -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = bg
+	sb.border_color = border
+	sb.border_width_left = bw_left
+	sb.border_width_top = bw_top
+	sb.border_width_right = bw_right
+	sb.border_width_bottom = bw_bottom
+	sb.corner_radius_top_left = 0
+	sb.corner_radius_top_right = 0
+	sb.corner_radius_bottom_left = 0
+	sb.corner_radius_bottom_right = 0
+	sb.corner_detail = 1
+	sb.anti_aliasing = false
+	sb.content_margin_left = cm_h
+	sb.content_margin_right = cm_h
+	sb.content_margin_top = cm_v
+	sb.content_margin_bottom = cm_v
+	if with_shadow:
+		sb.shadow_color = Color(0, 0, 0, 0.65)
+		sb.shadow_size = 1
+		sb.shadow_offset = Vector2(2, 2)
+	return sb
+
+func get_ui_stylebox(
+	style_name: String,
+	cm_l: float = 10.0,
+	cm_t: float = 6.0,
+	cm_r: float = 10.0,
+	cm_b: float = 6.0,
+	tex_margin: int = 6
+) -> StyleBox:
+	var cache_key := "%s:%d,%d,%d,%d:%d" % [style_name, int(cm_l), int(cm_t), int(cm_r), int(cm_b), tex_margin]
+	if _ui_stylebox_cache.has(cache_key):
+		return _ui_stylebox_cache[cache_key]
+
+	if UI_SLICE_COORDS.has(style_name):
+		var diff_tex := get_diffuse_texture("ui/ui_theme_atlas")
+		if diff_tex != null:
+			var d_img := diff_tex.get_image()
+			if d_img != null:
+				var cell: Vector2i = UI_SLICE_COORDS[style_name]
+				var sub_img := d_img.get_region(Rect2i(cell.x * UI_CELL_SIZE, cell.y * UI_CELL_SIZE, UI_CELL_SIZE, UI_CELL_SIZE))
+				var sub_tex := ImageTexture.create_from_image(sub_img)
+				var sbt := StyleBoxTexture.new()
+				sbt.texture = sub_tex
+				sbt.texture_margin_left = float(tex_margin)
+				sbt.texture_margin_top = float(tex_margin)
+				sbt.texture_margin_right = float(tex_margin)
+				sbt.texture_margin_bottom = float(tex_margin)
+				sbt.content_margin_left = cm_l
+				sbt.content_margin_top = cm_t
+				sbt.content_margin_right = cm_r
+				sbt.content_margin_bottom = cm_b
+				_ui_stylebox_cache[cache_key] = sbt
+				return sbt
+
+	var fallback := make_pixel_stylebox_flat(Color(0.08, 0.10, 0.13, 0.96), Color(0.28, 0.34, 0.42, 0.95), 2, 2, 2, 2, cm_l, cm_t)
+	_ui_stylebox_cache[cache_key] = fallback
+	return fallback
+
+func apply_pixel_ui_theme() -> void:
+	var themes_to_patch: Array[Theme] = []
+	if ResourceLoader.exists("res://ui/theme/tactical_theme.tres"):
+		var custom_t = load("res://ui/theme/tactical_theme.tres")
+		if custom_t is Theme:
+			themes_to_patch.append(custom_t)
+	var proj_t := ThemeDB.get_project_theme()
+	if proj_t != null and not (proj_t in themes_to_patch):
+		themes_to_patch.append(proj_t)
+
+	for t in themes_to_patch:
+		t.set_stylebox("panel", "Panel", get_ui_stylebox("panel_main", 10, 8, 10, 8))
+		t.set_stylebox("panel", "PanelContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8))
+		t.set_stylebox("panel", "PopupMenu", get_ui_stylebox("panel_tooltip", 10, 8, 10, 8))
+		t.set_stylebox("panel", "HeaderPanel", get_ui_stylebox("panel_header", 10, 5, 10, 5))
+		t.set_stylebox("panel", "GridSurfacePanel", get_ui_stylebox("panel_grid_surface", 6, 6, 6, 6))
+
+		var sb_btn_normal := get_ui_stylebox("btn_normal", 12, 6, 12, 6)
+		var sb_btn_hover := get_ui_stylebox("btn_hover", 12, 6, 12, 6)
+		var sb_btn_pressed := get_ui_stylebox("btn_pressed", 13, 7, 11, 5)
+		var sb_btn_disabled := get_ui_stylebox("btn_disabled", 12, 6, 12, 6)
+		t.set_stylebox("normal", "Button", sb_btn_normal)
+		t.set_stylebox("hover", "Button", sb_btn_hover)
+		t.set_stylebox("pressed", "Button", sb_btn_pressed)
+		t.set_stylebox("disabled", "Button", sb_btn_disabled)
+		t.set_stylebox("normal", "OptionButton", sb_btn_normal)
+		t.set_stylebox("hover", "OptionButton", sb_btn_hover)
+		t.set_stylebox("pressed", "OptionButton", sb_btn_pressed)
+
+		var sb_pri_normal := get_ui_stylebox("btn_primary_normal", 14, 6, 14, 6)
+		var sb_pri_hover := get_ui_stylebox("btn_primary_hover", 14, 6, 14, 6)
+		t.set_stylebox("normal", "PrimaryButton", sb_pri_normal)
+		t.set_stylebox("hover", "PrimaryButton", sb_pri_hover)
+		t.set_stylebox("pressed", "PrimaryButton", sb_pri_hover)
+
+		var sb_dng_normal := get_ui_stylebox("btn_danger_normal", 12, 6, 12, 6)
+		var sb_dng_hover := get_ui_stylebox("btn_danger_hover", 12, 6, 12, 6)
+		t.set_stylebox("normal", "DangerButton", sb_dng_normal)
+		t.set_stylebox("hover", "DangerButton", sb_dng_hover)
+		t.set_stylebox("pressed", "DangerButton", sb_dng_hover)
+
+		var sb_eq_normal := get_ui_stylebox("equip_normal", 6, 6, 6, 6)
+		var sb_eq_hover := get_ui_stylebox("equip_hover", 6, 6, 6, 6)
+		t.set_stylebox("normal", "EquipSlotButton", sb_eq_normal)
+		t.set_stylebox("hover", "EquipSlotButton", sb_eq_hover)
+		t.set_stylebox("pressed", "EquipSlotButton", sb_eq_hover)
+
+		var sb_line_edit := get_ui_stylebox("panel_line_edit", 8, 4, 8, 4)
+		t.set_stylebox("normal", "LineEdit", sb_line_edit)
+		t.set_stylebox("focus", "LineEdit", sb_line_edit)
+
+		t.set_stylebox("panel", "TabContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8))
+		t.set_stylebox("tab_selected", "TabContainer", get_ui_stylebox("tab_selected", 14, 6, 14, 6))
+		t.set_stylebox("tab_unselected", "TabContainer", get_ui_stylebox("tab_unselected", 14, 6, 14, 6))
+
+		t.set_stylebox("background", "ProgressBar", get_ui_stylebox("progress_bg", 2, 2, 2, 2, 4))
+		t.set_stylebox("scroll", "VScrollBar", get_ui_stylebox("scroll_bg", 4, 2, 4, 2, 3))
+		t.set_stylebox("grabber", "VScrollBar", get_ui_stylebox("scroll_grabber", 2, 2, 2, 2, 3))
+
