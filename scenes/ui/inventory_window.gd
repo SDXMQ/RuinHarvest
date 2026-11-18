@@ -65,6 +65,7 @@ var drag_preview: Control = null
 var hovered_grid_cell: Vector2i = Vector2i(-1, -1)
 var vicinity_update_timer: float = 0.0
 var _last_vicinity_signature: String = ""
+var open_container_popups: Dictionary = {}
 
 func _ready() -> void:
 	InventoryUIHelper.init_cached_styleboxes()
@@ -186,6 +187,7 @@ func _disable_focus_recursively(node: Node) -> void:
 		_disable_focus_recursively(child)
 
 func setup(p_player: CharacterBody2D, p_grid: InventoryGrid = null, p_equip: Dictionary = {}, p_target_inv: Inventory = null, p_target_title: String = "") -> void:
+	close_all_container_popups()
 	player = p_player
 	target_inventory = p_target_inv
 	target_title = p_target_title
@@ -329,13 +331,21 @@ func _input(event: InputEvent) -> void:
 			_loot_all_from_container()
 			get_viewport().set_input_as_handled()
 			return
+		elif not is_dragging and (event.keycode == KEY_L or event.physical_keycode == KEY_L):
+			if _toggle_lock_at_mouse():
+				get_viewport().set_input_as_handled()
+				return
 	
 	# 드래그 중 R 키 누르면 W <-> H 회전
 	if is_dragging and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R or event.physical_keycode == KEY_R:
 			drag_data["rotated"] = not drag_data.get("rotated", false)
 			_rebuild_drag_preview()
-			hovered_grid_cell = _calc_grid_hover_cell(get_global_mouse_position())
+			var m_pos := get_global_mouse_position()
+			hovered_grid_cell = _calc_grid_hover_cell(m_pos)
+			for p in open_container_popups.values():
+				if is_instance_valid(p):
+					p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
 			if SoundManager: SoundManager.play("menu_move")
 			grid_control.queue_redraw()
 			get_viewport().set_input_as_handled()
@@ -347,6 +357,9 @@ func _input(event: InputEvent) -> void:
 		_update_drag_preview_pos()
 		hovered_grid_cell = _calc_grid_hover_cell(m_pos)
 		grid_control.queue_redraw()
+		for p in open_container_popups.values():
+			if is_instance_valid(p):
+				p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
 		
 		# 마우스 아래의 장비/무기 슬롯 감지 및 하이라이트
 		var hovered_target_ctrl: Control = null
@@ -368,6 +381,19 @@ func _handle_global_drop() -> void:
 	if not is_dragging: return
 	
 	var m_pos = get_global_mouse_position()
+
+	# 0. 열려있는 중첩 컨테이너 팝업(최상단 우선) 위인지 검사
+	var children := get_children()
+	for ci in range(children.size() - 1, -1, -1):
+		var p_win := children[ci] as ContainerPopupWindow
+		if p_win and is_instance_valid(p_win) and p_win.is_visible_in_tree():
+			var d_cell: Vector2i = p_win.get_drop_cell(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
+			if d_cell != Vector2i(-1, -1):
+				_try_drop_on_popup(p_win, d_cell.x, d_cell.y)
+				return
+			if p_win.get_global_rect().has_point(m_pos):
+				_end_drag()
+				return
 	
 	# 1. 2D 그리드 영역 위인지 검사 (중앙 포커스 좌표 반영)
 	var grid_global_rect = grid_control.get_global_rect()
@@ -407,8 +433,19 @@ func _handle_global_drop() -> void:
 	if vicinity_rect.has_point(m_pos):
 		var src = drag_data.get("source", "")
 		var item = drag_data.get("item", {})
+		if bool(item.get("locked", false)):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("🔒 잠금된 아이템은 바닥에 버릴 수 없습니다. ([L] 키로 잠금 해제)")
+			if SoundManager: SoundManager.play("hit_melee")
+			_end_drag()
+			return
 		if src == "grid":
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
+			_drop_item_to_world(item)
+		elif src == "popup_grid":
+			var s_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+			if s_grid:
+				s_grid.remove_item_by_uid(item.get("uid", ""))
 			_drop_item_to_world(item)
 		elif src == "split":
 			drag_data["is_split"] = false
@@ -465,12 +502,17 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = inventory_grid.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
-				if Input.is_key_pressed(KEY_CTRL):
+				if event.double_click and InventoryGrid.is_container_item(item):
+					if is_dragging:
+						_end_drag()
+					if tooltip: tooltip.hide()
+					open_container_popup(item, inventory_grid)
+				elif Input.is_key_pressed(KEY_CTRL):
 					if tooltip: tooltip.hide()
 					if target_inventory != null:
 						_quick_transfer_grid_to_container(item)
 					else:
-						_handle_item_quick_action(item)
+						_handle_item_quick_action(item, false, true)
 				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
 						var split_item = item.duplicate()
@@ -478,18 +520,19 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 						split_item["amount"] = split_amt
 						item["amount"] -= split_amt
 						inventory_grid.grid_changed.emit()
-						_start_drag("split", split_item, Vector2i(cell_x, cell_y))
+						_start_drag("split", split_item, Vector2i(cell_x, cell_y), "", null, inventory_grid)
 						drag_data["is_split"] = true
 						drag_data["split_source_item"] = item
+						drag_data["split_source_grid"] = inventory_grid
 						drag_data["split_amount"] = split_amt
 					)
 				else:
-					_start_drag("grid", item, Vector2i(cell_x, cell_y))
+					_start_drag("grid", item, Vector2i(cell_x, cell_y), "", null, inventory_grid)
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
 			var item = inventory_grid.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
 				if Input.is_key_pressed(KEY_ALT):
-					_show_context_menu(item)
+					_show_context_menu(item, "grid", "", inventory_grid)
 				else:
 					_handle_item_quick_action(item)
 
@@ -543,7 +586,7 @@ func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, callback: Call
 	vbox.add_child(btn)
 	return btn
 
-func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref: String = "") -> void:
+func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref: String = "", source_grid: InventoryGrid = null) -> void:
 	_close_context_menu()
 	var id = item.get("id", "")
 	var idata = ItemDatabase.get_item_data(id)
@@ -581,6 +624,25 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	vbox.add_child(header_lbl)
 	vbox.add_child(HSeparator.new())
 
+	if InventoryGrid.is_container_item(item) and (source_type == "grid" or (source_type == "equipment" and slot_ref == "vest")):
+		var open_txt := "📂 포켓 열기" if source_type == "equipment" else "📂 컨테이너 열기"
+		_add_context_menu_btn(vbox, open_txt, func():
+			_close_context_menu()
+			open_container_popup(item, source_grid if source_type == "grid" else null)
+		)
+
+	if source_type in ["grid", "popup_grid"]:
+		var lock_grid: InventoryGrid = source_grid if source_grid else inventory_grid
+		var is_locked := bool(item.get("locked", false))
+		_add_context_menu_btn(vbox, "🔓 잠금 해제 (L)" if is_locked else "🔒 아이템 잠금 (L)", func():
+			_close_context_menu()
+			if lock_grid:
+				var now_locked := lock_grid.toggle_item_lock(str(item.get("uid", "")))
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit(("🔒 [%s] 잠금됨" if now_locked else "🔓 [%s] 잠금 해제") % item_name)
+				if SoundManager: SoundManager.play("menu_select")
+		)
+
 	if source_type == "grid":
 		_add_context_menu_btn(vbox, "⚡ 사용 / 장착", func():
 			_close_context_menu()
@@ -597,12 +659,20 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 					split_item["amount"] = split_amt
 					item["amount"] -= split_amt
 					inventory_grid.grid_changed.emit()
-					_start_drag("split", split_item, Vector2i(item.get("x", 0), item.get("y", 0)))
+					_start_drag("split", split_item, Vector2i(item.get("x", 0), item.get("y", 0)), "", null, inventory_grid)
 					drag_data["is_split"] = true
 					drag_data["split_source_item"] = item
+					drag_data["split_source_grid"] = inventory_grid
 					drag_data["split_amount"] = split_amt
 				)
 			)
+	elif source_type == "popup_grid" and source_grid:
+		_add_context_menu_btn(vbox, "📤 메인 가방으로 꺼내기", func():
+			_close_context_menu()
+			var popup_ref: ContainerPopupWindow = open_container_popups.get(source_grid.owner_container_uid, null) as ContainerPopupWindow
+			if popup_ref:
+				_handle_popup_quick_action(popup_ref, item, true)
+		)
 	elif source_type in ["equipment", "weapon_slot"] and slot_ref != "":
 		_add_context_menu_btn(vbox, "📤 가방으로 장착 해제", func():
 			_close_context_menu()
@@ -668,10 +738,17 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			perform_item_repair(item, slot_ref)
 		, user_funds < repair_cost)
 
-	_add_context_menu_btn(vbox, "🗑️ 바닥에 버리기", func():
+	var is_item_locked := bool(item.get("locked", false))
+	_add_context_menu_btn(vbox, "🔒 잠금됨 (버리기 불가)" if is_item_locked else "🗑️ 바닥에 버리기", func():
 		_close_context_menu()
+		if bool(item.get("locked", false)):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("🔒 잠금된 아이템은 바닥에 버릴 수 없습니다.")
+			return
 		if source_type == "grid" and inventory_grid:
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
+		elif source_type == "popup_grid" and source_grid:
+			source_grid.remove_item_by_uid(item.get("uid", ""))
 		elif source_type == "equipment" and slot_ref != "":
 			equipment_data[slot_ref] = {}
 			_apply_backpack_grid_size()
@@ -681,7 +758,7 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			_sync_weapon_to_player(slot_ref)
 			_update_weapons_ui()
 		_drop_item_to_world(item)
-	)
+	, is_item_locked)
 
 	add_child(context_menu_panel)
 	var mpos = get_global_mouse_position() - global_position
@@ -819,6 +896,9 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 				if rem_amt <= 0:
 					if src == "grid":
 						inventory_grid.remove_item_by_uid(uid)
+					elif src == "popup_grid":
+						var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+						if p_grid: p_grid.remove_item_by_uid(uid)
 					elif src == "split":
 						drag_data["is_split"] = false
 					elif src == "container":
@@ -850,11 +930,19 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					if src == "grid":
 						var orig_it = inventory_grid.get_item_by_uid(uid)
 						if not orig_it.is_empty(): orig_it["amount"] = rem_amt
+					elif src == "popup_grid":
+						var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+						if p_grid:
+							var p_it := p_grid.get_item_by_uid(uid)
+							if not p_it.is_empty(): p_it["amount"] = rem_amt
+							p_grid.grid_changed.emit()
 					elif src == "split":
 						var orig_sp = drag_data.get("split_source_item", {})
 						if not orig_sp.is_empty():
 							orig_sp["amount"] = int(orig_sp.get("amount", 0)) + rem_amt
 						drag_data["is_split"] = false
+						var sp_grid: InventoryGrid = drag_data.get("split_source_grid", inventory_grid) as InventoryGrid
+						if sp_grid: sp_grid.grid_changed.emit()
 					elif src == "container":
 						var orig_idx = drag_data.get("origin_index", -1)
 						if orig_idx != -1 and target_inventory:
@@ -874,7 +962,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 				return
 	
 	# 2. 빈 공간 배치 시도
-	if inventory_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", "")):
+	if inventory_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", ""), item):
 		if src == "grid":
 			inventory_grid.move_item(uid, cell_x, cell_y, is_rot)
 			if SoundManager: SoundManager.play("menu_select")
@@ -886,7 +974,10 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 				if SoundManager: SoundManager.play("hit_melee")
 		else:
 			if inventory_grid.place_item(item, cell_x, cell_y, is_rot):
-				if src == "vicinity":
+				if src == "popup_grid":
+					var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+					if p_grid: p_grid.remove_item_by_uid(uid)
+				elif src == "vicinity":
 					var ground_node = drag_data.get("ground_ref")
 					if is_instance_valid(ground_node):
 						ground_node.queue_free()
@@ -916,8 +1007,11 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 			else:
 				if SoundManager: SoundManager.play("hit_melee")
 	else:
-		# 배치 불가 사유 안내 (특히 2x2 세이프 파우치 구역)
-		if inventory_grid and inventory_grid.has_secure_container and cell_x < 2 and cell_y < 2:
+		# 배치 불가 사유 안내 (중첩 제한 & 2x2 세이프 파우치 구역)
+		var accept := inventory_grid.can_accept_item(item, str(item.get("id", "")))
+		if not bool(accept.get("ok", true)):
+			_log_container_reject_reason(str(accept.get("reason", "")))
+		elif inventory_grid and inventory_grid.has_secure_container and cell_x < 2 and cell_y < 2:
 			if not inventory_grid.is_allowed_in_secure_container(item.get("id", "")):
 				if EventBus.has_signal("event_logged"):
 					EventBus.event_logged.emit("🔒 [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
@@ -969,18 +1063,36 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 	hbox.add_theme_constant_override("separation", 8)
 	btn.add_child(hbox)
 	
+	var icon_wrap = Control.new()
+	icon_wrap.custom_minimum_size = Vector2(32, 32)
+	icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(icon_wrap)
+
 	var icon = TextureRect.new()
-	icon.custom_minimum_size = Vector2(32, 32)
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if ItemIconManager: icon.texture = ItemIconManager.get_icon(slot_item.get("id", ""))
-	hbox.add_child(icon)
+	icon_wrap.add_child(icon)
+
+	var c_item_id := str(slot_item.get("id", ""))
+	var is_wish := HideoutProgression.is_wishlist_item(c_item_id)
+	if is_wish:
+		var w_badge := Label.new()
+		w_badge.text = "★"
+		w_badge.add_theme_font_size_override("font_size", 11)
+		w_badge.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22))
+		w_badge.position = Vector2(20.0, -2.0)
+		w_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_wrap.add_child(w_badge)
 	
 	var lbl = Label.new()
-	var d = ItemDatabase.get_item_data(slot_item.get("id", ""))
+	var d = ItemDatabase.get_item_data(c_item_id)
 	var amt = slot_item.get("amount", 1)
-	lbl.text = "%s %s" % [d.get("name", slot_item.get("id", "")), ("(x%d)" % amt if amt > 1 else "")]
+	lbl.text = "%s%s %s" % [("★ " if is_wish else ""), d.get("name", c_item_id), ("(x%d)" % amt if amt > 1 else "")]
+	if is_wish:
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1018,7 +1130,7 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 					"h": base_size.y,
 					"custom_data": clean_slot_cd.duplicate(true)
 				}
-				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
 					if clean_slot_cd.has(k):
 						item_dict[k] = clean_slot_cd[k]
 				_start_drag("container", item_dict, Vector2i(index, 0))
@@ -1094,12 +1206,22 @@ func _try_drop_on_container() -> void:
 			else:
 				item["amount"] = rem
 				inventory_grid.grid_changed.emit()
+		elif src == "popup_grid":
+			var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+			if p_grid:
+				if rem <= 0:
+					p_grid.remove_item_by_uid(item.get("uid", ""))
+				else:
+					var p_it := p_grid.get_item_by_uid(item.get("uid", ""))
+					if not p_it.is_empty(): p_it["amount"] = rem
+					p_grid.grid_changed.emit()
 		elif src == "split":
 			if rem > 0:
 				var orig_item = drag_data.get("split_source_item", {})
 				if not orig_item.is_empty():
 					orig_item["amount"] = int(orig_item.get("amount", 0)) + rem
-					inventory_grid.grid_changed.emit()
+					var sp_grid: InventoryGrid = drag_data.get("split_source_grid", inventory_grid) as InventoryGrid
+					if sp_grid: sp_grid.grid_changed.emit()
 			drag_data["is_split"] = false
 		elif src == "equipment":
 			if rem <= 0:
@@ -1183,17 +1305,34 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	hbox.add_theme_constant_override("separation", 8)
 	btn.add_child(hbox)
 	
+	var icon_wrap = Control.new()
+	icon_wrap.custom_minimum_size = Vector2(32, 32)
+	icon_wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hbox.add_child(icon_wrap)
+
 	var icon = TextureRect.new()
-	icon.custom_minimum_size = Vector2(32, 32)
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	if ItemIconManager: icon.texture = ItemIconManager.get_icon(g_item.item_id)
-	hbox.add_child(icon)
+	icon_wrap.add_child(icon)
+
+	var is_wish := HideoutProgression.is_wishlist_item(g_item.item_id)
+	if is_wish:
+		var w_badge := Label.new()
+		w_badge.text = "★"
+		w_badge.add_theme_font_size_override("font_size", 11)
+		w_badge.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22))
+		w_badge.position = Vector2(20.0, -2.0)
+		w_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		icon_wrap.add_child(w_badge)
 	
 	var lbl = Label.new()
 	var d = ItemDatabase.get_item_data(g_item.item_id)
-	lbl.text = "%s %s" % [d.get("name", g_item.item_id), ("(x%d)" % g_item.amount if g_item.amount > 1 else "")]
+	lbl.text = "%s%s %s" % [("★ " if is_wish else ""), d.get("name", g_item.item_id), ("(x%d)" % g_item.amount if g_item.amount > 1 else "")]
+	if is_wish:
+		lbl.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1208,7 +1347,7 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 				"amount": g_item.amount,
 				"custom_data": clean_cd.duplicate(true)
 			}
-			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
 				if clean_cd.has(k):
 					item_dict[k] = clean_cd[k]
 			tooltip.display_item(item_dict, d)
@@ -1243,7 +1382,7 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 					"h": base_size.y,
 					"custom_data": clean_cd.duplicate(true)
 				}
-				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
 					if clean_cd.has(k):
 						item_dict[k] = clean_cd[k]
 				_start_drag("vicinity", item_dict, Vector2i.ZERO, "", g_item)
@@ -1301,7 +1440,10 @@ func _connect_equipment_slot(btn: Button, slot_name: String) -> void:
 					_try_equip_dragged_item(slot_name)
 				else:
 					var equipped = equipment_data.get(slot_name, {})
-					if not equipped.is_empty():
+					if event.double_click and slot_name == "vest" and not equipped.is_empty():
+						if tooltip: tooltip.hide()
+						open_container_popup(equipped, null)
+					elif not equipped.is_empty():
 						_start_drag("equipment", equipped, Vector2i.ZERO, slot_name)
 			elif event.button_index == MOUSE_BUTTON_RIGHT:
 				var equipped = equipment_data.get(slot_name, {})
@@ -1328,6 +1470,15 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 			EventBus.event_logged.emit("⚠️ [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
 		_end_drag()
 		return
+
+	if slot_name == "backpack":
+		var inner_arr = item.get("inner_items", [])
+		if inner_arr is Array and not inner_arr.is_empty():
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+			if SoundManager: SoundManager.play("hit_melee")
+			_end_drag()
+			return
 		
 	var src = drag_data.get("source", "")
 	var orig_slot = drag_data.get("slot_name", "")
@@ -1339,6 +1490,9 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 		
 	if src == "grid":
 		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	elif src == "popup_grid":
+		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
 	elif src == "vicinity":
 		var ground_node = drag_data.get("ground_ref")
 		if is_instance_valid(ground_node): ground_node.queue_free()
@@ -1779,6 +1933,10 @@ func _try_equip_weapon(slot_key: String) -> void:
 			if src == "grid":
 				if inventory_grid:
 					inventory_grid.remove_item_by_uid(item.get("uid", ""))
+			elif src == "popup_grid":
+				var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+				if p_grid:
+					p_grid.remove_item_by_uid(item.get("uid", ""))
 			elif src == "split":
 				drag_data["is_split"] = false
 			elif src == "vicinity":
@@ -1797,13 +1955,20 @@ func _try_equip_weapon(slot_key: String) -> void:
 					var orig_it = inventory_grid.get_item_by_uid(item.get("uid", ""))
 					if not orig_it.is_empty(): orig_it["amount"] = item["amount"]
 					inventory_grid.grid_changed.emit()
+			elif src == "popup_grid":
+				var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+				if p_grid:
+					var orig_pit := p_grid.get_item_by_uid(item.get("uid", ""))
+					if not orig_pit.is_empty(): orig_pit["amount"] = item["amount"]
+					p_grid.grid_changed.emit()
 			elif src == "split":
 				var orig_sp = drag_data.get("split_source_item", {})
 				if not orig_sp.is_empty():
 					orig_sp["amount"] = int(orig_sp.get("amount", 0)) + item["amount"]
 				drag_data["is_split"] = false
-				if inventory_grid:
-					inventory_grid.grid_changed.emit()
+				var sp_grid: InventoryGrid = drag_data.get("split_source_grid", inventory_grid) as InventoryGrid
+				if sp_grid:
+					sp_grid.grid_changed.emit()
 			elif src == "vicinity":
 				var ground_node = drag_data.get("ground_ref")
 				if is_instance_valid(ground_node):
@@ -1854,6 +2019,9 @@ func _try_equip_weapon(slot_key: String) -> void:
 		return
 		
 	if src == "grid": inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	elif src == "popup_grid":
+		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
 	elif src == "vicinity":
 		var ground_node = drag_data.get("ground_ref")
 		if is_instance_valid(ground_node): ground_node.queue_free()
@@ -1925,6 +2093,9 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 	var src = drag_data.get("source", "")
 	if src == "grid":
 		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	elif src == "popup_grid":
+		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
 	elif src == "vicinity":
 		var ground_node = drag_data.get("ground_ref")
 		if is_instance_valid(ground_node): ground_node.queue_free()
@@ -1993,7 +2164,7 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 # ============================================================
 # 5. UX & 인터랙션 (드래그, 회전, 분할, 우클릭 액션)
 # ============================================================
-func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = Vector2i.ZERO, slot_name: String = "", ground_ref: Node = null) -> void:
+func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = Vector2i.ZERO, slot_name: String = "", ground_ref: Node = null, source_grid: InventoryGrid = null) -> void:
 	if tooltip:
 		tooltip.hide()
 	is_dragging = true
@@ -2002,13 +2173,17 @@ func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = V
 		item["w"] = base_size.x
 	if not item.has("h"):
 		item["h"] = base_size.y
+	var resolved_grid: InventoryGrid = source_grid
+	if resolved_grid == null and source_type == "grid":
+		resolved_grid = inventory_grid
 	drag_data = {
 		"source": source_type,
 		"item": item,
 		"rotated": item.get("rotated", false),
 		"origin_pos": origin_pos,
 		"slot_name": slot_name,
-		"ground_ref": ground_ref
+		"ground_ref": ground_ref,
+		"source_grid": resolved_grid
 	}
 	
 	_rebuild_drag_preview()
@@ -2045,8 +2220,9 @@ func _end_drag() -> void:
 		var split_amt = drag_data.get("split_amount", 0)
 		if not orig.is_empty() and split_amt > 0:
 			orig["amount"] = int(orig.get("amount", 0)) + split_amt
-			if inventory_grid:
-				inventory_grid.grid_changed.emit()
+			var sp_grid: InventoryGrid = drag_data.get("split_source_grid", inventory_grid) as InventoryGrid
+			if sp_grid:
+				sp_grid.grid_changed.emit()
 		drag_data["is_split"] = false
 	is_dragging = false
 	drag_data.clear()
@@ -2056,6 +2232,10 @@ func _end_drag() -> void:
 	_clear_slot_highlights()
 	if grid_control:
 		grid_control.queue_redraw()
+	for p in open_container_popups.values():
+		if is_instance_valid(p) and p.grid_control:
+			p.hovered_cell = Vector2i(-1, -1)
+			p.grid_control.queue_redraw()
 
 func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
 	InventoryUIHelper.highlight_compatible_slots(drop_targets, item, hovered_ctrl)
@@ -2069,11 +2249,31 @@ func _open_split_dialog(item: Dictionary, on_confirm: Callable) -> void:
 	diag.setup(item.get("amount", 1))
 	diag.split_confirmed.connect(on_confirm)
 
-func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false) -> void:
+func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false, allow_popup_transfer: bool = false) -> void:
 	# 0. 파밍 상자나 보관함이 열려있다면 가방에서 보관함으로 빠른 전송 (단, 컨텍스트 메뉴 [사용/장착] 시에는 무시)
 	if target_inventory != null and not ignore_container:
 		_quick_transfer_grid_to_container(item)
 		return
+
+	# 0-A. Ctrl+좌클릭 시 열려있는 호환 중첩 컨테이너 팝업이 있으면 즉시 수납 시도
+	if allow_popup_transfer and not ignore_container and not open_container_popups.is_empty():
+		var children := get_children()
+		for ci in range(children.size() - 1, -1, -1):
+			var p_win := children[ci] as ContainerPopupWindow
+			if p_win and is_instance_valid(p_win) and p_win.inner_grid:
+				var acc := p_win.inner_grid.can_accept_item(item, str(item.get("id", "")))
+				if bool(acc.get("ok", false)):
+					var amt := maxi(1, int(item.get("amount", 1)))
+					var rem := p_win.inner_grid.auto_add_item(str(item.get("id", "")), amt, item)
+					var added := amt - rem
+					if added > 0:
+						if rem <= 0:
+							inventory_grid.remove_item_by_uid(str(item.get("uid", "")))
+						else:
+							item["amount"] = rem
+							inventory_grid.grid_changed.emit()
+						if SoundManager: SoundManager.play("menu_select")
+						return
 
 	var id = item.get("id", "")
 	var idata = ItemDatabase.get_item_data(id)
@@ -2097,6 +2297,13 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false)
 	if cat == ItemDatabase.ItemCategory.EQUIPMENT or (equip_slot in ["helmet", "vest", "backpack", "bottom"]):
 		var slot = equip_slot
 		if slot != "":
+			if slot == "backpack":
+				var inner_arr = item.get("inner_items", [])
+				if inner_arr is Array and not inner_arr.is_empty():
+					if EventBus.has_signal("event_logged"):
+						EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+					if SoundManager: SoundManager.play("hit_melee")
+					return
 			var prev_equipped = equipment_data.get(slot, {})
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
 			equipment_data[slot] = item
@@ -2312,6 +2519,8 @@ func _find_main_world_node() -> Node:
 	return null
 
 func _on_close_pressed() -> void:
+	_sync_all_open_popups()
+	close_all_container_popups()
 	if SoundManager: SoundManager.play("menu_select")
 	if player and player.has_method("refresh_equipped_weapon"):
 		player.refresh_equipped_weapon(false)
@@ -2321,3 +2530,316 @@ func _on_close_pressed() -> void:
 		get_tree().paused = false
 	queue_free()
 	window_closed.emit()
+
+# ============================================================
+# 6. 타르코프식 중첩 컨테이너 팝업 & 잠금 [L] 제어
+# ============================================================
+func _sync_all_open_popups() -> void:
+	for p in open_container_popups.values():
+		if is_instance_valid(p) and p.inner_grid and not p.container_item.is_empty():
+			InventoryGrid.sync_container_item_contents(p.container_item, p.inner_grid)
+
+func close_all_container_popups() -> void:
+	for p in open_container_popups.values():
+		if is_instance_valid(p):
+			p.queue_free()
+	open_container_popups.clear()
+
+func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = null) -> void:
+	if container_item.is_empty() or not InventoryGrid.is_container_item(container_item):
+		return
+	var cuid := str(container_item.get("uid", ""))
+	if cuid == "":
+		cuid = "equip_vest_" + str(container_item.get("id", "container"))
+	if open_container_popups.has(cuid):
+		var existing: ContainerPopupWindow = open_container_popups[cuid] as ContainerPopupWindow
+		if is_instance_valid(existing):
+			existing.move_to_front()
+			return
+		open_container_popups.erase(cuid)
+
+	var popup := ContainerPopupWindow.new()
+	add_child(popup)
+	popup.setup(container_item, src_grid, self)
+	var idx := open_container_popups.size()
+	var base_pos := Vector2(340.0 + float(idx) * 28.0, 64.0 + float(idx) * 24.0)
+	popup.position = InventoryUIHelper.clamp_popup_position(popup, base_pos, size, 8.0)
+	open_container_popups[cuid] = popup
+
+	popup.popup_closed.connect(func(_closed_uid: String):
+		open_container_popups.erase(cuid)
+		if inventory_grid:
+			inventory_grid.grid_changed.emit()
+		_update_weight_ui()
+	)
+	popup.popup_grid_changed.connect(func(_changed_uid: String):
+		if player:
+			player.set("equipment", equipment_data)
+			if player.has_signal("stats_changed"):
+				player.stats_changed.emit()
+		_update_weight_ui()
+	)
+	popup.item_drag_started.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
+		_start_drag("popup_grid", it, c_pos, "", null, p_win.inner_grid)
+	)
+	popup.item_split_requested.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
+		_open_split_dialog(it, func(split_amt):
+			var split_item = it.duplicate()
+			split_item["uid"] = "item_%d_%d" % [Time.get_ticks_msec(), randi() % 10000]
+			split_item["amount"] = split_amt
+			it["amount"] -= split_amt
+			if p_win.inner_grid:
+				p_win.inner_grid.grid_changed.emit()
+			_start_drag("split", split_item, c_pos, "", null, p_win.inner_grid)
+			drag_data["is_split"] = true
+			drag_data["split_source_item"] = it
+			drag_data["split_source_grid"] = p_win.inner_grid
+			drag_data["split_amount"] = split_amt
+		)
+	)
+	popup.item_quick_action_requested.connect(_handle_popup_quick_action)
+	popup.item_context_menu_requested.connect(func(p_win: ContainerPopupWindow, it: Dictionary):
+		if tooltip: tooltip.hide()
+		_show_context_menu(it, "popup_grid", "", p_win.inner_grid)
+	)
+	popup.item_hovered.connect(func(_p_win: ContainerPopupWindow, it: Dictionary):
+		if not is_dragging and tooltip and not it.is_empty():
+			var d := ItemDatabase.get_item_data(str(it.get("id", "")))
+			tooltip.display_item(it, d)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	popup.item_unhovered.connect(func(_p_win: ContainerPopupWindow):
+		if tooltip: tooltip.hide()
+	)
+	if SoundManager: SoundManager.play("menu_select")
+
+func _toggle_lock_at_mouse() -> bool:
+	var m_pos := get_global_mouse_position()
+	var children := get_children()
+	for ci in range(children.size() - 1, -1, -1):
+		var p_win := children[ci] as ContainerPopupWindow
+		if p_win and is_instance_valid(p_win) and p_win.is_visible_in_tree() and p_win.get_global_rect().has_point(m_pos):
+			var h_it: Dictionary = p_win.get_hovered_item()
+			if not h_it.is_empty() and p_win.inner_grid:
+				var now_l := p_win.inner_grid.toggle_item_lock(str(h_it.get("uid", "")))
+				var d := ItemDatabase.get_item_data(str(h_it.get("id", "")))
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit(("🔒 [%s] 잠금됨" if now_l else "🔓 [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
+				if tooltip and tooltip.visible:
+					tooltip.display_item(h_it, d)
+				if SoundManager: SoundManager.play("menu_select")
+				return true
+			return false
+	if grid_control and inventory_grid and grid_control.get_global_rect().has_point(m_pos) and hovered_grid_cell != Vector2i(-1, -1):
+		var h_it := inventory_grid.get_item_at(hovered_grid_cell.x, hovered_grid_cell.y)
+		if not h_it.is_empty():
+			var now_l := inventory_grid.toggle_item_lock(str(h_it.get("uid", "")))
+			var d := ItemDatabase.get_item_data(str(h_it.get("id", "")))
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit(("🔒 [%s] 잠금됨" if now_l else "🔓 [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
+			if tooltip and tooltip.visible:
+				tooltip.display_item(h_it, d)
+			if SoundManager: SoundManager.play("menu_select")
+			return true
+	return false
+
+func _log_container_reject_reason(reason: String) -> void:
+	if not EventBus.has_signal("event_logged"):
+		return
+	match reason:
+		"self_drop":
+			EventBus.event_logged.emit("⚠️ 자기 자신의 내부에는 넣을 수 없습니다.")
+		"max_depth_exceeded":
+			EventBus.event_logged.emit("⚠️ 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
+		"filter_mismatch":
+			EventBus.event_logged.emit("🔒 해당 특수 보관함의 전용 카테고리에 맞는 아이템만 수납할 수 있습니다.")
+		_:
+			EventBus.event_logged.emit("⚠️ 해당 위치에 아이템을 보관할 수 없습니다.")
+
+func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -> void:
+	if not is_dragging or not popup or not popup.inner_grid:
+		_end_drag()
+		return
+	var target_grid := popup.inner_grid
+	var item: Dictionary = drag_data.get("item", {})
+	var item_id := str(item.get("id", ""))
+	var is_rot := bool(drag_data.get("rotated", false))
+	var base_size := ItemDatabase.get_item_grid_size(item_id)
+	var base_w := int(item.get("w", base_size.x))
+	var base_h := int(item.get("h", base_size.y))
+	var place_w := base_h if is_rot else base_w
+	var place_h := base_w if is_rot else base_h
+	var src := str(drag_data.get("source", ""))
+	var src_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+	var uid := str(item.get("uid", ""))
+	var same_grid := (src_grid == target_grid)
+	var ignore_uid := uid if same_grid else ""
+
+	# 1. 수납 제한 / 자기자신 / 중첩 깊이 사전 검사
+	var accept := target_grid.can_accept_item(item, item_id)
+	if not bool(accept.get("ok", true)):
+		_log_container_reject_reason(str(accept.get("reason", "")))
+		if SoundManager: SoundManager.play("hit_melee")
+		_end_drag()
+		return
+
+	# 2. 같은 아이템 스택 병합 시도
+	var m_local := popup.grid_control.get_local_mouse_position()
+	var m_cx := int(floor(m_local.x / popup.POPUP_CELL_SIZE))
+	var m_cy := int(floor(m_local.y / popup.POPUP_CELL_SIZE))
+	var target_item := target_grid.get_item_at(m_cx, m_cy)
+	if target_item.is_empty():
+		target_item = target_grid.get_item_at(cell_x, cell_y)
+	if not target_item.is_empty() and str(target_item.get("id", "")) == item_id and str(target_item.get("uid", "")) != uid:
+		var idata := ItemDatabase.get_item_data(item_id)
+		var max_stack := int(idata.get("max_stack", 1))
+		if max_stack > 1:
+			var cur_amt := int(target_item.get("amount", 1))
+			var space := max_stack - cur_amt
+			if space > 0:
+				var drag_amt := int(item.get("amount", 1))
+				var to_add := mini(space, drag_amt)
+				target_item["amount"] = cur_amt + to_add
+				var rem_amt := drag_amt - to_add
+				if rem_amt <= 0:
+					if src == "grid" and inventory_grid:
+						inventory_grid.remove_item_by_uid(uid)
+					elif src == "popup_grid" and src_grid:
+						src_grid.remove_item_by_uid(uid)
+					elif src == "split":
+						drag_data["is_split"] = false
+					elif src == "container":
+						var orig_idx := int(drag_data.get("origin_index", -1))
+						if orig_idx != -1 and target_inventory:
+							target_inventory.remove_item_at(orig_idx, drag_amt)
+							_update_container_list()
+					elif src == "vicinity":
+						var ground_node = drag_data.get("ground_ref")
+						if is_instance_valid(ground_node): ground_node.queue_free()
+						_update_vicinity_list(true)
+					elif src == "equipment":
+						equipment_data[drag_data.get("slot_name", "")] = {}
+						_apply_backpack_grid_size()
+						_update_equipment_ui()
+					elif src == "weapon_slot":
+						var s_name := str(drag_data.get("slot_name", ""))
+						equipment_data[s_name] = {}
+						_sync_weapon_to_player(s_name)
+						_update_weapons_ui()
+					elif src == "attachment":
+						_remove_attachment_from_weapon_slot(str(drag_data.get("weapon_slot", "")), str(drag_data.get("attach_slot", "")), int(drag_data.get("rail_index", -1)), item_id)
+						_update_weapons_ui()
+				else:
+					item["amount"] = rem_amt
+					if src == "grid" and inventory_grid:
+						var o_it := inventory_grid.get_item_by_uid(uid)
+						if not o_it.is_empty(): o_it["amount"] = rem_amt
+						inventory_grid.grid_changed.emit()
+					elif src == "popup_grid" and src_grid:
+						var p_it := src_grid.get_item_by_uid(uid)
+						if not p_it.is_empty(): p_it["amount"] = rem_amt
+						src_grid.grid_changed.emit()
+					elif src == "split":
+						var orig_sp = drag_data.get("split_source_item", {})
+						if not orig_sp.is_empty():
+							orig_sp["amount"] = int(orig_sp.get("amount", 0)) + rem_amt
+						drag_data["is_split"] = false
+						var sp_grid: InventoryGrid = drag_data.get("split_source_grid", inventory_grid) as InventoryGrid
+						if sp_grid: sp_grid.grid_changed.emit()
+					elif src == "container":
+						var orig_idx := int(drag_data.get("origin_index", -1))
+						if orig_idx != -1 and target_inventory:
+							target_inventory.remove_item_at(orig_idx, to_add)
+							_update_container_list()
+					elif src == "vicinity":
+						var ground_node = drag_data.get("ground_ref")
+						if is_instance_valid(ground_node):
+							ground_node.amount = rem_amt
+							ground_node.update_visuals()
+						_update_vicinity_list(true)
+				target_grid.grid_changed.emit()
+				if SoundManager: SoundManager.play("menu_select")
+				_end_drag()
+				return
+
+	# 3. 빈 셀 배치
+	if target_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item_id, item):
+		if same_grid:
+			target_grid.move_item(uid, cell_x, cell_y, is_rot)
+			if SoundManager: SoundManager.play("menu_select")
+		elif target_grid.place_item(item, cell_x, cell_y, is_rot):
+			if src == "split":
+				drag_data["is_split"] = false
+			elif src == "grid" and inventory_grid:
+				inventory_grid.remove_item_by_uid(uid)
+			elif src == "popup_grid" and src_grid:
+				src_grid.remove_item_by_uid(uid)
+			elif src == "vicinity":
+				var ground_node = drag_data.get("ground_ref")
+				if is_instance_valid(ground_node): ground_node.queue_free()
+				_update_vicinity_list(true)
+			elif src == "container":
+				var orig_idx := int(drag_data.get("origin_index", -1))
+				if orig_idx != -1 and target_inventory:
+					target_inventory.remove_item_at(orig_idx, int(item.get("amount", 1)))
+					_update_container_list()
+			elif src == "equipment":
+				equipment_data[drag_data.get("slot_name", "")] = {}
+				_apply_backpack_grid_size()
+				_update_equipment_ui()
+			elif src == "weapon_slot":
+				var s_name := str(drag_data.get("slot_name", ""))
+				equipment_data[s_name] = {}
+				_sync_weapon_to_player(s_name)
+				_update_weapons_ui()
+			elif src == "attachment":
+				_remove_attachment_from_weapon_slot(str(drag_data.get("weapon_slot", "")), str(drag_data.get("attach_slot", "")), int(drag_data.get("rail_index", -1)), item_id)
+				_update_weapons_ui()
+			if SoundManager: SoundManager.play("menu_select")
+		else:
+			if SoundManager: SoundManager.play("hit_melee")
+	else:
+		if SoundManager: SoundManager.play("hit_melee")
+	_end_drag()
+
+func _handle_popup_quick_action(popup: ContainerPopupWindow, item: Dictionary, is_ctrl: bool) -> void:
+	if not popup or not popup.inner_grid or item.is_empty():
+		return
+	var item_id := str(item.get("id", ""))
+	var amt := maxi(1, int(item.get("amount", 1)))
+	var uid := str(item.get("uid", ""))
+	if is_ctrl and inventory_grid:
+		var rem := inventory_grid.auto_add_item(item_id, amt, item)
+		var added := amt - rem
+		if added > 0:
+			if rem <= 0:
+				popup.inner_grid.remove_item_by_uid(uid)
+			else:
+				item["amount"] = rem
+				popup.inner_grid.grid_changed.emit()
+			if SoundManager: SoundManager.play("menu_select")
+		else:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 메인 가방 공간이 부족합니다.")
+	elif target_inventory != null:
+		var rem := target_inventory.add_item(item_id, amt, item)
+		var added := amt - rem
+		if added > 0:
+			if rem <= 0:
+				popup.inner_grid.remove_item_by_uid(uid)
+			else:
+				item["amount"] = rem
+				popup.inner_grid.grid_changed.emit()
+			_update_container_list()
+			if SoundManager: SoundManager.play("menu_select")
+	else:
+		if inventory_grid:
+			var rem := inventory_grid.auto_add_item(item_id, amt, item)
+			var added := amt - rem
+			if added > 0:
+				if rem <= 0:
+					popup.inner_grid.remove_item_by_uid(uid)
+				else:
+					item["amount"] = rem
+					popup.inner_grid.grid_changed.emit()
+				if SoundManager: SoundManager.play("menu_select")

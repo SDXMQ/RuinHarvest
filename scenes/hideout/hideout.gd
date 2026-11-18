@@ -62,6 +62,30 @@ var hovered_stash_cell: Vector2i = Vector2i(-1, -1)
 
 var drop_targets: Array[Dictionary] = []
 var current_trader_id: String = "prapor"
+var open_container_popups: Dictionary = {}
+var context_menu_panel: PanelContainer = null
+
+# 상인 일괄 판매(Bulk Sell) & 마키 선택 상태
+var selected_sell_uids: Dictionary = {}
+var sell_player_grid_ctrl: Control = null
+var sell_stash_grid_ctrl: Control = null
+var hovered_sell_player_cell: Vector2i = Vector2i(-1, -1)
+var hovered_sell_stash_cell: Vector2i = Vector2i(-1, -1)
+var _is_marquee_selecting: bool = false
+var _marquee_ctrl: Control = null
+var _marquee_grid: InventoryGrid = null
+var _marquee_is_stash: bool = false
+var _marquee_start_local: Vector2 = Vector2.ZERO
+var trader_loyalty_label: Label = null
+var trader_loyalty_bar: ProgressBar = null
+var sell_grid_header_lbl: Label = null
+var sell_receipt_list_vbox: VBoxContainer = null
+var sell_receipt_summary_lbl: Label = null
+var sell_bulk_btn: Button = null
+
+# 암시장 등록 가격 배율 프리셋
+var market_price_ratio: float = 1.0
+var market_slot_label: Label = null
 
 var insurance_btn: Button = null
 
@@ -157,8 +181,11 @@ func _ready() -> void:
 		deposit_all_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		deposit_all_btn.add_theme_font_size_override("font_size", 11)
 		deposit_all_btn.pressed.connect(func():
+			_sync_all_open_popups()
 			var copy_items = player_grid_mgr.items.duplicate(true)
 			for it in copy_items:
+				if bool(it.get("locked", false)):
+					continue
 				var ix = int(it.get("x", 99))
 				var iy = int(it.get("y", 99))
 				var is_rot = it.get("rotated", false)
@@ -176,6 +203,7 @@ func _ready() -> void:
 					if not orig.is_empty(): orig["amount"] = rem
 			player_grid_mgr.grid_changed.emit()
 			stash_grid_mgr.grid_changed.emit()
+			_prune_stale_popups()
 			if SoundManager: SoundManager.play("item_pickup")
 		)
 		p_btn_row.add_child(deposit_all_btn)
@@ -196,6 +224,8 @@ func _ready() -> void:
 	
 	# 장비 슬롯 연결
 	_connect_equipment_slots()
+	_setup_traders_bulk_ui()
+	_setup_market_controls()
 	
 	# 작업대 탭 연결
 	if workbench:
@@ -267,10 +297,14 @@ func _process(_delta: float) -> void:
 	if tooltip and tooltip.visible:
 		tooltip.update_position(get_global_mouse_position())
 	if is_dragging and drag_preview_node:
-		drag_preview_node.global_position = get_global_mouse_position() - Vector2(22, 22)
+		_update_drag_preview_pos()
 
 func _on_tab_changed(tab: int) -> void:
 	if tooltip: tooltip.hide()
+	_close_context_menu()
+	if tab != 0:
+		_sync_all_open_popups()
+		close_all_container_popups()
 	if tab == 0:
 		_refresh_stash_ui()
 	elif tab == 1:
@@ -285,6 +319,7 @@ func _on_tab_changed(tab: int) -> void:
 		HideoutProgression.refresh_service_record_tab(self, service_record_tab)
 
 func _on_grid_changed() -> void:
+	_prune_stale_popups()
 	if player_grid_control: player_grid_control.queue_redraw()
 	if stash_grid_control: stash_grid_control.queue_redraw()
 	_refresh_trader_sell_ui()
@@ -295,9 +330,12 @@ func _on_grid_changed() -> void:
 	_sync_save_data()
 
 func _load_data() -> void:
+	close_all_container_popups()
 	if GameManager and not GameManager.current_world_data.is_empty():
 		_is_loading_data = true
 		var w_data = GameManager.current_world_data
+		if FleaMarket:
+			FleaMarket.load_from_save_dict(w_data.get("flea_market", {}))
 		var day = w_data.get("current_day", 1)
 		day_label.text = "생존 %d일차 (DAY %d)" % [day, day]
 		_update_money_label()
@@ -393,6 +431,7 @@ func _on_insurance_pressed() -> void:
 func _sync_save_data() -> void:
 	if _is_loading_data:
 		return
+	_sync_all_open_popups()
 	if GameManager and not GameManager.current_world_data.is_empty():
 		if not GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"] = {}
@@ -402,6 +441,8 @@ func _sync_save_data() -> void:
 		if not GameManager.current_world_data.has("hideout"):
 			GameManager.current_world_data["hideout"] = {}
 		GameManager.current_world_data["hideout"]["stash"] = stash_grid_mgr.items.duplicate(true)
+		if FleaMarket:
+			GameManager.current_world_data["flea_market"] = FleaMarket.to_save_dict()
 		
 		if GameManager.current_save_slot != "":
 			SaveManager.save_game(GameManager.current_world_data, GameManager.current_save_slot)
@@ -480,36 +521,77 @@ func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGri
 		ctrl.queue_redraw()
 		
 	elif event is InputEventMouseButton and event.pressed:
+		_close_context_menu()
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = grid_mgr.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
-				if Input.is_key_pressed(KEY_CTRL):
+				if event.double_click and InventoryGrid.is_container_item(item):
+					if is_dragging:
+						_end_drag()
 					if tooltip: tooltip.hide()
-					_handle_hideout_quick_action(item, is_player_grid)
+					open_container_popup(item, grid_mgr)
+				elif Input.is_key_pressed(KEY_CTRL):
+					if tooltip: tooltip.hide()
+					_handle_hideout_quick_action(item, is_player_grid, true)
 				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
 						var split_item = item.duplicate(true)
+						split_item["uid"] = InventoryGrid.next_uid()
 						split_item["amount"] = split_amt
 						item["amount"] -= split_amt
 						grid_mgr.grid_changed.emit()
-						_start_drag("player_grid" if is_player_grid else "stash_grid", split_item, Vector2i(cell_x, cell_y))
+						_start_drag("split", split_item, Vector2i(cell_x, cell_y), "", grid_mgr)
+						drag_data["is_split"] = true
+						drag_data["split_source_item"] = item
+						drag_data["split_source_grid"] = grid_mgr
+						drag_data["split_amount"] = split_amt
 					)
 				else:
-					_start_drag("player_grid" if is_player_grid else "stash_grid", item, Vector2i(cell_x, cell_y))
+					_start_drag("player_grid" if is_player_grid else "stash_grid", item, Vector2i(cell_x, cell_y), "", grid_mgr)
 		elif event.button_index == MOUSE_BUTTON_RIGHT:
-			# 우클릭 퀵 액션: 배낭 <-> 창고 간 자동 이동 또는 장비 장착
 			var item = grid_mgr.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
-				_handle_hideout_quick_action(item, is_player_grid)
+				if event.alt_pressed or Input.is_key_pressed(KEY_ALT):
+					if tooltip: tooltip.hide()
+					_show_context_menu(item, "player_grid" if is_player_grid else "stash_grid", "", grid_mgr)
+				else:
+					_handle_hideout_quick_action(item, is_player_grid)
 
-func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool) -> void:
+func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool, allow_popup_transfer: bool = false) -> void:
 	var item_id = item.get("id", "")
+	var src_grid = player_grid_mgr if is_from_player else stash_grid_mgr
+
+	# 0. Ctrl+좌클릭 시 열려있는 호환 중첩 컨테이너 팝업으로 빠른 수납 시도
+	if allow_popup_transfer and not open_container_popups.is_empty():
+		var children := get_children()
+		for ci in range(children.size() - 1, -1, -1):
+			var p_win := children[ci] as ContainerPopupWindow
+			if p_win and is_instance_valid(p_win) and p_win.inner_grid:
+				var acc := p_win.inner_grid.can_accept_item(item, item_id)
+				if bool(acc.get("ok", false)):
+					var amt := maxi(1, int(item.get("amount", 1)))
+					var rem := p_win.inner_grid.auto_add_item(item_id, amt, item)
+					if amt - rem > 0:
+						if rem <= 0:
+							src_grid.remove_item_by_uid(str(item.get("uid", "")))
+						else:
+							item["amount"] = rem
+							src_grid.grid_changed.emit()
+						if SoundManager: SoundManager.play("menu_select")
+						return
+
 	var target_slot = ItemDatabase.get_item_equip_slot(item_id)
 	
 	# 1. 장비 아이템이면 장비 슬롯으로 퀵 장착 시도
 	if target_slot != "" and equipment_data.has(target_slot) and equipment_data[target_slot].is_empty():
-		if is_from_player: player_grid_mgr.remove_item_by_uid(item.get("uid", ""))
-		else: stash_grid_mgr.remove_item_by_uid(item.get("uid", ""))
+		if target_slot == "backpack":
+			var inner_arr = item.get("inner_items", [])
+			if inner_arr is Array and not inner_arr.is_empty():
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+				if SoundManager: SoundManager.play("hit_melee")
+				return
+		src_grid.remove_item_by_uid(item.get("uid", ""))
 		equipment_data[target_slot] = item
 		_apply_backpack_grid_size()
 		_update_equipment_ui()
@@ -518,7 +600,6 @@ func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool) -> voi
 		
 	# 2. 배낭 <-> 창고 간 상호 자동 이동 (Auto-Fit)
 	var dest_grid = stash_grid_mgr if is_from_player else player_grid_mgr
-	var src_grid = player_grid_mgr if is_from_player else stash_grid_mgr
 	
 	var rem = dest_grid.auto_add_item(item.get("id", ""), item.get("amount", 1), item)
 	if rem <= 0:
@@ -532,12 +613,37 @@ func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool) -> voi
 # 드래그 앤 드롭 전역 제어
 # ============================================================
 func _input(event: InputEvent) -> void:
+	if is_instance_valid(context_menu_panel) and context_menu_panel.is_visible_in_tree():
+		if event is InputEventMouseButton and event.pressed:
+			if not context_menu_panel.get_global_rect().has_point(get_global_mouse_position()):
+				_close_context_menu()
+		elif event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
+				_close_context_menu()
+				get_viewport().set_input_as_handled()
+				return
+
+	# [L] 키 아이템 잠금/해제 & TradersTab [Space] 일괄 판매
+	if not is_dragging and event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_L or event.physical_keycode == KEY_L:
+			if _toggle_lock_at_mouse():
+				get_viewport().set_input_as_handled()
+				return
+		elif (event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE) and tab_container and tab_container.current_tab == 1:
+			if not selected_sell_uids.is_empty():
+				_execute_bulk_sell()
+				get_viewport().set_input_as_handled()
+				return
+
 	# R 키 회전
 	if is_dragging and event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_R or event.physical_keycode == KEY_R:
 			drag_data["rotated"] = not drag_data.get("rotated", false)
-			if drag_preview_node:
-				drag_preview_node.rotation = PI * 0.5 if drag_data["rotated"] else 0.0
+			_rebuild_drag_preview()
+			var m_pos := get_global_mouse_position()
+			for p in open_container_popups.values():
+				if is_instance_valid(p):
+					p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
 			if SoundManager: SoundManager.play("menu_move")
 			if player_grid_control: player_grid_control.queue_redraw()
 			if stash_grid_control: stash_grid_control.queue_redraw()
@@ -546,8 +652,10 @@ func _input(event: InputEvent) -> void:
 			
 	if is_dragging and event is InputEventMouseMotion:
 		var m_pos = event.global_position
-		if drag_preview_node:
-			drag_preview_node.global_position = m_pos - Vector2(22, 22)
+		_update_drag_preview_pos()
+		for p in open_container_popups.values():
+			if is_instance_valid(p):
+				p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
 			
 		if player_grid_control:
 			var p_m = m_pos - player_grid_control.get_global_rect().position
@@ -575,39 +683,61 @@ func _input(event: InputEvent) -> void:
 		_handle_hideout_global_drop(event.global_position)
 		get_viewport().set_input_as_handled()
 
-func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, slot_key: String = "") -> void:
+func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, slot_key: String = "", source_grid: InventoryGrid = null) -> void:
 	is_dragging = true
 	var base_size = ItemDatabase.get_item_grid_size(item_dict.get("id", ""))
 	if not item_dict.has("w"):
 		item_dict["w"] = base_size.x
 	if not item_dict.has("h"):
 		item_dict["h"] = base_size.y
+	var resolved_grid: InventoryGrid = source_grid
+	if resolved_grid == null:
+		if src_name == "player_grid": resolved_grid = player_grid_mgr
+		elif src_name == "stash_grid": resolved_grid = stash_grid_mgr
 	drag_data = {
 		"source": src_name,
 		"item": item_dict,
 		"cell": cell_pos,
 		"slot_name": slot_key,
-		"rotated": item_dict.get("rotated", false)
+		"rotated": item_dict.get("rotated", false),
+		"source_grid": resolved_grid
 	}
 	
 	if tooltip: tooltip.hide()
-	
-	if drag_preview_node: drag_preview_node.queue_free()
-	drag_preview_node = Control.new()
-	drag_preview_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	
-	var preview_tex = TextureRect.new()
-	preview_tex.texture = ItemIconManager.get_icon(item_dict.get("id", "")) if ItemIconManager else null
-	preview_tex.custom_minimum_size = Vector2(44, 44)
-	preview_tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	preview_tex.modulate = Color(1, 1, 1, 0.8)
-	drag_preview_node.add_child(preview_tex)
-	
-	add_child(drag_preview_node)
-	drag_preview_node.global_position = get_global_mouse_position() - Vector2(22, 22)
+	_rebuild_drag_preview()
 	_highlight_compatible_slots(item_dict, null)
 
+func _rebuild_drag_preview() -> void:
+	if drag_preview_node:
+		drag_preview_node.queue_free()
+		drag_preview_node = null
+	var item_dict: Dictionary = drag_data.get("item", {})
+	if item_dict.is_empty():
+		return
+	drag_preview_node = InventoryUIHelper.build_drag_preview(item_dict, bool(drag_data.get("rotated", false)), CELL_SIZE)
+	add_child(drag_preview_node)
+	_update_drag_preview_pos()
+
+func _update_drag_preview_pos() -> void:
+	if not drag_preview_node or not is_dragging or not is_inside_tree():
+		return
+	var item_dict: Dictionary = drag_data.get("item", {})
+	var is_rot := bool(drag_data.get("rotated", false))
+	var base_size := ItemDatabase.get_item_grid_size(str(item_dict.get("id", "")))
+	var cur_w := int(item_dict.get("h", base_size.y)) if is_rot else int(item_dict.get("w", base_size.x))
+	var cur_h := int(item_dict.get("w", base_size.x)) if is_rot else int(item_dict.get("h", base_size.y))
+	var center_offset := Vector2(float(cur_w) * CELL_SIZE * 0.5, float(cur_h) * CELL_SIZE * 0.5)
+	drag_preview_node.global_position = get_global_mouse_position() - center_offset
+
 func _end_drag() -> void:
+	if is_dragging and drag_data.get("is_split", false):
+		var orig = drag_data.get("split_source_item", {})
+		var split_amt = int(drag_data.get("split_amount", 0))
+		if not orig.is_empty() and split_amt > 0:
+			orig["amount"] = int(orig.get("amount", 0)) + split_amt
+			var sp_grid: InventoryGrid = drag_data.get("split_source_grid") as InventoryGrid
+			if sp_grid: sp_grid.grid_changed.emit()
+		drag_data["is_split"] = false
 	is_dragging = false
 	drag_data.clear()
 	hovered_player_cell = Vector2i(-1, -1)
@@ -618,6 +748,10 @@ func _end_drag() -> void:
 	_clear_slot_highlights()
 	if player_grid_control: player_grid_control.queue_redraw()
 	if stash_grid_control: stash_grid_control.queue_redraw()
+	for p in open_container_popups.values():
+		if is_instance_valid(p) and p.grid_control:
+			p.hovered_cell = Vector2i(-1, -1)
+			p.grid_control.queue_redraw()
 
 func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
 	InventoryUIHelper.highlight_compatible_slots(drop_targets, item, hovered_ctrl)
@@ -629,6 +763,19 @@ func _handle_hideout_global_drop(drop_pos: Vector2 = Vector2.INF) -> void:
 	if not is_dragging: return
 	
 	var m_pos = drop_pos if drop_pos != Vector2.INF else get_global_mouse_position()
+
+	# 0. 열려있는 중첩 컨테이너 팝업(최상단 우선) 위인지 검사
+	var children := get_children()
+	for ci in range(children.size() - 1, -1, -1):
+		var p_win := children[ci] as ContainerPopupWindow
+		if p_win and is_instance_valid(p_win) and p_win.is_visible_in_tree():
+			var d_cell: Vector2i = p_win.get_drop_cell(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
+			if d_cell != Vector2i(-1, -1):
+				_try_drop_on_popup(p_win, d_cell.x, d_cell.y)
+				return
+			if p_win.get_global_rect().has_point(m_pos):
+				_end_drag()
+				return
 	
 	# 1. 플레이어 배낭 2D 그리드 위인지 검사
 	if player_grid_control.get_global_rect().has_point(m_pos):
@@ -670,39 +817,37 @@ func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: in
 	var uid = item.get("uid", "")
 	var ignore_uid = uid if (src == ("player_grid" if is_dest_player else "stash_grid")) else ""
 	
-	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", "")):
+	if dest_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item.get("id", ""), item):
 		if src == "player_grid" and is_dest_player:
-			# 가방 내부 이동: move_item으로 안전하게 좌표 변경
 			player_grid_mgr.move_item(uid, cell_x, cell_y, is_rot)
 			if SoundManager: SoundManager.play("menu_select")
 		elif src == "stash_grid" and not is_dest_player:
-			# 창고 내부 이동: move_item으로 안전하게 좌표 변경
 			stash_grid_mgr.move_item(uid, cell_x, cell_y, is_rot)
 			if SoundManager: SoundManager.play("menu_select")
 		else:
-			# 서로 다른 그리드/슬롯 간 교차 이동 (가방 <-> 창고 <-> 장비):
-			# 출발지(src)에서 원래 좌표 기준으로 먼저 제거하여 grid_map 유령 점유(Ghost Cell)를 원천 차단!
-			if src == "player_grid":
-				player_grid_mgr.remove_item_by_uid(uid)
-			elif src == "stash_grid":
-				stash_grid_mgr.remove_item_by_uid(uid)
-			elif src == "equipment":
-				equipment_data[drag_data.get("slot_name", "")] = {}
-				_apply_backpack_grid_size()
-				_update_equipment_ui()
-				
 			if dest_grid.place_item(item, cell_x, cell_y, is_rot):
+				if src == "split":
+					drag_data["is_split"] = false
+				elif src == "player_grid":
+					player_grid_mgr.remove_item_by_uid(uid)
+				elif src == "stash_grid":
+					stash_grid_mgr.remove_item_by_uid(uid)
+				elif src == "popup_grid":
+					var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+					if p_grid: p_grid.remove_item_by_uid(uid)
+				elif src == "equipment":
+					equipment_data[drag_data.get("slot_name", "")] = {}
+					_apply_backpack_grid_size()
+					_update_equipment_ui()
 				if SoundManager: SoundManager.play("menu_select")
 			else:
-				# 배치 실패 시 출발지로 안전하게 롤백
-				if src == "player_grid":
-					player_grid_mgr.auto_add_item(item.get("id", ""), item.get("amount", 1), item)
-				elif src == "stash_grid":
-					stash_grid_mgr.auto_add_item(item.get("id", ""), item.get("amount", 1), item)
 				if SoundManager: SoundManager.play("hit_melee")
 	else:
-		# 배치 불가 사유 안내 (특히 2x2 세이프 파우치 구역)
-		if dest_grid.has_secure_container and cell_x < 2 and cell_y < 2:
+		# 배치 불가 사유 안내 (중첩 제한 & 2x2 세이프 파우치 구역)
+		var accept := dest_grid.can_accept_item(item, str(item.get("id", "")))
+		if not bool(accept.get("ok", true)):
+			_log_container_reject_reason(str(accept.get("reason", "")))
+		elif dest_grid.has_secure_container and cell_x < 2 and cell_y < 2:
 			if not dest_grid.is_allowed_in_secure_container(item.get("id", "")):
 				if EventBus.has_signal("event_logged"):
 					EventBus.event_logged.emit("🔒 [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
@@ -747,25 +892,33 @@ func _connect_equipment_slots() -> void:
 		
 		btn.gui_input.connect(func(event: InputEvent):
 			if event is InputEventMouseButton and event.pressed:
+				_close_context_menu()
 				if event.button_index == MOUSE_BUTTON_LEFT:
 					if is_dragging:
 						_try_equip_hideout_item(captured_slot)
 					else:
 						var equipped = equipment_data.get(captured_slot, {})
-						if not equipped.is_empty():
+						if event.double_click and captured_slot == "vest" and not equipped.is_empty():
+							if tooltip: tooltip.hide()
+							open_container_popup(equipped, null)
+						elif not equipped.is_empty():
 							if tooltip: tooltip.hide()
 							_start_drag("equipment", equipped, Vector2i.ZERO, captured_slot)
 				elif event.button_index == MOUSE_BUTTON_RIGHT:
-					# 우클릭 시 창고로 탈착
 					var equipped = equipment_data.get(captured_slot, {})
 					if not equipped.is_empty():
-						var rem = stash_grid_mgr.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
-						if rem <= 0:
-							equipment_data[captured_slot] = {}
-							_apply_backpack_grid_size()
-							_update_equipment_ui()
+						if event.alt_pressed or Input.is_key_pressed(KEY_ALT):
 							if tooltip: tooltip.hide()
-							if SoundManager: SoundManager.play("menu_select")
+							_show_context_menu(equipped, "equipment", captured_slot, null)
+						else:
+							# 우클릭 시 창고로 탈착
+							var rem = stash_grid_mgr.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
+							if rem <= 0:
+								equipment_data[captured_slot] = {}
+								_apply_backpack_grid_size()
+								_update_equipment_ui()
+								if tooltip: tooltip.hide()
+								if SoundManager: SoundManager.play("menu_select")
 		)
 
 func _try_equip_hideout_item(slot_name: String) -> void:
@@ -777,6 +930,15 @@ func _try_equip_hideout_item(slot_name: String) -> void:
 			EventBus.event_logged.emit("⚠️ [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
 		_end_drag()
 		return
+
+	if slot_name == "backpack":
+		var inner_arr = item.get("inner_items", [])
+		if inner_arr is Array and not inner_arr.is_empty():
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+			if SoundManager: SoundManager.play("hit_melee")
+			_end_drag()
+			return
 		
 	var src = drag_data.get("source", "")
 	var orig_slot = drag_data.get("slot_name", "")
@@ -790,6 +952,9 @@ func _try_equip_hideout_item(slot_name: String) -> void:
 		player_grid_mgr.remove_item_by_uid(item.get("uid", ""))
 	elif src == "stash_grid":
 		stash_grid_mgr.remove_item_by_uid(item.get("uid", ""))
+	elif src == "popup_grid":
+		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
 	elif src == "equipment":
 		equipment_data[orig_slot] = {}
 		
@@ -829,8 +994,270 @@ func _open_split_dialog(item: Dictionary, on_confirm_callback: Callable) -> void
 	_refresh_stash_ui()
 
 # ============================================================
-# 상인 거래소 UI 로직
+# 상인 거래소 & 3단 일괄 판매 UI 로직
 # ============================================================
+func _setup_traders_bulk_ui() -> void:
+	var t_vbox := get_node_or_null("CenterArea/TabContainer/TradersTab/VBox") as VBoxContainer
+	if not t_vbox:
+		return
+
+	# 상인 헤더 하단에 우호도(Loyalty Level) 정보 바 추가
+	var loyalty_panel := PanelContainer.new()
+	loyalty_panel.name = "TraderLoyaltyPanel"
+	loyalty_panel.theme_type_variation = &"HeaderPanel"
+	var l_hbox := HBoxContainer.new()
+	l_hbox.add_theme_constant_override("separation", 14)
+	loyalty_panel.add_child(l_hbox)
+
+	trader_loyalty_label = Label.new()
+	trader_loyalty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trader_loyalty_label.add_theme_font_size_override("font_size", 12)
+	trader_loyalty_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.38))
+	l_hbox.add_child(trader_loyalty_label)
+
+	trader_loyalty_bar = ProgressBar.new()
+	trader_loyalty_bar.custom_minimum_size = Vector2(210, 16)
+	trader_loyalty_bar.show_percentage = true
+	l_hbox.add_child(trader_loyalty_bar)
+
+	t_vbox.add_child(loyalty_panel)
+	t_vbox.move_child(loyalty_panel, 2)
+
+	# 기존 스크롤(상점)과 판매 영역을 3단 HBox 레이아웃으로 재구성 (기존 @onready 참조 유지)
+	var old_shop_scroll := t_vbox.get_node_or_null("Scroll") as Control
+	var old_sell_area := t_vbox.get_node_or_null("SellArea") as Control
+	if old_sell_area:
+		old_sell_area.hide()
+
+	var main_hbox := HBoxContainer.new()
+	main_hbox.name = "TraderMainHBox"
+	main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	main_hbox.add_theme_constant_override("separation", 12)
+	t_vbox.add_child(main_hbox)
+
+	# [좌측 컬럼] 상인 판매 물품 + 등급 해금 목록
+	var shop_col := VBoxContainer.new()
+	shop_col.name = "ShopCol"
+	shop_col.custom_minimum_size = Vector2(360, 0)
+	shop_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shop_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	shop_col.size_flags_stretch_ratio = 1.0
+	shop_col.add_theme_constant_override("separation", 6)
+	main_hbox.add_child(shop_col)
+
+	var shop_hdr := Label.new()
+	shop_hdr.text = "🛒 상인 공급 품목 (안정 공급 · 등급별 해금)"
+	shop_hdr.add_theme_font_size_override("font_size", 12)
+	shop_hdr.add_theme_color_override("font_color", Color(0.75, 0.88, 1.0))
+	shop_col.add_child(shop_hdr)
+
+	if old_shop_scroll:
+		t_vbox.remove_child(old_shop_scroll)
+		old_shop_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		old_shop_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		shop_col.add_child(old_shop_scroll)
+
+	# [중앙 컬럼] 자동 담기 + 배낭/창고 2D 다중 선택 & Marquee 드래그 영역
+	var center_col := VBoxContainer.new()
+	center_col.name = "BulkSelectCol"
+	center_col.custom_minimum_size = Vector2(440, 0)
+	center_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	center_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_col.size_flags_stretch_ratio = 1.25
+	center_col.add_theme_constant_override("separation", 6)
+	main_hbox.add_child(center_col)
+
+	var btn_bar := HBoxContainer.new()
+	btn_bar.add_theme_constant_override("separation", 6)
+	center_col.add_child(btn_bar)
+
+	var btn_valuables := Button.new()
+	btn_valuables.theme_type_variation = &"SmallButton"
+	btn_valuables.text = "🧹 환금템 모두 담기"
+	btn_valuables.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_valuables.add_theme_font_size_override("font_size", 11)
+	btn_valuables.pressed.connect(func(): _auto_select_bulk_sell("valuables"))
+	btn_bar.add_child(btn_valuables)
+
+	var btn_non_gear := Button.new()
+	btn_non_gear.theme_type_variation = &"SmallButton"
+	btn_non_gear.text = "📦 장비/무기 제외 모두 담기"
+	btn_non_gear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	btn_non_gear.add_theme_font_size_override("font_size", 11)
+	btn_non_gear.pressed.connect(func(): _auto_select_bulk_sell("non_gear"))
+	btn_bar.add_child(btn_non_gear)
+
+	var btn_clear := Button.new()
+	btn_clear.theme_type_variation = &"DangerButton"
+	btn_clear.text = "✖ 해제"
+	btn_clear.custom_minimum_size = Vector2(64, 0)
+	btn_clear.add_theme_font_size_override("font_size", 11)
+	btn_clear.pressed.connect(func():
+		selected_sell_uids.clear()
+		_refresh_trader_sell_ui()
+	)
+	btn_bar.add_child(btn_clear)
+
+	sell_grid_header_lbl = Label.new()
+	sell_grid_header_lbl.text = "💡 Alt+좌클릭 / 우클릭: 담기 토글 | 빈 공간 드래그: 범위(Marquee) 선택 | [L]: 잠금"
+	sell_grid_header_lbl.add_theme_font_size_override("font_size", 10)
+	sell_grid_header_lbl.add_theme_color_override("font_color", Color(0.76, 0.84, 0.92))
+	center_col.add_child(sell_grid_header_lbl)
+
+	var grids_scroll := ScrollContainer.new()
+	grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grids_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	center_col.add_child(grids_scroll)
+
+	var grids_vbox := VBoxContainer.new()
+	grids_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grids_vbox.add_theme_constant_override("separation", 8)
+	grids_scroll.add_child(grids_vbox)
+
+	var p_hdr := Label.new()
+	p_hdr.text = "🎒 내 배낭 (좌상단 2x2 SECURE & 🔒잠금 자동 보호)"
+	p_hdr.add_theme_font_size_override("font_size", 11)
+	p_hdr.add_theme_color_override("font_color", Color(0.95, 0.80, 0.35))
+	grids_vbox.add_child(p_hdr)
+
+	var p_panel := PanelContainer.new()
+	p_panel.theme_type_variation = &"GridSurfacePanel"
+	grids_vbox.add_child(p_panel)
+
+	sell_player_grid_ctrl = Control.new()
+	sell_player_grid_ctrl.name = "SellPlayerGridControl"
+	sell_player_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
+	sell_player_grid_ctrl.draw.connect(func():
+		if sell_player_grid_ctrl and player_grid_mgr:
+			InventoryUIHelper.draw_2d_grid(sell_player_grid_ctrl, player_grid_mgr, hovered_sell_player_cell, true, false, {}, CELL_SIZE)
+	)
+	sell_player_grid_ctrl.gui_input.connect(func(ev: InputEvent):
+		_handle_sell_grid_input(ev, sell_player_grid_ctrl, player_grid_mgr, false)
+	)
+	sell_player_grid_ctrl.mouse_exited.connect(func():
+		hovered_sell_player_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
+		if sell_player_grid_ctrl: sell_player_grid_ctrl.queue_redraw()
+	)
+	p_panel.add_child(sell_player_grid_ctrl)
+
+	var s_hdr := Label.new()
+	s_hdr.text = "📦 은신처 창고 (🔒잠금 아이템 제외)"
+	s_hdr.add_theme_font_size_override("font_size", 11)
+	s_hdr.add_theme_color_override("font_color", Color(0.55, 0.90, 1.0))
+	grids_vbox.add_child(s_hdr)
+
+	var s_panel := PanelContainer.new()
+	s_panel.theme_type_variation = &"GridSurfacePanel"
+	grids_vbox.add_child(s_panel)
+
+	sell_stash_grid_ctrl = Control.new()
+	sell_stash_grid_ctrl.name = "SellStashGridControl"
+	sell_stash_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
+	sell_stash_grid_ctrl.draw.connect(func():
+		if sell_stash_grid_ctrl and stash_grid_mgr:
+			InventoryUIHelper.draw_2d_grid(sell_stash_grid_ctrl, stash_grid_mgr, hovered_sell_stash_cell, false, false, {}, CELL_SIZE)
+	)
+	sell_stash_grid_ctrl.gui_input.connect(func(ev: InputEvent):
+		_handle_sell_grid_input(ev, sell_stash_grid_ctrl, stash_grid_mgr, true)
+	)
+	sell_stash_grid_ctrl.mouse_exited.connect(func():
+		hovered_sell_stash_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
+		if sell_stash_grid_ctrl: sell_stash_grid_ctrl.queue_redraw()
+	)
+	s_panel.add_child(sell_stash_grid_ctrl)
+
+	# [우측 컬럼] 판매 트레이 영수증 & 일괄 정산 패널
+	var right_panel := PanelContainer.new()
+	right_panel.name = "ReceiptCol"
+	right_panel.custom_minimum_size = Vector2(300, 0)
+	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_panel.size_flags_stretch_ratio = 0.88
+	var r_sb := PixelAssetManager.make_pixel_stylebox_flat(Color(0.06, 0.08, 0.11, 0.98), Color(0.28, 0.56, 0.48, 0.92), 2, 2, 2, 2, 8, 8, true)
+	right_panel.add_theme_stylebox_override("panel", r_sb)
+	main_hbox.add_child(right_panel)
+
+	var r_vbox := VBoxContainer.new()
+	r_vbox.add_theme_constant_override("separation", 8)
+	right_panel.add_child(r_vbox)
+
+	var r_title := Label.new()
+	r_title.text = "🧾 일괄 판매 정산 영수증"
+	r_title.add_theme_font_size_override("font_size", 14)
+	r_title.add_theme_color_override("font_color", Color(0.38, 0.98, 0.72))
+	r_vbox.add_child(r_title)
+
+	var r_scroll := ScrollContainer.new()
+	r_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	r_vbox.add_child(r_scroll)
+
+	sell_receipt_list_vbox = VBoxContainer.new()
+	sell_receipt_list_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sell_receipt_list_vbox.add_theme_constant_override("separation", 4)
+	r_scroll.add_child(sell_receipt_list_vbox)
+
+	sell_receipt_summary_lbl = Label.new()
+	sell_receipt_summary_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	sell_receipt_summary_lbl.add_theme_font_size_override("font_size", 12)
+	sell_receipt_summary_lbl.add_theme_color_override("font_color", Color(0.92, 0.95, 0.98))
+	r_vbox.add_child(sell_receipt_summary_lbl)
+
+	sell_bulk_btn = Button.new()
+	sell_bulk_btn.theme_type_variation = &"PrimaryButton"
+	sell_bulk_btn.custom_minimum_size = Vector2(0, 38)
+	sell_bulk_btn.text = "💰 일괄 판매 정산 (Space)"
+	sell_bulk_btn.pressed.connect(_execute_bulk_sell)
+	r_vbox.add_child(sell_bulk_btn)
+
+func _setup_market_controls() -> void:
+	var reg_area := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea") as Control
+	var reg_title := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea/RegisterTitle") as Label
+	var reg_scroll := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea/Scroll") as Control
+	if not reg_area:
+		return
+	reg_area.custom_minimum_size = Vector2(0, 134)
+	if reg_title:
+		reg_title.hide()
+	if reg_scroll:
+		reg_scroll.offset_top = 36.0
+
+	var bar := HBoxContainer.new()
+	bar.name = "MarketRegisterHeaderBar"
+	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	bar.offset_left = 10.0
+	bar.offset_top = 4.0
+	bar.offset_right = -10.0
+	bar.offset_bottom = 32.0
+	bar.add_theme_constant_override("separation", 8)
+	reg_area.add_child(bar)
+
+	market_slot_label = Label.new()
+	market_slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_slot_label.add_theme_font_size_override("font_size", 12)
+	market_slot_label.add_theme_color_override("font_color", Color(0.45, 0.90, 1.0))
+	bar.add_child(market_slot_label)
+
+	var ratio_lbl := Label.new()
+	ratio_lbl.text = "등록 가격 배율:"
+	ratio_lbl.add_theme_font_size_override("font_size", 11)
+	bar.add_child(ratio_lbl)
+
+	for r_val in [0.9, 1.0, 1.2, 1.5, 2.0]:
+		var r_btn := Button.new()
+		r_btn.theme_type_variation = &"SmallButton"
+		r_btn.text = "x%.1f" % r_val
+		r_btn.custom_minimum_size = Vector2(46, 24)
+		r_btn.add_theme_font_size_override("font_size", 10)
+		var cap_r: float = r_val
+		r_btn.pressed.connect(func():
+			market_price_ratio = cap_r
+			_refresh_market_register_ui()
+		)
+		bar.add_child(r_btn)
+
 func _select_trader(trader_id: String) -> void:
 	current_trader_id = trader_id
 	_refresh_trader_ui()
@@ -840,48 +1267,82 @@ func _refresh_trader_ui() -> void:
 	if t_data.is_empty(): return
 	
 	trader_desc_label.text = "[%s] %s" % [t_data["name"], t_data["desc"]]
+
+	var w_data := GameManager.current_world_data if GameManager else {}
+	if trader_loyalty_label and trader_loyalty_bar:
+		var l_info := HideoutProgression.get_trader_loyalty_info(w_data, current_trader_id)
+		var cur_lv := int(l_info.get("level", 1))
+		var q_cnt := int(l_info.get("quests", 0))
+		var spent := int(l_info.get("spent", 0))
+		var spec_hint := "잡화/기타 매입 55%"
+		if current_trader_id == "therapist":
+			spec_hint = "특화 매입: 의료·식량·식수 75% (기타 50%)"
+		elif current_trader_id == "prapor":
+			spec_hint = "특화 매입: 무기·탄약·장비·부품 70% (기타 48%)"
+		if cur_lv >= 4:
+			trader_loyalty_label.text = "⭐ 우호도 Lv.4 (최고 등급)  |  완료 의뢰 %d건  |  누적 거래 %d RUB  |  %s" % [q_cnt, spent, spec_hint]
+			trader_loyalty_bar.max_value = 100.0
+			trader_loyalty_bar.value = 100.0
+		else:
+			var nq := int(l_info.get("next_quests", 1))
+			var ns := maxi(1, int(l_info.get("next_spent", 15000)))
+			trader_loyalty_label.text = "⭐ 우호도 Lv.%d ➔ 다음 Lv.%d (의뢰 %d/%d건 · 누적 거래 %d/%d RUB)  |  %s" % [cur_lv, cur_lv + 1, q_cnt, nq, spent, ns, spec_hint]
+			trader_loyalty_bar.max_value = float(ns)
+			trader_loyalty_bar.value = float(mini(spent, ns))
 	
 	# 상품 목록 생성
 	for child in trader_items_vbox.get_children():
 		child.queue_free()
 		
-	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
-	var discount = HideoutProgression.get_trader_discount(GameManager.current_world_data) if GameManager else 0.0
+	var user_rubles = int(w_data.get("player", {}).get("rubles", 0))
+	var discount = HideoutProgression.get_trader_discount(w_data) if GameManager else 0.0
 	
 	for stock_item in t_data.get("stock", []):
 		var item_id = stock_item["id"]
 		var price = max(1, int(stock_item["price"] * (1.0 - discount)))
-		var amount = stock_item.get("amount", 1)
+		var amount = int(stock_item.get("amount", 1))
+		var req_lv := maxi(1, int(stock_item.get("min_level", 1)))
+		var is_unlocked := HideoutProgression.is_trader_item_unlocked(w_data, current_trader_id, stock_item)
 		var item_meta = ItemDatabase.get_item_data(item_id)
 		
 		var panel = PanelContainer.new()
 		var hbox = HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", 16)
+		hbox.add_theme_constant_override("separation", 10)
 		panel.add_child(hbox)
 		
 		# 아이템 아이콘
 		if ItemIconManager:
 			var icon_rect = TextureRect.new()
-			icon_rect.custom_minimum_size = Vector2(32, 32)
+			icon_rect.custom_minimum_size = Vector2(30, 30)
 			icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon_rect.texture = ItemIconManager.get_icon(item_id)
+			if not is_unlocked:
+				icon_rect.modulate = Color(0.5, 0.5, 0.5, 0.75)
 			hbox.add_child(icon_rect)
 		
 		var name_lbl = Label.new()
-		name_lbl.text = "%s (x%d)" % [item_meta.get("name", item_id), amount]
+		var lv_tag := "[Lv.%d] " % req_lv if req_lv > 1 else ""
+		name_lbl.text = "%s%s (x%d)" % [lv_tag, item_meta.get("name", item_id), amount]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.add_theme_font_size_override("font_size", 12)
+		if not is_unlocked:
+			name_lbl.add_theme_color_override("font_color", Color(0.58, 0.62, 0.68))
 		hbox.add_child(name_lbl)
 		
 		var price_lbl = Label.new()
 		price_lbl.text = "%d RUB" % price
-		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2))
+		price_lbl.add_theme_font_size_override("font_size", 12)
+		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.2) if is_unlocked else Color(0.6, 0.55, 0.45))
 		hbox.add_child(price_lbl)
 		
 		var buy_btn = Button.new()
-		buy_btn.text = "구매"
-		buy_btn.custom_minimum_size = Vector2(60, 32)
-		buy_btn.disabled = (user_rubles < price)
+		buy_btn.theme_type_variation = &"SmallButton"
+		buy_btn.text = ("구매" if is_unlocked else "🔒 Lv.%d" % req_lv)
+		buy_btn.custom_minimum_size = Vector2(68, 30)
+		buy_btn.disabled = (not is_unlocked) or (user_rubles < price)
+		if not is_unlocked:
+			buy_btn.tooltip_text = "우호도 Lv.%d 달성 시 해금됩니다." % req_lv
 		buy_btn.pressed.connect(func(): _buy_item(item_id, amount, price))
 		hbox.add_child(buy_btn)
 		
@@ -890,58 +1351,252 @@ func _refresh_trader_ui() -> void:
 	_refresh_trader_sell_ui()
 
 func _refresh_trader_sell_ui() -> void:
-	for child in trader_sell_grid.get_children():
-		child.queue_free()
-		
-	# 가방과 보관함(창고)의 아이템들을 판매 가능 목록으로 표시
-	var sellable_sources = [
-		{"mgr": player_grid_mgr, "tag": "🎒가방", "is_stash": false},
-		{"mgr": stash_grid_mgr, "tag": "📦창고", "is_stash": true}
-	]
-	var sell_ratio = HideoutProgression.get_trader_sell_ratio(GameManager.current_world_data) if GameManager else 0.60
-	
-	for src in sellable_sources:
-		var mgr = src["mgr"]
-		if not mgr: continue
-		var tag = src["tag"]
-		var is_stash = src["is_stash"]
-		
-		for item in mgr.items:
-			if item and not item.is_empty():
-				var data = ItemDatabase.get_item_data(item.get("id", ""))
-				var sell_price = max(1, int(data.get("value", 500) * sell_ratio))
-				var uid = item.get("uid", "")
-				
-				var btn = Button.new()
-				btn.custom_minimum_size = Vector2(110, 50)
-				
-				var btn_style = StyleBoxFlat.new()
-				btn_style.bg_color = Color(0.11, 0.14, 0.18, 0.96)
-				btn_style.border_width_left = 2
-				btn_style.border_width_top = 1
-				btn_style.border_width_right = 1
-				btn_style.border_width_bottom = 2
-				btn_style.border_color = Color(0.32, 0.38, 0.48, 1.0)
-				btn_style.set_corner_radius_all(0)
-				btn_style.corner_detail = 1
-				btn_style.anti_aliasing = false
-				btn.add_theme_stylebox_override("normal", btn_style)
-				
-				if ItemIconManager:
-					btn.icon = ItemIconManager.get_icon(item.get("id", ""))
-					btn.expand_icon = true
-				btn.text = "[%s] %s\n+%d RUB" % [tag, data.get("name", item.get("id", "")), sell_price * item.get("amount", 1)]
-				btn.add_theme_font_size_override("font_size", 9)
-				btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.4))
-				btn.pressed.connect(func(): _sell_item(uid, is_stash, item.get("id", ""), item.get("amount", 1), sell_price))
-				trader_sell_grid.add_child(btn)
+	# 1. 선택 목록에서 더 이상 존재하지 않거나 보호(잠금/2x2 안전) 대상이 된 아이템 정리
+	var to_erase: Array[String] = []
+	for uid_key in selected_sell_uids.keys():
+		var uid_s := str(uid_key)
+		var entry: Dictionary = selected_sell_uids[uid_key]
+		var src_grid: InventoryGrid = player_grid_mgr
+		if bool(entry.get("is_stash", false)):
+			src_grid = stash_grid_mgr
+		var it := src_grid.get_item_by_uid(uid_s) if src_grid else {}
+		if it.is_empty() or bool(it.get("locked", false)) or (src_grid and src_grid.is_item_in_secure_zone(it)):
+			to_erase.append(uid_s)
+	for ek in to_erase:
+		selected_sell_uids.erase(ek)
+
+	# 2. 2D 선택 그리드 크기 및 하이라이트 메타 동기화
+	if sell_player_grid_ctrl and player_grid_mgr:
+		sell_player_grid_ctrl.custom_minimum_size = Vector2(float(player_grid_mgr.grid_width) * CELL_SIZE, float(player_grid_mgr.grid_height) * CELL_SIZE)
+		sell_player_grid_ctrl.set_meta("selected_sell_uids", selected_sell_uids)
+		sell_player_grid_ctrl.queue_redraw()
+	if sell_stash_grid_ctrl and stash_grid_mgr:
+		sell_stash_grid_ctrl.custom_minimum_size = Vector2(float(stash_grid_mgr.grid_width) * CELL_SIZE, float(stash_grid_mgr.grid_height) * CELL_SIZE)
+		sell_stash_grid_ctrl.set_meta("selected_sell_uids", selected_sell_uids)
+		sell_stash_grid_ctrl.queue_redraw()
+
+	_refresh_sell_receipt_panel()
+
+func _refresh_sell_receipt_panel() -> void:
+	if not sell_receipt_list_vbox or not sell_receipt_summary_lbl or not sell_bulk_btn:
+		return
+	for ch in sell_receipt_list_vbox.get_children():
+		ch.queue_free()
+
+	var w_data := GameManager.current_world_data if GameManager else {}
+	var preview := HideoutProgression.preview_bulk_sell_receipt(current_trader_id, selected_sell_uids.values(), w_data, player_grid_mgr, stash_grid_mgr)
+	var line_items: Array = preview.get("line_items", [])
+
+	if line_items.is_empty():
+		var empty_lbl := Label.new()
+		empty_lbl.text = "판매 트레이가 비어 있습니다.\n\n좌측 배낭/창고 그리드에서\nAlt+좌클릭 / 우클릭 또는 드래그로\n아이템을 담아 주세요."
+		empty_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		empty_lbl.add_theme_font_size_override("font_size", 11)
+		empty_lbl.add_theme_color_override("font_color", Color(0.62, 0.68, 0.76))
+		sell_receipt_list_vbox.add_child(empty_lbl)
+	else:
+		for ln in line_items:
+			var it_id := str(ln.get("id", ""))
+			var idata := ItemDatabase.get_item_data(it_id)
+			var disp_name := str(idata.get("name", it_id))
+			var amt := int(ln.get("amount", 1))
+			var fin := int(ln.get("final_total", 0))
+			var drop_amt := int(ln.get("drop_amount", 0))
+
+			var row := HBoxContainer.new()
+			row.add_theme_constant_override("separation", 6)
+			var name_l := Label.new()
+			name_l.text = "%s%s" % [disp_name, (" x%d" % amt if amt > 1 else "")]
+			name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			name_l.clip_text = true
+			name_l.add_theme_font_size_override("font_size", 11)
+			row.add_child(name_l)
+
+			var price_l := Label.new()
+			price_l.text = "+%d RUB" % fin if drop_amt <= 0 else "+%d (-%d)" % [fin, drop_amt]
+			price_l.add_theme_font_size_override("font_size", 11)
+			price_l.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if drop_amt <= 0 else Color(1.0, 0.80, 0.35))
+			row.add_child(price_l)
+
+			sell_receipt_list_vbox.add_child(row)
+
+	var valid_cnt := int(preview.get("valid_count", 0))
+	var total_units := int(preview.get("total_units", 0))
+	var final_rubles := int(preview.get("total_final_rubles", 0))
+	var loss_rubles := int(preview.get("elasticity_loss_rubles", 0))
+	var loss_pct := float(preview.get("elasticity_loss_pct", 0.0))
+
+	var sum_lines: Array[String] = []
+	sum_lines.append("──────────────────────────")
+	sum_lines.append("📦 선택 품목: %d슬롯 (총 %d개)" % [valid_cnt, total_units])
+	if loss_rubles > 0:
+		sum_lines.append("📉 대량 매각 시세 하락: -%d RUB (-%.1f%%)" % [loss_rubles, loss_pct])
+	sum_lines.append("💵 예상 정산 금액: %d RUB" % final_rubles)
+	sell_receipt_summary_lbl.text = "\n".join(sum_lines)
+	sell_receipt_summary_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35) if loss_rubles > 0 else Color(0.88, 0.96, 0.92))
+	sell_bulk_btn.disabled = (valid_cnt <= 0)
+
+func _toggle_sell_selection(item: Dictionary, mgr: InventoryGrid, is_stash: bool) -> void:
+	if item.is_empty() or not mgr:
+		return
+	var uid := str(item.get("uid", ""))
+	if uid == "":
+		return
+	if selected_sell_uids.has(uid):
+		selected_sell_uids.erase(uid)
+		_refresh_trader_sell_ui()
+		if SoundManager: SoundManager.play("menu_move")
+		return
+	if bool(item.get("locked", false)):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🔒 잠금된 아이템은 판매 트레이에 담을 수 없습니다. ([L] 키로 해제)")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+	if mgr.is_item_in_secure_zone(item):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("🔒 2x2 안전 컨테이너 내 아이템은 일괄 판매에서 보호됩니다.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+	var inner = item.get("inner_items", [])
+	if inner is Array and not inner.is_empty():
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 내부에 아이템이 든 컨테이너는 먼저 비워 주세요.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+	selected_sell_uids[uid] = {
+		"uid": uid,
+		"is_stash": is_stash,
+		"source_grid": mgr
+	}
+	_refresh_trader_sell_ui()
+	if SoundManager: SoundManager.play("menu_select")
+
+func _auto_select_bulk_sell(mode: String) -> void:
+	var cands := HideoutProgression.collect_bulk_sell_candidates(mode, player_grid_mgr, stash_grid_mgr)
+	for c in cands:
+		var uid := str(c.get("uid", ""))
+		if uid != "":
+			selected_sell_uids[uid] = c
+	_refresh_trader_sell_ui()
+	if SoundManager:
+		SoundManager.play("menu_select" if not cands.is_empty() else "menu_move")
+
+func _execute_bulk_sell() -> void:
+	if selected_sell_uids.is_empty() or not GameManager:
+		return
+	var entries: Array = selected_sell_uids.values()
+	var res := HideoutProgression.execute_bulk_sell(current_trader_id, entries, GameManager.current_world_data, player_grid_mgr, stash_grid_mgr)
+	if bool(res.get("success", false)):
+		selected_sell_uids.clear()
+		if SoundManager: SoundManager.play("level_up")
+		_update_money_label()
+		_refresh_stash_ui()
+		_refresh_trader_ui()
+		_sync_save_data()
+
+func _handle_sell_grid_input(event: InputEvent, ctrl: Control, mgr: InventoryGrid, is_stash: bool) -> void:
+	if not ctrl or not mgr:
+		return
+	var local_pos := ctrl.get_local_mouse_position()
+	var cx := int(floor(local_pos.x / CELL_SIZE))
+	var cy := int(floor(local_pos.y / CELL_SIZE))
+
+	if event is InputEventMouseMotion:
+		var in_bounds := (cx >= 0 and cx < mgr.grid_width and cy >= 0 and cy < mgr.grid_height)
+		if is_stash:
+			hovered_sell_stash_cell = Vector2i(cx, cy) if in_bounds else Vector2i(-1, -1)
+		else:
+			hovered_sell_player_cell = Vector2i(cx, cy) if in_bounds else Vector2i(-1, -1)
+
+		if _is_marquee_selecting and _marquee_ctrl == ctrl:
+			var x0 := minf(_marquee_start_local.x, local_pos.x)
+			var y0 := minf(_marquee_start_local.y, local_pos.y)
+			var x1 := maxf(_marquee_start_local.x, local_pos.x)
+			var y1 := maxf(_marquee_start_local.y, local_pos.y)
+			ctrl.set_meta("marquee_rect", Rect2(x0, y0, x1 - x0, y1 - y0))
+			if tooltip: tooltip.hide()
+		elif in_bounds:
+			var h_item := mgr.get_item_at(cx, cy)
+			if not h_item.is_empty() and tooltip:
+				var idata := ItemDatabase.get_item_data(str(h_item.get("id", "")))
+				tooltip.display_item(h_item, idata)
+				tooltip.update_position(get_global_mouse_position())
+			elif tooltip:
+				tooltip.hide()
+		elif tooltip:
+			tooltip.hide()
+		ctrl.queue_redraw()
+	elif event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			var r_item := mgr.get_item_at(cx, cy)
+			if not r_item.is_empty():
+				_toggle_sell_selection(r_item, mgr, is_stash)
+		elif event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				var l_item := mgr.get_item_at(cx, cy)
+				if (event.alt_pressed or Input.is_key_pressed(KEY_ALT)) and not l_item.is_empty():
+					_toggle_sell_selection(l_item, mgr, is_stash)
+				else:
+					_is_marquee_selecting = true
+					_marquee_ctrl = ctrl
+					_marquee_grid = mgr
+					_marquee_is_stash = is_stash
+					_marquee_start_local = local_pos
+					ctrl.set_meta("marquee_rect", Rect2(local_pos, Vector2.ZERO))
+					ctrl.queue_redraw()
+			elif _is_marquee_selecting and _marquee_ctrl == ctrl:
+				var raw_rect = ctrl.get_meta("marquee_rect", Rect2())
+				var m_rect: Rect2 = raw_rect if raw_rect is Rect2 else Rect2()
+				ctrl.remove_meta("marquee_rect")
+				_is_marquee_selecting = false
+				_marquee_ctrl = null
+				_marquee_grid = null
+				if m_rect.size.x < 6.0 and m_rect.size.y < 6.0:
+					var click_item := mgr.get_item_at(cx, cy)
+					if not click_item.is_empty():
+						_toggle_sell_selection(click_item, mgr, is_stash)
+				else:
+					_apply_marquee_selection(m_rect, mgr, is_stash)
+				ctrl.queue_redraw()
+
+func _apply_marquee_selection(m_rect: Rect2, mgr: InventoryGrid, is_stash: bool) -> void:
+	if not mgr:
+		return
+	var added_cnt := 0
+	for it in mgr.items:
+		if it.is_empty():
+			continue
+		if bool(it.get("locked", false)) or mgr.is_item_in_secure_zone(it):
+			continue
+		var inner = it.get("inner_items", [])
+		if inner is Array and not inner.is_empty():
+			continue
+		var is_rot := bool(it.get("rotated", false))
+		var cw := int(it.get("h", 1)) if is_rot else int(it.get("w", 1))
+		var ch := int(it.get("w", 1)) if is_rot else int(it.get("h", 1))
+		var item_rect := Rect2(float(it.get("x", 0)) * CELL_SIZE, float(it.get("y", 0)) * CELL_SIZE, float(cw) * CELL_SIZE, float(ch) * CELL_SIZE)
+		if m_rect.intersects(item_rect):
+			var uid := str(it.get("uid", ""))
+			if uid != "" and not selected_sell_uids.has(uid):
+				selected_sell_uids[uid] = {
+					"uid": uid,
+					"is_stash": is_stash,
+					"source_grid": mgr
+				}
+				added_cnt += 1
+	_refresh_trader_sell_ui()
+	if SoundManager:
+		SoundManager.play("menu_select" if added_cnt > 0 else "menu_move")
 
 func _buy_item(item_id: String, amount: int, price: int) -> void:
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
 	if user_rubles < price: return
 	
-	# 자금 차감
+	# 자금 차감 및 거래자 누적 거래액 & 시세 탄력성 반영
 	GameManager.current_world_data["player"]["rubles"] -= price
+	HideoutProgression.record_trader_transaction(GameManager.current_world_data, current_trader_id, price)
+	if FleaMarket:
+		FleaMarket.record_player_purchase(item_id, amount)
 	_update_money_label()
 	
 	# 배낭 또는 창고에 아이템 지급 (Auto-Fit)
@@ -953,9 +1608,12 @@ func _buy_item(item_id: String, amount: int, price: int) -> void:
 	_refresh_trader_ui()
 	_sync_save_data()
 
-func _sell_item(uid: String, is_stash: bool, _item_id: String, amount: int, unit_price: int) -> void:
+func _sell_item(uid: String, is_stash: bool, item_id: String, amount: int, unit_price: int) -> void:
 	var total_gain = unit_price * amount
 	GameManager.current_world_data["player"]["rubles"] += total_gain
+	HideoutProgression.record_trader_transaction(GameManager.current_world_data, current_trader_id, total_gain)
+	if FleaMarket:
+		FleaMarket.record_player_sale(item_id, amount)
 	_update_money_label()
 	
 	if is_stash:
@@ -1055,13 +1713,16 @@ func _refresh_market_ui() -> void:
 	
 	for listing in FleaMarket.listings:
 		var item_id = listing["item_name"]
-		var price = listing["price"]
-		var amount = listing["count"]
+		var price = int(listing["price"])
+		var amount = int(listing["count"])
+		var is_player_listing := bool(listing.get("is_player", false))
+		var stock_rem := int(listing.get("stock_remaining", 1))
+		var is_sold_out := bool(listing.get("sold_out", false)) or stock_rem <= 0
 		var item_meta = ItemDatabase.get_item_data(item_id)
 		
 		var panel = PanelContainer.new()
 		var hbox = HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", 16)
+		hbox.add_theme_constant_override("separation", 14)
 		panel.add_child(hbox)
 		
 		if ItemIconManager:
@@ -1070,23 +1731,31 @@ func _refresh_market_ui() -> void:
 			icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 			icon_rect.texture = ItemIconManager.get_icon(item_id)
+			if is_sold_out:
+				icon_rect.modulate = Color(0.45, 0.45, 0.45, 0.65)
 			hbox.add_child(icon_rect)
 		
 		var name_lbl = Label.new()
-		name_lbl.text = "%s (x%d)" % [item_meta.get("name", item_id), amount]
+		var stock_txt := ("[내 등록 매물 · 대기 중]" if is_player_listing else ("[품절]" if is_sold_out else "재고 %d개" % stock_rem))
+		name_lbl.text = "%s (x%d)  [%s]" % [item_meta.get("name", item_id), amount, stock_txt]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		if is_sold_out:
+			name_lbl.add_theme_color_override("font_color", Color(0.55, 0.58, 0.62))
+		elif is_player_listing:
+			name_lbl.add_theme_color_override("font_color", Color(0.45, 0.88, 1.0))
 		hbox.add_child(name_lbl)
 		
 		var price_lbl = Label.new()
 		price_lbl.text = "%d RUB" % (price * amount)
-		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+		price_lbl.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2) if not is_sold_out else Color(0.5, 0.48, 0.45))
 		hbox.add_child(price_lbl)
 		
 		var buy_btn = Button.new()
-		buy_btn.text = "구매"
-		buy_btn.custom_minimum_size = Vector2(60, 32)
-		buy_btn.disabled = (user_rubles < price * amount)
-		buy_btn.pressed.connect(func(): _buy_market_item(listing, price * amount))
+		buy_btn.text = "품절" if is_sold_out else ("등록중" if is_player_listing else "구매")
+		buy_btn.custom_minimum_size = Vector2(68, 32)
+		buy_btn.disabled = is_sold_out or is_player_listing or (user_rubles < price * amount)
+		var cap_listing = listing
+		buy_btn.pressed.connect(func(): _buy_market_item(cap_listing, price * amount))
 		hbox.add_child(buy_btn)
 		
 		market_items_vbox.add_child(panel)
@@ -1096,6 +1765,14 @@ func _refresh_market_ui() -> void:
 func _refresh_market_register_ui() -> void:
 	for child in market_register_grid.get_children():
 		child.queue_free()
+
+	var used_slots := FleaMarket.player_listings.size() if FleaMarket else 0
+	var max_slots := FleaMarket.MAX_PLAYER_LISTINGS if FleaMarket else 3
+	var can_reg := FleaMarket.can_register_more_listings() if FleaMarket else false
+	var user_rubles := int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+	if market_slot_label:
+		market_slot_label.text = "💰 암시장 위탁 판매 등록  |  보유 슬롯: %d / %d  |  누진 수수료 5%%~35%% (잠금 🔒 제외)" % [used_slots, max_slots]
+		market_slot_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45) if not can_reg else Color(0.45, 0.90, 1.0))
 		
 	var registerable_sources = [
 		{"mgr": player_grid_mgr, "tag": "🎒가방", "is_stash": false},
@@ -1110,16 +1787,26 @@ func _refresh_market_register_ui() -> void:
 		
 		for item in mgr.items:
 			if item and not item.is_empty():
+				if bool(item.get("locked", false)):
+					continue
+				var inner = item.get("inner_items", [])
+				if inner is Array and not inner.is_empty():
+					continue
 				var item_id = item.get("id", "")
 				var uid = item.get("uid", "")
+				var amt := maxi(1, int(item.get("amount", 1)))
 				var data = ItemDatabase.get_item_data(item_id)
-				if item_id == "Scav 식별줄(Dogtag)":
+				if item_id in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
 					continue
 					
-				var current_price = FleaMarket.get_current_price(item_id)
+				var ref_price := FleaMarket.get_current_price(item_id)
+				var ask_price := maxi(10, int(round(float(ref_price) * market_price_ratio)))
+				var fee := FleaMarket.calculate_listing_fee(item_id, amt, ask_price)
+				var fee_pct := int(round(FleaMarket.calculate_listing_fee_rate(item_id, ask_price) * 100.0))
 				
 				var btn = Button.new()
-				btn.custom_minimum_size = Vector2(110, 50)
+				btn.custom_minimum_size = Vector2(148, 56)
+				btn.disabled = (not can_reg) or (user_rubles < fee)
 				
 				var btn_style = StyleBoxFlat.new()
 				btn_style.bg_color = Color(0.11, 0.14, 0.18, 0.96)
@@ -1136,39 +1823,50 @@ func _refresh_market_register_ui() -> void:
 				if ItemIconManager:
 					btn.icon = ItemIconManager.get_icon(item_id)
 					btn.expand_icon = true
-				btn.text = "[%s] %s\n시장가 %d RUB" % [tag, data.get("name", item_id), current_price]
+				btn.text = "[%s] %s x%d\n%d RUB (수수료 %d%%)" % [tag, data.get("name", item_id), amt, ask_price * amt, fee_pct]
 				btn.add_theme_font_size_override("font_size", 9)
-				btn.add_theme_color_override("font_color", Color(0.4, 0.8, 1.0))
-				btn.pressed.connect(func(): _register_market_item(uid, is_stash, item_id, item.get("amount", 1), current_price))
+				btn.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0) if not btn.disabled else Color(0.5, 0.54, 0.58))
+				btn.pressed.connect(func(): _register_market_item(uid, is_stash, item_id, amt, ask_price))
 				market_register_grid.add_child(btn)
 
 func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
 	if user_rubles < total_price: return
-	
-	GameManager.current_world_data["player"]["rubles"] -= total_price
+	var res := FleaMarket.purchase_listing(listing, 1)
+	if not bool(res.get("success", false)):
+		_refresh_market_ui()
+		return
+	var actual_cost := int(res.get("total_price", total_price))
+	GameManager.current_world_data["player"]["rubles"] -= actual_cost
 	_update_money_label()
 	
-	var remaining = player_grid_mgr.auto_add_item(listing["item_name"], listing["count"])
+	var b_item := str(res.get("item_name", listing.get("item_name", "")))
+	var b_amt := int(res.get("amount", listing.get("count", 1)))
+	var remaining = player_grid_mgr.auto_add_item(b_item, b_amt)
 	if remaining > 0:
-		stash_grid_mgr.auto_add_item(listing["item_name"], remaining)
+		stash_grid_mgr.auto_add_item(b_item, remaining)
 		
-	FleaMarket.listings.erase(listing)
 	if SoundManager: SoundManager.play("menu_select")
 	
 	_refresh_market_ui()
 	_sync_save_data()
 
-func _register_market_item(uid: String, is_stash: bool, item_id: String, amount: int, current_price: int) -> void:
-	# 5% 수수료 (선불)
-	var fee = max(1, int(current_price * amount * 0.05))
-	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
+func _register_market_item(uid: String, is_stash: bool, item_id: String, amount: int, ask_unit_price: int) -> void:
+	if not FleaMarket or not FleaMarket.can_register_more_listings():
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 암시장 동시 판매 슬롯(최대 %d개)이 가득 찼습니다." % (FleaMarket.MAX_PLAYER_LISTINGS if FleaMarket else 3))
+		return
+	var fee := FleaMarket.calculate_listing_fee(item_id, amount, ask_unit_price)
+	var user_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0))
 	
 	if user_rubles < fee:
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⚠️ 등록 수수료(%d RUB)가 부족합니다." % fee)
 		return
 		
+	if not FleaMarket.register_item(item_id, amount, ask_unit_price, true):
+		return
+
 	GameManager.current_world_data["player"]["rubles"] -= fee
 	_update_money_label()
 	
@@ -1178,17 +1876,293 @@ func _register_market_item(uid: String, is_stash: bool, item_id: String, amount:
 	else:
 		player_grid_mgr.remove_item_by_uid(uid)
 	
-	FleaMarket.add_listing({
-		"item_name": item_id,
-		"count": amount,
-		"price": current_price,
-		"seller": "플레이어",
-		"time_left": 1800
-	})
-	
 	if SoundManager: SoundManager.play("menu_select")
 	_refresh_market_ui()
 	_sync_save_data()
+
+# ============================================================
+# 중첩 컨테이너 팝업창 & 잠금 [L] & 컨텍스트 메뉴
+# ============================================================
+func _sync_all_open_popups() -> void:
+	for p in open_container_popups.values():
+		if is_instance_valid(p) and p.inner_grid and not p.container_item.is_empty():
+			InventoryGrid.sync_container_item_contents(p.container_item, p.inner_grid)
+
+func close_all_container_popups() -> void:
+	for p in open_container_popups.values():
+		if is_instance_valid(p):
+			p.queue_free()
+	open_container_popups.clear()
+
+func _prune_stale_popups() -> void:
+	var stale: Array[String] = []
+	for cuid in open_container_popups.keys():
+		var p = open_container_popups[cuid]
+		if not is_instance_valid(p):
+			stale.append(str(cuid))
+			continue
+		var s_uid := str(p.container_item.get("uid", ""))
+		if s_uid != "":
+			var exists := (player_grid_mgr and not player_grid_mgr.get_item_by_uid(s_uid).is_empty()) or (stash_grid_mgr and not stash_grid_mgr.get_item_by_uid(s_uid).is_empty())
+			if not exists:
+				stale.append(str(cuid))
+	for ek in stale:
+		var p = open_container_popups.get(ek, null)
+		if is_instance_valid(p):
+			p.queue_free()
+		open_container_popups.erase(ek)
+
+func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = null) -> void:
+	if container_item.is_empty() or not InventoryGrid.is_container_item(container_item):
+		return
+	var cuid := str(container_item.get("uid", ""))
+	if cuid == "":
+		cuid = "equip_vest_" + str(container_item.get("id", "container"))
+	if open_container_popups.has(cuid):
+		var existing: ContainerPopupWindow = open_container_popups[cuid] as ContainerPopupWindow
+		if is_instance_valid(existing):
+			existing.move_to_front()
+			return
+		open_container_popups.erase(cuid)
+
+	var popup := ContainerPopupWindow.new()
+	add_child(popup)
+	popup.setup(container_item, src_grid, self)
+	var idx := open_container_popups.size()
+	var base_pos := Vector2(380.0 + float(idx) * 28.0, 90.0 + float(idx) * 24.0)
+	popup.position = InventoryUIHelper.clamp_popup_position(popup, base_pos, size, 8.0)
+	open_container_popups[cuid] = popup
+
+	popup.popup_closed.connect(func(_closed_uid: String):
+		open_container_popups.erase(cuid)
+		_on_grid_changed()
+	)
+	popup.popup_grid_changed.connect(func(_changed_uid: String):
+		_sync_save_data()
+	)
+	popup.item_drag_started.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
+		_start_drag("popup_grid", it, c_pos, "", p_win.inner_grid)
+	)
+	popup.item_split_requested.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
+		_open_split_dialog(it, func(split_amt):
+			var split_item := it.duplicate(true)
+			split_item["uid"] = InventoryGrid.next_uid()
+			split_item["amount"] = split_amt
+			it["amount"] -= split_amt
+			if p_win.inner_grid:
+				p_win.inner_grid.grid_changed.emit()
+			_start_drag("split", split_item, c_pos, "", p_win.inner_grid)
+			drag_data["is_split"] = true
+			drag_data["split_source_item"] = it
+			drag_data["split_source_grid"] = p_win.inner_grid
+			drag_data["split_amount"] = split_amt
+		)
+	)
+	popup.item_quick_action_requested.connect(_handle_popup_quick_action)
+	popup.item_context_menu_requested.connect(func(p_win: ContainerPopupWindow, it: Dictionary):
+		if tooltip: tooltip.hide()
+		_show_context_menu(it, "popup_grid", "", p_win.inner_grid)
+	)
+	popup.item_hovered.connect(func(_p_win: ContainerPopupWindow, it: Dictionary):
+		if not is_dragging and tooltip and not it.is_empty():
+			var d := ItemDatabase.get_item_data(str(it.get("id", "")))
+			tooltip.display_item(it, d)
+			tooltip.update_position(get_global_mouse_position())
+	)
+	popup.item_unhovered.connect(func(_p_win: ContainerPopupWindow):
+		if tooltip: tooltip.hide()
+	)
+	if SoundManager: SoundManager.play("menu_select")
+
+func _toggle_lock_at_mouse() -> bool:
+	var m_pos := get_global_mouse_position()
+	var children := get_children()
+	for ci in range(children.size() - 1, -1, -1):
+		var p_win := children[ci] as ContainerPopupWindow
+		if p_win and is_instance_valid(p_win) and p_win.is_visible_in_tree() and p_win.get_global_rect().has_point(m_pos):
+			var h_it: Dictionary = p_win.get_hovered_item()
+			if not h_it.is_empty() and p_win.inner_grid:
+				p_win.inner_grid.toggle_item_lock(str(h_it.get("uid", "")))
+				if tooltip and tooltip.visible:
+					tooltip.display_item(h_it, ItemDatabase.get_item_data(str(h_it.get("id", ""))))
+				if SoundManager: SoundManager.play("menu_select")
+				return true
+			return false
+	var targets := [
+		[player_grid_control, player_grid_mgr],
+		[stash_grid_control, stash_grid_mgr],
+		[sell_player_grid_ctrl, player_grid_mgr],
+		[sell_stash_grid_ctrl, stash_grid_mgr]
+	]
+	for pair in targets:
+		var ctrl: Control = pair[0]
+		var mgr: InventoryGrid = pair[1]
+		if is_instance_valid(ctrl) and mgr and ctrl.is_visible_in_tree() and ctrl.get_global_rect().has_point(m_pos):
+			var l_pos := m_pos - ctrl.get_global_rect().position
+			var cx := int(floor(l_pos.x / CELL_SIZE))
+			var cy := int(floor(l_pos.y / CELL_SIZE))
+			var h_it := mgr.get_item_at(cx, cy)
+			if not h_it.is_empty():
+				mgr.toggle_item_lock(str(h_it.get("uid", "")))
+				if tooltip and tooltip.visible:
+					tooltip.display_item(h_it, ItemDatabase.get_item_data(str(h_it.get("id", ""))))
+				if SoundManager: SoundManager.play("menu_select")
+				return true
+	return false
+
+func _log_container_reject_reason(reason: String) -> void:
+	if not EventBus.has_signal("event_logged"):
+		return
+	match reason:
+		"self_drop":
+			EventBus.event_logged.emit("⚠️ 자기 자신의 내부에는 수납할 수 없습니다.")
+		"max_depth_exceeded":
+			EventBus.event_logged.emit("⚠️ 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
+		"filter_mismatch":
+			EventBus.event_logged.emit("🔒 해당 보관함 전용 카테고리 아이템만 넣을 수 있습니다.")
+		_:
+			EventBus.event_logged.emit("⚠️ 해당 위치에 보관할 수 없습니다.")
+
+func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -> void:
+	if not is_dragging or not popup or not popup.inner_grid:
+		_end_drag()
+		return
+	var target_grid := popup.inner_grid
+	var item: Dictionary = drag_data.get("item", {})
+	var item_id := str(item.get("id", ""))
+	var is_rot := bool(drag_data.get("rotated", false))
+	var base_size := ItemDatabase.get_item_grid_size(item_id)
+	var base_w := int(item.get("w", base_size.x))
+	var base_h := int(item.get("h", base_size.y))
+	var place_w := base_h if is_rot else base_w
+	var place_h := base_w if is_rot else base_h
+	var src := str(drag_data.get("source", ""))
+	var src_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
+	var uid := str(item.get("uid", ""))
+	var same_grid := (src_grid == target_grid)
+	var ignore_uid := uid if same_grid else ""
+
+	var accept := target_grid.can_accept_item(item, item_id)
+	if not bool(accept.get("ok", true)):
+		_log_container_reject_reason(str(accept.get("reason", "")))
+		if SoundManager: SoundManager.play("hit_melee")
+		_end_drag()
+		return
+
+	if target_grid.can_place_item(place_w, place_h, cell_x, cell_y, ignore_uid, item_id, item):
+		if same_grid:
+			target_grid.move_item(uid, cell_x, cell_y, is_rot)
+			if SoundManager: SoundManager.play("menu_select")
+		elif target_grid.place_item(item, cell_x, cell_y, is_rot):
+			if src == "split":
+				drag_data["is_split"] = false
+			elif src == "player_grid" and player_grid_mgr:
+				player_grid_mgr.remove_item_by_uid(uid)
+			elif src == "stash_grid" and stash_grid_mgr:
+				stash_grid_mgr.remove_item_by_uid(uid)
+			elif src == "popup_grid" and src_grid:
+				src_grid.remove_item_by_uid(uid)
+			elif src == "equipment":
+				equipment_data[drag_data.get("slot_name", "")] = {}
+				_apply_backpack_grid_size()
+				_update_equipment_ui()
+			if SoundManager: SoundManager.play("menu_select")
+		else:
+			if SoundManager: SoundManager.play("hit_melee")
+	else:
+		if SoundManager: SoundManager.play("hit_melee")
+	_end_drag()
+
+func _handle_popup_quick_action(popup: ContainerPopupWindow, item: Dictionary, _is_ctrl: bool) -> void:
+	if not popup or not popup.inner_grid or item.is_empty():
+		return
+	var item_id := str(item.get("id", ""))
+	var amt := maxi(1, int(item.get("amount", 1)))
+	var uid := str(item.get("uid", ""))
+	var dest := stash_grid_mgr if (popup.source_grid == player_grid_mgr) else player_grid_mgr
+	if not dest:
+		dest = stash_grid_mgr if stash_grid_mgr else player_grid_mgr
+	if not dest:
+		return
+	var rem := dest.auto_add_item(item_id, amt, item)
+	if amt - rem > 0:
+		if rem <= 0:
+			popup.inner_grid.remove_item_by_uid(uid)
+		else:
+			item["amount"] = rem
+			popup.inner_grid.grid_changed.emit()
+		if SoundManager: SoundManager.play("menu_select")
+
+func _close_context_menu() -> void:
+	if context_menu_panel and is_instance_valid(context_menu_panel):
+		context_menu_panel.queue_free()
+	context_menu_panel = null
+
+func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String = "", source_grid: InventoryGrid = null) -> void:
+	_close_context_menu()
+	var item_id := str(item.get("id", ""))
+	var idata := ItemDatabase.get_item_data(item_id)
+	var item_name := str(idata.get("name", item_id))
+
+	context_menu_panel = PanelContainer.new()
+	context_menu_panel.z_index = 300
+	var sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_tooltip", 8, 6, 8, 6, 4) if PixelAssetManager else null
+	if sb == null:
+		sb = PixelAssetManager.make_pixel_stylebox_flat(Color(0.055, 0.07, 0.095, 0.98), Color(0.35, 0.45, 0.60, 0.95), 2, 2, 2, 2, 8, 6, true)
+	context_menu_panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	context_menu_panel.add_child(vbox)
+
+	var hdr := Label.new()
+	hdr.text = item_name
+	hdr.add_theme_font_size_override("font_size", 11)
+	hdr.add_theme_color_override("font_color", Color(0.92, 0.86, 0.42))
+	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(hdr)
+	vbox.add_child(HSeparator.new())
+
+	if InventoryGrid.is_container_item(item) and (source_type in ["player_grid", "stash_grid"] or (source_type == "equipment" and slot_ref == "vest")):
+		_add_context_menu_btn(vbox, "📂 포켓 열기" if source_type == "equipment" else "📂 컨테이너 열기", func():
+			_close_context_menu()
+			open_container_popup(item, source_grid if source_type in ["player_grid", "stash_grid"] else null)
+		)
+
+	if source_type in ["player_grid", "stash_grid", "popup_grid"] and source_grid:
+		var is_locked := bool(item.get("locked", false))
+		_add_context_menu_btn(vbox, "🔓 잠금 해제 (L)" if is_locked else "🔒 아이템 잠금 (L)", func():
+			_close_context_menu()
+			source_grid.toggle_item_lock(str(item.get("uid", "")))
+			if SoundManager: SoundManager.play("menu_select")
+		)
+
+	if source_type in ["player_grid", "stash_grid"]:
+		_add_context_menu_btn(vbox, "📤 빠른 이동 / 장착", func():
+			_close_context_menu()
+			_handle_hideout_quick_action(item, source_type == "player_grid")
+		)
+	elif source_type == "popup_grid" and source_grid:
+		var pop_ref: ContainerPopupWindow = open_container_popups.get(source_grid.owner_container_uid, null) as ContainerPopupWindow
+		if pop_ref:
+			_add_context_menu_btn(vbox, "📤 밖으로 꺼내기", func():
+				_close_context_menu()
+				_handle_popup_quick_action(pop_ref, item, true)
+			)
+
+	add_child(context_menu_panel)
+	var mpos := get_global_mouse_position() - global_position
+	context_menu_panel.position = InventoryUIHelper.clamp_popup_position(context_menu_panel, mpos, size, 8.0)
+
+func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, cb: Callable) -> void:
+	var btn := Button.new()
+	btn.theme_type_variation = &"SmallButton"
+	btn.text = text_str
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.custom_minimum_size = Vector2(142, 26)
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.pressed.connect(cb)
+	vbox.add_child(btn)
 
 # ============================================================
 # 결과 팝업 및 네비게이션

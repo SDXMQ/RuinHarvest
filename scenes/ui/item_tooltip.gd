@@ -31,7 +31,7 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 	var cdata = item.get("custom_data", {})
 	if cdata is Dictionary and not cdata.is_empty():
 		var clean_cd := InventoryGrid.sanitize_custom_data(cdata)
-		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
 			if not item.has(k) and clean_cd.has(k):
 				item[k] = clean_cd[k]
 		
@@ -90,14 +90,14 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 		7: cat_str = "퀘스트"
 		_: cat_str = "잡화"
 		
-	var weight: float = float(data.get("weight", 0.1))
+	var total_w: float = InventoryGrid.get_item_total_weight(item)
 	var value: int = int(data.get("value", 0))
 	var amt: int = int(item.get("amount", 1))
 	
 	if amt > 1:
-		meta_label.text = "[%s]  수량: %d개  |  무게: %.1fkg  |  가치: %d RUB" % [cat_str, amt, weight * amt, value * amt]
+		meta_label.text = "[%s]  수량: %d개  |  무게: %.1fkg  |  가치: %d RUB" % [cat_str, amt, total_w, value * amt]
 	else:
-		meta_label.text = "[%s]  무게: %.1fkg  |  가치: %d RUB" % [cat_str, weight, value]
+		meta_label.text = "[%s]  무게: %.1fkg  |  가치: %d RUB" % [cat_str, total_w, value]
 	
 	# 4. 설명 텍스트
 	var desc: String = str(data.get("description", ""))
@@ -117,6 +117,20 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 		_display_gun_details(item, rec_id, data)
 	else:
 		_display_general_item_details(item, data)
+
+	var status_notes: Array[String] = []
+	if bool(item.get("locked", false)):
+		status_notes.append("[color=#ffb86c]🔒 [잠금 상태] 일괄 판매·보관·버리기 보호됨 ([L] 키로 해제)[/color]")
+	var check_item_id := str(item.get("id", ""))
+	if HideoutProgression.is_wishlist_item(check_item_id):
+		status_notes.append("[color=#ffe066]★ [위시리스트] 은신처 업그레이드 / 상인 의뢰 필요 물자[/color]")
+	if not status_notes.is_empty() and stats_label:
+		var extra_bb := "\n".join(status_notes)
+		if stats_label.visible and stats_label.text != "":
+			stats_label.text += "\n" + extra_bb
+		else:
+			stats_label.text = extra_bb
+		stats_label.show()
 		
 	# 6. 내구도 바
 	var max_dur = float(item.get("max_durability", data.get("max_durability", 0)))
@@ -317,9 +331,23 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 		if data.has("weight_bonus") and float(data["weight_bonus"]) != 0:
 			stats.append(" • 가방 용량: %+0.1fkg" % float(data["weight_bonus"]))
 			
-		var bg = data.get("backpack_grid")
-		if bg is Vector2i and bg != Vector2i.ZERO:
-			stats.append(" • 수납 공간: [color=#8be9fd]%d칸 (%dx%d)[/color]" % [bg.x * bg.y, bg.x, bg.y])
+		if InventoryGrid.is_container_item(item):
+			var c_spec := InventoryGrid.get_container_spec(item)
+			var gw := int(c_spec.get("grid_w", 0))
+			var gh := int(c_spec.get("grid_h", 0))
+			var inner_arr = item.get("inner_items", [])
+			var inner_cnt: int = inner_arr.size() if inner_arr is Array else 0
+			stats.append(" • 내부 수납 공간: [color=#8be9fd]%d칸 (%dx%d) · 현재 %d개 보관[/color]" % [gw * gh, gw, gh, inner_cnt])
+			var f_kind := str(c_spec.get("allowed_filter", ""))
+			if f_kind != "":
+				var filter_names := {
+					"ammo": "탄약 전용",
+					"medical": "의약품 전용",
+					"weapon_part": "총기 부품 전용",
+					"dogtag_key": "인식표 · 열쇠 · 키카드 전용"
+				}
+				stats.append(" • 수납 제한: [color=#50fa7b]%s[/color]" % str(filter_names.get(f_kind, f_kind)))
+			stats.append(" • [color=#f1fa8c]💡 더블클릭 또는 [Alt+우클릭 -> 열기]로 내부 공간 팝업[/color]")
 			
 		var effects = data.get("effects", {})
 		if effects.has("hp"): stats.append(" • 체력 회복: [color=#50fa7b]+%d[/color]" % effects["hp"])

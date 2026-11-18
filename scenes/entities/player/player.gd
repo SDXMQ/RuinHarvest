@@ -476,11 +476,7 @@ func get_total_weight() -> float:
 	for slot in ["primary1", "primary2", "sidearm", "throwable", "helmet", "vest", "backpack"]:
 		var eq: Dictionary = equipment.get(slot, {})
 		if not eq.is_empty():
-			if eq.has("computed_stats") and eq["computed_stats"].has("weight"):
-				total += float(eq["computed_stats"]["weight"])
-			else:
-				var d = ItemDatabase.get_item_data(String(eq.get("id", "")))
-				total += float(d.get("weight", 0.5)) * int(eq.get("amount", 1))
+			total += InventoryGrid.get_item_total_weight(eq)
 	return total
 
 func _handle_movement(delta: float) -> void:

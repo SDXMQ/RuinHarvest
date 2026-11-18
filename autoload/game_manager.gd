@@ -134,6 +134,14 @@ func start_new_game(world_settings: Dictionary = {}) -> void:
 		"world_settings": world_settings
 	}
 	
+	if FleaMarket:
+		FleaMarket.supply_pressure.clear()
+		FleaMarket.player_listings.clear()
+		FleaMarket.current_day = 1
+		FleaMarket.update_market_prices(1)
+		FleaMarket.refresh_listings(1)
+		FleaMarket.refresh_daily_bounties(1)
+		current_world_data["flea_market"] = FleaMarket.to_save_dict()
 	SaveManager.save_game(current_world_data, current_save_slot)
 	change_state(GameState.HIDEOUT)
 
@@ -142,6 +150,8 @@ func load_game(slot_name: String) -> void:
 	if not data.is_empty():
 		current_save_slot = slot_name
 		current_world_data = data
+		if FleaMarket:
+			FleaMarket.load_from_save_dict(data.get("flea_market", {}))
 		change_state(GameState.HIDEOUT)
 
 # ============================================================
@@ -192,6 +202,7 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 		var sales_report = FleaMarket.process_player_sales(current_world_data["player"])
 		last_raid_result["sales_report"] = sales_report
 		FleaMarket.advance_day()
+		current_world_data["flea_market"] = FleaMarket.to_save_dict()
 	
 	if result == "survived":
 		current_world_data["player"]["raids_survived"] = int(current_world_data["player"].get("raids_survived", 0)) + 1

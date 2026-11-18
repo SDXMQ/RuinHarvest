@@ -66,6 +66,15 @@ func _load_all_items():
 						d["speed_bonus"] = res.speed_bonus
 					if res.backpack_grid != Vector2i.ZERO and res.category == ItemCategory.EQUIPMENT:
 						d["backpack_grid"] = res.backpack_grid
+						d["inner_grid"] = res.backpack_grid
+					if res.equip_slot == "vest":
+						var vest_grid := Vector2i(3, 2)
+						if res.id.contains("3레벨"):
+							vest_grid = Vector2i(4, 3)
+						elif res.id.contains("2레벨"):
+							vest_grid = Vector2i(4, 2)
+						d["rig_grid"] = vest_grid
+						d["inner_grid"] = vest_grid
 					if res.item_type != "":
 						d["type"] = res.item_type
 					if res.damage > 0.0:
@@ -182,6 +191,80 @@ func _load_all_items():
 			"effects": {}
 		}
 
+	# 특수 보관 케이스 4종 (외형 2x2 압축 보관함, 내부 6x6~8x8 카테고리 필터 수납)
+	if not items.has("탄약 케이스"):
+		items["탄약 케이스"] = {
+			"id": "탄약 케이스",
+			"name": "탄약 케이스",
+			"category": ItemCategory.EQUIPMENT,
+			"type": "storage_case",
+			"description": "각종 구경의 탄약을 압축 보관하는 강철 탄약통입니다. 외부 2x2 칸만 차지하며 내부 6x6(36칸) 탄약 전용 공간을 제공합니다.",
+			"stackable": false,
+			"max_stack": 1,
+			"grid_w": 2,
+			"grid_h": 2,
+			"inner_grid": Vector2i(6, 6),
+			"allowed_filter": "ammo",
+			"weight": 1.2,
+			"rarity": 0.08,
+			"value": 28000,
+			"effects": {}
+		}
+	if not items.has("의약품 케이스"):
+		items["의약품 케이스"] = {
+			"id": "의약품 케이스",
+			"name": "의약품 케이스",
+			"category": ItemCategory.EQUIPMENT,
+			"type": "storage_case",
+			"description": "응급 치료킷과 항생제를 위생적으로 정리하는 의료 보관함입니다. 외부 2x2 칸만 차지하며 내부 7x7(49칸) 의료품 전용 공간을 제공합니다.",
+			"stackable": false,
+			"max_stack": 1,
+			"grid_w": 2,
+			"grid_h": 2,
+			"inner_grid": Vector2i(7, 7),
+			"allowed_filter": "medical",
+			"weight": 1.4,
+			"rarity": 0.06,
+			"value": 32000,
+			"effects": {}
+		}
+	if not items.has("무기 부품 상자"):
+		items["무기 부품 상자"] = {
+			"id": "무기 부품 상자",
+			"name": "무기 부품 상자",
+			"category": ItemCategory.EQUIPMENT,
+			"type": "storage_case",
+			"description": "총열·조준경·소음기 등 총기 모딩 부품을 대량 보관하는 폼 패딩 상자입니다. 외부 2x2 칸만 차지하며 내부 8x8(64칸) 부품 전용 공간을 제공합니다.",
+			"stackable": false,
+			"max_stack": 1,
+			"grid_w": 2,
+			"grid_h": 2,
+			"inner_grid": Vector2i(8, 8),
+			"allowed_filter": "weapon_part",
+			"weight": 1.8,
+			"rarity": 0.04,
+			"value": 45000,
+			"effects": {}
+		}
+	if not items.has("인식표 지갑"):
+		items["인식표 지갑"] = {
+			"id": "인식표 지갑",
+			"name": "인식표 지갑",
+			"category": ItemCategory.EQUIPMENT,
+			"type": "storage_case",
+			"description": "Scav 인식표와 열쇠·보안 키카드를 모아두는 전술 기밀 파우치입니다. 외부 2x2 칸만 차지하며 내부 6x6(36칸)을 제공합니다.",
+			"stackable": false,
+			"max_stack": 1,
+			"grid_w": 2,
+			"grid_h": 2,
+			"inner_grid": Vector2i(6, 6),
+			"allowed_filter": "dogtag_key",
+			"weight": 0.4,
+			"rarity": 0.06,
+			"value": 24000,
+			"effects": {}
+		}
+
 # 장소 및 가구별 루트 테이블
 var loot_tables: Dictionary = {
 	"crate": [
@@ -277,53 +360,71 @@ var loot_tables: Dictionary = {
 	]
 }
 
-# 3인 상인 데이터 정의
+# 3인 상인 데이터 정의 (우호도 Lv.1~Lv.4 해금 및 안정 소비재 공급)
 var traders: Dictionary = {
 	"prapor": {
 		"name": "프라포 (무기/군수품)",
-		"desc": "전직 군수 보급관. 총기와 탄약, 방어구를 취급합니다.",
+		"desc": "전직 군수 보급관. 무기·탄약·방어구·부품을 최고가(70%)로 매입하며 고등급 군용품을 해금합니다.",
 		"stock": [
-			{"id": "권총", "price": 18000},
-			{"id": "MP5_리시버", "price": 26000},
-			{"id": "레버액션 소총", "price": 35000},
-			{"id": "9mm", "price": 150, "amount": 30},
-			{"id": ".45ACP", "price": 250, "amount": 25},
-			{"id": "5.56mm", "price": 350, "amount": 30},
-			{"id": "7.62mm", "price": 450, "amount": 25},
-			{"id": "12게이지_벅샷", "price": 300, "amount": 12},
-			{"id": "레드닷_사이트", "price": 6500},
-			{"id": "대용량_확장_탄창", "price": 9000},
-			{"id": "수직_포어그립", "price": 4000},
-			{"id": "수류탄", "price": 4000},
-			{"id": "파이프", "price": 1500},
-			{"id": "방탄조끼", "price": 15000}
+			{"id": "권총", "price": 18000, "min_level": 1},
+			{"id": "9mm", "price": 4500, "amount": 30, "min_level": 1},
+			{ "id": ".45ACP", "price": 6250, "amount": 25, "min_level": 1 },
+			{"id": "12게이지_벅샷", "price": 3600, "amount": 12, "min_level": 1},
+			{"id": "레드닷_사이트", "price": 6500, "min_level": 1},
+			{"id": "수류탄", "price": 4000, "min_level": 1},
+			{"id": "파이프", "price": 1500, "min_level": 1},
+			{"id": "1레벨_방탄복", "price": 9000, "min_level": 1},
+			{"id": "방탄조끼", "price": 15000, "min_level": 1},
+			{"id": "1레벨_헬멧", "price": 6000, "min_level": 1},
+			{"id": "MP5_리시버", "price": 26000, "min_level": 2},
+			{"id": "레버액션 소총", "price": 35000, "min_level": 2},
+			{"id": "12게이지_슬러그", "price": 5000, "amount": 10, "min_level": 2},
+			{"id": "대용량_확장_탄창", "price": 9000, "min_level": 2},
+			{"id": "수직_포어그립", "price": 4000, "min_level": 2},
+			{"id": "2레벨_방탄복", "price": 21000, "min_level": 2},
+			{"id": "5.56mm", "price": 10500, "amount": 30, "min_level": 3},
+			{"id": "7.62mm", "price": 11250, "amount": 25, "min_level": 3},
+			{"id": "AK_리시버", "price": 28000, "min_level": 3},
+			{"id": "탄약 케이스", "price": 28000, "min_level": 3},
+			{"id": "3레벨_방탄복", "price": 38000, "min_level": 4},
+			{"id": "M4_리시버", "price": 36000, "min_level": 4},
+			{"id": "무기 부품 상자", "price": 45000, "min_level": 4}
 		]
 	},
 	"therapist": {
 		"name": "테라피스트 (의료/식량)",
-		"desc": "응급 의사 출신. 의약품과 식수를 공정하게 거래합니다.",
+		"desc": "응급 의사 출신. 의약품과 식량/음료를 최고가(75%)로 매입하며 구급 물자를 상시 공급합니다.",
 		"stock": [
-			{"id": "붕대", "price": 800},
-			{"id": "진통제", "price": 2500},
-			{"id": "구급상자", "price": 4000},
-			{"id": "식량통조림", "price": 1200},
-			{"id": "생수", "price": 600},
-			{"id": "에너지바", "price": 800}
+			{"id": "붕대", "price": 800, "min_level": 1},
+			{"id": "생수", "price": 600, "min_level": 1},
+			{"id": "식량통조림", "price": 1200, "min_level": 1},
+			{"id": "에너지바", "price": 800, "min_level": 1},
+			{"id": "진통제", "price": 2500, "min_level": 1},
+			{"id": "구급상자", "price": 4000, "min_level": 1},
+			{"id": "항생제", "price": 3400, "min_level": 2},
+			{"id": "고급 치료킷", "price": 8500, "min_level": 2},
+			{"id": "의약품 케이스", "price": 32000, "min_level": 3},
+			{"id": "인식표 지갑", "price": 24000, "min_level": 4}
 		]
 	},
 	"fence": {
 		"name": "펜스 (잡화/암시장)",
-		"desc": "무엇이든 사고파는 암시장 중개인. 희귀 부품과 도구를 취급합니다.",
+		"desc": "무엇이든 취급하는 브로커. 잡동사니·재료·기타 품목을 고르게 매입(55%)하며 특수 도구를 판매합니다.",
 		"stock": [
-			{"id": "고철", "price": 400, "amount": 5},
-			{"id": "못", "price": 100, "amount": 10},
-			{"id": "천", "price": 200, "amount": 5},
-			{"id": "폐전선", "price": 1200},
-			{"id": "손전등", "price": 2000},
-			{"id": "가방", "price": 8000},
-			{"id": "장거리 무전기", "price": 9500},
-			{"id": "무기고 열쇠", "price": 22000},
-			{"id": "보안 키카드", "price": 32000}
+			{"id": "고철", "price": 2000, "amount": 5, "min_level": 1},
+			{"id": "못", "price": 1000, "amount": 10, "min_level": 1},
+			{"id": "천", "price": 1000, "amount": 5, "min_level": 1},
+			{"id": "폐전선", "price": 1200, "min_level": 1},
+			{"id": "손전등", "price": 2000, "min_level": 1},
+			{"id": "1레벨_가방", "price": 6500, "min_level": 1},
+			{"id": "가방", "price": 8000, "min_level": 1},
+			{"id": "장거리 무전기", "price": 9500, "min_level": 2},
+			{"id": "2레벨_가방", "price": 15000, "min_level": 2},
+			{"id": "함정", "price": 2600, "min_level": 2},
+			{"id": "무기고 열쇠", "price": 22000, "min_level": 3},
+			{"id": "인식표 지갑", "price": 24000, "min_level": 3},
+			{"id": "보안 키카드", "price": 32000, "min_level": 4},
+			{"id": "3레벨_가방", "price": 30000, "min_level": 4}
 		]
 	}
 }

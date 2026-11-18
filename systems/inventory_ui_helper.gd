@@ -5,7 +5,8 @@ extends RefCounted
 ## 타르코프식 2D 인벤토리 및 슬롯 상호작용 공통 UI 헬퍼
 ## 2D 그리드 셀 렌더링, 고스트 프리뷰, 슬롯 호환성 검사 및 스타일박스 하이라이트 공통 처리
 
-const CELL_SIZE: float = 44.0
+const CELL_SIZE: float = 36.0
+const POPUP_CELL_SIZE: float = 32.0
 
 # 캐시된 StyleBoxFlat (마우스 이동 시 반복 생성 방지)
 static var _sb_hover_compat: StyleBoxFlat = null
@@ -158,12 +159,26 @@ static func _draw_pixel_corner_brackets(ctrl: Control, rect: Rect2, col: Color, 
 	ctrl.draw_rect(Rect2(x1 - arm_len, y1 - thick, arm_len, thick), col, true)
 	ctrl.draw_rect(Rect2(x1 - thick, y1 - arm_len, thick, arm_len), col, true)
 
+static func _draw_pixel_padlock(ctrl: Control, pos: Vector2, col: Color) -> void:
+	var x0 := floorf(pos.x)
+	var y0 := floorf(pos.y)
+	# 자물쇠 아치
+	ctrl.draw_rect(Rect2(x0 + 1.0, y0, 4.0, 1.0), col, true)
+	ctrl.draw_rect(Rect2(x0 + 1.0, y0 + 1.0, 1.0, 2.0), col, true)
+	ctrl.draw_rect(Rect2(x0 + 4.0, y0 + 1.0, 1.0, 2.0), col, true)
+	# 자물쇠 몸체
+	ctrl.draw_rect(Rect2(x0, y0 + 3.0, 6.0, 4.0), col, true)
+	ctrl.draw_rect(Rect2(x0 + 2.0, y0 + 4.0, 2.0, 2.0), Color(0.08, 0.10, 0.14, 0.95), true)
+
 static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2i, is_player_grid: bool, is_dragging: bool = false, drag_data: Dictionary = {}, cell_size: float = CELL_SIZE) -> void:
 	if not ctrl or not grid_mgr: return
 	
 	var w: int = grid_mgr.grid_width
 	var h: int = grid_mgr.grid_height
 	var font: Font = ThemeDB.fallback_font
+	var selected_uids: Dictionary = ctrl.get_meta("selected_sell_uids", {}) if ctrl.has_meta("selected_sell_uids") else {}
+	var is_compact_cell := cell_size <= 34.0
+	var lbl_font_sz: int = 8 if is_compact_cell else 9
 	
 	# 0. 전체 그리드 베이스 배경 (다크 택티컬 스틸 웰)
 	var full_rect := Rect2(0.0, 0.0, float(w) * cell_size, float(h) * cell_size)
@@ -180,15 +195,15 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			ctrl.draw_rect(Rect2(c_rect.position.x, c_rect.position.y, 1.0, c_rect.size.y), cell_shadow_col, true)
 	
 	# 1. 배경 격자선 및 플레이어 배낭 좌상단 2x2 안전 컨테이너(Secure Pouch) 구역 표시
-	if is_player_grid and w >= 2 and h >= 2:
+	if is_player_grid and grid_mgr.has_secure_container and w >= 2 and h >= 2:
 		var pouch_rect := Rect2(0.0, 0.0, 2.0 * cell_size, 2.0 * cell_size)
 		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.08), true)
 		# 상단 해저드 도트 스트라이프 틱
 		for hx in range(0, int(2.0 * cell_size) - 4, 8):
 			ctrl.draw_rect(Rect2(float(hx) + 2.0, 2.0, 4.0, 2.0), Color(0.92, 0.68, 0.22, 0.38), true)
 		ctrl.draw_rect(pouch_rect, Color(0.92, 0.68, 0.22, 0.62), false, 1.0)
-		_draw_pixel_corner_brackets(ctrl, Rect2(1.0, 1.0, 2.0 * cell_size - 2.0, 2.0 * cell_size - 2.0), Color(1.0, 0.78, 0.28, 0.9), 6.0, 2.0)
-		ctrl.draw_string(font, Vector2(5.0, 2.0 * cell_size - 5.0), "SECURE", HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.95, 0.72, 0.24, 0.55))
+		_draw_pixel_corner_brackets(ctrl, Rect2(1.0, 1.0, 2.0 * cell_size - 2.0, 2.0 * cell_size - 2.0), Color(1.0, 0.78, 0.28, 0.9), 5.0, 2.0)
+		ctrl.draw_string(font, Vector2(4.0, 2.0 * cell_size - 4.0), "SECURE", HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.95, 0.72, 0.24, 0.55))
 		
 	var line_col := Color(0.16, 0.20, 0.26, 0.9)
 	for x in range(w + 1):
@@ -211,17 +226,23 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		ctrl.draw_rect(hover_cell_rect, Color(0.92, 0.65, 0.20, 0.10), true)
 		_draw_pixel_corner_brackets(ctrl, hover_cell_rect, Color(0.95, 0.68, 0.22, 0.75), 5.0, 1.0)
 		
-	# 2. 배치된 아이템 렌더링 (픽셀 베벨 카드 + 희귀도 LED 바 + 코너 브래킷)
+	# 2. 배치된 아이템 렌더링 (픽셀 베벨 카드 + 희귀도 LED 바 + 코너 브래킷 + 잠금/위시리스트/선택)
+	var drag_src_grid = drag_data.get("source_grid", null)
+	var drag_src_name := str(drag_data.get("source", ""))
+	var drag_uid := str(drag_data.get("item", {}).get("uid", ""))
 	for item in grid_mgr.items:
 		if item.is_empty(): continue
-		if is_dragging and (drag_data.get("source") == "grid" or drag_data.get("source") == "player_grid") and drag_data.get("item", {}).get("uid") == item.get("uid"):
-			continue # 드래그 중인 원본은 투명하게 숨김
+		var item_uid := str(item.get("uid", ""))
+		if is_dragging and drag_uid != "" and drag_uid == item_uid:
+			if drag_src_grid == grid_mgr or (drag_src_grid == null and (drag_src_name == "grid" or drag_src_name == "player_grid" or drag_src_name == "stash_grid")):
+				continue # 드래그 중인 원본은 투명하게 숨김
 			
 		var cur_w: int = int(item.get("h", 1)) if bool(item.get("rotated", false)) else int(item.get("w", 1))
 		var cur_h: int = int(item.get("w", 1)) if bool(item.get("rotated", false)) else int(item.get("h", 1))
 		var item_rect := Rect2(float(item.get("x", 0)) * cell_size + 2.0, float(item.get("y", 0)) * cell_size + 2.0, float(cur_w) * cell_size - 4.0, float(cur_h) * cell_size - 4.0)
 		
-		var d: Dictionary = ItemDatabase.get_item_data(str(item.get("id", "")))
+		var item_id_str: String = str(item.get("id", ""))
+		var d: Dictionary = ItemDatabase.get_item_data(item_id_str)
 		var rarity: float = float(d.get("rarity", 0.5))
 		var rarity_accent := Color(0.45, 0.55, 0.68, 0.9)
 		if rarity <= 0.05:
@@ -231,7 +252,10 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		elif rarity <= 0.35:
 			rarity_accent = Color(0.35, 0.72, 0.98, 0.95)
 			
+		var is_selected_sell := selected_uids.has(item_uid)
 		var item_bg := Color(0.11, 0.135, 0.175, 0.96) if is_player_grid else Color(0.10, 0.12, 0.155, 0.96)
+		if is_selected_sell:
+			item_bg = Color(0.10, 0.24, 0.22, 0.98)
 		# 외곽 1px 암색 림 + 내부 스텝 베벨
 		ctrl.draw_rect(Rect2(item_rect.position.x - 1.0, item_rect.position.y - 1.0, item_rect.size.x + 2.0, item_rect.size.y + 2.0), Color(0.02, 0.03, 0.04, 0.95), false, 1.0)
 		ctrl.draw_rect(item_rect, item_bg, true)
@@ -252,26 +276,50 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		ctrl.draw_rect(Rect2(rx1 - 1.0, ry1 - 4.0, 1.0, 4.0), rarity_accent, true)
 		
 		# 아이콘
-		var icon_tex: Texture2D = ItemIconManager.get_icon(str(item.get("id", ""))) if ItemIconManager else null
+		var icon_tex: Texture2D = ItemIconManager.get_icon(item_id_str) if ItemIconManager else null
 		if icon_tex:
-			var min_sz: float = floorf(minf(item_rect.size.x, item_rect.size.y) * 0.72)
+			var min_sz: float = floorf(minf(item_rect.size.x, item_rect.size.y) * 0.66)
 			var icon_size := Vector2(min_sz, min_sz)
 			var icon_pos: Vector2 = (item_rect.position + (item_rect.size - icon_size) / 2.0).floor()
 			ctrl.draw_texture_rect(icon_tex, Rect2(icon_pos, icon_size), false)
 			
-		# 수량
+		# 이름 (좌측 여백 5px, 우상단 배지 공간 확보를 위해 폭 제한)
+		var is_locked := bool(item.get("locked", false))
+		var is_wish := HideoutProgression.is_wishlist_item(item_id_str)
+		var right_badge_pad: float = 8.0
+		if is_locked:
+			right_badge_pad += 8.0
+		if is_wish:
+			right_badge_pad += 10.0
+		ctrl.draw_string(font, item_rect.position + Vector2(5.0, 10.0), str(d.get("name", item_id_str)), HORIZONTAL_ALIGNMENT_LEFT, maxf(10.0, item_rect.size.x - right_badge_pad), lbl_font_sz, Color(0.88, 0.91, 0.95, 0.92))
+
+		# 우상단 상태 배지: 잠금(자물쇠) & 위시리스트(★)
+		var badge_cursor_x: float = rx1 - 2.0
+		if is_locked:
+			badge_cursor_x -= 7.0
+			_draw_pixel_padlock(ctrl, Vector2(badge_cursor_x, ry0 + 2.0), Color(1.0, 0.72, 0.20, 0.98))
+		if is_wish:
+			badge_cursor_x -= 10.0
+			ctrl.draw_string(font, Vector2(badge_cursor_x, ry0 + 10.0), "★", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.22, 0.98))
+
+		# 방어구/헬멧 내구도 바 표기 (최하단 2px, 텍스트와 비겹침)
+		var cat: int = int(d.get("category", -1))
+		var is_armor: bool = cat == ItemDatabase.ItemCategory.EQUIPMENT and (d.get("equip_slot") in ["vest", "helmet"] or item_id_str.contains("방탄") or item_id_str.contains("헬멧") or item_id_str.contains("조끼") or item_id_str.contains("방독면"))
+		var bottom_text_offset: float = 5.0 if is_armor else 4.0
+
+		# 수량 or 중첩 컨테이너 보관 수량 표기
 		var amt: int = int(item.get("amount", 1))
 		if amt > 1:
-			ctrl.draw_string(font, item_rect.position + Vector2(6.0, item_rect.size.y - 4.0), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.98, 0.82, 0.32))
-			
-		# 이름
-		ctrl.draw_string(font, item_rect.position + Vector2(6.0, 12.0), str(d.get("name", item.get("id", ""))), HORIZONTAL_ALIGNMENT_LEFT, item_rect.size.x - 10.0, 10, Color(0.88, 0.91, 0.95, 0.9))
+			ctrl.draw_string(font, item_rect.position + Vector2(5.0, item_rect.size.y - bottom_text_offset), "x%d" % amt, HORIZONTAL_ALIGNMENT_LEFT, -1, lbl_font_sz, Color(0.98, 0.82, 0.32))
+		elif InventoryGrid.is_container_item(item):
+			var inner_arr = item.get("inner_items", [])
+			var inner_cnt: int = inner_arr.size() if inner_arr is Array else 0
+			var c_col := Color(0.45, 0.92, 1.0, 0.92) if inner_cnt > 0 else Color(0.58, 0.66, 0.74, 0.75)
+			ctrl.draw_string(font, item_rect.position + Vector2(5.0, item_rect.size.y - bottom_text_offset), "[%d]" % inner_cnt, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, c_col)
 
 		# 총기류 탄약 표기 (우하단: cur/max, 잔탄 0: 적색, 잔탄 보유: 연녹색)
-		var item_id_str: String = str(item.get("id", ""))
-		var cat: int = int(d.get("category", -1))
 		var item_type_str: String = str(d.get("type", item.get("type", "")))
-		var is_non_gun: bool = bool(d.get("stackable", false)) or item_type_str in ["melee", "ammo", "throwable", "part"] or item_id_str in ["나이프", "파이프", "도끼", "야구방망이", "탄약", "수류탄", "연막탄", "화염병"] or WeaponPartsDatabase.AMMO_TYPES.has(item_id_str) or WeaponPartsDatabase.PARTS.has(item_id_str)
+		var is_non_gun: bool = bool(d.get("stackable", false)) or item_type_str in ["melee", "ammo", "throwable", "part", "storage_case"] or item_id_str in ["나이프", "파이프", "도끼", "야구방망이", "탄약", "수류탄", "연막탄", "화염병"] or WeaponPartsDatabase.AMMO_TYPES.has(item_id_str) or WeaponPartsDatabase.PARTS.has(item_id_str)
 		var is_gun: bool = not is_non_gun and (WeaponPartsDatabase.is_modifiable_weapon(item) or item.has("parts") or item_type_str in ["receiver", "assembled_weapon", "ranged"] or item.has("current_magazine_ammo"))
 		if is_gun:
 			var max_ammo: int = 30
@@ -287,20 +335,17 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			var cur_ammo: int = int(item.get("current_magazine_ammo", max_ammo))
 			var ammo_str: String = "%d/%d" % [cur_ammo, max_ammo]
 			var ammo_col := Color(0.4, 1.0, 0.6) if cur_ammo > 0 else Color(1.0, 0.25, 0.25)
-			var font_sz: int = 9
-			var text_w: float = 42.0
-			ctrl.draw_string(font, item_rect.position + Vector2(item_rect.size.x - text_w - 4.0, item_rect.size.y - 4.0), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, font_sz, ammo_col)
+			var text_w: float = 36.0
+			ctrl.draw_string(font, item_rect.position + Vector2(item_rect.size.x - text_w - 3.0, item_rect.size.y - bottom_text_offset), ammo_str, HORIZONTAL_ALIGNMENT_RIGHT, text_w, 8, ammo_col)
 
-		# 방어구/헬멧 내구도 바 표기 (셀 하단 세그먼트 픽셀 LED 바)
-		var is_armor: bool = cat == ItemDatabase.ItemCategory.EQUIPMENT and (d.get("equip_slot") in ["vest", "helmet"] or item_id_str.contains("방탄") or item_id_str.contains("헬멧") or item_id_str.contains("조끼") or item_id_str.contains("방독면"))
 		if is_armor:
 			var max_dur: float = float(item.get("max_durability", d.get("max_durability", 100.0)))
 			if max_dur > 0.0:
 				var cur_dur: float = float(item.get("durability", max_dur))
 				var ratio: float = clampf(cur_dur / max_dur, 0.0, 1.0)
-				var bar_w: float = item_rect.size.x - 8.0
-				var bar_h: float = 3.0
-				var bar_rect := Rect2(item_rect.position.x + 4.0, item_rect.position.y + item_rect.size.y - bar_h - 2.0, bar_w, bar_h)
+				var bar_w: float = item_rect.size.x - 6.0
+				var bar_h: float = 2.0
+				var bar_rect := Rect2(item_rect.position.x + 3.0, item_rect.position.y + item_rect.size.y - bar_h - 1.0, bar_w, bar_h)
 				ctrl.draw_rect(bar_rect, Color(0.05, 0.07, 0.09, 0.92), true)
 				var dur_col := Color(0.25, 0.85, 0.4, 0.95)
 				if ratio < 0.25:
@@ -315,6 +360,11 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 						ctrl.draw_rect(Rect2(bar_rect.position.x + seg_x, bar_rect.position.y, seg_w, bar_h), dur_col, true)
 						seg_x += 4.0
 
+		# 판매 장바구니 선택 하이라이트 테두리
+		if is_selected_sell:
+			ctrl.draw_rect(item_rect, Color(0.25, 0.98, 0.72, 0.98), false, 2.0)
+			ctrl.draw_string(font, Vector2(rx1 - 11.0, ry1 - 4.0), "✓", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.32, 1.0, 0.68, 1.0))
+
 	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강 픽셀 타겟 브래킷)
 	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
 		var item: Dictionary = drag_data.get("item", {})
@@ -327,8 +377,9 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		
 		var src: String = str(drag_data.get("source", ""))
 		var uid: String = str(item.get("uid", ""))
-		var ignore_uid: String = uid if (src == "grid" or src == ("player_grid" if is_player_grid else "stash_grid")) else ""
-		var can_place: bool = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid, str(item.get("id", "")))
+		var same_grid: bool = (drag_src_grid == grid_mgr) or (drag_src_grid == null and (src == "grid" or src == ("player_grid" if is_player_grid else "stash_grid")))
+		var ignore_uid: String = uid if same_grid else ""
+		var can_place: bool = grid_mgr.can_place_item(place_w, place_h, hovered_cell.x, hovered_cell.y, ignore_uid, str(item.get("id", "")), item)
 		var ghost_rect := Rect2(float(hovered_cell.x) * cell_size, float(hovered_cell.y) * cell_size, float(place_w) * cell_size, float(place_h) * cell_size)
 		
 		var col := Color(0.16, 0.72, 0.28, 0.35) if can_place else Color(0.85, 0.18, 0.18, 0.35)
@@ -337,6 +388,13 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		ctrl.draw_rect(ghost_rect, col, true)
 		ctrl.draw_rect(ghost_rect, border_col, false, 1.0)
 		_draw_pixel_corner_brackets(ctrl, Rect2(ghost_rect.position.x + 1.0, ghost_rect.position.y + 1.0, ghost_rect.size.x - 2.0, ghost_rect.size.y - 2.0), border_col, 6.0, 2.0)
+
+	# 4. Marquee 영역 다중 선택 박스 렌더링
+	if ctrl.has_meta("marquee_rect"):
+		var m_rect = ctrl.get_meta("marquee_rect")
+		if m_rect is Rect2 and m_rect.size.x > 2.0 and m_rect.size.y > 2.0:
+			ctrl.draw_rect(m_rect, Color(0.22, 0.85, 0.96, 0.20), true)
+			ctrl.draw_rect(m_rect, Color(0.35, 0.94, 1.0, 0.95), false, 1.5)
 
 static func highlight_compatible_slots(drop_targets: Array, item: Dictionary, hovered_ctrl: Control = null) -> void:
 	init_cached_styleboxes()

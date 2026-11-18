@@ -9,8 +9,17 @@ signal grid_changed
 @export var grid_width: int = 6
 @export var grid_height: int = 4
 @export var has_secure_container: bool = false
+@export var container_depth: int = 0
+@export var owner_container_uid: String = ""
+@export var allowed_filter: String = ""
 
 static var _uid_counter: int = 0
+
+const PRESERVED_CUSTOM_KEYS: Array[String] = [
+	"parts", "attachments", "loaded_ammo", "current_magazine_ammo",
+	"computed_stats", "durability", "max_durability", "receiver",
+	"name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"
+]
 
 static func next_uid() -> String:
 	_uid_counter += 1
@@ -33,6 +42,160 @@ static func is_same_item_id(a: String, b: String) -> bool:
 		return true
 	return false
 
+static func get_container_spec(item_or_id) -> Dictionary:
+	var item_id := ""
+	var item_dict: Dictionary = {}
+	if item_or_id is Dictionary:
+		item_dict = item_or_id
+		item_id = str(item_dict.get("id", ""))
+	else:
+		item_id = str(item_or_id)
+	if item_id == "":
+		return {"is_container": false, "grid_w": 0, "grid_h": 0, "allowed_filter": "", "kind": ""}
+	var resolved := ItemDatabase.resolve_item_id(item_id) if ItemDatabase and ItemDatabase.has_method("resolve_item_id") else item_id
+	var data: Dictionary = ItemDatabase.get_item_data(resolved) if ItemDatabase else {}
+	var item_type := str(data.get("type", item_dict.get("type", "")))
+	var eq_slot := str(data.get("equip_slot", ""))
+
+	if item_type == "storage_case" or resolved in ["탄약 케이스", "의약품 케이스", "무기 부품 상자", "인식표 지갑"]:
+		var ig = data.get("inner_grid", Vector2i(6, 6))
+		var gw := int(item_dict.get("inner_grid_w", ig.x if ig is Vector2i else 6))
+		var gh := int(item_dict.get("inner_grid_h", ig.y if ig is Vector2i else 6))
+		return {
+			"is_container": true,
+			"grid_w": maxi(1, gw),
+			"grid_h": maxi(1, gh),
+			"allowed_filter": str(data.get("allowed_filter", "")),
+			"kind": "case"
+		}
+	if eq_slot == "backpack" or resolved.contains("가방") or resolved.contains("배낭"):
+		var bg = data.get("backpack_grid", data.get("inner_grid", Vector2i(6, 5)))
+		var gw := int(item_dict.get("inner_grid_w", bg.x if bg is Vector2i else 6))
+		var gh := int(item_dict.get("inner_grid_h", bg.y if bg is Vector2i else 5))
+		return {
+			"is_container": true,
+			"grid_w": maxi(1, gw),
+			"grid_h": maxi(1, gh),
+			"allowed_filter": "",
+			"kind": "backpack"
+		}
+	if eq_slot == "vest" or resolved.contains("방탄") or resolved.contains("조끼"):
+		var rg = data.get("rig_grid", data.get("inner_grid", Vector2i(3, 2)))
+		var gw := int(item_dict.get("inner_grid_w", rg.x if rg is Vector2i else 3))
+		var gh := int(item_dict.get("inner_grid_h", rg.y if rg is Vector2i else 2))
+		return {
+			"is_container": true,
+			"grid_w": maxi(1, gw),
+			"grid_h": maxi(1, gh),
+			"allowed_filter": "",
+			"kind": "vest"
+		}
+	return {"is_container": false, "grid_w": 0, "grid_h": 0, "allowed_filter": "", "kind": ""}
+
+static func is_container_item(item_or_id) -> bool:
+	return bool(get_container_spec(item_or_id).get("is_container", false))
+
+static func is_item_allowed_by_filter(item_id: String, filter_kind: String) -> bool:
+	if filter_kind == "" or item_id == "":
+		return true
+	var resolved := ItemDatabase.resolve_item_id(item_id) if ItemDatabase and ItemDatabase.has_method("resolve_item_id") else item_id
+	var data: Dictionary = ItemDatabase.get_item_data(resolved) if ItemDatabase else {}
+	var item_type := str(data.get("type", ""))
+	var cat := int(data.get("category", -1))
+	match filter_kind:
+		"ammo":
+			return (ItemDatabase and ItemDatabase.is_ammo_item(resolved)) or item_type == "ammo" or (WeaponPartsDatabase and WeaponPartsDatabase.AMMO_TYPES.has(resolved))
+		"medical":
+			return cat == ItemDatabase.ItemCategory.MEDICAL
+		"weapon_part":
+			return (WeaponPartsDatabase and WeaponPartsDatabase.PARTS.has(resolved)) or item_type == "part"
+		"dogtag_key":
+			return (
+				item_type in ["dogtag", "key", "keycard"]
+				or resolved in ["Scav 인식표", "Scav 식별줄(Dogtag)", "무기고 열쇠", "보안 키카드"]
+				or resolved.contains("인식표")
+				or resolved.contains("식별줄")
+				or resolved.contains("열쇠")
+				or resolved.contains("키카드")
+			)
+	return true
+
+static func has_nested_container_inside(item: Dictionary) -> bool:
+	var inner = item.get("inner_items", [])
+	if not (inner is Array):
+		return false
+	for sub in inner:
+		if sub is Dictionary and not sub.is_empty():
+			if is_container_item(sub) or has_nested_container_inside(sub):
+				return true
+	return false
+
+static func sanitize_inner_items_array(raw_arr: Array) -> Array:
+	var out: Array = []
+	for entry in raw_arr:
+		if not (entry is Dictionary) or not entry.has("id"):
+			continue
+		var sub: Dictionary = entry.duplicate(true)
+		var sid := str(sub.get("id", ""))
+		if sid == "탄약":
+			sid = "9mm"
+			sub["id"] = sid
+		elif sid == "나침반":
+			sid = "군용 나침반"
+			sub["id"] = sid
+		if not sub.has("uid") or str(sub["uid"]) == "":
+			sub["uid"] = next_uid()
+		if ItemDatabase:
+			var bsize := ItemDatabase.get_item_grid_size(sid)
+			sub["w"] = bsize.x
+			sub["h"] = bsize.y
+		if sub.get("custom_data") is Dictionary:
+			sub["custom_data"] = sanitize_custom_data(sub["custom_data"])
+		if sub.get("inner_items") is Array:
+			sub["inner_items"] = sanitize_inner_items_array(sub["inner_items"])
+		out.append(sub)
+	return out
+
+static func ensure_container_defaults(item: Dictionary) -> void:
+	if item.is_empty():
+		return
+	var spec := get_container_spec(item)
+	if bool(spec.get("is_container", false)):
+		item["inner_grid_w"] = int(spec["grid_w"])
+		item["inner_grid_h"] = int(spec["grid_h"])
+		if not item.has("inner_items") or not (item["inner_items"] is Array):
+			item["inner_items"] = []
+		else:
+			item["inner_items"] = sanitize_inner_items_array(item["inner_items"])
+
+static func get_item_total_weight(item: Dictionary) -> float:
+	if item.is_empty():
+		return 0.0
+	var item_id := str(item.get("id", ""))
+	var amt := maxi(1, int(item.get("amount", 1)))
+	var unit_w := 0.1
+	if item.get("computed_stats") is Dictionary and item["computed_stats"].has("weight"):
+		unit_w = float(item["computed_stats"]["weight"])
+	elif ItemDatabase:
+		var d: Dictionary = ItemDatabase.get_item_data(item_id)
+		unit_w = float(d.get("weight", 0.1))
+	var total := unit_w * float(amt)
+	var inner = item.get("inner_items", [])
+	if inner is Array:
+		for sub in inner:
+			if sub is Dictionary and not sub.is_empty():
+				total += get_item_total_weight(sub)
+	return total
+
+static func sync_container_item_contents(container_item: Dictionary, inner_grid: InventoryGrid) -> void:
+	if container_item.is_empty() or inner_grid == null:
+		return
+	container_item["inner_items"] = inner_grid.items.duplicate(true)
+	container_item["inner_grid_w"] = inner_grid.grid_width
+	container_item["inner_grid_h"] = inner_grid.grid_height
+	if container_item.get("custom_data") is Dictionary:
+		container_item["custom_data"].erase("inner_items")
+
 static func sanitize_custom_data(raw_data: Dictionary) -> Dictionary:
 	if raw_data.is_empty():
 		return {}
@@ -45,14 +208,49 @@ static func sanitize_custom_data(raw_data: Dictionary) -> Dictionary:
 				clean[k] = inner[k]
 	for k in ["uid", "x", "y", "w", "h", "rotated", "id", "amount", "custom_data"]:
 		clean.erase(k)
+	if clean.get("inner_items") is Array:
+		clean["inner_items"] = sanitize_inner_items_array(clean["inner_items"])
 	return clean
+
+func can_accept_item(item: Dictionary, item_id_fallback: String = "") -> Dictionary:
+	var uid := str(item.get("uid", ""))
+	var check_id := str(item.get("id", item_id_fallback))
+	if owner_container_uid != "" and uid != "" and uid == owner_container_uid:
+		return {"ok": false, "reason": "self_drop"}
+	if container_depth >= 1 and check_id != "" and is_container_item(check_id):
+		return {"ok": false, "reason": "max_depth_exceeded"}
+	if container_depth == 0 and not item.is_empty() and has_nested_container_inside(item):
+		return {"ok": false, "reason": "max_depth_exceeded"}
+	if allowed_filter != "" and check_id != "" and not is_item_allowed_by_filter(check_id, allowed_filter):
+		return {"ok": false, "reason": "filter_mismatch"}
+	return {"ok": true, "reason": ""}
+
+func is_item_in_secure_zone(item: Dictionary) -> bool:
+	if not has_secure_container or item.is_empty():
+		return false
+	var ix := int(item.get("x", 99))
+	var iy := int(item.get("y", 99))
+	var is_rot := bool(item.get("rotated", false))
+	var base_size := ItemDatabase.get_item_grid_size(str(item.get("id", ""))) if ItemDatabase else Vector2i(int(item.get("w", 1)), int(item.get("h", 1)))
+	var w := base_size.y if is_rot else base_size.x
+	var h := base_size.x if is_rot else base_size.y
+	return ix >= 0 and iy >= 0 and ix < 2 and iy < 2 and ix + w <= 2 and iy + h <= 2
+
+func toggle_item_lock(uid: String) -> bool:
+	var item := get_item_by_uid(uid)
+	if item.is_empty():
+		return false
+	var next_state := not bool(item.get("locked", false))
+	item["locked"] = next_state
+	grid_changed.emit()
+	return next_state
 
 func is_allowed_in_secure_container(item_id: String) -> bool:
 	if item_id == "":
 		return true
 	var data = ItemDatabase.get_item_data(item_id)
 	var item_type = str(data.get("type", ""))
-	if item_type in ["key", "keycard"] or item_id.contains("열쇠") or item_id.contains("키카드"):
+	if item_type in ["key", "keycard", "dogtag"] or item_id.contains("열쇠") or item_id.contains("키카드") or item_id.contains("인식표") or str(data.get("allowed_filter", "")) == "dogtag_key":
 		return true
 	if item_type == "ammo" or item_id == "탄약" or item_id.contains("9mm") or item_id.contains("5.56") or item_id.contains("7.62") or item_id.contains("12게이지") or item_id.contains(".45"):
 		return true
@@ -107,11 +305,14 @@ func load_items(saved_items: Array) -> void:
 		item["h"] = base_size.y
 		if item.get("custom_data") is Dictionary:
 			item["custom_data"] = sanitize_custom_data(item["custom_data"])
+		if item.get("inner_items") is Array:
+			item["inner_items"] = sanitize_inner_items_array(item["inner_items"])
+		ensure_container_defaults(item)
 		if not item.has("uid") or String(item["uid"]) == "":
 			item["uid"] = next_uid()
 		
 		# 원래 좌표에 배치 가능하면 그대로 배치
-		if ix >= 0 and iy >= 0 and can_place_item(cur_w, cur_h, ix, iy, "", item["id"]):
+		if ix >= 0 and iy >= 0 and can_place_item(cur_w, cur_h, ix, iy, "", item["id"], item):
 			place_item(item, ix, iy, is_rot)
 		else:
 			# 불가하면 Auto-Fit으로 공간 찾아 배치
@@ -132,16 +333,24 @@ func _init_grid_map() -> void:
 		var cur_h = item.get("w", 1) if item.get("rotated", false) else item.get("h", 1)
 		_mark_grid(item.get("x", 0), item.get("y", 0), cur_w, cur_h, item.get("uid", ""))
 
-func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "", item_id: String = "") -> bool:
+func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "", item_id: String = "", item_dict: Dictionary = {}) -> bool:
 	if target_x < 0 or target_y < 0:
 		return false
 	if target_x + w > grid_width or target_y + h > grid_height:
 		return false
 		
 	var check_id = item_id
+	var probe_dict: Dictionary = item_dict
 	if check_id == "" and ignore_uid != "":
 		var existing = get_item_by_uid(ignore_uid)
 		check_id = existing.get("id", "")
+		if probe_dict.is_empty():
+			probe_dict = existing
+	
+	var accept_res := can_accept_item(probe_dict, check_id)
+	if not bool(accept_res.get("ok", true)):
+		return false
+
 	if has_secure_container and target_x < 2 and target_y < 2:
 		# 안전 컨테이너(2x2) 영역과 겹치는 아이템은 경계를 걸쳐 놓을 수 없으며 완전히 내부(2x2)에 들어와야 함
 		if target_x + w > 2 or target_y + h > 2:
@@ -176,7 +385,7 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 		uid = next_uid()
 		item["uid"] = uid
 		
-	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id):
+	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id, item):
 		return false
 		
 	# 기존 아이템 목록에 있으면 제거 후 재배치
@@ -186,9 +395,12 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 	var cdata = item.get("custom_data", {})
 	if cdata is Dictionary and not cdata.is_empty():
 		var clean_c := sanitize_custom_data(cdata)
-		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+		for k in PRESERVED_CUSTOM_KEYS:
 			if not item.has(k) and clean_c.has(k):
-				item[k] = clean_c[k]
+				item[k] = clean_c[k].duplicate(true) if (clean_c[k] is Dictionary or clean_c[k] is Array) else clean_c[k]
+		clean_c.erase("inner_items")
+		clean_c.erase("inner_grid_w")
+		clean_c.erase("inner_grid_h")
 		item["custom_data"] = clean_c
 	if not item.has("durability") and item_data.has("max_durability"):
 		item["durability"] = item_data["max_durability"]
@@ -200,6 +412,7 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 	item["rotated"] = rotated
 	if not item.has("amount"):
 		item["amount"] = 1
+	ensure_container_defaults(item)
 		
 	items.append(item)
 	_mark_grid(target_x, target_y, actual_w, actual_h, uid)
@@ -217,7 +430,7 @@ func move_item(uid: String, target_x: int, target_y: int, rotated: bool) -> bool
 	var actual_w = base_h if rotated else base_w
 	var actual_h = base_w if rotated else base_h
 	
-	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id):
+	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id, item):
 		return false
 		
 	# 기존 영역 해제
@@ -254,12 +467,20 @@ func remove_item_by_uid(uid: String, should_emit: bool = true) -> Dictionary:
 			
 	return target_item
 
-func get_item_count(id: String) -> int:
-	var total = 0
-	for item in items:
+func _count_item_recursive(item_list: Array, id: String) -> int:
+	var total := 0
+	for item in item_list:
+		if not (item is Dictionary) or item.is_empty():
+			continue
 		if is_same_item_id(String(item.get("id", "")), id):
-			total += item.get("amount", 1)
+			total += int(item.get("amount", 1))
+		var inner = item.get("inner_items", [])
+		if inner is Array and not inner.is_empty():
+			total += _count_item_recursive(inner, id)
 	return total
+
+func get_item_count(id: String) -> int:
+	return _count_item_recursive(items, id)
 
 func has_item(id: String, amount: int = 1) -> bool:
 	return get_item_count(id) >= amount
@@ -270,7 +491,7 @@ func remove_item(id: String, amount: int = 1) -> int:
 	while i >= 0 and remaining > 0:
 		var item = items[i]
 		if is_same_item_id(String(item.get("id", "")), id):
-			var cur_amt = item.get("amount", 1)
+			var cur_amt = int(item.get("amount", 1))
 			if cur_amt <= remaining:
 				remaining -= cur_amt
 				remove_item_by_uid(item.get("uid", ""), false)
@@ -278,6 +499,24 @@ func remove_item(id: String, amount: int = 1) -> int:
 				item["amount"] = cur_amt - remaining
 				remaining = 0
 		i -= 1
+	if remaining > 0:
+		for container_it in items:
+			if remaining <= 0:
+				break
+			var inner = container_it.get("inner_items", [])
+			if inner is Array and not inner.is_empty():
+				for j in range(inner.size() - 1, -1, -1):
+					if remaining <= 0:
+						break
+					var sub = inner[j]
+					if sub is Dictionary and is_same_item_id(String(sub.get("id", "")), id):
+						var s_amt := int(sub.get("amount", 1))
+						if s_amt <= remaining:
+							remaining -= s_amt
+							inner.remove_at(j)
+						else:
+							sub["amount"] = s_amt - remaining
+							remaining = 0
 	grid_changed.emit()
 	return remaining
 
@@ -296,18 +535,18 @@ func get_item_at(grid_x: int, grid_y: int) -> Dictionary:
 		return get_item_by_uid(uid)
 	return {}
 
-func find_first_fit(base_w: int, base_h: int, item_id: String = "") -> Dictionary:
+func find_first_fit(base_w: int, base_h: int, item_id: String = "", item_dict: Dictionary = {}) -> Dictionary:
 	# 1. 정방향 (W x H) 탐색 (0,0부터)
 	for y in range(grid_height - base_h + 1):
 		for x in range(grid_width - base_w + 1):
-			if can_place_item(base_w, base_h, x, y, "", item_id):
+			if can_place_item(base_w, base_h, x, y, "", item_id, item_dict):
 				return {"found": true, "x": x, "y": y, "rotated": false}
 				
 	# 2. 회전방향 (H x W) 탐색 (크기가 다를 때만)
 	if base_w != base_h:
 		for y in range(grid_height - base_w + 1):
 			for x in range(grid_width - base_h + 1):
-				if can_place_item(base_h, base_w, x, y, "", item_id):
+				if can_place_item(base_h, base_w, x, y, "", item_id, item_dict):
 					return {"found": true, "x": x, "y": y, "rotated": true}
 					
 	return {"found": false, "x": -1, "y": -1, "rotated": false}
@@ -317,6 +556,12 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 	var item_data = ItemDatabase.get_item_data(resolved_id)
 	var max_stack = int(item_data.get("max_stack", 1))
 	var remaining = amount
+	
+	var probe_dict: Dictionary = custom_data.duplicate(true) if not custom_data.is_empty() else {}
+	probe_dict["id"] = resolved_id
+	var accept_res := can_accept_item(probe_dict, resolved_id)
+	if not bool(accept_res.get("ok", true)):
+		return remaining
 	
 	# 1. 스택 가능한 아이템이면 기존 스택에 먼저 채우기
 	if max_stack > 1:
@@ -334,7 +579,7 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 	var clean_custom := sanitize_custom_data(custom_data)
 	var base_size = ItemDatabase.get_item_grid_size(resolved_id)
 	while remaining > 0:
-		var fit = find_first_fit(base_size.x, base_size.y, resolved_id)
+		var fit = find_first_fit(base_size.x, base_size.y, resolved_id, probe_dict)
 		if not fit["found"]:
 			grid_changed.emit()
 			return remaining # 더 이상 넣을 공간 없음
@@ -349,12 +594,17 @@ func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int
 			"rotated": fit["rotated"]
 		}
 		if not clean_custom.is_empty():
-			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type"]:
+			for k in PRESERVED_CUSTOM_KEYS:
 				if clean_custom.has(k):
-					new_item[k] = clean_custom[k]
-			new_item["custom_data"] = clean_custom.duplicate(true)
+					new_item[k] = clean_custom[k].duplicate(true) if (clean_custom[k] is Dictionary or clean_custom[k] is Array) else clean_custom[k]
+			var stripped_cd := clean_custom.duplicate(true)
+			stripped_cd.erase("inner_items")
+			stripped_cd.erase("inner_grid_w")
+			stripped_cd.erase("inner_grid_h")
+			new_item["custom_data"] = stripped_cd
 		if not new_item.has("durability") and item_data.has("max_durability"):
 			new_item["durability"] = item_data["max_durability"]
+		ensure_container_defaults(new_item)
 			
 		place_item(new_item, fit["x"], fit["y"], fit["rotated"])
 		remaining -= to_add
@@ -408,11 +658,11 @@ func resize_grid(new_w: int, new_h: int) -> Array[Dictionary]:
 		var ix = item.get("x", 0)
 		var iy = item.get("y", 0)
 		
-		if can_place_item(cur_w, cur_h, ix, iy, "", item.get("id", "")):
+		if can_place_item(cur_w, cur_h, ix, iy, "", item.get("id", ""), item):
 			place_item(item, ix, iy, item.get("rotated", false))
 		else:
 			# 기존 자리에 못 들어가면 빈 자리에 Auto-Fit 시도
-			var fit = find_first_fit(item.get("w", 1), item.get("h", 1), item.get("id", ""))
+			var fit = find_first_fit(item.get("w", 1), item.get("h", 1), item.get("id", ""), item)
 			if fit["found"]:
 				place_item(item, fit["x"], fit["y"], fit["rotated"])
 			else:
@@ -423,12 +673,9 @@ func resize_grid(new_w: int, new_h: int) -> Array[Dictionary]:
 	return dropped_items
 
 func get_total_weight() -> float:
-	var total = 0.0
+	var total := 0.0
 	for item in items:
-		var d = ItemDatabase.get_item_data(item.get("id", ""))
-		var w = d.get("weight", 0.1)
-		var amt = item.get("amount", 1)
-		total += w * amt
+		total += get_item_total_weight(item)
 	return total
 
 func _mark_grid(target_x: int, target_y: int, w: int, h: int, uid: String) -> void:

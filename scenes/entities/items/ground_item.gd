@@ -58,9 +58,26 @@ func setup(p_id: String, p_amount: int = 1, p_custom: Dictionary = {}) -> void:
 	custom_data = p_custom
 	update_visuals()
 
+func _get_or_create_wishlist_badge() -> Label:
+	var badge: Label = get_node_or_null("WishlistBadge") as Label
+	if badge == null:
+		badge = Label.new()
+		badge.name = "WishlistBadge"
+		badge.text = "★"
+		badge.add_theme_font_size_override("font_size", 12)
+		badge.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22))
+		badge.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08, 0.95))
+		badge.add_theme_constant_override("outline_size", 2)
+		badge.position = Vector2(6.0, -18.0)
+		badge.z_index = 2
+		badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(badge)
+	return badge
+
 func update_visuals() -> void:
 	if not is_node_ready(): return
 	
+	var badge := _get_or_create_wishlist_badge()
 	if item_id != "":
 		if ItemIconManager:
 			sprite.texture = ItemIconManager.get_icon(item_id)
@@ -68,12 +85,21 @@ func update_visuals() -> void:
 			
 		var data = ItemDatabase.get_item_data(item_id)
 		var display_name = data.get("name", item_id)
+		var is_wish := HideoutProgression.is_wishlist_item(item_id)
+		var prefix := "★ " if is_wish else ""
 		if amount > 1:
-			label.text = "%s (%d)" % [display_name, amount]
+			label.text = "%s%s (%d)" % [prefix, display_name, amount]
 		else:
-			label.text = display_name
+			label.text = "%s%s" % [prefix, display_name]
+		if is_wish:
+			label.add_theme_color_override("font_color", Color(1.0, 0.88, 0.25))
+		else:
+			label.remove_theme_color_override("font_color")
+		badge.visible = is_wish
 	else:
 		label.text = ""
+		label.remove_theme_color_override("font_color")
+		badge.visible = false
 
 func _on_mouse_entered() -> void:
 	is_hovered = true

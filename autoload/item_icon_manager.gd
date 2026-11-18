@@ -60,7 +60,7 @@ func save_all_icons_to_disk(force_overwrite: bool = true) -> int:
 		all_ids[str(p_id)] = true
 	for a_id in WeaponPartsDatabase.AMMO_TYPES.keys():
 		all_ids[str(a_id)] = true
-	for extra_id in ["무기고 열쇠", "보안 키카드", "항생제", "Scav 인식표", "초콜릿", "MP5_리시버", "함정"]:
+	for extra_id in ["무기고 열쇠", "보안 키카드", "항생제", "Scav 인식표", "초콜릿", "MP5_리시버", "함정", "탄약 케이스", "의약품 케이스", "무기 부품 상자", "인식표 지갑"]:
 		all_ids[extra_id] = true
 
 	var saved_count: int = 0
@@ -81,6 +81,21 @@ func _generate_icon(item_id: String) -> Texture2D:
 func _paint_icon_by_id(img: Image, item_id: String, size: int) -> void:
 	var norm_id := item_id.replace("_", " ").strip_edges()
 	var lower_id := norm_id.to_lower()
+
+	# === 0. 특수 압축 보관 케이스 (다른 키워드 매칭보다 최우선 판별) ===
+	if norm_id.contains("탄약 케이스") or lower_id.contains("ammo case"):
+		_draw_storage_case(img, "ammo", size)
+		return
+	elif norm_id.contains("의약품 케이스") or lower_id.contains("med case"):
+		_draw_storage_case(img, "medical", size)
+		return
+	elif norm_id.contains("무기 부품 상자") or lower_id.contains("parts box"):
+		_draw_storage_case(img, "weapon_part", size)
+		return
+	elif norm_id.contains("인식표 지갑") or lower_id.contains("dogtag"):
+		if norm_id.contains("지갑") or lower_id.contains("wallet") or lower_id.contains("case"):
+			_draw_storage_case(img, "dogtag_key", size)
+			return
 
 	# === 1. 방탄복 / 조끼 ===
 	if norm_id.contains("3레벨") and (norm_id.contains("방탄") or norm_id.contains("조끼")) or lower_id.contains("armor 3") or lower_id.contains("heavy armor"):
@@ -1136,3 +1151,67 @@ func _draw_keycard(img: Image, _size: int) -> void:
 			elif x >= 15 and x <= 23 and (y == 16 or y == 19):
 				c = Color(0.65, 0.82, 0.98)
 			img.set_pixel(x, y, c)
+
+func _draw_storage_case(img: Image, case_kind: String, _size: int) -> void:
+	var body_col := Color(0.24, 0.30, 0.22)
+	var trim_col := Color(0.42, 0.50, 0.34)
+	var accent_col := Color(0.92, 0.76, 0.24)
+	if case_kind == "medical":
+		body_col = Color(0.76, 0.80, 0.86)
+		trim_col = Color(0.55, 0.62, 0.70)
+		accent_col = Color(0.88, 0.22, 0.24)
+	elif case_kind == "weapon_part":
+		body_col = Color(0.18, 0.21, 0.26)
+		trim_col = Color(0.34, 0.40, 0.48)
+		accent_col = Color(0.32, 0.78, 0.96)
+	elif case_kind == "dogtag_key":
+		body_col = Color(0.32, 0.24, 0.18)
+		trim_col = Color(0.48, 0.36, 0.26)
+		accent_col = Color(0.94, 0.80, 0.28)
+
+	# 케이스 본체
+	for x in range(5, 27):
+		for y in range(8, 25):
+			var c := body_col
+			if y < 11:
+				c = trim_col
+			elif y == 12:
+				c = Color(0.10, 0.12, 0.15)
+			img.set_pixel(x, y, c)
+	# 상단 손잡이
+	for x in range(12, 20):
+		img.set_pixel(x, 6, trim_col)
+		img.set_pixel(x, 7, trim_col)
+	img.set_pixel(12, 7, Color(0.12, 0.13, 0.16))
+	img.set_pixel(19, 7, Color(0.12, 0.13, 0.16))
+	# 잠금 래치 2개
+	for lx in [8, 22]:
+		for y in range(11, 15):
+			img.set_pixel(lx, y, accent_col)
+			img.set_pixel(lx + 1, y, accent_col)
+	# 중앙 심볼
+	if case_kind == "medical":
+		for x in range(14, 18):
+			for y in range(15, 22):
+				img.set_pixel(x, y, accent_col)
+		for x in range(12, 20):
+			for y in range(17, 20):
+				img.set_pixel(x, y, accent_col)
+	elif case_kind == "ammo":
+		for bx in [12, 15, 18]:
+			for y in range(15, 22):
+				img.set_pixel(bx, y, accent_col)
+				img.set_pixel(bx + 1, y, accent_col)
+	elif case_kind == "weapon_part":
+		for x in range(11, 21):
+			for y in range(17, 20):
+				img.set_pixel(x, y, accent_col)
+		for y in range(15, 22):
+			img.set_pixel(14, y, accent_col)
+			img.set_pixel(15, y, accent_col)
+	else:
+		for x in range(13, 19):
+			for y in range(15, 21):
+				img.set_pixel(x, y, accent_col)
+		img.set_pixel(15, 17, body_col)
+		img.set_pixel(16, 17, body_col)
