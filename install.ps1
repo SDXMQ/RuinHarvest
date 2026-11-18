@@ -31,19 +31,39 @@ function Invoke-RuinHarvestInstall {
         'User-Agent' = 'RuinHarvest-Installer'
         'Accept'     = 'application/vnd.github+json'
     }
-    $releaseUrl = "https://api.github.com/repos/$repo/releases/latest"
+    $release = $null
+    $latestUrl = "https://api.github.com/repos/$repo/releases/latest"
 
     try {
-        $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers
+        $release = Invoke-RestMethod -Uri $latestUrl -Headers $headers
     } catch {
         $statusCode = $null
         if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
             $statusCode = [int]$_.Exception.Response.StatusCode
         }
-        if ($statusCode -eq 404) {
-            throw "No GitHub Release found at https://github.com/$repo/releases. Publish a release with $exeName (or a Windows .zip) first."
+        if ($statusCode -ne 404) {
+            throw "Failed to query GitHub Releases: $($_.Exception.Message)"
         }
-        throw "Failed to query GitHub Releases: $($_.Exception.Message)"
+    }
+
+    if (-not $release) {
+        try {
+            $allReleases = @(Invoke-RestMethod -Uri "https://api.github.com/repos/$repo/releases?per_page=10" -Headers $headers)
+            $release = $allReleases | Where-Object { -not $_.draft } | Select-Object -First 1
+        } catch {
+            $statusCode = $null
+            if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+                $statusCode = [int]$_.Exception.Response.StatusCode
+            }
+            if ($statusCode -eq 404) {
+                throw "Repository or releases not accessible at https://github.com/$repo/releases (check that the repository is public)."
+            }
+            throw "Failed to query GitHub Releases: $($_.Exception.Message)"
+        }
+    }
+
+    if (-not $release) {
+        throw "No GitHub Release found at https://github.com/$repo/releases. Publish a release with $exeName (or a Windows .zip) first."
     }
 
     $assets = @($release.assets)
@@ -64,7 +84,7 @@ function Invoke-RuinHarvestInstall {
         throw "No Windows release asset (.exe or .zip) found in release '$($release.tag_name)'."
     }
 
-    $version = if ($release.tag_name) { ($release.tag_name -replace '^v', '') } else { '1.0.0' }
+    $version = if ($release.tag_name) { (($release.tag_name -replace '^v', '') -replace '-.*$', '') } else { '1.0.0' }
     if ($version -notmatch '^\d+(\.\d+)*$') {
         $version = '1.0.0'
     }

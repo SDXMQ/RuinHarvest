@@ -102,7 +102,7 @@ irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
 ```
 
 > [!IMPORTANT]
-> [install.ps1](install.ps1)은 최신 [GitHub Release](https://github.com/SDXMQ/RuinHarvest/releases/latest)에 업로드된 `RuinHarvest.exe`(또는 Windows `.zip` 빌드)를 내려받아 설치합니다. 이 명령을 사용하려면 먼저 GitHub Releases에 Windows 실행 파일이 등록되어 있어야 합니다.
+> [install.ps1](install.ps1)은 최신 [GitHub Release](https://github.com/SDXMQ/RuinHarvest/releases)에 업로드된 `RuinHarvest.exe`(또는 Windows `.zip` 빌드)를 내려받아 설치합니다(정식 릴리스가 없으면 최신 Pre-release를 사용합니다). 이 명령을 사용하려면 먼저 GitHub Releases에 Windows 실행 파일이 등록되어 있어야 합니다.
 
 제거할 때는 **Windows 설정 → 앱 → 설치된 앱 → RuinHarvest**에서 제거하거나 아래 명령을 실행하세요(세이브 파일은 `%APPDATA%\Godot\app_userdata\RuinHarvest`에 보존됩니다).
 

@@ -102,7 +102,7 @@ irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
 ```
 
 > [!IMPORTANT]
-> [install.ps1](install.ps1) downloads `RuinHarvest.exe` (or a Windows `.zip` build) from the latest [GitHub Release](https://github.com/SDXMQ/RuinHarvest/releases/latest). Make sure a Windows release asset is published on GitHub Releases before running this command.
+> [install.ps1](install.ps1) downloads `RuinHarvest.exe` (or a Windows `.zip` build) from the latest [GitHub Release](https://github.com/SDXMQ/RuinHarvest/releases) (falling back to the newest pre-release if no stable release exists yet). Make sure a Windows release asset is published on GitHub Releases before running this command.
 
 To uninstall, remove **RuinHarvest** from **Windows Settings → Apps → Installed apps** (save data under `%APPDATA%\Godot\app_userdata\RuinHarvest` is preserved), or run:
 
