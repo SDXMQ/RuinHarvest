@@ -50,7 +50,6 @@ project/assembly_name="RuinHarvest"
 
 [gui]
 
-common/snap_controls_to_pixels=true
 theme/custom="res://ui/theme/tactical_theme.tres"
 
 [input]
