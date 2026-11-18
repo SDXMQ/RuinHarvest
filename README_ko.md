@@ -95,7 +95,7 @@
 
 ### Windows 한 줄 설치 (PowerShell)
 
-PowerShell 한 줄로 **RuinHarvest**를 `C:\Program Files\RuinHarvest`에 일반 Windows 응용프로그램처럼 설치합니다(필요 시 UAC 관리자 권한을 자동으로 요청하며, 시작 메뉴·바탕화면 바로가기 생성 및 Windows **설치된 앱**에 제거 항목을 등록합니다).
+PowerShell 한 줄로 **RuinHarvest**를 `%LocalAppData%\Programs\RuinHarvest`에 일반 Windows 응용프로그램처럼 설치합니다(**관리자 권한(UAC) 불필요**, 시작 메뉴·바탕화면 바로가기 생성 및 Windows **설치된 앱** 등록). 설치 후 실행 시 첫 화면의 업데이트 체크를 통해 최신 릴리스가 있으면 자동으로 내려받아 업데이트한 뒤 재실행됩니다:
 
 ```powershell
 irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
@@ -107,7 +107,7 @@ irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
 제거할 때는 **Windows 설정 → 앱 → 설치된 앱 → RuinHarvest**에서 제거하거나 아래 명령을 실행하세요(세이브 파일은 `%APPDATA%\Godot\app_userdata\RuinHarvest`에 보존됩니다).
 
 ```powershell
-& "$env:ProgramFiles\RuinHarvest\uninstall.ps1"
+& "$env:LOCALAPPDATA\Programs\RuinHarvest\uninstall.ps1"
 ```
 
 ### 소스 코드에서 직접 실행 (Godot 4.7)
@@ -153,7 +153,7 @@ RuinHarvest/
 ├── systems/                   # 핵심 시스템 (2D 인벤토리 그리드, 무기 부품 DB, 성장, 날씨, 이벤트 등)
 ├── ui/theme/                  # 전술 픽셀 UI 테마 (tactical_theme.tres)
 ├── world/interior/            # 건물 내부 레이아웃 생성기
-└── install.ps1                # Windows 한 줄 PowerShell 설치 스크립트 (Program Files + 바로가기 + 앱 등록)
+└── install.ps1                # Windows 한 줄 PowerShell 설치 스크립트 (%LocalAppData% + 바로가기 + 앱 등록)
 ```
 
 ---

@@ -95,7 +95,7 @@ Surviving a raid lets you bring everything in your backpack back to your hideout
 
 ### Windows One-Line Installer (PowerShell)
 
-Install **RuinHarvest** as a Windows desktop application into `C:\Program Files\RuinHarvest` (automatically requests Administrator permission via UAC, creates Start Menu & Desktop shortcuts, and registers the app in Windows **Installed apps**):
+Install **RuinHarvest** as a Windows desktop application into `%LocalAppData%\Programs\RuinHarvest` (**no Administrator / UAC permission required** — creates Start Menu & Desktop shortcuts and registers the app in Windows **Installed apps**). On startup, the game automatically checks GitHub Releases and updates itself before entering the main menu when a newer version is available:
 
 ```powershell
 irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
@@ -107,7 +107,7 @@ irm https://raw.githubusercontent.com/SDXMQ/RuinHarvest/main/install.ps1 | iex
 To uninstall, remove **RuinHarvest** from **Windows Settings → Apps → Installed apps** (save data under `%APPDATA%\Godot\app_userdata\RuinHarvest` is preserved), or run:
 
 ```powershell
-& "$env:ProgramFiles\RuinHarvest\uninstall.ps1"
+& "$env:LOCALAPPDATA\Programs\RuinHarvest\uninstall.ps1"
 ```
 
 ### Run from Source (Godot 4.7)
@@ -153,7 +153,7 @@ RuinHarvest/
 ├── systems/                   # Core gameplay systems (2D inventory grid, weapon parts DB, progression, weather, events)
 ├── ui/theme/                  # Tactical pixel UI theme (tactical_theme.tres)
 ├── world/interior/            # Interior layout generator
-└── install.ps1                # Windows one-line PowerShell installer (Program Files + shortcuts + Apps registry)
+└── install.ps1                # Windows one-line PowerShell installer (%LocalAppData% + shortcuts + Apps registry)
 ```
 
 ---

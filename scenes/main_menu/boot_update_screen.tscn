@@ -1,0 +1,135 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://scenes/main_menu/boot_update_screen.gd" id="1_script"]
+[ext_resource type="Theme" uid="uid://c4ne6cow3b2ew" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
+[ext_resource type="Script" uid="uid://b3ynxa4gd5wva" path="res://scenes/main_menu/live_pixel_backdrop.gd" id="3_backdrop"]
+
+[node name="BootUpdateScreen" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_script")
+
+[node name="ColorRect" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.04, 0.05, 0.065, 1)
+
+[node name="LivePixelBackdrop" type="Control" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_backdrop")
+
+[node name="TopAccentBar" type="ColorRect" parent="."]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 3.0
+grow_horizontal = 2
+color = Color(0.88, 0.62, 0.2, 0.85)
+
+[node name="UpdateFrame" type="PanelContainer" parent="."]
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -260.0
+offset_top = -155.0
+offset_right = 260.0
+offset_bottom = 155.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="UpdateFrame"]
+layout_mode = 2
+theme_override_constants/margin_left = 24
+theme_override_constants/margin_top = 20
+theme_override_constants/margin_right = 24
+theme_override_constants/margin_bottom = 20
+
+[node name="VBox" type="VBoxContainer" parent="UpdateFrame/Margin"]
+layout_mode = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="TaglineLabel" type="Label" parent="UpdateFrame/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.9, 0.65, 0.22, 0.95)
+theme_override_colors/font_outline_color = Color(0.02, 0.03, 0.05, 0.95)
+theme_override_constants/outline_size = 2
+theme_override_font_sizes/font_size = 11
+text = "// TACTICAL SYSTEM UPDATER //"
+horizontal_alignment = 1
+
+[node name="TitleLabel" type="Label" parent="UpdateFrame/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.95, 0.96, 0.98, 1)
+theme_override_colors/font_shadow_color = Color(0.02, 0.03, 0.05, 0.95)
+theme_override_colors/font_outline_color = Color(0.04, 0.05, 0.08, 0.98)
+theme_override_constants/shadow_offset_x = 3
+theme_override_constants/shadow_offset_y = 3
+theme_override_constants/outline_size = 3
+theme_override_font_sizes/font_size = 38
+text = "RuinHarvest"
+horizontal_alignment = 1
+
+[node name="Divider" type="HSeparator" parent="UpdateFrame/Margin/VBox"]
+layout_mode = 2
+
+[node name="VersionLabel" type="Label" parent="UpdateFrame/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.76, 0.82, 0.88, 1)
+theme_override_font_sizes/font_size = 13
+text = "v1.0.0"
+horizontal_alignment = 1
+
+[node name="StatusLabel" type="Label" parent="UpdateFrame/Margin/VBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.92, 0.94, 0.97, 1)
+theme_override_font_sizes/font_size = 13
+text = "Checking for updates..."
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="ProgressBar" type="ProgressBar" parent="UpdateFrame/Margin/VBox"]
+custom_minimum_size = Vector2(0, 24)
+layout_mode = 2
+show_percentage = false
+
+[node name="ButtonsHBox" type="HBoxContainer" parent="UpdateFrame/Margin/VBox"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="RetryButton" type="Button" parent="UpdateFrame/Margin/VBox/ButtonsHBox"]
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+theme_type_variation = &"PrimaryButton"
+text = "Retry"
+
+[node name="OpenReleaseButton" type="Button" parent="UpdateFrame/Margin/VBox/ButtonsHBox"]
+custom_minimum_size = Vector2(150, 36)
+layout_mode = 2
+text = "Open Releases Page"
+
+[node name="QuitButton" type="Button" parent="UpdateFrame/Margin/VBox/ButtonsHBox"]
+custom_minimum_size = Vector2(110, 36)
+layout_mode = 2
+theme_type_variation = &"DangerButton"
+text = "Quit Game"
