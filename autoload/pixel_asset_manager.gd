@@ -50,16 +50,17 @@ const UI_SLICE_COORDS := {
 }
 
 func _ready() -> void:
-	# 핵심 시트 선행 워밍업 (게임/테스트 진입 시 즉시 사용 가능)
+	# 핵심 월드 시트 선행 워밍업 (게임/테스트 진입 시 즉시 사용 가능)
 	for key in [
 		"tiles/world_tileset",
 		"entities/player_parts",
 		"weapons/weapon_parts",
 		"entities/enemies",
-		"props/world_props",
-		"ui/ui_theme_atlas"
+		"props/world_props"
 	]:
 		get_canvas_texture(key)
+	# UI 테마 아틀라스는 별도 CanvasLayer에서 렌더링되므로 불필요한 노말맵(_n.png) 없이 디퓨즈만 로드
+	get_diffuse_texture("ui/ui_theme_atlas")
 	apply_pixel_ui_theme()
 
 func create_pixel_entity_material(rim: float = 0.22, local_to_scene: bool = false) -> ShaderMaterial:
@@ -126,9 +127,12 @@ func get_canvas_texture(key: String) -> CanvasTexture:
 func get_diffuse_texture(key: String) -> Texture2D:
 	if _diffuse_cache.has(key):
 		return _diffuse_cache[key]
-	var ct := get_canvas_texture(key)
-	if ct != null:
-		return ct.diffuse_texture
+	var base_path := _resolve_base_path(key)
+	var d_path := base_path + "_d.png"
+	var diff_tex := load_texture_2d(d_path)
+	if diff_tex != null:
+		_diffuse_cache[key] = diff_tex
+		return diff_tex
 	return null
 
 func get_normal_texture(key: String) -> Texture2D:
@@ -293,10 +297,10 @@ static func make_pixel_stylebox_flat(
 func get_ui_stylebox(
 	style_name: String,
 	cm_l: float = 10.0,
-	cm_t: float = 6.0,
+	cm_t: float = 4.0,
 	cm_r: float = 10.0,
-	cm_b: float = 6.0,
-	tex_margin: int = 6
+	cm_b: float = 4.0,
+	tex_margin: int = 4
 ) -> StyleBox:
 	var cache_key := "%s:%d,%d,%d,%d:%d" % [style_name, int(cm_l), int(cm_t), int(cm_r), int(cm_b), tex_margin]
 	if _ui_stylebox_cache.has(cache_key):
@@ -309,9 +313,24 @@ func get_ui_stylebox(
 			if d_img != null:
 				var cell: Vector2i = UI_SLICE_COORDS[style_name]
 				var sub_img := d_img.get_region(Rect2i(cell.x * UI_CELL_SIZE, cell.y * UI_CELL_SIZE, UI_CELL_SIZE, UI_CELL_SIZE))
+				var default_modulate := Color(1.0, 1.0, 1.0, 1.0)
+				if style_name == "progress_fill_amber":
+					# 동적 틴트(초록/노랑/빨강/청록) 시 색상이 탁해지지 않도록 화이트 픽셀 베벨로 정규화 후 기본 앰버 틴트 부여
+					for py in range(sub_img.get_height()):
+						for px in range(sub_img.get_width()):
+							var c := sub_img.get_pixel(px, py)
+							var v := maxf(c.r, maxf(c.g, c.b))
+							var boost := clampf(v * 1.12, 0.0, 1.0)
+							sub_img.set_pixel(px, py, Color(boost, boost, boost, c.a))
+					default_modulate = Color(0.92, 0.68, 0.22, 1.0)
 				var sub_tex := ImageTexture.create_from_image(sub_img)
+				var ui_ct := CanvasTexture.new()
+				ui_ct.diffuse_texture = sub_tex
+				ui_ct.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 				var sbt := StyleBoxTexture.new()
-				sbt.texture = sub_tex
+				sbt.texture = ui_ct
+				sbt.region_rect = Rect2(0.0, 0.0, float(UI_CELL_SIZE), float(UI_CELL_SIZE))
+				sbt.modulate_color = default_modulate
 				sbt.texture_margin_left = float(tex_margin)
 				sbt.texture_margin_top = float(tex_margin)
 				sbt.texture_margin_right = float(tex_margin)
@@ -338,16 +357,17 @@ func apply_pixel_ui_theme() -> void:
 		themes_to_patch.append(proj_t)
 
 	for t in themes_to_patch:
-		t.set_stylebox("panel", "Panel", get_ui_stylebox("panel_main", 10, 8, 10, 8))
-		t.set_stylebox("panel", "PanelContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8))
-		t.set_stylebox("panel", "PopupMenu", get_ui_stylebox("panel_tooltip", 10, 8, 10, 8))
-		t.set_stylebox("panel", "HeaderPanel", get_ui_stylebox("panel_header", 10, 5, 10, 5))
-		t.set_stylebox("panel", "GridSurfacePanel", get_ui_stylebox("panel_grid_surface", 6, 6, 6, 6))
+		t.set_stylebox("panel", "Panel", get_ui_stylebox("panel_main", 10, 8, 10, 8, 5))
+		t.set_stylebox("panel", "PanelContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8, 5))
+		t.set_stylebox("panel", "PopupMenu", get_ui_stylebox("panel_tooltip", 8, 6, 8, 6, 4))
+		t.set_stylebox("panel", "HeaderPanel", get_ui_stylebox("panel_header", 10, 5, 10, 5, 4))
+		t.set_stylebox("panel", "GridSurfacePanel", get_ui_stylebox("panel_grid_surface", 6, 6, 6, 6, 4))
 
-		var sb_btn_normal := get_ui_stylebox("btn_normal", 12, 6, 12, 6)
-		var sb_btn_hover := get_ui_stylebox("btn_hover", 12, 6, 12, 6)
-		var sb_btn_pressed := get_ui_stylebox("btn_pressed", 13, 7, 11, 5)
-		var sb_btn_disabled := get_ui_stylebox("btn_disabled", 12, 6, 12, 6)
+		# 소형 버튼(22~28px)에서도 9-Patch 중앙 영역이 음수가 되지 않도록 상하 texture_margin을 4px(합 8px)로 제한
+		var sb_btn_normal := get_ui_stylebox("btn_normal", 10, 4, 10, 4, 4)
+		var sb_btn_hover := get_ui_stylebox("btn_hover", 10, 4, 10, 4, 4)
+		var sb_btn_pressed := get_ui_stylebox("btn_pressed", 11, 5, 9, 3, 4)
+		var sb_btn_disabled := get_ui_stylebox("btn_disabled", 10, 4, 10, 4, 4)
 		t.set_stylebox("normal", "Button", sb_btn_normal)
 		t.set_stylebox("hover", "Button", sb_btn_hover)
 		t.set_stylebox("pressed", "Button", sb_btn_pressed)
@@ -356,33 +376,41 @@ func apply_pixel_ui_theme() -> void:
 		t.set_stylebox("hover", "OptionButton", sb_btn_hover)
 		t.set_stylebox("pressed", "OptionButton", sb_btn_pressed)
 
-		var sb_pri_normal := get_ui_stylebox("btn_primary_normal", 14, 6, 14, 6)
-		var sb_pri_hover := get_ui_stylebox("btn_primary_hover", 14, 6, 14, 6)
+		# 22~28px 초소형 전술 버튼 전용 타입 변형 (SmallButton: texture_margin 3px, 상하 합 6px)
+		t.set_type_variation("SmallButton", "Button")
+		t.set_stylebox("normal", "SmallButton", get_ui_stylebox("btn_normal", 6, 2, 6, 2, 3))
+		t.set_stylebox("hover", "SmallButton", get_ui_stylebox("btn_hover", 6, 2, 6, 2, 3))
+		t.set_stylebox("pressed", "SmallButton", get_ui_stylebox("btn_pressed", 7, 3, 5, 1, 3))
+		t.set_stylebox("disabled", "SmallButton", get_ui_stylebox("btn_disabled", 6, 2, 6, 2, 3))
+
+		var sb_pri_normal := get_ui_stylebox("btn_primary_normal", 12, 4, 12, 4, 4)
+		var sb_pri_hover := get_ui_stylebox("btn_primary_hover", 12, 4, 12, 4, 4)
 		t.set_stylebox("normal", "PrimaryButton", sb_pri_normal)
 		t.set_stylebox("hover", "PrimaryButton", sb_pri_hover)
 		t.set_stylebox("pressed", "PrimaryButton", sb_pri_hover)
 
-		var sb_dng_normal := get_ui_stylebox("btn_danger_normal", 12, 6, 12, 6)
-		var sb_dng_hover := get_ui_stylebox("btn_danger_hover", 12, 6, 12, 6)
+		var sb_dng_normal := get_ui_stylebox("btn_danger_normal", 10, 4, 10, 4, 4)
+		var sb_dng_hover := get_ui_stylebox("btn_danger_hover", 10, 4, 10, 4, 4)
 		t.set_stylebox("normal", "DangerButton", sb_dng_normal)
 		t.set_stylebox("hover", "DangerButton", sb_dng_hover)
 		t.set_stylebox("pressed", "DangerButton", sb_dng_hover)
 
-		var sb_eq_normal := get_ui_stylebox("equip_normal", 6, 6, 6, 6)
-		var sb_eq_hover := get_ui_stylebox("equip_hover", 6, 6, 6, 6)
+		var sb_eq_normal := get_ui_stylebox("equip_normal", 6, 4, 6, 4, 4)
+		var sb_eq_hover := get_ui_stylebox("equip_hover", 6, 4, 6, 4, 4)
 		t.set_stylebox("normal", "EquipSlotButton", sb_eq_normal)
 		t.set_stylebox("hover", "EquipSlotButton", sb_eq_hover)
 		t.set_stylebox("pressed", "EquipSlotButton", sb_eq_hover)
 
-		var sb_line_edit := get_ui_stylebox("panel_line_edit", 8, 4, 8, 4)
+		var sb_line_edit := get_ui_stylebox("panel_line_edit", 8, 4, 8, 4, 4)
 		t.set_stylebox("normal", "LineEdit", sb_line_edit)
 		t.set_stylebox("focus", "LineEdit", sb_line_edit)
 
-		t.set_stylebox("panel", "TabContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8))
-		t.set_stylebox("tab_selected", "TabContainer", get_ui_stylebox("tab_selected", 14, 6, 14, 6))
-		t.set_stylebox("tab_unselected", "TabContainer", get_ui_stylebox("tab_unselected", 14, 6, 14, 6))
+		t.set_stylebox("panel", "TabContainer", get_ui_stylebox("panel_main", 10, 8, 10, 8, 5))
+		t.set_stylebox("tab_selected", "TabContainer", get_ui_stylebox("tab_selected", 12, 5, 12, 5, 4))
+		t.set_stylebox("tab_unselected", "TabContainer", get_ui_stylebox("tab_unselected", 12, 5, 12, 5, 4))
 
-		t.set_stylebox("background", "ProgressBar", get_ui_stylebox("progress_bg", 2, 2, 2, 2, 4))
+		t.set_stylebox("background", "ProgressBar", get_ui_stylebox("progress_bg", 2, 2, 2, 2, 3))
+		t.set_stylebox("fill", "ProgressBar", get_ui_stylebox("progress_fill_amber", 2, 1, 2, 1, 2))
 		t.set_stylebox("scroll", "VScrollBar", get_ui_stylebox("scroll_bg", 4, 2, 4, 2, 3))
 		t.set_stylebox("grabber", "VScrollBar", get_ui_stylebox("scroll_grabber", 2, 2, 2, 2, 3))
 

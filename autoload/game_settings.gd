@@ -7,10 +7,11 @@ extends Node
 # 화면 및 그리드 상수
 # ============================================================
 const RESOLUTION_OPTIONS: Array[Vector2i] = [
+	Vector2i(640, 360),
 	Vector2i(1280, 720),
-	Vector2i(1366, 768),
 	Vector2i(1600, 900),
-	Vector2i(1920, 1080)
+	Vector2i(1920, 1080),
+	Vector2i(2560, 1440)
 ]
 const DEFAULT_RESOLUTION: Vector2i = Vector2i(1280, 720)
 const FPS: int = 60
@@ -311,8 +312,9 @@ const BIOMES: Dictionary = {
 # ============================================================
 # 설정 저장/로드 (GameSettings 싱글톤 데이터)
 # ============================================================
-var resolution_index: int = 0
+var resolution_index: int = 1
 var fullscreen: bool = false
+var integer_scaling: bool = false
 var vsync: bool = true
 var master_volume: float = 0.8
 var sfx_volume: float = 0.8
@@ -381,6 +383,8 @@ func get_current_resolution() -> Vector2i:
 func apply_display_settings() -> void:
 	var res: Vector2i = get_current_resolution()
 	DisplayServer.window_set_size(res)
+	if get_tree() and get_tree().root:
+		get_tree().root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER if integer_scaling else Window.CONTENT_SCALE_STRETCH_FRACTIONAL
 	if fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
@@ -394,6 +398,7 @@ func save_settings() -> void:
 	var data: Dictionary = {
 		"resolution_index": resolution_index,
 		"fullscreen": fullscreen,
+		"integer_scaling": integer_scaling,
 		"vsync": vsync,
 		"master_volume": master_volume,
 		"sfx_volume": sfx_volume,
@@ -425,6 +430,7 @@ func load_settings() -> void:
 			var d: Dictionary = json.data
 			resolution_index = d.get("resolution_index", resolution_index)
 			fullscreen = d.get("fullscreen", fullscreen)
+			integer_scaling = d.get("integer_scaling", integer_scaling)
 			vsync = d.get("vsync", vsync)
 			master_volume = d.get("master_volume", master_volume)
 			sfx_volume = d.get("sfx_volume", sfx_volume)

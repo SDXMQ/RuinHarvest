@@ -12,22 +12,44 @@ extends Control
 
 signal window_closed
 
-var resolutions = [
+var resolutions: Array[Vector2i] = [
+	Vector2i(640, 360),
 	Vector2i(1280, 720),
 	Vector2i(1600, 900),
 	Vector2i(1920, 1080),
 	Vector2i(2560, 1440)
 ]
 
+var integer_scale_btn: CheckButton = null
+
 func _ready() -> void:
 	# 초기화
 	fullscreen_btn.button_pressed = (DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
 	
+	resolution_opt.clear()
 	for i in range(resolutions.size()):
-		var res = resolutions[i]
-		resolution_opt.add_item("%d x %d" % [res.x, res.y])
+		var res: Vector2i = resolutions[i]
+		var suffix := ""
+		if res == Vector2i(640, 360):
+			suffix = " (0.5x 픽셀)"
+		elif res == Vector2i(1280, 720):
+			suffix = " (1x 정수 기준)"
+		elif res == Vector2i(2560, 1440):
+			suffix = " (2x 정수 배율)"
+		resolution_opt.add_item("%d x %d%s" % [res.x, res.y, suffix])
 		if DisplayServer.window_get_size() == res:
 			resolution_opt.selected = i
+
+	var video_vbox: VBoxContainer = get_node_or_null("Panel/VBox/TabContainer/비디오/VBox") as VBoxContainer
+	if video_vbox:
+		integer_scale_btn = CheckButton.new()
+		integer_scale_btn.name = "IntegerScaleBtn"
+		integer_scale_btn.text = "정수 배율 픽셀 스케일링 (Integer Scale)"
+		integer_scale_btn.tooltip_text = "활성화 시 1px 픽셀 아트 테두리가 비정수 배율에서 뭉개지지 않도록 정수 배율로 고정합니다."
+		var is_int_scale: bool = (GameSettings.integer_scaling if GameSettings else false) or (get_tree() != null and get_tree().root != null and get_tree().root.content_scale_stretch == Window.CONTENT_SCALE_STRETCH_INTEGER)
+		integer_scale_btn.button_pressed = is_int_scale
+		integer_scale_btn.toggled.connect(_on_integer_scale_toggled)
+		video_vbox.add_child(integer_scale_btn)
 			
 	# 로그 개수 슬라이더 초기화
 	if GameSettings:
@@ -60,10 +82,23 @@ func _on_fullscreen_toggled(toggled_on: bool) -> void:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+	if GameSettings:
+		GameSettings.fullscreen = toggled_on
+		GameSettings.save_settings()
+
+func _on_integer_scale_toggled(toggled_on: bool) -> void:
+	if get_tree() and get_tree().root:
+		get_tree().root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER if toggled_on else Window.CONTENT_SCALE_STRETCH_FRACTIONAL
+	if GameSettings:
+		GameSettings.integer_scaling = toggled_on
+		GameSettings.save_settings()
 
 func _on_resolution_selected(index: int) -> void:
-	var res = resolutions[index]
+	var res: Vector2i = resolutions[index]
 	DisplayServer.window_set_size(res)
+	if GameSettings:
+		GameSettings.resolution_index = index
+		GameSettings.save_settings()
 
 func _on_volume_changed(bus_idx: int, value: float) -> void:
 	var db = linear_to_db(max(value, 0.001))

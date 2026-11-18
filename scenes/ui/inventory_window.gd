@@ -5,7 +5,7 @@ extends Control
 
 signal window_closed
 
-const CELL_SIZE: float = 44.0
+const CELL_SIZE: float = InventoryUIHelper.CELL_SIZE
 const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
 const SplitDialogScene = preload("res://scenes/ui/split_dialog.tscn")
 const GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
@@ -103,9 +103,10 @@ func _ready() -> void:
 	if inv_header_hbox:
 		var sort_btn = Button.new()
 		sort_btn.name = "AutoSortBtn"
+		sort_btn.theme_type_variation = &"SmallButton"
 		sort_btn.text = "정렬"
 		sort_btn.tooltip_text = "동일 아이템 병합 및 빈 공간 자동 정렬"
-		sort_btn.custom_minimum_size = Vector2(56, 22)
+		sort_btn.custom_minimum_size = Vector2(56, 24)
 		sort_btn.add_theme_font_size_override("font_size", 11)
 		sort_btn.pressed.connect(func():
 			if inventory_grid and inventory_grid.has_method("sort_items"):
@@ -427,24 +428,7 @@ func _handle_global_drop() -> void:
 			var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
 			var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
 			var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
-			if equipment_data.has(w_slot):
-				var w_dict = equipment_data[w_slot]
-				var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
-				if w_parts.has(a_slot):
-					var p_val = w_parts[a_slot]
-					if p_val is Array:
-						if r_idx >= 0 and r_idx < p_val.size():
-							p_val.remove_at(r_idx)
-						else:
-							p_val.erase(item.get("id", ""))
-						if p_val.is_empty(): w_parts.erase(a_slot)
-					else:
-						w_parts.erase(a_slot)
-				w_dict["parts"] = w_parts
-				w_dict["attachments"] = w_parts
-				equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
-				_clamp_weapon_excess_ammo(equipment_data[w_slot])
-				_sync_weapon_to_player(w_slot)
+			_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 			_update_weapons_ui()
 			_drop_item_to_world(item)
 		_end_drag()
@@ -548,6 +532,17 @@ func perform_item_repair(item: Dictionary, slot_ref: String = "") -> bool:
 	if SoundManager: SoundManager.play("craft_complete")
 	return true
 
+func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, callback: Callable, is_disabled: bool = false) -> Button:
+	var btn := Button.new()
+	btn.theme_type_variation = &"SmallButton"
+	btn.text = text_str
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.custom_minimum_size = Vector2(140, 26)
+	btn.disabled = is_disabled
+	btn.pressed.connect(callback)
+	vbox.add_child(btn)
+	return btn
+
 func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref: String = "") -> void:
 	_close_context_menu()
 	var id = item.get("id", "")
@@ -558,20 +553,20 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	context_menu_panel.name = "ContextMenuPanel"
 	context_menu_panel.z_index = 300
 
-	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.055, 0.07, 0.095, 0.98)
-	sb.border_color = Color(0.35, 0.45, 0.60, 0.95)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(0)
-	sb.corner_detail = 1
-	sb.anti_aliasing = false
-	sb.shadow_color = Color(0, 0, 0, 0.85)
-	sb.shadow_size = 1
-	sb.shadow_offset = Vector2(3, 3)
-	sb.content_margin_left = 6
-	sb.content_margin_right = 6
-	sb.content_margin_top = 6
-	sb.content_margin_bottom = 6
+	var sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_tooltip", 8, 6, 8, 6, 4) if PixelAssetManager else null
+	if sb == null:
+		var flat_sb := StyleBoxFlat.new()
+		flat_sb.bg_color = Color(0.055, 0.07, 0.095, 0.98)
+		flat_sb.border_color = Color(0.35, 0.45, 0.60, 0.95)
+		flat_sb.set_border_width_all(2)
+		flat_sb.set_corner_radius_all(0)
+		flat_sb.corner_detail = 1
+		flat_sb.anti_aliasing = false
+		flat_sb.content_margin_left = 8
+		flat_sb.content_margin_right = 8
+		flat_sb.content_margin_top = 6
+		flat_sb.content_margin_bottom = 6
+		sb = flat_sb
 	context_menu_panel.add_theme_stylebox_override("panel", sb)
 
 	var vbox = VBoxContainer.new()
@@ -587,23 +582,14 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	vbox.add_child(HSeparator.new())
 
 	if source_type == "grid":
-		var btn_use = Button.new()
-		btn_use.text = "⚡ 사용 / 장착"
-		btn_use.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn_use.custom_minimum_size = Vector2(130, 24)
-		btn_use.pressed.connect(func():
+		_add_context_menu_btn(vbox, "⚡ 사용 / 장착", func():
 			_close_context_menu()
 			_handle_item_quick_action(item, true)
 		)
-		vbox.add_child(btn_use)
 
 		var amt = int(item.get("amount", 1))
 		if amt > 1:
-			var btn_split = Button.new()
-			btn_split.text = "✂️ 수량 분할"
-			btn_split.alignment = HORIZONTAL_ALIGNMENT_LEFT
-			btn_split.custom_minimum_size = Vector2(130, 24)
-			btn_split.pressed.connect(func():
+			_add_context_menu_btn(vbox, "✂️ 수량 분할", func():
 				_close_context_menu()
 				_open_split_dialog(item, func(split_amt):
 					var split_item = item.duplicate()
@@ -617,13 +603,8 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 					drag_data["split_amount"] = split_amt
 				)
 			)
-			vbox.add_child(btn_split)
 	elif source_type in ["equipment", "weapon_slot"] and slot_ref != "":
-		var btn_unequip = Button.new()
-		btn_unequip.text = "📤 가방으로 장착 해제"
-		btn_unequip.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn_unequip.custom_minimum_size = Vector2(130, 24)
-		btn_unequip.pressed.connect(func():
+		_add_context_menu_btn(vbox, "📤 가방으로 장착 해제", func():
 			_close_context_menu()
 			var rem = inventory_grid.auto_add_item(item.get("id", ""), item.get("amount", 1), item) if inventory_grid else 1
 			if rem <= 0:
@@ -636,7 +617,6 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 					_update_weapons_ui()
 				if SoundManager: SoundManager.play("menu_select")
 		)
-		vbox.add_child(btn_unequip)
 
 	var has_parts = false
 	var parts_dict: Dictionary = item.get("parts", item.get("attachments", {}))
@@ -646,28 +626,18 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 		elif pv != null and String(pv) != "": has_parts = true; break
 
 	if has_parts:
-		var btn_detach = Button.new()
-		btn_detach.text = "🔩 부품 모두 분리"
-		btn_detach.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn_detach.custom_minimum_size = Vector2(130, 24)
-		btn_detach.pressed.connect(func():
+		_add_context_menu_btn(vbox, "🔩 부품 모두 분리", func():
 			_close_context_menu()
 			_detach_all_item_parts(item)
 			if source_type == "weapon_slot" and slot_ref != "":
 				_sync_weapon_to_player(slot_ref)
 				_update_weapons_ui()
 		)
-		vbox.add_child(btn_detach)
 
-	# 총기 탄약 비우기 (Unload)
 	var cur_mag_ammo = int(item.get("current_magazine_ammo", 0))
 	var loaded_ammo_type = item.get("loaded_ammo", "")
 	if cur_mag_ammo > 0 and loaded_ammo_type != "":
-		var btn_unload = Button.new()
-		btn_unload.text = "🔄 탄약 비우기 (%d발)" % cur_mag_ammo
-		btn_unload.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn_unload.custom_minimum_size = Vector2(130, 24)
-		btn_unload.pressed.connect(func():
+		_add_context_menu_btn(vbox, "🔄 탄약 비우기 (%d발)" % cur_mag_ammo, func():
 			_close_context_menu()
 			var rem = inventory_grid.auto_add_item(loaded_ammo_type, cur_mag_ammo) if inventory_grid else cur_mag_ammo
 			if rem > 0:
@@ -682,37 +652,23 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("🔄 [%s] 탄약 %d발을 회수했습니다." % [item_name, cur_mag_ammo - rem])
 		)
-		vbox.add_child(btn_unload)
 
-	# 손상된 장비 수리 (은신처 정가 수리 vs 인레이드 야전 응급 수리 차등화)
 	var max_dur = float(item.get("max_durability", idata.get("max_durability", 0.0)))
 	var cur_dur = float(item.get("durability", max_dur))
 	var missing_dur = max_dur - cur_dur
 	if max_dur > 0 and missing_dur > 0.5:
 		var is_field_repair: bool = (GameManager != null and GameManager.current_state == GameManager.GameState.IN_GAME)
 		var repair_cost = int(ceil(missing_dur * (15.0 if is_field_repair else 10.0)))
-		var btn_repair = Button.new()
-		if is_field_repair:
-			btn_repair.text = "🛠️ 야전 응급 수리 (%d RUB | 최대 -10%%)" % repair_cost
-		else:
-			btn_repair.text = "🔧 수리하기 (%d RUB)" % repair_cost
-		btn_repair.alignment = HORIZONTAL_ALIGNMENT_LEFT
-		btn_repair.custom_minimum_size = Vector2(130, 24)
+		var repair_txt := ("🛠️ 야전 응급 수리 (%d RUB | 최대 -10%%)" if is_field_repair else "🔧 수리하기 (%d RUB)") % repair_cost
 		var user_funds = _get_player_rubles()
 		if user_funds < repair_cost:
-			btn_repair.disabled = true
-			btn_repair.text += " (잔액 부족)"
-		btn_repair.pressed.connect(func():
+			repair_txt += " (잔액 부족)"
+		_add_context_menu_btn(vbox, repair_txt, func():
 			_close_context_menu()
 			perform_item_repair(item, slot_ref)
-		)
-		vbox.add_child(btn_repair)
+		, user_funds < repair_cost)
 
-	var btn_drop = Button.new()
-	btn_drop.text = "🗑️ 바닥에 버리기"
-	btn_drop.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn_drop.custom_minimum_size = Vector2(130, 24)
-	btn_drop.pressed.connect(func():
+	_add_context_menu_btn(vbox, "🗑️ 바닥에 버리기", func():
 		_close_context_menu()
 		if source_type == "grid" and inventory_grid:
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
@@ -726,13 +682,10 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			_update_weapons_ui()
 		_drop_item_to_world(item)
 	)
-	vbox.add_child(btn_drop)
 
 	add_child(context_menu_panel)
 	var mpos = get_global_mouse_position() - global_position
-	mpos.x = min(mpos.x, size.x - 170)
-	mpos.y = min(mpos.y, size.y - 150)
-	context_menu_panel.position = mpos
+	context_menu_panel.position = InventoryUIHelper.clamp_popup_position(context_menu_panel, mpos, size, 8.0)
 
 func _close_context_menu() -> void:
 	if context_menu_panel:
@@ -890,24 +843,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 						var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
 						var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
 						var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
-						if equipment_data.has(w_slot):
-							var w_dict = equipment_data[w_slot]
-							var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
-							if w_parts.has(a_slot):
-								var p_val = w_parts[a_slot]
-								if p_val is Array:
-									if r_idx >= 0 and r_idx < p_val.size():
-										p_val.remove_at(r_idx)
-									else:
-										p_val.erase(item.get("id", ""))
-									if p_val.is_empty(): w_parts.erase(a_slot)
-								else:
-									w_parts.erase(a_slot)
-							w_dict["parts"] = w_parts
-							w_dict["attachments"] = w_parts
-							equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
-							_clamp_weapon_excess_ammo(equipment_data[w_slot])
-							_sync_weapon_to_player(w_slot)
+						_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 						_update_weapons_ui()
 				else:
 					item["amount"] = rem_amt
@@ -973,24 +909,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
 					var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
 					var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
-					if equipment_data.has(w_slot):
-						var w_dict = equipment_data[w_slot]
-						var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
-						if w_parts.has(a_slot):
-							var p_val = w_parts[a_slot]
-							if p_val is Array:
-								if r_idx >= 0 and r_idx < p_val.size():
-									p_val.remove_at(r_idx)
-								else:
-									p_val.erase(item.get("id", ""))
-								if p_val.is_empty(): w_parts.erase(a_slot)
-							else:
-								w_parts.erase(a_slot)
-						w_dict["parts"] = w_parts
-						w_dict["attachments"] = w_parts
-						equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
-						_clamp_weapon_excess_ammo(equipment_data[w_slot])
-						_sync_weapon_to_player(w_slot)
+					_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 					_update_weapons_ui()
 					
 				if SoundManager: SoundManager.play("menu_select")
@@ -1202,24 +1121,7 @@ func _try_drop_on_container() -> void:
 				var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
 				var a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
 				var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
-				if equipment_data.has(w_slot):
-					var w_dict = equipment_data[w_slot]
-					var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
-					if w_parts.has(a_slot):
-						var p_val = w_parts[a_slot]
-						if p_val is Array:
-							if r_idx >= 0 and r_idx < p_val.size():
-								p_val.remove_at(r_idx)
-							else:
-								p_val.erase(item.get("id", ""))
-							if p_val.is_empty(): w_parts.erase(a_slot)
-						else:
-							w_parts.erase(a_slot)
-					w_dict["parts"] = w_parts
-					w_dict["attachments"] = w_parts
-					equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
-					_clamp_weapon_excess_ammo(equipment_data[w_slot])
-					_sync_weapon_to_player(w_slot)
+				_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 				_update_weapons_ui()
 		elif src == "vicinity":
 			var ground_node = drag_data.get("ground_ref")
@@ -1529,42 +1431,64 @@ func _update_weapons_ui() -> void:
 	_create_weapon_card("보조 무기", "sidearm", equipment_data.get("sidearm", {}))
 	_create_weapon_card("투척 무기", "throwable", equipment_data.get("throwable", {}))
 
+func _remove_attachment_from_weapon_slot(w_slot: String, a_slot: String, r_idx: int, part_id: String = "") -> void:
+	if not equipment_data.has(w_slot):
+		return
+	var w_dict: Dictionary = equipment_data[w_slot]
+	if w_dict.is_empty():
+		return
+	var w_parts: Dictionary = w_dict.get("parts", w_dict.get("attachments", {}))
+	if w_parts.has(a_slot):
+		var p_val = w_parts[a_slot]
+		if p_val is Array:
+			if r_idx >= 0 and r_idx < p_val.size():
+				p_val.remove_at(r_idx)
+			elif part_id != "":
+				p_val.erase(part_id)
+			if p_val.is_empty():
+				w_parts.erase(a_slot)
+		else:
+			w_parts.erase(a_slot)
+	w_dict["parts"] = w_parts
+	w_dict["attachments"] = w_parts
+	equipment_data[w_slot] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
+	_clamp_weapon_excess_ammo(equipment_data[w_slot])
+	_sync_weapon_to_player(w_slot)
+
 func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionary) -> void:
 	var panel = PanelContainer.new()
 	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	var style = StyleBoxFlat.new()
-	style.bg_color = Color(0.065, 0.08, 0.11, 0.95)
-	style.border_width_left = 3
-	style.border_width_top = 1
-	style.border_width_right = 1
-	style.border_width_bottom = 1
-	style.border_color = Color(0.9, 0.4, 0.4) if slot_key.begins_with("primary") else Color(0.4, 0.7, 1.0)
-	style.set_corner_radius_all(0)
-	style.corner_detail = 1
-	style.anti_aliasing = false
-	style.content_margin_left = 8
-	style.content_margin_right = 8
-	style.content_margin_top = 6
-	style.content_margin_bottom = 6
-	panel.add_theme_stylebox_override("panel", style)
-	
-	var vbox = VBoxContainer.new()
-	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	panel.add_child(vbox)
-	
-	# 상단 헤더 & 메인 무기 버튼 (장착 무기 아이콘 프레임 + 마스터 황금 테두리 + 현재 손에 든 슬롯 표시)
 	var is_active_hand: bool = (player != null and "active_weapon_slot" in player and String(player.active_weapon_slot) == slot_key)
 	var w_world_data: Dictionary = GameManager.current_world_data if (GameManager and GameManager.current_world_data is Dictionary) else {}
 	var is_gold_master := false
 	if not weapon_dict.is_empty():
 		var m_bonus := HideoutProgression.get_weapon_mastery_bonus(w_world_data, str(weapon_dict.get("id", "")))
 		is_gold_master = bool(m_bonus.get("gold_border", false))
-	if is_gold_master:
+
+	var card_sb: StyleBox = null
+	if PixelAssetManager:
+		card_sb = PixelAssetManager.get_ui_stylebox("equip_gold" if is_gold_master else "panel_main", 8, 6, 8, 6, 4)
+	if card_sb == null:
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.065, 0.08, 0.11, 0.95)
 		style.border_width_left = 3
 		style.border_width_top = 1
 		style.border_width_right = 1
 		style.border_width_bottom = 1
-		style.border_color = Color(1.0, 0.84, 0.22, 0.98)
+		style.border_color = Color(1.0, 0.84, 0.22, 0.98) if is_gold_master else (Color(0.9, 0.4, 0.4) if slot_key.begins_with("primary") else Color(0.4, 0.7, 1.0))
+		style.set_corner_radius_all(0)
+		style.corner_detail = 1
+		style.anti_aliasing = false
+		style.content_margin_left = 8
+		style.content_margin_right = 8
+		style.content_margin_top = 6
+		style.content_margin_bottom = 6
+		card_sb = style
+	panel.add_theme_stylebox_override("panel", card_sb)
+	
+	var vbox = VBoxContainer.new()
+	vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.add_child(vbox)
 
 	var top_hbox = HBoxContainer.new()
 	top_hbox.add_theme_constant_override("separation", 6)
@@ -1578,16 +1502,16 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 
 	if not weapon_dict.is_empty() and ItemIconManager:
 		var icon_frame := PanelContainer.new()
-		var ic_sb := StyleBoxFlat.new()
-		ic_sb.bg_color = Color(0.05, 0.065, 0.095, 0.96)
-		ic_sb.border_width_left = 2 if is_gold_master else 1
-		ic_sb.border_width_top = 2 if is_gold_master else 1
-		ic_sb.border_width_right = 2 if is_gold_master else 1
-		ic_sb.border_width_bottom = 2 if is_gold_master else 1
-		ic_sb.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gold_master else Color(0.35, 0.78, 0.55, 0.92)
-		ic_sb.set_corner_radius_all(0)
-		ic_sb.corner_detail = 1
-		ic_sb.anti_aliasing = false
+		var ic_sb: StyleBox = PixelAssetManager.get_ui_stylebox("equip_gold" if is_gold_master else "equip_filled", 2, 2, 2, 2, 3) if PixelAssetManager else null
+		if ic_sb == null:
+			var flat_ic := StyleBoxFlat.new()
+			flat_ic.bg_color = Color(0.05, 0.065, 0.095, 0.96)
+			flat_ic.set_border_width_all(2 if is_gold_master else 1)
+			flat_ic.border_color = Color(1.0, 0.84, 0.22, 1.0) if is_gold_master else Color(0.35, 0.78, 0.55, 0.92)
+			flat_ic.set_corner_radius_all(0)
+			flat_ic.corner_detail = 1
+			flat_ic.anti_aliasing = false
+			ic_sb = flat_ic
 		icon_frame.add_theme_stylebox_override("panel", ic_sb)
 		var wep_icon := TextureRect.new()
 		wep_icon.name = "EquippedWeaponIcon"
@@ -1645,15 +1569,9 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 			dur_bar.show_percentage = false
 			dur_bar.max_value = max_dur
 			dur_bar.value = cur_dur
-			var dur_style = StyleBoxFlat.new()
 			var ratio = cur_dur / max_dur
-			dur_style.bg_color = Color(0.2, 0.85, 0.3) if ratio > 0.5 else (Color(0.9, 0.7, 0.1) if ratio > 0.25 else Color(0.9, 0.2, 0.2))
-			dur_style.anti_aliasing = false
-			dur_bar.add_theme_stylebox_override("fill", dur_style)
-			var bg_style = StyleBoxFlat.new()
-			bg_style.bg_color = Color(0.05, 0.06, 0.08, 0.85)
-			bg_style.anti_aliasing = false
-			dur_bar.add_theme_stylebox_override("background", bg_style)
+			var dur_col = Color(0.2, 0.85, 0.3) if ratio > 0.5 else (Color(0.9, 0.7, 0.1) if ratio > 0.25 else Color(0.9, 0.2, 0.2))
+			InventoryUIHelper.apply_dynamic_tint(dur_bar, "fill", dur_col)
 			vbox.add_child(dur_bar)
 	
 	wep_btn.mouse_entered.connect(func():
@@ -1725,7 +1643,8 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 
 func _create_attachment_sub_slot(parent: Container, weapon_slot_key: String, attach_type: String, current_part_id: String, rail_index: int = -1) -> void:
 	var btn = Button.new()
-	btn.custom_minimum_size = Vector2(78, 26)
+	btn.theme_type_variation = &"SmallButton"
+	btn.custom_minimum_size = Vector2(78, 28)
 	btn.clip_text = true
 	btn.focus_mode = Control.FOCUS_NONE
 	
@@ -1784,23 +1703,7 @@ func _create_attachment_sub_slot(parent: Container, weapon_slot_key: String, att
 				# 부착물 가방으로 탈착
 				var rem = inventory_grid.auto_add_item(current_part_id, 1)
 				if rem <= 0:
-					var w_dict = equipment_data.get(weapon_slot_key, {})
-					var w_parts = w_dict.get("parts", w_dict.get("attachments", {}))
-					if w_parts.has(attach_type):
-						var p_val = w_parts[attach_type]
-						if p_val is Array:
-							if rail_index >= 0 and rail_index < p_val.size():
-								p_val.remove_at(rail_index)
-							else:
-								p_val.erase(current_part_id)
-							if p_val.is_empty(): w_parts.erase(attach_type)
-						else:
-							w_parts.erase(attach_type)
-					w_dict["parts"] = w_parts
-					w_dict["attachments"] = w_parts
-					equipment_data[weapon_slot_key] = WeaponPartsDatabase.compute_weapon_from_dict(w_dict)
-					_clamp_weapon_excess_ammo(equipment_data[weapon_slot_key])
-					_sync_weapon_to_player(weapon_slot_key)
+					_remove_attachment_from_weapon_slot(weapon_slot_key, attach_type, rail_index, current_part_id)
 					_update_weapons_ui()
 					if SoundManager: SoundManager.play("menu_select")
 	)
@@ -2118,61 +2021,12 @@ func _rebuild_drag_preview() -> void:
 	if drag_preview:
 		drag_preview.queue_free()
 		drag_preview = null
-		
 	var item = drag_data.get("item", {})
-	if item.is_empty(): return
-	
+	if item.is_empty():
+		return
 	var is_rot = drag_data.get("rotated", false)
-	var base_size = ItemDatabase.get_item_grid_size(item.get("id", ""))
-	var base_w = item.get("w", base_size.x)
-	var base_h = item.get("h", base_size.y)
-	var cur_w = base_h if is_rot else base_w
-	var cur_h = base_w if is_rot else base_h
-	
-	drag_preview = Control.new()
-	drag_preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	drag_preview.z_index = 200
+	drag_preview = InventoryUIHelper.build_drag_preview(item, is_rot, CELL_SIZE)
 	add_child(drag_preview)
-	
-	var total_w = cur_w * CELL_SIZE
-	var total_h = cur_h * CELL_SIZE
-	drag_preview.custom_minimum_size = Vector2(total_w, total_h)
-	
-	var bg_panel = Panel.new()
-	bg_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	bg_panel.position = Vector2(2, 2)
-	bg_panel.size = Vector2(total_w - 4, total_h - 4)
-	
-	var sb = StyleBoxFlat.new()
-	sb.bg_color = Color(0.09, 0.12, 0.16, 0.88)
-	sb.border_color = Color(0.92, 0.68, 0.24, 0.98)
-	sb.set_border_width_all(2)
-	sb.set_corner_radius_all(0)
-	sb.corner_detail = 1
-	sb.anti_aliasing = false
-	bg_panel.add_theme_stylebox_override("panel", sb)
-	drag_preview.add_child(bg_panel)
-	
-	var icon = TextureRect.new()
-	var min_dim = min(total_w, total_h) * 0.72
-	icon.custom_minimum_size = Vector2(min_dim, min_dim)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	if ItemIconManager: icon.texture = ItemIconManager.get_icon(item.get("id", ""))
-	icon.position = (Vector2(total_w, total_h) - Vector2(min_dim, min_dim)) / 2.0
-	drag_preview.add_child(icon)
-	
-	var amt = int(item.get("amount", 1))
-	if amt > 1:
-		var amt_lbl = Label.new()
-		amt_lbl.text = "x%d" % amt
-		amt_lbl.add_theme_font_size_override("font_size", 10)
-		amt_lbl.add_theme_color_override("font_color", Color(1, 0.85, 0.3))
-		amt_lbl.position = Vector2(6, total_h - 18)
-		amt_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		drag_preview.add_child(amt_lbl)
-		
 	_update_drag_preview_pos()
 
 func _update_drag_preview_pos() -> void:

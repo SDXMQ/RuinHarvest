@@ -59,32 +59,22 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 	
 	var rarity: float = float(data.get("rarity", 0.5))
 	var name_color: Color = Color(0.92, 0.94, 0.96)
-	var border_color: Color = Color(0.28, 0.36, 0.46, 0.85)
+	var border_color: Color = Color(0.82, 0.90, 1.0, 0.98)
 	
 	if rarity <= 0.05:
 		name_color = Color(1.0, 0.78, 0.2) # 레전더리 (황금)
-		border_color = Color(1.0, 0.78, 0.2, 0.95)
+		border_color = Color(1.0, 0.78, 0.2, 0.98)
 	elif rarity <= 0.15:
 		name_color = Color(0.8, 0.45, 1.0) # 에픽 (보라)
-		border_color = Color(0.8, 0.45, 1.0, 0.95)
+		border_color = Color(0.8, 0.45, 1.0, 0.98)
 	elif rarity <= 0.35:
 		name_color = Color(0.3, 0.72, 1.0) # 레어 (파랑)
-		border_color = Color(0.3, 0.72, 1.0, 0.95)
+		border_color = Color(0.3, 0.72, 1.0, 0.98)
 		
 	name_label.add_theme_color_override("font_color", name_color)
 	
-	# 테두리 색상 갱신 (픽셀 코너 및 안티앨리어싱 비활성화)
-	var current_sb = get_theme_stylebox("panel")
-	if current_sb is StyleBoxFlat:
-		var custom_sb = current_sb.duplicate() as StyleBoxFlat
-		custom_sb.border_color = border_color
-		custom_sb.corner_radius_top_left = 0
-		custom_sb.corner_radius_top_right = 0
-		custom_sb.corner_radius_bottom_left = 0
-		custom_sb.corner_radius_bottom_right = 0
-		custom_sb.corner_detail = 1
-		custom_sb.anti_aliasing = false
-		add_theme_stylebox_override("panel", custom_sb)
+	# 테두리/패널 색조 갱신 (StyleBoxTexture 및 StyleBoxFlat 모두 지원)
+	InventoryUIHelper.apply_dynamic_tint(self, "panel", border_color)
 		
 	# 3. 카테고리 / 무게 / 가격 메타데이터
 	var cat_str = "일반"
@@ -138,20 +128,8 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 		durability_bar.value = cur_dur
 		
 		var ratio = cur_dur / max_dur
-		var fill_style = StyleBoxFlat.new()
-		fill_style.corner_radius_top_left = 0
-		fill_style.corner_radius_top_right = 0
-		fill_style.corner_radius_bottom_right = 0
-		fill_style.corner_radius_bottom_left = 0
-		fill_style.corner_detail = 1
-		fill_style.anti_aliasing = false
-		if ratio > 0.6:
-			fill_style.bg_color = Color(0.2, 0.8, 0.3)
-		elif ratio > 0.3:
-			fill_style.bg_color = Color(0.9, 0.7, 0.1)
-		else:
-			fill_style.bg_color = Color(0.9, 0.2, 0.2)
-		durability_bar.add_theme_stylebox_override("fill", fill_style)
+		var dur_col := Color(0.2, 0.8, 0.3) if ratio > 0.6 else (Color(0.9, 0.7, 0.1) if ratio > 0.3 else Color(0.9, 0.2, 0.2))
+		InventoryUIHelper.apply_dynamic_tint(durability_bar, "fill", dur_col)
 	else:
 		durability_container.hide()
 		
@@ -415,4 +393,4 @@ func update_position(target_global_pos: Vector2) -> void:
 	target_pos.x = maxf(target_pos.x, 8.0)
 	target_pos.y = maxf(target_pos.y, 8.0)
 		
-	global_position = target_pos
+	global_position = target_pos.floor()

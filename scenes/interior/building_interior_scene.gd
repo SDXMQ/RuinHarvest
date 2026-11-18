@@ -167,10 +167,7 @@ func _ensure_tactical_hud_widgets() -> void:
 			badge_bleed = status_badges_container.get_node_or_null("BleedBadge")
 			badge_fracture = status_badges_container.get_node_or_null("FractureBadge")
 			badge_biohazard = status_badges_container.get_node_or_null("BiohazardBadge")
-			for badge in [badge_bleed, badge_fracture, badge_biohazard]:
-				if badge:
-					badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-					badge.focus_mode = Control.FOCUS_NONE
+		HudTacticalHelper.style_status_badges([badge_bleed, badge_fracture, badge_biohazard])
 
 	channeling_bar = hud.get_node_or_null("ChannelingBar")
 	if not channeling_bar:
@@ -649,24 +646,7 @@ func _on_player_hit_direction(attacker_pos: Vector2) -> void:
 		hit_arc_overlay.queue_redraw()
 
 func _on_hit_arc_draw() -> void:
-	if not hit_arc_overlay or hit_arcs.is_empty():
-		return
-	var center = hit_arc_overlay.size * 0.5
-	var arc_radius = 130.0
-	var arc_width = 3.5
-	var arc_spread = deg_to_rad(38.0)
-	for arc_data in hit_arcs:
-		var alpha = clamp(arc_data["timer"] / arc_data["max_time"], 0.0, 1.0)
-		var arc_angle = arc_data["angle"]
-		var col = Color(1.0, 0.15, 0.15, 0.85 * alpha)
-		var shadow_col = Color(0.1, 0.0, 0.0, 0.45 * alpha)
-		hit_arc_overlay.draw_arc(center, arc_radius, arc_angle - arc_spread * 0.5, arc_angle + arc_spread * 0.5, 16, shadow_col, arc_width + 2.0)
-		hit_arc_overlay.draw_arc(center, arc_radius, arc_angle - arc_spread * 0.5, arc_angle + arc_spread * 0.5, 16, col, arc_width)
-		var tip_dir = Vector2.RIGHT.rotated(arc_angle)
-		var tip_pos = center + tip_dir * (arc_radius + 6.0)
-		var p_left = center + Vector2.RIGHT.rotated(arc_angle - 0.09) * (arc_radius + 1.0)
-		var p_right = center + Vector2.RIGHT.rotated(arc_angle + 0.09) * (arc_radius + 1.0)
-		hit_arc_overlay.draw_colored_polygon(PackedVector2Array([tip_pos, p_left, p_right]), col)
+	HudTacticalHelper.draw_hit_arcs(hit_arc_overlay, hit_arcs)
 
 func _has_open_modal_window() -> bool:
 	return (
@@ -754,82 +734,32 @@ func _open_inventory_window(target_inv: Inventory = null, title: String = "") ->
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	_open_inventory_window(target_inv, title)
 
+func player_has_radio() -> bool:
+	if not player or not player.inventory_grid:
+		return false
+	for it in player.inventory_grid.items:
+		if String(it.get("id", "")).contains("무전기"):
+			return true
+	return false
+
 func _on_player_stats_changed() -> void:
-	if not player: return
-	if hp_bar:
-		hp_bar.max_value = player.max_hp
-		hp_bar.value = player.hp
-		hp_bar.get_node("Label").text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
-	if stamina_bar:
-		stamina_bar.max_value = player.max_stamina
-		stamina_bar.value = player.stamina
-		stamina_bar.get_node("Label").text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
-	if hunger_bar:
-		hunger_bar.value = player.hunger
-	if thirst_bar:
-		thirst_bar.value = player.thirst
-		
-	var has_status = player.is_bleeding or player.is_fractured or player.is_infected
-	if badge_bleed:
-		badge_bleed.visible = player.is_bleeding
-	if badge_fracture:
-		badge_fracture.visible = player.is_fractured
-	if badge_biohazard:
-		badge_biohazard.visible = player.is_infected
-		
-	if status_label:
-		var statuses = []
-		if player.is_bleeding: statuses.append("출혈")
-		if player.is_fractured: statuses.append("골절")
-		if player.is_infected: statuses.append("감염")
-		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
-		status_label.visible = not has_status
-		
-	if weapon_panel:
-		var eq_wep = player.equipped_weapon
-		var wep_data = ItemDatabase.get_item_data(player.equipped_weapon_data.get("id", eq_wep))
-		var slot_disp = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
-		var disp_name = str(player.equipped_weapon_data.get("name", eq_wep))
-		if weapon_name_label:
-			weapon_name_label.text = "[%s] %s" % [slot_disp, disp_name]
-		if weapon_icon and ItemIconManager:
-			weapon_icon.texture = ItemIconManager.get_icon(player.equipped_weapon_data.get("id", eq_wep))
-		if ammo_label:
-			if player.equipped_weapon_data.is_empty():
-				ammo_label.text = "👊 맨손 (주먹)"
-				ammo_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
-			elif player.active_weapon_slot == "throwable" or player.equipped_weapon_data.get("type", "") == "throwable":
-				var amt = player.equipped_weapon_data.get("amount", 1)
-				ammo_label.text = "💣 수량: %d개" % amt
-				ammo_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
-			elif not WeaponHandler.is_firearm_dict(player.equipped_weapon_data):
-				ammo_label.text = "🗡️ 근접 무기 (좌클릭 타격)"
-				ammo_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
-			else:
-				var cur_mag = player.equipped_weapon_data.get("current_magazine_ammo", 0)
-				var stats = player.equipped_weapon_data.get("computed_stats", {})
-				var mag_size = stats.get("magazine_size", 15)
-				var reserve_ammo = player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0
-				var cal = player._get_compatible_ammo_types()[0] if player.has_method("_get_compatible_ammo_types") and player._get_compatible_ammo_types().size() > 0 else "9mm"
-				var cal_disp = "9mm 탄약" if cal in ["9mm", "탄약"] else cal.replace("_", " ")
-				ammo_label.text = "🔫 %d / %d  [%s: %d]" % [cur_mag, mag_size, cal_disp, reserve_ammo]
-				ammo_label.add_theme_color_override("font_color", Color.RED if cur_mag == 0 else Color(0.4, 1.0, 0.6))
-		if weapon_durability_bar:
-			var max_dur = wep_data.get("max_durability", 100.0)
-			var cur_dur = player.equipped_weapon_data.get("durability", max_dur)
-			weapon_durability_bar.max_value = max_dur
-			weapon_durability_bar.value = cur_dur
-			var fill_style: StyleBoxFlat
-			if weapon_durability_bar.has_theme_stylebox_override("fill"):
-				fill_style = weapon_durability_bar.get_theme_stylebox("fill") as StyleBoxFlat
-			if not fill_style:
-				var base_style = weapon_durability_bar.get_theme_stylebox("fill")
-				fill_style = base_style.duplicate() as StyleBoxFlat if base_style is StyleBoxFlat else StyleBoxFlat.new()
-				weapon_durability_bar.add_theme_stylebox_override("fill", fill_style)
-			var ratio = float(cur_dur) / max(1.0, float(max_dur))
-			var target_fill_col = Color(0.2, 0.8, 0.3) if ratio > 0.6 else (Color(0.9, 0.7, 0.1) if ratio > 0.3 else Color(0.9, 0.2, 0.2))
-			if fill_style.bg_color != target_fill_col:
-				fill_style.bg_color = target_fill_col
+	HudTacticalHelper.update_player_hud(
+		player,
+		hp_bar,
+		stamina_bar,
+		hunger_bar,
+		thirst_bar,
+		status_label,
+		badge_bleed,
+		badge_fracture,
+		badge_biohazard,
+		weapon_panel,
+		weapon_icon,
+		weapon_name_label,
+		ammo_label,
+		weapon_durability_bar,
+		player_has_radio()
+	)
 
 func _setup_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
@@ -890,9 +820,15 @@ func _on_quickslot_N_pressed() -> void:
 		if SoundManager: SoundManager.play("menu_select")
 		_update_quickslot_bar()
 
+func _on_quickslot_U_pressed() -> void:
+	_on_event_logged("📻 실내에서는 전파가 차폐되어 야외로 나가야 드론/무전 호출이 가능합니다.")
+
 func _update_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
 	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
+	var slotU = quickslot_hbox.get_node_or_null("SlotU")
+	if slotU and slotU is Button and not slotU.pressed.is_connected(_on_quickslot_U_pressed):
+		slotU.pressed.connect(_on_quickslot_U_pressed)
 
 func _on_player_channel_started(duration: float, item_name: String) -> void:
 	if channeling_bar:
@@ -987,28 +923,7 @@ func _exit_interior() -> void:
 	get_tree().change_scene_to_file("res://scenes/world/main_world.tscn")
 
 func _on_event_logged(msg: String) -> void:
-	if not event_log_vbox: return
-	var max_logs = GameSettings.max_event_logs if GameSettings else 3
-	
-	var panel = PanelContainer.new()
-	var style = HudTacticalHelper.make_event_toast_stylebox(Color(1.0, 0.8, 0.2))
-	panel.add_theme_stylebox_override("panel", style)
-	
-	var lbl = Label.new()
-	lbl.text = msg
-	lbl.add_theme_font_size_override("font_size", 13)
-	panel.add_child(lbl)
-	event_log_vbox.add_child(panel)
-	
-	while event_log_vbox.get_child_count() > max_logs:
-		var oldest = event_log_vbox.get_child(0)
-		oldest.queue_free()
-		event_log_vbox.remove_child(oldest)
-		
-	var tween = create_tween()
-	tween.tween_interval(5.0)
-	tween.tween_property(panel, "modulate:a", 0.0, 1.0)
-	tween.tween_callback(panel.queue_free)
+	HudTacticalHelper.spawn_event_toast(self, event_log_vbox, msg)
 
 func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused

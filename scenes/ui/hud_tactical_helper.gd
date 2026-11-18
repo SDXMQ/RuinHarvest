@@ -54,31 +54,37 @@ static func style_quickslot_button(
 	btn.clip_contents = true
 	btn.focus_mode = Control.FOCUS_NONE
 
-	var style: StyleBoxFlat
-	if btn.has_theme_stylebox_override("normal"):
-		style = btn.get_theme_stylebox("normal") as StyleBoxFlat
-	if not style:
-		style = StyleBoxFlat.new()
-		btn.add_theme_stylebox_override("normal", style)
-		btn.add_theme_stylebox_override("hover", style)
-		btn.add_theme_stylebox_override("pressed", style)
-
-	style.corner_radius_top_left = 0
-	style.corner_radius_top_right = 0
-	style.corner_radius_bottom_left = 0
-	style.corner_radius_bottom_right = 0
-	style.corner_detail = 1
-	style.anti_aliasing = false
-	style.bg_color = Color(0.11, 0.14, 0.19, 0.96) if is_active else Color(0.055, 0.07, 0.095, 0.92)
-	var b_w = 2 if is_active else 1
-	style.border_width_left = b_w
-	style.border_width_top = b_w
-	style.border_width_right = b_w
-	style.border_width_bottom = b_w
-	style.border_color = active_color if is_active else (Color(0.28, 0.34, 0.42, 0.9) if is_available else Color(0.18, 0.20, 0.24, 0.7))
-	style.shadow_color = Color(0, 0, 0, 0.75)
-	style.shadow_size = 1
-	style.shadow_offset = Vector2(2, 2)
+	var sb: StyleBox = null
+	if PixelAssetManager:
+		var slice_key := "quickslot_active" if is_active else ("quickslot_normal" if is_available else "quickslot_unavailable")
+		var base_qs := PixelAssetManager.get_ui_stylebox(slice_key, 4, 4, 4, 4, 4)
+		if base_qs != null:
+			if is_active and not active_color.is_equal_approx(Color(1.0, 0.82, 0.25)):
+				var dup_qs := base_qs.duplicate()
+				if dup_qs is StyleBoxTexture:
+					dup_qs.modulate_color = active_color
+				sb = dup_qs
+			else:
+				sb = base_qs
+	if sb == null:
+		var style := StyleBoxFlat.new()
+		style.corner_radius_top_left = 0
+		style.corner_radius_top_right = 0
+		style.corner_radius_bottom_left = 0
+		style.corner_radius_bottom_right = 0
+		style.corner_detail = 1
+		style.anti_aliasing = false
+		style.bg_color = Color(0.11, 0.14, 0.19, 0.96) if is_active else Color(0.055, 0.07, 0.095, 0.92)
+		var b_w := 2 if is_active else 1
+		style.set_border_width_all(b_w)
+		style.border_color = active_color if is_active else (Color(0.28, 0.34, 0.42, 0.9) if is_available else Color(0.18, 0.20, 0.24, 0.7))
+		style.shadow_color = Color(0, 0, 0, 0.75)
+		style.shadow_size = 1
+		style.shadow_offset = Vector2(2, 2)
+		sb = style
+	btn.add_theme_stylebox_override("normal", sb)
+	btn.add_theme_stylebox_override("hover", sb)
+	btn.add_theme_stylebox_override("pressed", sb)
 
 	var sweep_overlay: ColorRect = btn.get_node_or_null("SweepOverlay")
 	if not sweep_overlay:
@@ -325,21 +331,38 @@ static func _make_bar_stylebox(bg: Color, border: Color, bw: int = 1) -> StyleBo
 	return sb
 
 static func style_hud_bars(hp_bar: ProgressBar, stamina_bar: ProgressBar, hunger_bar: ProgressBar, thirst_bar: ProgressBar) -> void:
-	var bg_sb := _make_bar_stylebox(Color(0.035, 0.045, 0.062, 0.94), Color(0.20, 0.25, 0.33, 0.92), 1)
+	var bg_sb: StyleBox = PixelAssetManager.get_ui_stylebox("progress_bg", 2, 2, 2, 2, 3) if PixelAssetManager else null
+	if bg_sb == null:
+		bg_sb = _make_bar_stylebox(Color(0.035, 0.045, 0.062, 0.94), Color(0.20, 0.25, 0.33, 0.92), 1)
 	if hp_bar:
 		hp_bar.add_theme_stylebox_override("background", bg_sb)
-		hp_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.82, 0.22, 0.24, 0.96), Color(1.0, 0.45, 0.42, 0.95), 1))
+		InventoryUIHelper.apply_dynamic_tint(hp_bar, "fill", Color(0.88, 0.24, 0.26, 0.98))
 	if stamina_bar:
 		stamina_bar.add_theme_stylebox_override("background", bg_sb)
-		stamina_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.22, 0.66, 0.88, 0.96), Color(0.48, 0.85, 1.0, 0.95), 1))
+		InventoryUIHelper.apply_dynamic_tint(stamina_bar, "fill", Color(0.24, 0.70, 0.92, 0.98))
 	if hunger_bar:
 		hunger_bar.add_theme_stylebox_override("background", bg_sb)
-		hunger_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.85, 0.56, 0.16, 0.96), Color(1.0, 0.76, 0.32, 0.95), 1))
+		InventoryUIHelper.apply_dynamic_tint(hunger_bar, "fill", Color(0.90, 0.60, 0.18, 0.98))
 	if thirst_bar:
 		thirst_bar.add_theme_stylebox_override("background", bg_sb)
-		thirst_bar.add_theme_stylebox_override("fill", _make_bar_stylebox(Color(0.20, 0.76, 0.68, 0.96), Color(0.45, 0.95, 0.86, 0.95), 1))
+		InventoryUIHelper.apply_dynamic_tint(thirst_bar, "fill", Color(0.22, 0.80, 0.72, 0.98))
 
-static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) -> StyleBoxFlat:
+static func style_status_badges(badges: Array) -> void:
+	var badge_sb: StyleBox = PixelAssetManager.get_ui_stylebox("badge_frame", 6, 3, 6, 3, 3) if PixelAssetManager else null
+	for b in badges:
+		if is_instance_valid(b) and b is Control:
+			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.focus_mode = Control.FOCUS_NONE
+			if badge_sb != null:
+				b.add_theme_stylebox_override("panel", badge_sb)
+
+static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) -> StyleBox:
+	if PixelAssetManager:
+		var base_sb := PixelAssetManager.get_ui_stylebox("badge_frame", 10, 6, 10, 6, 4)
+		if base_sb is StyleBoxTexture:
+			var dup := base_sb.duplicate() as StyleBoxTexture
+			dup.modulate_color = Color(accent_col.r, accent_col.g, accent_col.b, 0.96).lerp(Color.WHITE, 0.25)
+			return dup
 	var style := StyleBoxFlat.new()
 	style.bg_color = Color(0.05, 0.065, 0.095, 0.92)
 	style.border_width_left = 4
@@ -361,6 +384,168 @@ static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) 
 	style.shadow_offset = Vector2(2, 2)
 	style.anti_aliasing = false
 	return style
+
+static func spawn_event_toast(owner_node: Node, event_log_vbox: VBoxContainer, msg: String) -> void:
+	if not is_instance_valid(event_log_vbox) or not is_instance_valid(owner_node):
+		return
+	var max_logs: int = GameSettings.max_event_logs if GameSettings else 3
+	var accent_col := Color(1.0, 0.8, 0.2)
+	var font_col := Color(0.92, 0.94, 0.96)
+	if msg.begins_with("★"):
+		accent_col = Color(1.0, 0.8, 0.2)
+		font_col = Color(1.0, 0.9, 0.4)
+	elif msg.begins_with("✓") or msg.begins_with("📦") or msg.begins_with("💊") or msg.begins_with("🔓"):
+		accent_col = Color(0.3, 0.9, 0.4)
+		font_col = Color(0.6, 1.0, 0.6)
+	elif msg.begins_with("✗") or msg.begins_with("💀") or msg.begins_with("⚠️") or msg.begins_with("🔒"):
+		accent_col = Color(0.9, 0.3, 0.3)
+		font_col = Color(1.0, 0.5, 0.5)
+	elif msg.begins_with("🌦️") or msg.begins_with("🌅") or msg.begins_with("📻") or msg.begins_with("💡"):
+		accent_col = Color(0.3, 0.7, 1.0)
+		font_col = Color(0.6, 0.85, 1.0)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", make_event_toast_stylebox(accent_col))
+	var lbl := Label.new()
+	lbl.text = msg
+	lbl.add_theme_font_size_override("font_size", 13)
+	lbl.add_theme_color_override("font_color", font_col)
+	panel.add_child(lbl)
+	event_log_vbox.add_child(panel)
+
+	while event_log_vbox.get_child_count() > max_logs:
+		var oldest := event_log_vbox.get_child(0)
+		oldest.queue_free()
+		event_log_vbox.remove_child(oldest)
+
+	var tween := owner_node.create_tween()
+	tween.tween_interval(5.0)
+	tween.tween_property(panel, "modulate:a", 0.0, 1.0)
+	tween.tween_callback(panel.queue_free)
+
+static func update_player_hud(
+	player: Node,
+	hp_bar: ProgressBar,
+	stamina_bar: ProgressBar,
+	hunger_bar: ProgressBar,
+	thirst_bar: ProgressBar,
+	status_label: Label,
+	badge_bleed: Control,
+	badge_fracture: Control,
+	badge_biohazard: Control,
+	weapon_panel: Control,
+	weapon_icon: TextureRect,
+	weapon_name_label: Label,
+	ammo_label: Label,
+	weapon_durability_bar: ProgressBar,
+	has_radio: bool = false
+) -> void:
+	if not is_instance_valid(player):
+		return
+	if hp_bar:
+		hp_bar.max_value = player.max_hp
+		hp_bar.value = player.hp
+		var hp_lbl := hp_bar.get_node_or_null("Label") as Label
+		if hp_lbl:
+			hp_lbl.text = "HP: %d/%d" % [int(player.hp), int(player.max_hp)]
+	if stamina_bar:
+		stamina_bar.max_value = player.max_stamina
+		stamina_bar.value = player.stamina
+		var st_lbl := stamina_bar.get_node_or_null("Label") as Label
+		if st_lbl:
+			st_lbl.text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
+	if hunger_bar:
+		hunger_bar.value = player.hunger
+	if thirst_bar:
+		thirst_bar.value = player.thirst
+
+	var has_status: bool = bool(player.is_bleeding or player.is_fractured or player.is_infected)
+	if badge_bleed:
+		badge_bleed.visible = player.is_bleeding
+	if badge_fracture:
+		badge_fracture.visible = player.is_fractured
+	if badge_biohazard:
+		badge_biohazard.visible = player.is_infected
+
+	if status_label:
+		var statuses: Array[String] = []
+		if player.is_bleeding: statuses.append("출혈")
+		if player.is_fractured: statuses.append("골절")
+		if player.is_infected: statuses.append("감염")
+		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+		status_label.visible = not has_status
+
+	if weapon_panel:
+		var radio_badge: Label = weapon_panel.get_node_or_null("RadioHudBadge") as Label
+		if not radio_badge:
+			radio_badge = Label.new()
+			radio_badge.name = "RadioHudBadge"
+			radio_badge.text = "📡 [U] 무전 호출 가능"
+			radio_badge.add_theme_font_size_override("font_size", 11)
+			radio_badge.add_theme_color_override("font_color", Color(0.35, 0.95, 1.0))
+			radio_badge.position = Vector2(6, -20)
+			weapon_panel.add_child(radio_badge)
+		radio_badge.visible = has_radio
+
+		var eq_wep: String = str(player.equipped_weapon)
+		var wep_data: Dictionary = ItemDatabase.get_item_data(str(player.equipped_weapon_data.get("id", eq_wep)))
+		var slot_disp: String = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
+		var disp_name: String = str(player.equipped_weapon_data.get("name", eq_wep))
+		if weapon_name_label:
+			weapon_name_label.text = "[%s] %s" % [slot_disp, disp_name]
+		if weapon_icon and ItemIconManager:
+			weapon_icon.texture = ItemIconManager.get_icon(str(player.equipped_weapon_data.get("id", eq_wep)))
+
+		if ammo_label:
+			if player.equipped_weapon_data.is_empty():
+				ammo_label.text = "👊 맨손 (주먹)"
+				ammo_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
+			elif player.active_weapon_slot == "throwable" or str(player.equipped_weapon_data.get("type", "")) == "throwable":
+				var amt: int = int(player.equipped_weapon_data.get("amount", 1))
+				ammo_label.text = "💣 수량: %d개" % amt
+				ammo_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
+			elif not WeaponHandler.is_firearm_dict(player.equipped_weapon_data):
+				ammo_label.text = "🗡️ 근접 무기 (좌클릭 타격)"
+				ammo_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
+			else:
+				var cur_mag: int = int(player.equipped_weapon_data.get("current_magazine_ammo", 0))
+				var stats: Dictionary = player.equipped_weapon_data.get("computed_stats", {})
+				var mag_size: int = int(stats.get("magazine_size", 15))
+				var reserve_ammo: int = player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0
+				var compat_list: Array = player._get_compatible_ammo_types() if player.has_method("_get_compatible_ammo_types") else []
+				var cal: String = str(compat_list[0]) if compat_list.size() > 0 else "9mm"
+				var cal_disp: String = "9mm 탄약" if cal in ["9mm", "탄약"] else cal.replace("_", " ")
+				ammo_label.text = "🔫 %d / %d  [%s: %d]" % [cur_mag, mag_size, cal_disp, reserve_ammo]
+				ammo_label.add_theme_color_override("font_color", Color.RED if cur_mag == 0 else Color(0.4, 1.0, 0.6))
+
+		if weapon_durability_bar:
+			var max_dur: float = float(player.equipped_weapon_data.get("max_durability", wep_data.get("max_durability", 100.0)))
+			var cur_dur: float = float(player.equipped_weapon_data.get("durability", max_dur))
+			weapon_durability_bar.max_value = max_dur
+			weapon_durability_bar.value = cur_dur
+			var ratio: float = cur_dur / maxf(1.0, max_dur)
+			var target_fill_col := Color(0.2, 0.8, 0.3) if ratio > 0.6 else (Color(0.9, 0.7, 0.1) if ratio > 0.3 else Color(0.9, 0.2, 0.2))
+			InventoryUIHelper.apply_dynamic_tint(weapon_durability_bar, "fill", target_fill_col)
+
+static func draw_hit_arcs(hit_arc_overlay: Control, hit_arcs: Array) -> void:
+	if not is_instance_valid(hit_arc_overlay) or hit_arcs.is_empty():
+		return
+	var center: Vector2 = (hit_arc_overlay.size * 0.5).floor()
+	var arc_radius: float = 130.0
+	var arc_width: float = 3.5
+	var arc_spread: float = deg_to_rad(38.0)
+	for arc_data in hit_arcs:
+		var alpha: float = clampf(float(arc_data["timer"]) / float(arc_data["max_time"]), 0.0, 1.0)
+		var arc_angle: float = float(arc_data["angle"])
+		var col := Color(1.0, 0.15, 0.15, 0.85 * alpha)
+		var shadow_col := Color(0.1, 0.0, 0.0, 0.45 * alpha)
+		hit_arc_overlay.draw_arc(center, arc_radius, arc_angle - arc_spread * 0.5, arc_angle + arc_spread * 0.5, 16, shadow_col, arc_width + 2.0)
+		hit_arc_overlay.draw_arc(center, arc_radius, arc_angle - arc_spread * 0.5, arc_angle + arc_spread * 0.5, 16, col, arc_width)
+		var tip_dir := Vector2.RIGHT.rotated(arc_angle)
+		var tip_pos := center + tip_dir * (arc_radius + 6.0)
+		var p_left := center + Vector2.RIGHT.rotated(arc_angle - 0.09) * (arc_radius + 1.0)
+		var p_right := center + Vector2.RIGHT.rotated(arc_angle + 0.09) * (arc_radius + 1.0)
+		hit_arc_overlay.draw_colored_polygon(PackedVector2Array([tip_pos, p_left, p_right]), col)
 
 static func draw_pixel_crosshair(ctrl: Control, m_pos: Vector2, spread: float, is_ads: bool, is_jammed: bool) -> void:
 	if not ctrl:

@@ -51,7 +51,7 @@ var player_grid_mgr: InventoryGrid
 var stash_grid_mgr: InventoryGrid
 var equipment_data: Dictionary = {}
 
-const CELL_SIZE: float = 44.0
+const CELL_SIZE: float = InventoryUIHelper.CELL_SIZE
 
 # 드래그 앤 드롭 상태
 var is_dragging: bool = false
@@ -443,7 +443,7 @@ func _on_stash_grid_draw() -> void:
 	_draw_2d_grid(stash_grid_control, stash_grid_mgr, hovered_stash_cell, false)
 
 func _draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2i, is_player_grid: bool) -> void:
-	InventoryUIHelper.draw_2d_grid(ctrl, grid_mgr, hovered_cell, is_player_grid, is_dragging, drag_data)
+	InventoryUIHelper.draw_2d_grid(ctrl, grid_mgr, hovered_cell, is_player_grid, is_dragging, drag_data, CELL_SIZE)
 
 
 # ============================================================
