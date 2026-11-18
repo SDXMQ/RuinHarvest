@@ -175,7 +175,7 @@ func get_atlas_slice(key: String, region: Rect2i) -> CanvasTexture:
 	_slice_cache[slice_key] = ct
 	return ct
 
-static func get_cell_rect(col: int, row: int, cell_w: int = 32, cell_h: int = 32) -> Rect2:
+func get_cell_rect(col: int, row: int, cell_w: int = 32, cell_h: int = 32) -> Rect2:
 	return Rect2(float(col * cell_w), float(row * cell_h), float(cell_w), float(cell_h))
 
 func create_canvas_texture_from_images(diff_img: Image, norm_img: Image = null, strength: float = 2.4) -> CanvasTexture:
@@ -231,15 +231,15 @@ func generate_normal_map_from_image(img: Image, strength: float = 2.4) -> Image:
 
 			var tl := heights[ym1 * w + xm1]
 			var tc := heights[ym1 * w + x]
-			var tr := heights[ym1 * w + xp1]
+			var top_r := heights[ym1 * w + xp1]
 			var ml := heights[y * w + xm1]
 			var mr := heights[y * w + xp1]
 			var bl := heights[yp1 * w + xm1]
 			var bc := heights[yp1 * w + x]
 			var br := heights[yp1 * w + xp1]
 
-			var gx := ((tr + 2.0 * mr + br) - (tl + 2.0 * ml + bl)) * 0.25
-			var gy := ((bl + 2.0 * bc + br) - (tl + 2.0 * tc + tr)) * 0.25
+			var gx := ((top_r + 2.0 * mr + br) - (tl + 2.0 * ml + bl)) * 0.25
+			var gy := ((bl + 2.0 * bc + br) - (tl + 2.0 * tc + top_r)) * 0.25
 
 			# Verified Godot 4.7 OpenGL normal convention: nx = -gx, ny = +gy
 			var nx := -gx * strength
@@ -260,7 +260,7 @@ func _resolve_base_path(key: String) -> String:
 		return k
 	return PIXEL_ROOT + k
 
-static func make_pixel_stylebox_flat(
+func make_pixel_stylebox_flat(
 	bg: Color,
 	border: Color,
 	bw_left: int = 2,
@@ -413,4 +413,3 @@ func apply_pixel_ui_theme() -> void:
 		t.set_stylebox("fill", "ProgressBar", get_ui_stylebox("progress_fill_amber", 2, 1, 2, 1, 2))
 		t.set_stylebox("scroll", "VScrollBar", get_ui_stylebox("scroll_bg", 4, 2, 4, 2, 3))
 		t.set_stylebox("grabber", "VScrollBar", get_ui_stylebox("scroll_grabber", 2, 2, 2, 2, 3))
-

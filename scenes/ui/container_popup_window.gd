@@ -77,8 +77,10 @@ func setup(p_container_item: Dictionary, p_source_grid: InventoryGrid, p_host: C
 
 func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_kind: String) -> void:
 	var frame_sb: StyleBox = PixelAssetManager.get_ui_stylebox("panel_tooltip", 6, 6, 6, 6, 4) if PixelAssetManager else null
-	if frame_sb == null:
+	if frame_sb == null and PixelAssetManager:
 		frame_sb = PixelAssetManager.make_pixel_stylebox_flat(Color(0.06, 0.08, 0.11, 0.98), Color(0.38, 0.50, 0.65, 0.95), 2, 2, 2, 2, 6, 6, true)
+	elif frame_sb == null:
+		frame_sb = StyleBoxFlat.new()
 	add_theme_stylebox_override("panel", frame_sb)
 
 	var root_vbox := VBoxContainer.new()
@@ -275,8 +277,8 @@ func update_drag_hover(m_global_pos: Vector2, drag_item: Dictionary, is_rot: boo
 		var base_h := int(drag_item.get("h", base_size.y))
 		var cur_w := base_h if is_rot else base_w
 		var cur_h := base_w if is_rot else base_h
-		var cx := int(floor(local_pos.x / POPUP_CELL_SIZE)) - int(cur_w / 2)
-		var cy := int(floor(local_pos.y / POPUP_CELL_SIZE)) - int(cur_h / 2)
+		var cx := int(floor(local_pos.x / POPUP_CELL_SIZE)) - floori(float(cur_w) * 0.5)
+		var cy := int(floor(local_pos.y / POPUP_CELL_SIZE)) - floori(float(cur_h) * 0.5)
 		hovered_cell = Vector2i(cx, cy)
 		grid_control.queue_redraw()
 		return true
@@ -294,8 +296,8 @@ func get_drop_cell(m_global_pos: Vector2, drag_item: Dictionary, is_rot: bool) -
 	var base_h := int(drag_item.get("h", base_size.y))
 	var cur_w := base_h if is_rot else base_w
 	var cur_h := base_w if is_rot else base_h
-	var cx := int(floor(local_pos.x / POPUP_CELL_SIZE)) - int(cur_w / 2)
-	var cy := int(floor(local_pos.y / POPUP_CELL_SIZE)) - int(cur_h / 2)
+	var cx := int(floor(local_pos.x / POPUP_CELL_SIZE)) - floori(float(cur_w) * 0.5)
+	var cy := int(floor(local_pos.y / POPUP_CELL_SIZE)) - floori(float(cur_h) * 0.5)
 	return Vector2i(cx, cy)
 
 func get_hovered_item() -> Dictionary:

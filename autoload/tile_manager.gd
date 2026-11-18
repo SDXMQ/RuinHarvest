@@ -641,7 +641,7 @@ func _draw_door_locked(img: Image, x: int, y: int) -> void:
 				c = Color(0.12, 0.14, 0.18) # 강철 문틀
 			elif iy >= 6 and iy <= 9:
 				# 적색/황색 보안 경고 스트라이프
-				c = Color(0.85, 0.18, 0.18) if ((ix + iy) / 3) % 2 == 0 else Color(0.88, 0.72, 0.15)
+				c = Color(0.85, 0.18, 0.18) if floori(float(ix + iy) / 3.0) % 2 == 0 else Color(0.88, 0.72, 0.15)
 			elif ix >= TILE_SIZE - 10 and ix <= TILE_SIZE - 5 and iy >= 13 and iy <= 20:
 				# 전자식 키패드 / 황금 자물쇠 인디케이터
 				c = Color(0.95, 0.78, 0.20)
@@ -694,64 +694,64 @@ func _draw_fallback_extended_tiles(img: Image) -> void:
 # ==========================================================
 # 방향/코너/비트마스크 판별 및 상태 전이 유틸리티 API
 # ==========================================================
-static func get_wall_tile_for_mask(mask: int) -> Vector2i:
+func get_wall_tile_for_mask(mask: int) -> Vector2i:
 	var m := clampi(mask, 0, 15)
 	if m == (DIR_E | DIR_W):
 		return OBJ_WALL
-	return Vector2i(m % 8, 6 + int(m / 8))
+	return Vector2i(m % 8, 6 + floori(float(m) / 8.0))
 
-static func get_fence_tile_for_mask(mask: int) -> Vector2i:
+func get_fence_tile_for_mask(mask: int) -> Vector2i:
 	var m := clampi(mask, 0, 15)
 	if m == (DIR_E | DIR_W):
 		return OBJ_FENCE
-	return Vector2i(m % 8, 8 + int(m / 8))
+	return Vector2i(m % 8, 8 + floori(float(m) / 8.0))
 
-static func is_wall(coords: Vector2i) -> bool:
+func is_wall(coords: Vector2i) -> bool:
 	return coords == OBJ_WALL or (coords.y in [6, 7] and coords.x >= 0 and coords.x < 8 and coords != Vector2i(2, 7))
 
-static func is_fence(coords: Vector2i) -> bool:
+func is_fence(coords: Vector2i) -> bool:
 	return coords == OBJ_FENCE or (coords.y in [8, 9] and coords.x >= 0 and coords.x < 8 and coords != Vector2i(2, 9))
 
-static func is_gate(coords: Vector2i) -> bool:
+func is_gate(coords: Vector2i) -> bool:
 	return coords == OBJ_GATE or coords == OBJ_GATE_V
 
-static func is_door_closed(coords: Vector2i) -> bool:
+func is_door_closed(coords: Vector2i) -> bool:
 	return coords == OBJ_DOOR_CLOSED or coords == OBJ_DOOR_CLOSED_V
 
-static func is_door_open(coords: Vector2i) -> bool:
+func is_door_open(coords: Vector2i) -> bool:
 	return coords == OBJ_DOOR_OPEN or coords == OBJ_DOOR_OPEN_V
 
-static func is_door_locked(coords: Vector2i) -> bool:
+func is_door_locked(coords: Vector2i) -> bool:
 	return coords == OBJ_DOOR_LOCKED or coords == OBJ_DOOR_LOCKED_V
 
-static func is_window(coords: Vector2i) -> bool:
+func is_window(coords: Vector2i) -> bool:
 	return coords == OBJ_WINDOW or coords == OBJ_WINDOW_V
 
-static func is_window_broken(coords: Vector2i) -> bool:
+func is_window_broken(coords: Vector2i) -> bool:
 	return coords == OBJ_WINDOW_BROKEN or coords == OBJ_WINDOW_BROKEN_V
 
-static func is_fridge(coords: Vector2i) -> bool:
+func is_fridge(coords: Vector2i) -> bool:
 	return coords == OBJ_FRIDGE or coords == OBJ_FRIDGE_N or coords == OBJ_FRIDGE_E or coords == OBJ_FRIDGE_W
 
-static func is_bed(coords: Vector2i) -> bool:
+func is_bed(coords: Vector2i) -> bool:
 	return coords == OBJ_BED or coords == OBJ_BED_N or coords == OBJ_BED_E or coords == OBJ_BED_W
 
-static func is_desk(coords: Vector2i) -> bool:
+func is_desk(coords: Vector2i) -> bool:
 	return coords == OBJ_DESK or coords == OBJ_DESK_N or coords == OBJ_DESK_E or coords == OBJ_DESK_W
 
-static func is_shelf(coords: Vector2i) -> bool:
+func is_shelf(coords: Vector2i) -> bool:
 	return coords == OBJ_SHELF or coords == OBJ_SHELF_N or coords == OBJ_SHELF_E or coords == OBJ_SHELF_W
 
-static func is_structure_wall_line(coords: Vector2i) -> bool:
+func is_structure_wall_line(coords: Vector2i) -> bool:
 	return is_wall(coords) or is_door_closed(coords) or is_door_open(coords) or is_door_locked(coords) or is_window(coords) or is_window_broken(coords)
 
-static func is_structure_shadow_caster(coords: Vector2i) -> bool:
+func is_structure_shadow_caster(coords: Vector2i) -> bool:
 	return is_structure_wall_line(coords) or is_fence(coords) or is_gate(coords)
 
-static func casts_oval_shadow(coords: Vector2i) -> bool:
+func casts_oval_shadow(coords: Vector2i) -> bool:
 	return coords in [OBJ_CRATE, OBJ_BARREL, OBJ_DEBRIS, OBJ_ROCK] or is_fridge(coords) or is_bed(coords) or is_desk(coords) or is_shelf(coords)
 
-static func is_road_asphalt(coords: Vector2i) -> bool:
+func is_road_asphalt(coords: Vector2i) -> bool:
 	return coords in [
 		TILE_ROAD, TILE_ROAD_LINE, TILE_ROAD_LINE_H, TILE_CROSSWALK, TILE_CROSSWALK_H,
 		TILE_ROAD_LINE_VB_TR, TILE_ROAD_LINE_VB_LB, TILE_ROAD_LINE_VB_TL, TILE_ROAD_LINE_VB_RB,
@@ -759,7 +759,7 @@ static func is_road_asphalt(coords: Vector2i) -> bool:
 		TILE_ROAD_EDGE_W, TILE_ROAD_EDGE_E, TILE_ROAD_EDGE_N, TILE_ROAD_EDGE_S,
 	]
 
-static func is_sidewalk_tile(coords: Vector2i) -> bool:
+func is_sidewalk_tile(coords: Vector2i) -> bool:
 	return coords in [
 		TILE_CONCRETE,
 		TILE_SIDEWALK_CURB_N, TILE_SIDEWALK_CURB_E, TILE_SIDEWALK_CURB_S, TILE_SIDEWALK_CURB_W,
@@ -767,28 +767,28 @@ static func is_sidewalk_tile(coords: Vector2i) -> bool:
 		TILE_SIDEWALK_DIAG_NW, TILE_SIDEWALK_DIAG_NE, TILE_SIDEWALK_DIAG_SE, TILE_SIDEWALK_DIAG_SW,
 	]
 
-static func is_vertical_variant(coords: Vector2i) -> bool:
+func is_vertical_variant(coords: Vector2i) -> bool:
 	return coords in [OBJ_DOOR_CLOSED_V, OBJ_DOOR_OPEN_V, OBJ_DOOR_LOCKED_V, OBJ_WINDOW_V, OBJ_WINDOW_BROKEN_V, OBJ_GATE_V]
 
-static func get_door_closed_tile(is_vertical: bool) -> Vector2i:
+func get_door_closed_tile(is_vertical: bool) -> Vector2i:
 	return OBJ_DOOR_CLOSED_V if is_vertical else OBJ_DOOR_CLOSED
 
-static func get_door_open_tile(is_vertical: bool) -> Vector2i:
+func get_door_open_tile(is_vertical: bool) -> Vector2i:
 	return OBJ_DOOR_OPEN_V if is_vertical else OBJ_DOOR_OPEN
 
-static func get_door_locked_tile(is_vertical: bool) -> Vector2i:
+func get_door_locked_tile(is_vertical: bool) -> Vector2i:
 	return OBJ_DOOR_LOCKED_V if is_vertical else OBJ_DOOR_LOCKED
 
-static func get_window_tile(is_vertical: bool) -> Vector2i:
+func get_window_tile(is_vertical: bool) -> Vector2i:
 	return OBJ_WINDOW_V if is_vertical else OBJ_WINDOW
 
-static func get_gate_tile(is_vertical: bool) -> Vector2i:
+func get_gate_tile(is_vertical: bool) -> Vector2i:
 	return OBJ_GATE_V if is_vertical else OBJ_GATE
 
-static func get_window_broken_tile(coords: Vector2i) -> Vector2i:
+func get_window_broken_tile(coords: Vector2i) -> Vector2i:
 	return OBJ_WINDOW_BROKEN_V if coords == OBJ_WINDOW_V or coords == OBJ_WINDOW_BROKEN_V else OBJ_WINDOW_BROKEN
 
-static func get_toggled_door_tile(coords: Vector2i) -> Vector2i:
+func get_toggled_door_tile(coords: Vector2i) -> Vector2i:
 	if coords == OBJ_DOOR_CLOSED:
 		return OBJ_DOOR_OPEN
 	if coords == OBJ_DOOR_CLOSED_V:
@@ -803,10 +803,10 @@ static func get_toggled_door_tile(coords: Vector2i) -> Vector2i:
 		return OBJ_DOOR_OPEN_V
 	return coords
 
-static func get_unlocked_door_tile(coords: Vector2i) -> Vector2i:
+func get_unlocked_door_tile(coords: Vector2i) -> Vector2i:
 	return OBJ_DOOR_OPEN_V if coords == OBJ_DOOR_LOCKED_V else OBJ_DOOR_OPEN
 
-static func get_furniture_variant(base_coords: Vector2i, facing: int) -> Vector2i:
+func get_furniture_variant(base_coords: Vector2i, facing: int) -> Vector2i:
 	if facing == FACE_S:
 		return base_coords
 	if base_coords == OBJ_FRIDGE:
@@ -831,12 +831,12 @@ static func get_furniture_variant(base_coords: Vector2i, facing: int) -> Vector2
 			FACE_W: return OBJ_SHELF_W
 	return base_coords
 
-static func choose_door_is_vertical(n_wall: bool, e_wall: bool, s_wall: bool, w_wall: bool) -> bool:
+func choose_door_is_vertical(n_wall: bool, e_wall: bool, s_wall: bool, w_wall: bool) -> bool:
 	var v_score: int = int(n_wall) + int(s_wall)
 	var h_score: int = int(e_wall) + int(w_wall)
 	return v_score > h_score
 
-static func choose_furniture_facing(n_wall: int, e_wall: int, s_wall: int, w_wall: int, n_open: bool, e_open: bool, s_open: bool, w_open: bool) -> int:
+func choose_furniture_facing(n_wall: int, e_wall: int, s_wall: int, w_wall: int, n_open: bool, e_open: bool, s_open: bool, w_open: bool) -> int:
 	# 각 방향 후보 [facing, back_wall_strength(0/1/2), front_open, front_wall_strength]
 	var candidates := [
 		[FACE_S, n_wall, s_open, s_wall],

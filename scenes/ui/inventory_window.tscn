@@ -1,7 +1,7 @@
 [gd_scene load_steps=3 format=3 uid="uid://invwindow001"]
 
 [ext_resource type="Script" path="res://scenes/ui/inventory_window.gd" id="1_inv"]
-[ext_resource type="Theme" uid="uid://tactical_theme_v1" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
+[ext_resource type="Theme" uid="uid://c4ne6cow3b2ew" path="res://ui/theme/tactical_theme.tres" id="2_theme"]
 
 [node name="InventoryWindow" type="Control"]
 process_mode = 3

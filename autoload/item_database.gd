@@ -577,7 +577,7 @@ func get_item_grid_size(id: String) -> Vector2i:
 	_cached_grid_sizes[id] = size
 	return size
 
-static func is_ammo_item(item_id: String) -> bool:
+func is_ammo_item(item_id: String) -> bool:
 	if item_id == "":
 		return false
 	return item_id == "탄약" or item_id.ends_with("mm") or item_id.contains("게이지") or item_id.contains("ACP")

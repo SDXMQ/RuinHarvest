@@ -287,6 +287,10 @@ func _test_scene_instantiation() -> void:
 	print("-- [Test 5] UI & Scene Instantiation Verification --")
 	_assert(absf(InventoryUIHelper.CELL_SIZE - 36.0) < 0.01, "Main InventoryUIHelper.CELL_SIZE is 36.0")
 	_assert(absf(InventoryUIHelper.POPUP_CELL_SIZE - 32.0) < 0.01, "Popup InventoryUIHelper.POPUP_CELL_SIZE is 32.0")
+	var bullet_scr: Script = load("res://scenes/entities/projectiles/bullet.gd")
+	var ground_scr: Script = load("res://scenes/entities/items/ground_item.gd")
+	var player_scr: Script = load("res://scenes/entities/player/player.gd")
+	_assert(bullet_scr != null and ground_scr != null and player_scr != null, "Core gameplay scripts (bullet, ground_item, player) reload cleanly")
 
 	GameManager.current_world_data = _make_test_world_data()
 	var inv_scene: PackedScene = load("res://scenes/ui/inventory_window.tscn")
@@ -302,6 +306,7 @@ func _test_scene_instantiation() -> void:
 		inv_win.queue_free()
 		tmp_grid.queue_free()
 
+	GameManager.current_save_slot = ""
 	var hideout_scene: PackedScene = load("res://scenes/hideout/hideout.tscn")
 	var hideout_node := hideout_scene.instantiate()
 	_assert(hideout_node != null, "hideout.tscn instantiates cleanly")
@@ -311,6 +316,49 @@ func _test_scene_instantiation() -> void:
 		_assert(is_instance_valid(hideout_node.get("sell_player_grid_ctrl")), "Hideout 3-col TradersTab created SellPlayerGridControl")
 		_assert(is_instance_valid(hideout_node.get("sell_stash_grid_ctrl")), "Hideout 3-col TradersTab created SellStashGridControl")
 		_assert(is_instance_valid(hideout_node.get("sell_bulk_btn")), "Hideout 3-col TradersTab created BulkSell settle button")
+		_assert(is_instance_valid(hideout_node.get("market_player_grid_ctrl")), "Hideout MarketTab created MarketPlayerGridControl")
+		_assert(is_instance_valid(hideout_node.get("market_stash_grid_ctrl")), "Hideout MarketTab created MarketStashGridControl")
+		_assert(is_instance_valid(hideout_node.get("market_search_input")), "Hideout MarketTab created search input")
+		_assert(is_instance_valid(hideout_node.get("market_confirm_btn")), "Hideout MarketTab created register confirm button")
+
+		FleaMarket.player_listings.clear()
+		var hp_grid: InventoryGrid = hideout_node.get("player_grid_mgr")
+		var m_p_ctrl: Control = hideout_node.get("market_player_grid_ctrl")
+		hp_grid.auto_add_item("그래픽카드", 1)
+		hp_grid.auto_add_item("구급상자", 1)
+		hp_grid.auto_add_item("CPU", 1, {"locked": true})
+		var gpu_uid := ""
+		var med_uid := ""
+		var cpu_uid := ""
+		for it in hp_grid.items:
+			if str(it.get("id", "")) == "그래픽카드": gpu_uid = str(it.get("uid", ""))
+			elif str(it.get("id", "")) == "구급상자": med_uid = str(it.get("uid", ""))
+			elif str(it.get("id", "")) == "CPU": cpu_uid = str(it.get("uid", ""))
+
+		hideout_node.set("market_search_text", "그래픽")
+		hideout_node.set("market_filter_category", "all")
+		hideout_node.call("_refresh_market_register_ui")
+		var m_matched: Dictionary = m_p_ctrl.get_meta("matched_uids", {})
+		var m_unavail: Dictionary = m_p_ctrl.get_meta("unavailable_uids", {})
+		_assert(bool(m_p_ctrl.get_meta("filter_active", false)) and m_matched.has(gpu_uid) and not m_matched.has(med_uid), "Market search highlights only matching items (GPU)")
+		_assert(m_unavail.has(cpu_uid), "Market register grid marks locked item as unavailable")
+
+		hideout_node.set("market_search_text", "")
+		hideout_node.set("market_filter_category", "medical_supply")
+		hideout_node.call("_refresh_market_register_ui")
+		var cat_matched: Dictionary = m_p_ctrl.get_meta("matched_uids", {})
+		_assert(cat_matched.has(med_uid) and not cat_matched.has(gpu_uid), "Market category filter 'medical_supply' filters to medical items")
+
+		hideout_node.set("market_filter_category", "all")
+		hideout_node.set("market_selected_uid", gpu_uid)
+		hideout_node.set("market_selected_is_stash", false)
+		hideout_node.call("_refresh_market_register_ui")
+		var confirm_btn: Button = hideout_node.get("market_confirm_btn")
+		_assert(not confirm_btn.disabled, "Selecting valid item enables Market confirm register button")
+		hideout_node.call("_try_register_selected_market_item")
+		_assert(FleaMarket.player_listings.size() == 1 and hp_grid.get_item_by_uid(gpu_uid).is_empty(), "Confirming Market register moves selected item to player_listings")
+		FleaMarket.player_listings.clear()
+
 		hideout_node.queue_free()
 	await get_tree().process_frame
 

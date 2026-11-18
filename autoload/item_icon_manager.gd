@@ -511,7 +511,7 @@ func _draw_receiver(img: Image, rec_type: String, _size: int) -> void:
 			for x in range(11, 14):
 				img.set_pixel(x, y, Color(0.16, 0.17, 0.20)) # 권총손잡이
 		for step in range(8):
-			var mx := 17 + int(step / 2)
+			var mx := 17 + int(float(step) / 2.0)
 			var my := 16 + step
 			for dx in range(3):
 				if mx + dx < 28 and my < 26:

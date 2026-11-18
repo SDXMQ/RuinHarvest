@@ -83,9 +83,23 @@ var sell_receipt_list_vbox: VBoxContainer = null
 var sell_receipt_summary_lbl: Label = null
 var sell_bulk_btn: Button = null
 
-# 암시장 등록 가격 배율 프리셋
+# 암시장 등록 UI 상태 (좌/우 2단 분할 + 2D 그리드 + 검색/카테고리 필터)
 var market_price_ratio: float = 1.0
 var market_slot_label: Label = null
+var market_search_text: String = ""
+var market_filter_category: String = "all"
+var market_search_input: LineEdit = null
+var market_player_grid_ctrl: Control = null
+var market_stash_grid_ctrl: Control = null
+var hovered_market_player_cell: Vector2i = Vector2i(-1, -1)
+var hovered_market_stash_cell: Vector2i = Vector2i(-1, -1)
+var market_selected_uid: String = ""
+var market_selected_is_stash: bool = false
+var market_filter_buttons: Dictionary = {}
+var market_ratio_buttons: Dictionary = {}
+var market_preview_lbl: Label = null
+var market_confirm_btn: Button = null
+var market_result_count_lbl: Label = null
 
 var insurance_btn: Button = null
 
@@ -323,6 +337,7 @@ func _on_grid_changed() -> void:
 	if player_grid_control: player_grid_control.queue_redraw()
 	if stash_grid_control: stash_grid_control.queue_redraw()
 	_refresh_trader_sell_ui()
+	_refresh_market_register_ui()
 	if progression_tab and tab_container and tab_container.current_tab == 4:
 		HideoutProgression.refresh_progression_tab(self, progression_tab)
 	if service_record_tab and tab_container and tab_container.current_tab == 5:
@@ -570,12 +585,12 @@ func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool, allow_
 				var acc := p_win.inner_grid.can_accept_item(item, item_id)
 				if bool(acc.get("ok", false)):
 					var amt := maxi(1, int(item.get("amount", 1)))
-					var rem := p_win.inner_grid.auto_add_item(item_id, amt, item)
-					if amt - rem > 0:
-						if rem <= 0:
+					var p_rem := p_win.inner_grid.auto_add_item(item_id, amt, item)
+					if amt - p_rem > 0:
+						if p_rem <= 0:
 							src_grid.remove_item_by_uid(str(item.get("uid", "")))
 						else:
-							item["amount"] = rem
+							item["amount"] = p_rem
 							src_grid.grid_changed.emit()
 						if SoundManager: SoundManager.play("menu_select")
 						return
@@ -622,6 +637,14 @@ func _input(event: InputEvent) -> void:
 				_close_context_menu()
 				get_viewport().set_input_as_handled()
 				return
+
+	# 검색창(LineEdit) 포커스 중에는 단축키 가로채기 차단 (ESC로 포커스 해제)
+	var focus_owner := get_viewport().gui_get_focus_owner() if (is_inside_tree() and get_viewport()) else null
+	if focus_owner is LineEdit:
+		if event is InputEventKey and event.pressed and (event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE):
+			focus_owner.release_focus()
+			get_viewport().set_input_as_handled()
+		return
 
 	# [L] 키 아이템 잠금/해제 & TradersTab [Space] 일괄 판매
 	if not is_dragging and event is InputEventKey and event.pressed and not event.echo:
@@ -1213,50 +1236,240 @@ func _setup_traders_bulk_ui() -> void:
 	r_vbox.add_child(sell_bulk_btn)
 
 func _setup_market_controls() -> void:
-	var reg_area := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea") as Control
-	var reg_title := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea/RegisterTitle") as Label
-	var reg_scroll := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea/Scroll") as Control
-	if not reg_area:
+	var m_vbox := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox") as VBoxContainer
+	if not m_vbox:
 		return
-	reg_area.custom_minimum_size = Vector2(0, 134)
-	if reg_title:
-		reg_title.hide()
-	if reg_scroll:
-		reg_scroll.offset_top = 36.0
+	var old_market_scroll := m_vbox.get_node_or_null("Scroll") as Control
+	var old_reg_area := m_vbox.get_node_or_null("RegisterArea") as Control
+	if old_reg_area:
+		old_reg_area.hide()
 
-	var bar := HBoxContainer.new()
-	bar.name = "MarketRegisterHeaderBar"
-	bar.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	bar.offset_left = 10.0
-	bar.offset_top = 4.0
-	bar.offset_right = -10.0
-	bar.offset_bottom = 32.0
-	bar.add_theme_constant_override("separation", 8)
-	reg_area.add_child(bar)
+	var market_main_hbox := HBoxContainer.new()
+	market_main_hbox.name = "MarketMainHBox"
+	market_main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	market_main_hbox.add_theme_constant_override("separation", 12)
+	m_vbox.add_child(market_main_hbox)
+
+	# [좌측 컬럼] 긴급 수배 및 암시장 매물 목록
+	var listings_col := VBoxContainer.new()
+	listings_col.name = "MarketListingsCol"
+	listings_col.custom_minimum_size = Vector2(540, 0)
+	listings_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	listings_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	listings_col.size_flags_stretch_ratio = 1.05
+	listings_col.add_theme_constant_override("separation", 6)
+	market_main_hbox.add_child(listings_col)
+
+	var listings_hdr := Label.new()
+	listings_hdr.text = "🏪 오늘의 2.5x 긴급 수배 & 암시장 매물"
+	listings_hdr.add_theme_font_size_override("font_size", 12)
+	listings_hdr.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	listings_col.add_child(listings_hdr)
+
+	if old_market_scroll:
+		m_vbox.remove_child(old_market_scroll)
+		old_market_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		old_market_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		listings_col.add_child(old_market_scroll)
+
+	# [우측 컬럼] 검색/필터 + 배낭·창고 2D 그리드 + 선택 등록 확인 패널
+	var reg_col := VBoxContainer.new()
+	reg_col.name = "MarketRegisterCol"
+	reg_col.custom_minimum_size = Vector2(460, 0)
+	reg_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	reg_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	reg_col.size_flags_stretch_ratio = 1.0
+	reg_col.add_theme_constant_override("separation", 6)
+	market_main_hbox.add_child(reg_col)
 
 	market_slot_label = Label.new()
-	market_slot_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	market_slot_label.add_theme_font_size_override("font_size", 12)
 	market_slot_label.add_theme_color_override("font_color", Color(0.45, 0.90, 1.0))
-	bar.add_child(market_slot_label)
+	reg_col.add_child(market_slot_label)
+
+	# 1. 이름 검색창 + 초기화 + 매칭 개수 표시
+	var search_row := HBoxContainer.new()
+	search_row.add_theme_constant_override("separation", 6)
+	reg_col.add_child(search_row)
+
+	market_search_input = LineEdit.new()
+	market_search_input.name = "MarketSearchInput"
+	market_search_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_search_input.placeholder_text = "🔍 아이템 이름 검색 (예: 그래픽카드, 열쇠, SSD...)"
+	market_search_input.clear_button_enabled = true
+	market_search_input.text_changed.connect(func(new_txt: String):
+		market_search_text = new_txt.strip_edges()
+		_refresh_market_register_ui()
+	)
+	search_row.add_child(market_search_input)
+
+	var clr_btn := Button.new()
+	clr_btn.theme_type_variation = &"SmallButton"
+	clr_btn.text = "초기화"
+	clr_btn.custom_minimum_size = Vector2(56, 0)
+	clr_btn.focus_mode = Control.FOCUS_NONE
+	clr_btn.pressed.connect(func():
+		market_search_text = ""
+		market_filter_category = "all"
+		if market_search_input:
+			market_search_input.text = ""
+		_refresh_market_register_ui()
+	)
+	search_row.add_child(clr_btn)
+
+	market_result_count_lbl = Label.new()
+	market_result_count_lbl.add_theme_font_size_override("font_size", 11)
+	market_result_count_lbl.add_theme_color_override("font_color", Color(0.75, 0.85, 0.95))
+	search_row.add_child(market_result_count_lbl)
+
+	# 2. 카테고리 필터 버튼
+	var cat_row := HBoxContainer.new()
+	cat_row.add_theme_constant_override("separation", 4)
+	reg_col.add_child(cat_row)
+
+	market_filter_buttons.clear()
+	var cat_defs := [
+		["all", "전체"],
+		["valuables", "고가/잡화"],
+		["combat", "무기/부품/방어"],
+		["medical_supply", "의료/식량"],
+		["key_case", "열쇠/케이스"]
+	]
+	for c_def in cat_defs:
+		var cid := str(c_def[0])
+		var cname := str(c_def[1])
+		var f_btn := Button.new()
+		f_btn.theme_type_variation = &"SmallButton"
+		f_btn.text = cname
+		f_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		f_btn.add_theme_font_size_override("font_size", 10)
+		f_btn.focus_mode = Control.FOCUS_NONE
+		var cap_cid := cid
+		f_btn.pressed.connect(func():
+			market_filter_category = cap_cid
+			_refresh_market_register_ui()
+		)
+		cat_row.add_child(f_btn)
+		market_filter_buttons[cid] = f_btn
+
+	# 3. 등록 가격 배율 프리셋
+	var ratio_row := HBoxContainer.new()
+	ratio_row.add_theme_constant_override("separation", 6)
+	reg_col.add_child(ratio_row)
 
 	var ratio_lbl := Label.new()
 	ratio_lbl.text = "등록 가격 배율:"
 	ratio_lbl.add_theme_font_size_override("font_size", 11)
-	bar.add_child(ratio_lbl)
+	ratio_row.add_child(ratio_lbl)
 
+	market_ratio_buttons.clear()
 	for r_val in [0.9, 1.0, 1.2, 1.5, 2.0]:
 		var r_btn := Button.new()
 		r_btn.theme_type_variation = &"SmallButton"
 		r_btn.text = "x%.1f" % r_val
 		r_btn.custom_minimum_size = Vector2(46, 24)
 		r_btn.add_theme_font_size_override("font_size", 10)
+		r_btn.focus_mode = Control.FOCUS_NONE
 		var cap_r: float = r_val
 		r_btn.pressed.connect(func():
 			market_price_ratio = cap_r
 			_refresh_market_register_ui()
 		)
-		bar.add_child(r_btn)
+		ratio_row.add_child(r_btn)
+		market_ratio_buttons[str(r_val)] = r_btn
+
+	# 4. 배낭 & 창고 2D 그리드
+	var grids_scroll := ScrollContainer.new()
+	grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grids_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	reg_col.add_child(grids_scroll)
+
+	var grids_vbox := VBoxContainer.new()
+	grids_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grids_vbox.add_theme_constant_override("separation", 8)
+	grids_scroll.add_child(grids_vbox)
+
+	var mp_hdr := Label.new()
+	mp_hdr.text = "🎒 내 배낭 (클릭: 선택 | 더블클릭·Ctrl+클릭: 즉시 등록 | [L]: 잠금)"
+	mp_hdr.add_theme_font_size_override("font_size", 11)
+	mp_hdr.add_theme_color_override("font_color", Color(0.95, 0.82, 0.36))
+	grids_vbox.add_child(mp_hdr)
+
+	var mp_panel := PanelContainer.new()
+	mp_panel.theme_type_variation = &"GridSurfacePanel"
+	grids_vbox.add_child(mp_panel)
+
+	market_player_grid_ctrl = Control.new()
+	market_player_grid_ctrl.name = "MarketPlayerGridControl"
+	market_player_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
+	market_player_grid_ctrl.draw.connect(func():
+		if market_player_grid_ctrl and player_grid_mgr:
+			InventoryUIHelper.draw_2d_grid(market_player_grid_ctrl, player_grid_mgr, hovered_market_player_cell, true, false, {}, CELL_SIZE)
+	)
+	market_player_grid_ctrl.gui_input.connect(func(ev: InputEvent):
+		_handle_market_grid_input(ev, market_player_grid_ctrl, player_grid_mgr, false)
+	)
+	market_player_grid_ctrl.mouse_exited.connect(func():
+		hovered_market_player_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
+		if market_player_grid_ctrl: market_player_grid_ctrl.queue_redraw()
+	)
+	mp_panel.add_child(market_player_grid_ctrl)
+
+	var ms_hdr := Label.new()
+	ms_hdr.text = "📦 은신처 창고 (검색/필터 미일치 및 등록 불가 품목은 어둡게 표시됨)"
+	ms_hdr.add_theme_font_size_override("font_size", 11)
+	ms_hdr.add_theme_color_override("font_color", Color(0.55, 0.90, 1.0))
+	grids_vbox.add_child(ms_hdr)
+
+	var ms_panel := PanelContainer.new()
+	ms_panel.theme_type_variation = &"GridSurfacePanel"
+	grids_vbox.add_child(ms_panel)
+
+	market_stash_grid_ctrl = Control.new()
+	market_stash_grid_ctrl.name = "MarketStashGridControl"
+	market_stash_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
+	market_stash_grid_ctrl.draw.connect(func():
+		if market_stash_grid_ctrl and stash_grid_mgr:
+			InventoryUIHelper.draw_2d_grid(market_stash_grid_ctrl, stash_grid_mgr, hovered_market_stash_cell, false, false, {}, CELL_SIZE)
+	)
+	market_stash_grid_ctrl.gui_input.connect(func(ev: InputEvent):
+		_handle_market_grid_input(ev, market_stash_grid_ctrl, stash_grid_mgr, true)
+	)
+	market_stash_grid_ctrl.mouse_exited.connect(func():
+		hovered_market_stash_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
+		if market_stash_grid_ctrl: market_stash_grid_ctrl.queue_redraw()
+	)
+	ms_panel.add_child(market_stash_grid_ctrl)
+
+	# 5. 하단 선택 아이템 등록 확인 패널
+	var confirm_panel := PanelContainer.new()
+	confirm_panel.name = "MarketConfirmPanel"
+	var c_sb := PixelAssetManager.make_pixel_stylebox_flat(Color(0.06, 0.08, 0.12, 0.98), Color(0.32, 0.56, 0.78, 0.92), 2, 2, 2, 2, 8, 6, true)
+	confirm_panel.add_theme_stylebox_override("panel", c_sb)
+	reg_col.add_child(confirm_panel)
+
+	var c_hbox := HBoxContainer.new()
+	c_hbox.add_theme_constant_override("separation", 10)
+	confirm_panel.add_child(c_hbox)
+
+	market_preview_lbl = Label.new()
+	market_preview_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_preview_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	market_preview_lbl.add_theme_font_size_override("font_size", 11)
+	market_preview_lbl.text = "💡 2D 그리드에서 암시장에 등록할 아이템을 클릭하세요."
+	c_hbox.add_child(market_preview_lbl)
+
+	market_confirm_btn = Button.new()
+	market_confirm_btn.theme_type_variation = &"PrimaryButton"
+	market_confirm_btn.custom_minimum_size = Vector2(148, 36)
+	market_confirm_btn.text = "📈 암시장 등록"
+	market_confirm_btn.disabled = true
+	market_confirm_btn.focus_mode = Control.FOCUS_NONE
+	market_confirm_btn.pressed.connect(_try_register_selected_market_item)
+	c_hbox.add_child(market_confirm_btn)
 
 func _select_trader(trader_id: String) -> void:
 	current_trader_id = trader_id
@@ -1762,72 +1975,236 @@ func _refresh_market_ui() -> void:
 		
 	_refresh_market_register_ui()
 
+func _is_market_item_registerable(item: Dictionary) -> Dictionary:
+	if item.is_empty():
+		return {"ok": false, "reason": "아이템을 선택하세요."}
+	if bool(item.get("locked", false)):
+		return {"ok": false, "reason": "🔒 잠금된 아이템은 등록할 수 없습니다. ([L] 키로 해제)"}
+	var inner = item.get("inner_items", [])
+	if inner is Array and not inner.is_empty():
+		return {"ok": false, "reason": "⚠️ 내부에 아이템이 든 컨테이너는 비운 뒤 등록할 수 있습니다."}
+	var item_id := str(item.get("id", ""))
+	if item_id in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
+		return {"ok": false, "reason": "⚠️ Scav 인식표는 암시장에 등록할 수 없습니다."}
+	return {"ok": true, "reason": ""}
+
+func _does_market_item_match_filter(item: Dictionary) -> bool:
+	if item.is_empty():
+		return false
+	var item_id := str(item.get("id", ""))
+	var resolved := ItemDatabase.resolve_item_id(item_id) if (ItemDatabase and ItemDatabase.has_method("resolve_item_id")) else item_id
+	var data: Dictionary = ItemDatabase.get_item_data(resolved) if ItemDatabase else {}
+	if market_search_text != "":
+		var disp_name := str(data.get("name", item_id))
+		if not disp_name.containsn(market_search_text) and not item_id.containsn(market_search_text) and not resolved.containsn(market_search_text):
+			return false
+	if market_filter_category == "all":
+		return true
+	var cat := int(data.get("category", -1))
+	var itype := str(data.get("type", item.get("type", "")))
+	match market_filter_category:
+		"valuables":
+			return cat == ItemDatabase.ItemCategory.MISC or cat == ItemDatabase.ItemCategory.MATERIAL
+		"combat":
+			if itype == "storage_case":
+				return false
+			return (
+				cat == ItemDatabase.ItemCategory.WEAPON
+				or cat == ItemDatabase.ItemCategory.EQUIPMENT
+				or itype in ["receiver", "assembled_weapon", "part", "ammo"]
+				or (ItemDatabase and ItemDatabase.is_ammo_item(resolved))
+				or (WeaponPartsDatabase and (WeaponPartsDatabase.PARTS.has(resolved) or WeaponPartsDatabase.RECEIVERS.has(resolved)))
+			)
+		"medical_supply":
+			return cat in [ItemDatabase.ItemCategory.MEDICAL, ItemDatabase.ItemCategory.FOOD, ItemDatabase.ItemCategory.WATER]
+		"key_case":
+			return (
+				itype in ["key", "keycard", "storage_case", "dogtag"]
+				or resolved.contains("열쇠")
+				or resolved.contains("키카드")
+				or resolved.contains("케이스")
+				or resolved.contains("상자")
+				or resolved.contains("지갑")
+				or resolved.contains("인식표")
+			)
+	return true
+
 func _refresh_market_register_ui() -> void:
-	for child in market_register_grid.get_children():
-		child.queue_free()
+	if market_register_grid:
+		for child in market_register_grid.get_children():
+			child.queue_free()
 
 	var used_slots := FleaMarket.player_listings.size() if FleaMarket else 0
 	var max_slots := FleaMarket.MAX_PLAYER_LISTINGS if FleaMarket else 3
 	var can_reg := FleaMarket.can_register_more_listings() if FleaMarket else false
-	var user_rubles := int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
 	if market_slot_label:
-		market_slot_label.text = "💰 암시장 위탁 판매 등록  |  보유 슬롯: %d / %d  |  누진 수수료 5%%~35%% (잠금 🔒 제외)" % [used_slots, max_slots]
+		market_slot_label.text = "💰 암시장 위탁 판매 등록  |  보유 슬롯: %d / %d  |  누진 수수료 5%%~35%%" % [used_slots, max_slots]
 		market_slot_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45) if not can_reg else Color(0.45, 0.90, 1.0))
-		
-	var registerable_sources = [
-		{"mgr": player_grid_mgr, "tag": "🎒가방", "is_stash": false},
-		{"mgr": stash_grid_mgr, "tag": "📦창고", "is_stash": true}
+
+	# 필터 및 배율 버튼 강조 갱신
+	for cid in market_filter_buttons.keys():
+		var b: Button = market_filter_buttons[cid] as Button
+		if is_instance_valid(b):
+			var is_on: bool = (str(cid) == market_filter_category)
+			b.add_theme_color_override("font_color", Color(0.35, 1.0, 0.72) if is_on else Color(0.84, 0.88, 0.92))
+			b.modulate = Color(1.15, 1.15, 1.15) if is_on else Color(0.88, 0.88, 0.88)
+	for r_key in market_ratio_buttons.keys():
+		var rb: Button = market_ratio_buttons[r_key] as Button
+		if is_instance_valid(rb):
+			var is_r_on: bool = absf(float(r_key) - market_price_ratio) < 0.01
+			rb.add_theme_color_override("font_color", Color(1.0, 0.86, 0.30) if is_r_on else Color(0.84, 0.88, 0.92))
+			rb.modulate = Color(1.15, 1.15, 1.15) if is_r_on else Color(0.88, 0.88, 0.88)
+
+	var filter_active: bool = (market_search_text != "" or market_filter_category != "all")
+	var total_matched := 0
+	var selected_still_exists := false
+
+	var pairs := [
+		{"ctrl": market_player_grid_ctrl, "mgr": player_grid_mgr, "is_stash": false},
+		{"ctrl": market_stash_grid_ctrl, "mgr": stash_grid_mgr, "is_stash": true}
 	]
-	
-	for src in registerable_sources:
-		var mgr = src["mgr"]
-		if not mgr: continue
-		var tag = src["tag"]
-		var is_stash = src["is_stash"]
-		
-		for item in mgr.items:
-			if item and not item.is_empty():
-				if bool(item.get("locked", false)):
-					continue
-				var inner = item.get("inner_items", [])
-				if inner is Array and not inner.is_empty():
-					continue
-				var item_id = item.get("id", "")
-				var uid = item.get("uid", "")
-				var amt := maxi(1, int(item.get("amount", 1)))
-				var data = ItemDatabase.get_item_data(item_id)
-				if item_id in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
-					continue
-					
-				var ref_price := FleaMarket.get_current_price(item_id)
-				var ask_price := maxi(10, int(round(float(ref_price) * market_price_ratio)))
-				var fee := FleaMarket.calculate_listing_fee(item_id, amt, ask_price)
-				var fee_pct := int(round(FleaMarket.calculate_listing_fee_rate(item_id, ask_price) * 100.0))
-				
-				var btn = Button.new()
-				btn.custom_minimum_size = Vector2(148, 56)
-				btn.disabled = (not can_reg) or (user_rubles < fee)
-				
-				var btn_style = StyleBoxFlat.new()
-				btn_style.bg_color = Color(0.11, 0.14, 0.18, 0.96)
-				btn_style.border_width_left = 2
-				btn_style.border_width_top = 1
-				btn_style.border_width_right = 1
-				btn_style.border_width_bottom = 2
-				btn_style.border_color = Color(0.32, 0.38, 0.48, 1.0)
-				btn_style.set_corner_radius_all(0)
-				btn_style.corner_detail = 1
-				btn_style.anti_aliasing = false
-				btn.add_theme_stylebox_override("normal", btn_style)
-				
-				if ItemIconManager:
-					btn.icon = ItemIconManager.get_icon(item_id)
-					btn.expand_icon = true
-				btn.text = "[%s] %s x%d\n%d RUB (수수료 %d%%)" % [tag, data.get("name", item_id), amt, ask_price * amt, fee_pct]
-				btn.add_theme_font_size_override("font_size", 9)
-				btn.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0) if not btn.disabled else Color(0.5, 0.54, 0.58))
-				btn.pressed.connect(func(): _register_market_item(uid, is_stash, item_id, amt, ask_price))
-				market_register_grid.add_child(btn)
+	for p in pairs:
+		var ctrl: Control = p["ctrl"]
+		var mgr: InventoryGrid = p["mgr"]
+		if not mgr:
+			continue
+		var matched_uids: Dictionary = {}
+		var unavail_uids: Dictionary = {}
+		for it in mgr.items:
+			if it.is_empty():
+				continue
+			var uid := str(it.get("uid", ""))
+			if uid == "":
+				continue
+			if uid == market_selected_uid and bool(p["is_stash"]) == market_selected_is_stash:
+				selected_still_exists = true
+			var reg_chk := _is_market_item_registerable(it)
+			if not bool(reg_chk["ok"]):
+				unavail_uids[uid] = true
+			elif _does_market_item_match_filter(it):
+				matched_uids[uid] = true
+				total_matched += 1
+		if ctrl:
+			ctrl.custom_minimum_size = Vector2(float(mgr.grid_width) * CELL_SIZE, float(mgr.grid_height) * CELL_SIZE)
+			ctrl.set_meta("filter_active", filter_active)
+			ctrl.set_meta("matched_uids", matched_uids)
+			ctrl.set_meta("unavailable_uids", unavail_uids)
+			ctrl.set_meta("active_focus_uid", market_selected_uid)
+			ctrl.queue_redraw()
+
+	if not selected_still_exists:
+		market_selected_uid = ""
+		if market_player_grid_ctrl:
+			market_player_grid_ctrl.set_meta("active_focus_uid", "")
+			market_player_grid_ctrl.queue_redraw()
+		if market_stash_grid_ctrl:
+			market_stash_grid_ctrl.set_meta("active_focus_uid", "")
+			market_stash_grid_ctrl.queue_redraw()
+
+	if market_result_count_lbl:
+		market_result_count_lbl.text = "가능 %d개" % total_matched
+
+	_refresh_market_selection_preview()
+
+func _refresh_market_selection_preview() -> void:
+	if not market_preview_lbl or not market_confirm_btn:
+		return
+	var mgr: InventoryGrid = stash_grid_mgr if market_selected_is_stash else player_grid_mgr
+	var item: Dictionary = mgr.get_item_by_uid(market_selected_uid) if (mgr and market_selected_uid != "") else {}
+	if item.is_empty():
+		market_preview_lbl.text = "💡 2D 그리드에서 암시장에 등록할 아이템을 클릭하세요. (검색/카테고리 필터 지원 · 더블클릭 시 즉시 등록)"
+		market_preview_lbl.add_theme_color_override("font_color", Color(0.75, 0.82, 0.90))
+		market_confirm_btn.disabled = true
+		return
+
+	var item_id := str(item.get("id", ""))
+	var amt := maxi(1, int(item.get("amount", 1)))
+	var data := ItemDatabase.get_item_data(item_id)
+	var disp_name := str(data.get("name", item_id))
+	var reg_chk := _is_market_item_registerable(item)
+	if not bool(reg_chk["ok"]):
+		market_preview_lbl.text = "[%s x%d]  %s" % [disp_name, amt, str(reg_chk["reason"])]
+		market_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
+		market_confirm_btn.disabled = true
+		return
+
+	var ref_price := FleaMarket.get_current_price(item_id) if FleaMarket else 100
+	var ask_unit := maxi(10, int(round(float(ref_price) * market_price_ratio)))
+	var total_ask := ask_unit * amt
+	var fee := FleaMarket.calculate_listing_fee(item_id, amt, ask_unit) if FleaMarket else 1
+	var fee_pct := int(round((FleaMarket.calculate_listing_fee_rate(item_id, ask_unit) if FleaMarket else 0.05) * 100.0))
+	var user_rubles := int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+	var can_reg := FleaMarket.can_register_more_listings() if FleaMarket else false
+	var src_tag := "📦창고" if market_selected_is_stash else "🎒배낭"
+
+	if not can_reg:
+		market_preview_lbl.text = "[%s] %s x%d  |  ⚠️ 판매 슬롯(3/3)이 가득 찼습니다." % [src_tag, disp_name, amt]
+		market_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.48, 0.48))
+		market_confirm_btn.disabled = true
+	elif user_rubles < fee:
+		market_preview_lbl.text = "[%s] %s x%d  |  희망가: %d RUB (x%.1f)  |  ⚠️ 수수료 %d RUB 부족" % [src_tag, disp_name, amt, total_ask, market_price_ratio, fee]
+		market_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
+		market_confirm_btn.disabled = true
+	else:
+		market_preview_lbl.text = "[%s] %s x%d\n희망 판매가: %d RUB (시세 x%.1f)  |  선불 수수료: %d RUB (%d%%)  |  판매 순이익: +%d RUB" % [
+			src_tag, disp_name, amt, total_ask, market_price_ratio, fee, fee_pct, total_ask - fee
+		]
+		market_preview_lbl.add_theme_color_override("font_color", Color(0.45, 0.98, 0.72))
+		market_confirm_btn.disabled = false
+
+func _handle_market_grid_input(event: InputEvent, ctrl: Control, mgr: InventoryGrid, is_stash: bool) -> void:
+	if not ctrl or not mgr:
+		return
+	var local_pos := ctrl.get_local_mouse_position()
+	var cx := int(floor(local_pos.x / CELL_SIZE))
+	var cy := int(floor(local_pos.y / CELL_SIZE))
+	var in_bounds := (cx >= 0 and cx < mgr.grid_width and cy >= 0 and cy < mgr.grid_height)
+
+	if event is InputEventMouseMotion:
+		if is_stash:
+			hovered_market_stash_cell = Vector2i(cx, cy) if in_bounds else Vector2i(-1, -1)
+		else:
+			hovered_market_player_cell = Vector2i(cx, cy) if in_bounds else Vector2i(-1, -1)
+		if in_bounds:
+			var h_item := mgr.get_item_at(cx, cy)
+			if not h_item.is_empty() and tooltip:
+				tooltip.display_item(h_item, ItemDatabase.get_item_data(str(h_item.get("id", ""))))
+				tooltip.update_position(get_global_mouse_position())
+			elif tooltip:
+				tooltip.hide()
+		elif tooltip:
+			tooltip.hide()
+		ctrl.queue_redraw()
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			var item := mgr.get_item_at(cx, cy)
+			if item.is_empty():
+				market_selected_uid = ""
+				_refresh_market_register_ui()
+				return
+			market_selected_uid = str(item.get("uid", ""))
+			market_selected_is_stash = is_stash
+			_refresh_market_register_ui()
+			if SoundManager: SoundManager.play("menu_move")
+			if event.double_click or Input.is_key_pressed(KEY_CTRL):
+				_try_register_selected_market_item()
+
+func _try_register_selected_market_item() -> void:
+	var mgr: InventoryGrid = stash_grid_mgr if market_selected_is_stash else player_grid_mgr
+	var item: Dictionary = mgr.get_item_by_uid(market_selected_uid) if (mgr and market_selected_uid != "") else {}
+	if item.is_empty():
+		return
+	var reg_chk := _is_market_item_registerable(item)
+	if not bool(reg_chk["ok"]):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit(str(reg_chk["reason"]))
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+	var item_id := str(item.get("id", ""))
+	var amt := maxi(1, int(item.get("amount", 1)))
+	var ref_price := FleaMarket.get_current_price(item_id) if FleaMarket else 100
+	var ask_price := maxi(10, int(round(float(ref_price) * market_price_ratio)))
+	_register_market_item(market_selected_uid, market_selected_is_stash, item_id, amt, ask_price)
 
 func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
@@ -1992,7 +2369,9 @@ func _toggle_lock_at_mouse() -> bool:
 		[player_grid_control, player_grid_mgr],
 		[stash_grid_control, stash_grid_mgr],
 		[sell_player_grid_ctrl, player_grid_mgr],
-		[sell_stash_grid_ctrl, stash_grid_mgr]
+		[sell_stash_grid_ctrl, stash_grid_mgr],
+		[market_player_grid_ctrl, player_grid_mgr],
+		[market_stash_grid_ctrl, stash_grid_mgr]
 	]
 	for pair in targets:
 		var ctrl: Control = pair[0]
@@ -2234,6 +2613,9 @@ func _on_menu_pressed() -> void:
 		GameManager.change_state(GameManager.GameState.MAIN_MENU)
 
 func _unhandled_input(event: InputEvent) -> void:
+	var focus_owner := get_viewport().gui_get_focus_owner() if (is_inside_tree() and get_viewport()) else null
+	if focus_owner is LineEdit:
+		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.physical_keycode == KEY_B:
 			_open_weapon_modding_window()

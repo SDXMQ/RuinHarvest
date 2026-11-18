@@ -1868,7 +1868,6 @@ func _try_equip_weapon(slot_key: String) -> void:
 	var item = drag_data.get("item", {})
 	var it_id = String(item.get("id", ""))
 	var it_data = ItemDatabase.get_item_data(it_id)
-	var it_cat = int(it_data.get("category", -1))
 	var it_type = String(it_data.get("type", ""))
 
 	# 탄약 드래그 앤 드롭 시 탄종 선택 재장전 및 잔탄 확인/교체 처리
@@ -1928,40 +1927,40 @@ func _try_equip_weapon(slot_key: String) -> void:
 			load_amt = min(drag_amt, max_mag)
 			final_mag_ammo = load_amt
 
-		var src = drag_data.get("source", "")
+		var ammo_src = drag_data.get("source", "")
 		if drag_amt <= load_amt:
-			if src == "grid":
+			if ammo_src == "grid":
 				if inventory_grid:
 					inventory_grid.remove_item_by_uid(item.get("uid", ""))
-			elif src == "popup_grid":
+			elif ammo_src == "popup_grid":
 				var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
 				if p_grid:
 					p_grid.remove_item_by_uid(item.get("uid", ""))
-			elif src == "split":
+			elif ammo_src == "split":
 				drag_data["is_split"] = false
-			elif src == "vicinity":
+			elif ammo_src == "vicinity":
 				var ground_node = drag_data.get("ground_ref")
 				if is_instance_valid(ground_node): ground_node.queue_free()
 				_update_vicinity_list(true)
-			elif src == "container":
+			elif ammo_src == "container":
 				var orig_idx = drag_data.get("origin_index", -1)
 				if orig_idx != -1 and target_inventory:
 					target_inventory.remove_item_at(orig_idx, drag_amt)
 					_update_container_list()
 		else:
 			item["amount"] = drag_amt - load_amt
-			if src == "grid":
+			if ammo_src == "grid":
 				if inventory_grid:
 					var orig_it = inventory_grid.get_item_by_uid(item.get("uid", ""))
 					if not orig_it.is_empty(): orig_it["amount"] = item["amount"]
 					inventory_grid.grid_changed.emit()
-			elif src == "popup_grid":
+			elif ammo_src == "popup_grid":
 				var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
 				if p_grid:
 					var orig_pit := p_grid.get_item_by_uid(item.get("uid", ""))
 					if not orig_pit.is_empty(): orig_pit["amount"] = item["amount"]
 					p_grid.grid_changed.emit()
-			elif src == "split":
+			elif ammo_src == "split":
 				var orig_sp = drag_data.get("split_source_item", {})
 				if not orig_sp.is_empty():
 					orig_sp["amount"] = int(orig_sp.get("amount", 0)) + item["amount"]
@@ -1969,13 +1968,13 @@ func _try_equip_weapon(slot_key: String) -> void:
 				var sp_grid: InventoryGrid = drag_data.get("split_source_grid", inventory_grid) as InventoryGrid
 				if sp_grid:
 					sp_grid.grid_changed.emit()
-			elif src == "vicinity":
+			elif ammo_src == "vicinity":
 				var ground_node = drag_data.get("ground_ref")
 				if is_instance_valid(ground_node):
 					ground_node.amount = item["amount"]
 					ground_node.update_visuals()
 				_update_vicinity_list(true)
-			elif src == "container":
+			elif ammo_src == "container":
 				var orig_idx = drag_data.get("origin_index", -1)
 				if orig_idx != -1 and target_inventory:
 					target_inventory.remove_item_at(orig_idx, load_amt)

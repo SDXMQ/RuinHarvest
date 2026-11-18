@@ -177,6 +177,10 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 	var h: int = grid_mgr.grid_height
 	var font: Font = ThemeDB.fallback_font
 	var selected_uids: Dictionary = ctrl.get_meta("selected_sell_uids", {}) if ctrl.has_meta("selected_sell_uids") else {}
+	var filter_active: bool = bool(ctrl.get_meta("filter_active", false)) if ctrl.has_meta("filter_active") else false
+	var matched_uids: Dictionary = ctrl.get_meta("matched_uids", {}) if ctrl.has_meta("matched_uids") else {}
+	var unavailable_uids: Dictionary = ctrl.get_meta("unavailable_uids", {}) if ctrl.has_meta("unavailable_uids") else {}
+	var active_focus_uid: String = str(ctrl.get_meta("active_focus_uid", "")) if ctrl.has_meta("active_focus_uid") else ""
 	var is_compact_cell := cell_size <= 34.0
 	var lbl_font_sz: int = 8 if is_compact_cell else 9
 	
@@ -360,7 +364,18 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 						ctrl.draw_rect(Rect2(bar_rect.position.x + seg_x, bar_rect.position.y, seg_w, bar_h), dur_col, true)
 						seg_x += 4.0
 
-		# 판매 장바구니 선택 하이라이트 테두리
+		# 판매 장바구니 & 검색/필터 하이라이트 및 비매칭 디밍 처리
+		var is_unavail := unavailable_uids.has(item_uid)
+		var is_dimmed := is_unavail or (filter_active and not matched_uids.has(item_uid))
+		if is_dimmed:
+			ctrl.draw_rect(item_rect, Color(0.02, 0.03, 0.045, 0.68), true)
+		elif filter_active and matched_uids.has(item_uid):
+			ctrl.draw_rect(item_rect, Color(0.28, 0.88, 1.0, 0.92), false, 1.5)
+
+		if active_focus_uid != "" and active_focus_uid == item_uid:
+			ctrl.draw_rect(item_rect, Color(1.0, 0.85, 0.24, 1.0), false, 2.0)
+			_draw_pixel_corner_brackets(ctrl, item_rect, Color(1.0, 0.92, 0.45, 1.0), 5.0, 2.0)
+
 		if is_selected_sell:
 			ctrl.draw_rect(item_rect, Color(0.25, 0.98, 0.72, 0.98), false, 2.0)
 			ctrl.draw_string(font, Vector2(rx1 - 11.0, ry1 - 4.0), "✓", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.32, 1.0, 0.68, 1.0))
