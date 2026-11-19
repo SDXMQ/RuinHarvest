@@ -91,6 +91,11 @@ var sell_grid_header_lbl: Label = null
 var sell_receipt_list_vbox: VBoxContainer = null
 var sell_receipt_summary_lbl: Label = null
 var sell_bulk_btn: Button = null
+var trader_mode_tabs: TabContainer = null
+var sell_grids_scroll: ScrollContainer = null
+var trader_btn_valuables: Button = null
+var trader_btn_non_gear: Button = null
+var market_grids_scroll: ScrollContainer = null
 
 # 암시장 등록 UI 상태 (좌/우 2단 분할 + 2D 그리드 + 검색/카테고리 필터)
 var market_price_ratio: float = 1.0
@@ -349,6 +354,14 @@ func _update_all_hideout_grid_sizes() -> void:
 		stash_cell_size = _compute_fit_cell_size(s_scroll, stash_grid_mgr.grid_width, CELL_SIZE, 56.0)
 		stash_grid_control.custom_minimum_size = Vector2(stash_grid_mgr.grid_width * stash_cell_size, stash_grid_mgr.grid_height * stash_cell_size)
 		stash_grid_control.queue_redraw()
+	if sell_player_grid_ctrl and player_grid_mgr:
+		sell_player_cell_size = _compute_fit_cell_size(sell_grids_scroll, player_grid_mgr.grid_width, CELL_SIZE, 54.0)
+		sell_player_grid_ctrl.custom_minimum_size = Vector2(float(player_grid_mgr.grid_width) * sell_player_cell_size, float(player_grid_mgr.grid_height) * sell_player_cell_size)
+		sell_player_grid_ctrl.queue_redraw()
+	if sell_stash_grid_ctrl and stash_grid_mgr:
+		sell_stash_cell_size = _compute_fit_cell_size(sell_grids_scroll, stash_grid_mgr.grid_width, CELL_SIZE, 54.0)
+		sell_stash_grid_ctrl.custom_minimum_size = Vector2(float(stash_grid_mgr.grid_width) * sell_stash_cell_size, float(stash_grid_mgr.grid_height) * sell_stash_cell_size)
+		sell_stash_grid_ctrl.queue_redraw()
 
 func _setup_stash_grid_scaling() -> void:
 	for ctrl in [player_grid_control, stash_grid_control]:
@@ -800,7 +813,7 @@ func _input(event: InputEvent) -> void:
 			if _toggle_lock_at_mouse():
 				get_viewport().set_input_as_handled()
 				return
-		elif (event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE) and tab_container and tab_container.current_tab == 1:
+		elif (event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE) and tab_container and tab_container.current_tab == 1 and (trader_mode_tabs == null or trader_mode_tabs.current_tab == 1):
 			if not selected_sell_uids.is_empty():
 				_execute_bulk_sell()
 				get_viewport().set_input_as_handled()
@@ -1211,6 +1224,8 @@ func _setup_traders_bulk_ui() -> void:
 
 	trader_loyalty_label = Label.new()
 	trader_loyalty_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trader_loyalty_label.clip_text = true
+	trader_loyalty_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	trader_loyalty_label.add_theme_font_size_override("font_size", 12)
 	trader_loyalty_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.38))
 	l_hbox.add_child(trader_loyalty_label)
@@ -1223,70 +1238,80 @@ func _setup_traders_bulk_ui() -> void:
 	t_vbox.add_child(loyalty_panel)
 	t_vbox.move_child(loyalty_panel, 2)
 
-	# 기존 스크롤(상점)과 판매 영역을 3단 HBox 레이아웃으로 재구성 (기존 @onready 참조 유지)
+	# 기존 스크롤(상점)과 판매 영역을 구매/판매 서브 탭으로 분리 (기존 @onready 참조 유지)
 	var old_shop_scroll := t_vbox.get_node_or_null("Scroll") as Control
 	var old_sell_area := t_vbox.get_node_or_null("SellArea") as Control
 	if old_sell_area:
 		old_sell_area.hide()
 
-	var main_hbox := HBoxContainer.new()
-	main_hbox.name = "TraderMainHBox"
-	main_hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	main_hbox.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	main_hbox.add_theme_constant_override("separation", 12)
-	t_vbox.add_child(main_hbox)
+	trader_mode_tabs = TabContainer.new()
+	trader_mode_tabs.name = "TraderModeTabs"
+	trader_mode_tabs.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trader_mode_tabs.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	trader_mode_tabs.tab_changed.connect(func(_t: int): call_deferred("_update_all_hideout_grid_sizes"))
+	t_vbox.add_child(trader_mode_tabs)
 
-	# [좌측 컬럼] 상인 판매 물품 + 등급 해금 목록
-	var shop_col := VBoxContainer.new()
-	shop_col.name = "ShopCol"
-	shop_col.custom_minimum_size = Vector2(360, 0)
-	shop_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	shop_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	shop_col.size_flags_stretch_ratio = 1.0
-	shop_col.add_theme_constant_override("separation", 6)
-	main_hbox.add_child(shop_col)
+	# [서브 탭 0] 상인 공급 품목 구매
+	var buy_tab := VBoxContainer.new()
+	buy_tab.name = "🛒 물품 구매"
+	buy_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	buy_tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	buy_tab.add_theme_constant_override("separation", 6)
+	trader_mode_tabs.add_child(buy_tab)
 
 	var shop_hdr := Label.new()
 	shop_hdr.text = "🛒 상인 공급 품목 (안정 공급 · 등급별 해금)"
 	shop_hdr.add_theme_font_size_override("font_size", 12)
 	shop_hdr.add_theme_color_override("font_color", Color(0.75, 0.88, 1.0))
-	shop_col.add_child(shop_hdr)
+	buy_tab.add_child(shop_hdr)
 
 	if old_shop_scroll:
 		t_vbox.remove_child(old_shop_scroll)
 		old_shop_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		old_shop_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		shop_col.add_child(old_shop_scroll)
+		if old_shop_scroll is ScrollContainer:
+			(old_shop_scroll as ScrollContainer).horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		if trader_items_vbox:
+			trader_items_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		buy_tab.add_child(old_shop_scroll)
 
-	# [중앙 컬럼] 자동 담기 + 배낭/창고 2D 다중 선택 & Marquee 드래그 영역
+	# [서브 탭 1] 아이템 일괄 판매 (2D 다중 선택 + 영수증 정산)
+	var sell_tab := HBoxContainer.new()
+	sell_tab.name = "💰 아이템 판매"
+	sell_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sell_tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sell_tab.add_theme_constant_override("separation", 12)
+	trader_mode_tabs.add_child(sell_tab)
+
+	# [판매 좌측 컬럼] 자동 담기 토글 + 배낭/창고 2D 다중 선택 & Marquee 드래그 영역
 	var center_col := VBoxContainer.new()
 	center_col.name = "BulkSelectCol"
-	center_col.custom_minimum_size = Vector2(440, 0)
+	center_col.custom_minimum_size = Vector2(360, 0)
 	center_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	center_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	center_col.size_flags_stretch_ratio = 1.25
 	center_col.add_theme_constant_override("separation", 6)
-	main_hbox.add_child(center_col)
+	sell_tab.add_child(center_col)
 
 	var btn_bar := HBoxContainer.new()
 	btn_bar.add_theme_constant_override("separation", 6)
 	center_col.add_child(btn_bar)
 
-	var btn_valuables := Button.new()
-	btn_valuables.theme_type_variation = &"SmallButton"
-	btn_valuables.text = "🧹 환금템 모두 담기"
-	btn_valuables.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn_valuables.add_theme_font_size_override("font_size", 11)
-	btn_valuables.pressed.connect(func(): _auto_select_bulk_sell("valuables"))
-	btn_bar.add_child(btn_valuables)
+	trader_btn_valuables = Button.new()
+	trader_btn_valuables.theme_type_variation = &"SmallButton"
+	trader_btn_valuables.text = "🧹 환금템 모두 담기"
+	trader_btn_valuables.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trader_btn_valuables.add_theme_font_size_override("font_size", 11)
+	trader_btn_valuables.pressed.connect(func(): _auto_select_bulk_sell("valuables"))
+	btn_bar.add_child(trader_btn_valuables)
 
-	var btn_non_gear := Button.new()
-	btn_non_gear.theme_type_variation = &"SmallButton"
-	btn_non_gear.text = "📦 장비/무기 제외 모두 담기"
-	btn_non_gear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	btn_non_gear.add_theme_font_size_override("font_size", 11)
-	btn_non_gear.pressed.connect(func(): _auto_select_bulk_sell("non_gear"))
-	btn_bar.add_child(btn_non_gear)
+	trader_btn_non_gear = Button.new()
+	trader_btn_non_gear.theme_type_variation = &"SmallButton"
+	trader_btn_non_gear.text = "📦 장비/무기 제외 모두 담기"
+	trader_btn_non_gear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	trader_btn_non_gear.add_theme_font_size_override("font_size", 11)
+	trader_btn_non_gear.pressed.connect(func(): _auto_select_bulk_sell("non_gear"))
+	btn_bar.add_child(trader_btn_non_gear)
 
 	var btn_clear := Button.new()
 	btn_clear.theme_type_variation = &"DangerButton"
@@ -1305,15 +1330,17 @@ func _setup_traders_bulk_ui() -> void:
 	sell_grid_header_lbl.add_theme_color_override("font_color", Color(0.76, 0.84, 0.92))
 	center_col.add_child(sell_grid_header_lbl)
 
-	var grids_scroll := ScrollContainer.new()
-	grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grids_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	center_col.add_child(grids_scroll)
+	sell_grids_scroll = ScrollContainer.new()
+	sell_grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	sell_grids_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	sell_grids_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	sell_grids_scroll.resized.connect(_update_all_hideout_grid_sizes)
+	center_col.add_child(sell_grids_scroll)
 
 	var grids_vbox := VBoxContainer.new()
 	grids_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grids_vbox.add_theme_constant_override("separation", 8)
-	grids_scroll.add_child(grids_vbox)
+	sell_grids_scroll.add_child(grids_vbox)
 
 	var p_hdr := Label.new()
 	p_hdr.text = "🎒 내 배낭 (좌상단 2x2 SECURE & 🔒잠금 자동 보호)"
@@ -1330,7 +1357,7 @@ func _setup_traders_bulk_ui() -> void:
 	sell_player_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
 	sell_player_grid_ctrl.draw.connect(func():
 		if sell_player_grid_ctrl and player_grid_mgr:
-			InventoryUIHelper.draw_2d_grid(sell_player_grid_ctrl, player_grid_mgr, hovered_sell_player_cell, true, false, {}, CELL_SIZE)
+			InventoryUIHelper.draw_2d_grid(sell_player_grid_ctrl, player_grid_mgr, hovered_sell_player_cell, true, false, {}, sell_player_cell_size)
 	)
 	sell_player_grid_ctrl.gui_input.connect(func(ev: InputEvent):
 		_handle_sell_grid_input(ev, sell_player_grid_ctrl, player_grid_mgr, false)
@@ -1357,7 +1384,7 @@ func _setup_traders_bulk_ui() -> void:
 	sell_stash_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
 	sell_stash_grid_ctrl.draw.connect(func():
 		if sell_stash_grid_ctrl and stash_grid_mgr:
-			InventoryUIHelper.draw_2d_grid(sell_stash_grid_ctrl, stash_grid_mgr, hovered_sell_stash_cell, false, false, {}, CELL_SIZE)
+			InventoryUIHelper.draw_2d_grid(sell_stash_grid_ctrl, stash_grid_mgr, hovered_sell_stash_cell, false, false, {}, sell_stash_cell_size)
 	)
 	sell_stash_grid_ctrl.gui_input.connect(func(ev: InputEvent):
 		_handle_sell_grid_input(ev, sell_stash_grid_ctrl, stash_grid_mgr, true)
@@ -1369,18 +1396,18 @@ func _setup_traders_bulk_ui() -> void:
 	)
 	s_panel.add_child(sell_stash_grid_ctrl)
 
-	# [우측 컬럼] 판매 트레이 영수증 & 일괄 정산 패널
+	# [판매 우측 컬럼] 판매 트레이 영수증 & 일괄 정산 패널
 	var right_panel := PanelContainer.new()
 	right_panel.name = "ReceiptCol"
-	right_panel.custom_minimum_size = Vector2(300, 0)
+	right_panel.custom_minimum_size = Vector2(280, 0)
 	right_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_panel.size_flags_stretch_ratio = 0.88
+	right_panel.size_flags_stretch_ratio = 0.85
 	if PixelAssetManager:
 		var r_sb := PixelAssetManager.get_pixel_stylebox("receipt_panel", 8.0, 8.0, 8.0, 8.0, 4)
 		if r_sb != null:
 			right_panel.add_theme_stylebox_override("panel", r_sb)
-	main_hbox.add_child(right_panel)
+	sell_tab.add_child(right_panel)
 
 	var r_vbox := VBoxContainer.new()
 	r_vbox.add_theme_constant_override("separation", 8)
@@ -1685,6 +1712,7 @@ func _refresh_trader_ui() -> void:
 			trader_loyalty_label.text = "⭐ 우호도 Lv.%d ➔ 다음 Lv.%d (의뢰 %d/%d건 · 누적 거래 %d/%d RUB)  |  %s" % [cur_lv, cur_lv + 1, q_cnt, nq, spent, ns, spec_hint]
 			trader_loyalty_bar.max_value = float(ns)
 			trader_loyalty_bar.value = float(mini(spent, ns))
+		trader_loyalty_label.tooltip_text = trader_loyalty_label.text
 	
 	# 상품 목록 생성
 	for child in trader_items_vbox.get_children():
@@ -1702,7 +1730,9 @@ func _refresh_trader_ui() -> void:
 		var item_meta = ItemDatabase.get_item_data(item_id)
 		
 		var panel = PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var hbox = HBoxContainer.new()
+		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		hbox.add_theme_constant_override("separation", 10)
 		panel.add_child(hbox)
 		
@@ -1721,6 +1751,10 @@ func _refresh_trader_ui() -> void:
 		var lv_tag := "[Lv.%d] " % req_lv if req_lv > 1 else ""
 		name_lbl.text = "%s%s (x%d)" % [lv_tag, item_meta.get("name", item_id), amount]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.custom_minimum_size = Vector2(0, 0)
+		name_lbl.clip_text = true
+		name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_lbl.tooltip_text = name_lbl.text
 		name_lbl.add_theme_font_size_override("font_size", 12)
 		if not is_unlocked:
 			name_lbl.add_theme_color_override("font_color", Color(0.58, 0.62, 0.68))
@@ -1763,15 +1797,39 @@ func _refresh_trader_sell_ui() -> void:
 
 	# 2. 2D 선택 그리드 크기 및 하이라이트 메타 동기화
 	if sell_player_grid_ctrl and player_grid_mgr:
-		sell_player_grid_ctrl.custom_minimum_size = Vector2(float(player_grid_mgr.grid_width) * CELL_SIZE, float(player_grid_mgr.grid_height) * CELL_SIZE)
+		sell_player_cell_size = _compute_fit_cell_size(sell_grids_scroll, player_grid_mgr.grid_width, CELL_SIZE, 54.0)
+		sell_player_grid_ctrl.custom_minimum_size = Vector2(float(player_grid_mgr.grid_width) * sell_player_cell_size, float(player_grid_mgr.grid_height) * sell_player_cell_size)
 		sell_player_grid_ctrl.set_meta("selected_sell_uids", selected_sell_uids)
 		sell_player_grid_ctrl.queue_redraw()
 	if sell_stash_grid_ctrl and stash_grid_mgr:
-		sell_stash_grid_ctrl.custom_minimum_size = Vector2(float(stash_grid_mgr.grid_width) * CELL_SIZE, float(stash_grid_mgr.grid_height) * CELL_SIZE)
+		sell_stash_cell_size = _compute_fit_cell_size(sell_grids_scroll, stash_grid_mgr.grid_width, CELL_SIZE, 54.0)
+		sell_stash_grid_ctrl.custom_minimum_size = Vector2(float(stash_grid_mgr.grid_width) * sell_stash_cell_size, float(stash_grid_mgr.grid_height) * sell_stash_cell_size)
 		sell_stash_grid_ctrl.set_meta("selected_sell_uids", selected_sell_uids)
 		sell_stash_grid_ctrl.queue_redraw()
 
+	_update_bulk_sell_toggle_buttons()
 	_refresh_sell_receipt_panel()
+
+func _are_all_bulk_candidates_selected(cands: Array) -> bool:
+	if cands.is_empty():
+		return false
+	for c in cands:
+		var uid := str(c.get("uid", ""))
+		if uid != "" and not selected_sell_uids.has(uid):
+			return false
+	return true
+
+func _update_bulk_sell_toggle_buttons() -> void:
+	if trader_btn_valuables:
+		var v_cands := HideoutProgression.collect_bulk_sell_candidates("valuables", player_grid_mgr, stash_grid_mgr)
+		var v_all := _are_all_bulk_candidates_selected(v_cands)
+		trader_btn_valuables.text = "✓ 환금템 모두 해제" if v_all else "🧹 환금템 모두 담기"
+		trader_btn_valuables.add_theme_color_override("font_color", Color(0.45, 1.0, 0.72) if v_all else Color(0.92, 0.94, 0.96))
+	if trader_btn_non_gear:
+		var ng_cands := HideoutProgression.collect_bulk_sell_candidates("non_gear", player_grid_mgr, stash_grid_mgr)
+		var ng_all := _are_all_bulk_candidates_selected(ng_cands)
+		trader_btn_non_gear.text = "✓ 장비/무기 제외 해제" if ng_all else "📦 장비/무기 제외 모두 담기"
+		trader_btn_non_gear.add_theme_color_override("font_color", Color(0.45, 1.0, 0.72) if ng_all else Color(0.92, 0.94, 0.96))
 
 func _refresh_sell_receipt_panel() -> void:
 	if not sell_receipt_list_vbox or not sell_receipt_summary_lbl or not sell_bulk_btn:
@@ -1869,10 +1927,16 @@ func _toggle_sell_selection(item: Dictionary, mgr: InventoryGrid, is_stash: bool
 
 func _auto_select_bulk_sell(mode: String) -> void:
 	var cands := HideoutProgression.collect_bulk_sell_candidates(mode, player_grid_mgr, stash_grid_mgr)
-	for c in cands:
-		var uid := str(c.get("uid", ""))
-		if uid != "":
-			selected_sell_uids[uid] = c
+	if _are_all_bulk_candidates_selected(cands):
+		for c in cands:
+			var uid := str(c.get("uid", ""))
+			if uid != "":
+				selected_sell_uids.erase(uid)
+	else:
+		for c in cands:
+			var uid := str(c.get("uid", ""))
+			if uid != "":
+				selected_sell_uids[uid] = c
 	_refresh_trader_sell_ui()
 	if SoundManager:
 		SoundManager.play("menu_select" if not cands.is_empty() else "menu_move")
@@ -1893,9 +1957,10 @@ func _execute_bulk_sell() -> void:
 func _handle_sell_grid_input(event: InputEvent, ctrl: Control, mgr: InventoryGrid, is_stash: bool) -> void:
 	if not ctrl or not mgr:
 		return
+	var csz := _get_grid_cell_size(ctrl)
 	var local_pos := ctrl.get_local_mouse_position()
-	var cx := int(floor(local_pos.x / CELL_SIZE))
-	var cy := int(floor(local_pos.y / CELL_SIZE))
+	var cx := int(floor(local_pos.x / csz))
+	var cy := int(floor(local_pos.y / csz))
 
 	if event is InputEventMouseMotion:
 		var in_bounds := (cx >= 0 and cx < mgr.grid_width and cy >= 0 and cy < mgr.grid_height)
@@ -1952,12 +2017,13 @@ func _handle_sell_grid_input(event: InputEvent, ctrl: Control, mgr: InventoryGri
 					if not click_item.is_empty():
 						_toggle_sell_selection(click_item, mgr, is_stash)
 				else:
-					_apply_marquee_selection(m_rect, mgr, is_stash)
+					_apply_marquee_selection(m_rect, mgr, is_stash, ctrl)
 				ctrl.queue_redraw()
 
-func _apply_marquee_selection(m_rect: Rect2, mgr: InventoryGrid, is_stash: bool) -> void:
+func _apply_marquee_selection(m_rect: Rect2, mgr: InventoryGrid, is_stash: bool, ctrl: Control = null) -> void:
 	if not mgr:
 		return
+	var csz := _get_grid_cell_size(ctrl)
 	var added_cnt := 0
 	for it in mgr.items:
 		if it.is_empty():
@@ -1970,7 +2036,7 @@ func _apply_marquee_selection(m_rect: Rect2, mgr: InventoryGrid, is_stash: bool)
 		var is_rot := bool(it.get("rotated", false))
 		var cw := int(it.get("h", 1)) if is_rot else int(it.get("w", 1))
 		var ch := int(it.get("w", 1)) if is_rot else int(it.get("h", 1))
-		var item_rect := Rect2(float(it.get("x", 0)) * CELL_SIZE, float(it.get("y", 0)) * CELL_SIZE, float(cw) * CELL_SIZE, float(ch) * CELL_SIZE)
+		var item_rect := Rect2(float(it.get("x", 0)) * csz, float(it.get("y", 0)) * csz, float(cw) * csz, float(ch) * csz)
 		if m_rect.intersects(item_rect):
 			var uid := str(it.get("uid", ""))
 			if uid != "" and not selected_sell_uids.has(uid):
