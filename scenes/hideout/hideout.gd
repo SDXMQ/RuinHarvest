@@ -362,6 +362,14 @@ func _update_all_hideout_grid_sizes() -> void:
 		sell_stash_cell_size = _compute_fit_cell_size(sell_grids_scroll, stash_grid_mgr.grid_width, CELL_SIZE, 54.0)
 		sell_stash_grid_ctrl.custom_minimum_size = Vector2(float(stash_grid_mgr.grid_width) * sell_stash_cell_size, float(stash_grid_mgr.grid_height) * sell_stash_cell_size)
 		sell_stash_grid_ctrl.queue_redraw()
+	if market_player_grid_ctrl and player_grid_mgr:
+		market_player_cell_size = _compute_fit_cell_size(market_grids_scroll, player_grid_mgr.grid_width, CELL_SIZE, 54.0)
+		market_player_grid_ctrl.custom_minimum_size = Vector2(float(player_grid_mgr.grid_width) * market_player_cell_size, float(player_grid_mgr.grid_height) * market_player_cell_size)
+		market_player_grid_ctrl.queue_redraw()
+	if market_stash_grid_ctrl and stash_grid_mgr:
+		market_stash_cell_size = _compute_fit_cell_size(market_grids_scroll, stash_grid_mgr.grid_width, CELL_SIZE, 54.0)
+		market_stash_grid_ctrl.custom_minimum_size = Vector2(float(stash_grid_mgr.grid_width) * market_stash_cell_size, float(stash_grid_mgr.grid_height) * market_stash_cell_size)
+		market_stash_grid_ctrl.queue_redraw()
 
 func _setup_stash_grid_scaling() -> void:
 	for ctrl in [player_grid_control, stash_grid_control]:
@@ -1462,10 +1470,10 @@ func _setup_market_controls() -> void:
 	# [좌측 컬럼] 긴급 수배 및 암시장 매물 목록
 	var listings_col := VBoxContainer.new()
 	listings_col.name = "MarketListingsCol"
-	listings_col.custom_minimum_size = Vector2(540, 0)
+	listings_col.custom_minimum_size = Vector2(360, 0)
 	listings_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	listings_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	listings_col.size_flags_stretch_ratio = 1.05
+	listings_col.size_flags_stretch_ratio = 1.0
 	listings_col.add_theme_constant_override("separation", 6)
 	market_main_hbox.add_child(listings_col)
 
@@ -1479,22 +1487,48 @@ func _setup_market_controls() -> void:
 		m_vbox.remove_child(old_market_scroll)
 		old_market_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		old_market_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		if old_market_scroll is ScrollContainer:
+			(old_market_scroll as ScrollContainer).horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		if market_items_vbox:
+			market_items_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		listings_col.add_child(old_market_scroll)
 
 	# [우측 컬럼] 검색/필터 + 배낭·창고 2D 그리드 + 선택 등록 확인 패널
 	var reg_col := VBoxContainer.new()
 	reg_col.name = "MarketRegisterCol"
-	reg_col.custom_minimum_size = Vector2(460, 0)
+	reg_col.custom_minimum_size = Vector2(360, 0)
 	reg_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	reg_col.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	reg_col.size_flags_stretch_ratio = 1.0
+	reg_col.size_flags_stretch_ratio = 1.05
 	reg_col.add_theme_constant_override("separation", 6)
 	market_main_hbox.add_child(reg_col)
 
 	market_slot_label = Label.new()
+	market_slot_label.clip_text = true
+	market_slot_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	market_slot_label.add_theme_font_size_override("font_size", 12)
 	market_slot_label.add_theme_color_override("font_color", Color(0.45, 0.90, 1.0))
 	reg_col.add_child(market_slot_label)
+
+	var guide_panel := PanelContainer.new()
+	guide_panel.name = "MarketGuidePanel"
+	var guide_sb := StyleBoxFlat.new()
+	guide_sb.bg_color = Color(0.08, 0.12, 0.18, 0.90)
+	guide_sb.set_border_width_all(1)
+	guide_sb.border_color = Color(0.24, 0.42, 0.58, 0.75)
+	guide_sb.set_corner_radius_all(4)
+	guide_sb.content_margin_left = 8
+	guide_sb.content_margin_right = 8
+	guide_sb.content_margin_top = 5
+	guide_sb.content_margin_bottom = 5
+	guide_panel.add_theme_stylebox_override("panel", guide_sb)
+	var guide_lbl := Label.new()
+	guide_lbl.text = "📘 위탁 판매 안내: 아이템 선택 → 희망 배율(x0.9~x2.0) 설정 → 등록 시 선불 수수료(5~35%) 차감\n레이드 귀환(출격 1회) 후 자동 판매·정산되며, 미판매/만료 품목은 은신처 창고로 자동 반환됩니다."
+	guide_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	guide_lbl.add_theme_font_size_override("font_size", 10)
+	guide_lbl.add_theme_color_override("font_color", Color(0.76, 0.88, 0.96))
+	guide_panel.add_child(guide_lbl)
+	reg_col.add_child(guide_panel)
 
 	# 1. 이름 검색창 + 초기화 + 매칭 개수 표시
 	var search_row := HBoxContainer.new()
@@ -1588,15 +1622,17 @@ func _setup_market_controls() -> void:
 		market_ratio_buttons[str(r_val)] = r_btn
 
 	# 4. 배낭 & 창고 2D 그리드
-	var grids_scroll := ScrollContainer.new()
-	grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	grids_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	reg_col.add_child(grids_scroll)
+	market_grids_scroll = ScrollContainer.new()
+	market_grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	market_grids_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	market_grids_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	market_grids_scroll.resized.connect(_update_all_hideout_grid_sizes)
+	reg_col.add_child(market_grids_scroll)
 
 	var grids_vbox := VBoxContainer.new()
 	grids_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grids_vbox.add_theme_constant_override("separation", 8)
-	grids_scroll.add_child(grids_vbox)
+	market_grids_scroll.add_child(grids_vbox)
 
 	var mp_hdr := Label.new()
 	mp_hdr.text = "🎒 내 배낭 (클릭: 선택 | 더블클릭·Ctrl+클릭: 즉시 등록 | [L]: 잠금)"
@@ -1605,6 +1641,7 @@ func _setup_market_controls() -> void:
 	grids_vbox.add_child(mp_hdr)
 
 	var mp_panel := PanelContainer.new()
+	mp_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	mp_panel.theme_type_variation = &"GridSurfacePanel"
 	grids_vbox.add_child(mp_panel)
 
@@ -1613,7 +1650,7 @@ func _setup_market_controls() -> void:
 	market_player_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
 	market_player_grid_ctrl.draw.connect(func():
 		if market_player_grid_ctrl and player_grid_mgr:
-			InventoryUIHelper.draw_2d_grid(market_player_grid_ctrl, player_grid_mgr, hovered_market_player_cell, true, false, {}, CELL_SIZE)
+			InventoryUIHelper.draw_2d_grid(market_player_grid_ctrl, player_grid_mgr, hovered_market_player_cell, true, false, {}, market_player_cell_size)
 	)
 	market_player_grid_ctrl.gui_input.connect(func(ev: InputEvent):
 		_handle_market_grid_input(ev, market_player_grid_ctrl, player_grid_mgr, false)
@@ -1632,6 +1669,7 @@ func _setup_market_controls() -> void:
 	grids_vbox.add_child(ms_hdr)
 
 	var ms_panel := PanelContainer.new()
+	ms_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	ms_panel.theme_type_variation = &"GridSurfacePanel"
 	grids_vbox.add_child(ms_panel)
 
@@ -1640,7 +1678,7 @@ func _setup_market_controls() -> void:
 	market_stash_grid_ctrl.mouse_filter = Control.MOUSE_FILTER_STOP
 	market_stash_grid_ctrl.draw.connect(func():
 		if market_stash_grid_ctrl and stash_grid_mgr:
-			InventoryUIHelper.draw_2d_grid(market_stash_grid_ctrl, stash_grid_mgr, hovered_market_stash_cell, false, false, {}, CELL_SIZE)
+			InventoryUIHelper.draw_2d_grid(market_stash_grid_ctrl, stash_grid_mgr, hovered_market_stash_cell, false, false, {}, market_stash_cell_size)
 	)
 	market_stash_grid_ctrl.gui_input.connect(func(ev: InputEvent):
 		_handle_market_grid_input(ev, market_stash_grid_ctrl, stash_grid_mgr, true)
@@ -2103,17 +2141,21 @@ func _refresh_market_ui() -> void:
 	if not bounties.is_empty():
 		var bounty_panel = PanelContainer.new()
 		bounty_panel.name = "BountyOrderPanel"
+		bounty_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		if PixelAssetManager:
 			var bounty_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("bounty_panel", 12.0, 10.0, 12.0, 10.0, 4)
 			if bounty_sb != null:
 				bounty_panel.add_theme_stylebox_override("panel", bounty_sb)
 
 		var b_vbox = VBoxContainer.new()
+		b_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b_vbox.add_theme_constant_override("separation", 8)
 		bounty_panel.add_child(b_vbox)
 		
 		var b_title = Label.new()
 		b_title.text = "[🔥 오늘의 2.5x 긴급 수배] 암시장 특수 상인 고가 매입 품목"
+		b_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		if PixelAssetManager:
 			b_title.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
 		b_title.add_theme_font_size_override("font_size", 12)
@@ -2128,7 +2170,8 @@ func _refresh_market_ui() -> void:
 			var owned_cnt = HideoutProgression.count_total_item(b_id, player_grid_mgr, stash_grid_mgr)
 			
 			var b_row = HBoxContainer.new()
-			b_row.add_theme_constant_override("separation", 12)
+			b_row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b_row.add_theme_constant_override("separation", 8)
 			if ItemIconManager:
 				var b_icon := TextureRect.new()
 				b_icon.custom_minimum_size = Vector2(28, 28)
@@ -2138,14 +2181,32 @@ func _refresh_market_ui() -> void:
 				b_icon.texture = ItemIconManager.get_icon(b_id)
 				b_row.add_child(b_icon)
 
-			var b_lbl = Label.new()
-			b_lbl.text = "★ [%s]  일반 시세: %d RUB ➔ 수배 매입가: %d RUB (x2.5)  |  보유: %d개" % [b_name, m_price, b_price, owned_cnt]
-			b_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-			b_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if owned_cnt > 0 else Color(0.92, 0.88, 0.76))
-			b_row.add_child(b_lbl)
+			var b_info_vbox := VBoxContainer.new()
+			b_info_vbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b_info_vbox.add_theme_constant_override("separation", 2)
+
+			var b_name_lbl := Label.new()
+			b_name_lbl.text = "★ %s  (보유: %d개)" % [b_name, owned_cnt]
+			b_name_lbl.clip_text = true
+			b_name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			b_name_lbl.add_theme_font_size_override("font_size", 12)
+			b_name_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if owned_cnt > 0 else Color(0.92, 0.88, 0.76))
+			b_info_vbox.add_child(b_name_lbl)
+
+			var b_price_lbl := Label.new()
+			b_price_lbl.text = "시세 %d ➔ 수배 매입가 %d RUB (x2.5)" % [m_price, b_price]
+			b_price_lbl.clip_text = true
+			b_price_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+			b_price_lbl.add_theme_font_size_override("font_size", 10)
+			b_price_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.42))
+			b_info_vbox.add_child(b_price_lbl)
+			b_row.add_child(b_info_vbox)
 			
 			var sell_b_btn = Button.new()
-			sell_b_btn.text = "🔥 즉시 납품 (+%d RUB)" % b_price
+			sell_b_btn.theme_type_variation = &"SmallButton"
+			sell_b_btn.text = "🔥 납품"
+			sell_b_btn.custom_minimum_size = Vector2(76, 30)
+			sell_b_btn.tooltip_text = "즉시 납품 (+%d RUB)" % b_price
 			sell_b_btn.disabled = (owned_cnt <= 0)
 			var cap_id = b_id
 			sell_b_btn.pressed.connect(func():
@@ -2171,8 +2232,10 @@ func _refresh_market_ui() -> void:
 		var item_meta = ItemDatabase.get_item_data(item_id)
 		
 		var panel = PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var hbox = HBoxContainer.new()
-		hbox.add_theme_constant_override("separation", 14)
+		hbox.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		hbox.add_theme_constant_override("separation", 8)
 		panel.add_child(hbox)
 		
 		if ItemIconManager:
@@ -2189,6 +2252,10 @@ func _refresh_market_ui() -> void:
 		var stock_txt := ("[내 등록 매물 · 대기 중]" if is_player_listing else ("[품절]" if is_sold_out else "재고 %d개" % stock_rem))
 		name_lbl.text = "%s (x%d)  [%s]" % [item_meta.get("name", item_id), amount, stock_txt]
 		name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		name_lbl.custom_minimum_size = Vector2(0, 0)
+		name_lbl.clip_text = true
+		name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+		name_lbl.tooltip_text = name_lbl.text
 		if is_sold_out:
 			name_lbl.add_theme_color_override("font_color", Color(0.55, 0.58, 0.62))
 		elif is_player_listing:
@@ -2322,7 +2389,12 @@ func _refresh_market_register_ui() -> void:
 				matched_uids[uid] = true
 				total_matched += 1
 		if ctrl:
-			ctrl.custom_minimum_size = Vector2(float(mgr.grid_width) * CELL_SIZE, float(mgr.grid_height) * CELL_SIZE)
+			var csz := _compute_fit_cell_size(market_grids_scroll, mgr.grid_width, CELL_SIZE, 54.0)
+			if bool(p["is_stash"]):
+				market_stash_cell_size = csz
+			else:
+				market_player_cell_size = csz
+			ctrl.custom_minimum_size = Vector2(float(mgr.grid_width) * csz, float(mgr.grid_height) * csz)
 			ctrl.set_meta("filter_active", filter_active)
 			ctrl.set_meta("matched_uids", matched_uids)
 			ctrl.set_meta("unavailable_uids", unavail_uids)
@@ -2392,9 +2464,10 @@ func _refresh_market_selection_preview() -> void:
 func _handle_market_grid_input(event: InputEvent, ctrl: Control, mgr: InventoryGrid, is_stash: bool) -> void:
 	if not ctrl or not mgr:
 		return
+	var csz := _get_grid_cell_size(ctrl)
 	var local_pos := ctrl.get_local_mouse_position()
-	var cx := int(floor(local_pos.x / CELL_SIZE))
-	var cy := int(floor(local_pos.y / CELL_SIZE))
+	var cx := int(floor(local_pos.x / csz))
+	var cy := int(floor(local_pos.y / csz))
 	var in_bounds := (cx >= 0 and cx < mgr.grid_width and cy >= 0 and cy < mgr.grid_height)
 
 	if event is InputEventMouseMotion:
