@@ -500,6 +500,8 @@ func _spawn_entities() -> void:
 		player.is_bleeding = s.get("is_bleeding", false)
 		player.is_fractured = s.get("is_fractured", false)
 		player.is_infected = s.get("is_infected", false)
+		player.painkiller_timer = float(s.get("painkiller_timer", 0.0))
+		player.painkiller_damage_reduction = float(s.get("painkiller_damage_reduction", 0.0))
 		player.set_flashlight(s.get("flashlight_enabled", true))
 		
 	if GameManager and not GameManager.current_world_data.is_empty():
@@ -963,6 +965,8 @@ func _exit_interior() -> void:
 				"is_bleeding": player.is_bleeding,
 				"is_fractured": player.is_fractured,
 				"is_infected": player.is_infected,
+				"painkiller_timer": player.painkiller_timer,
+				"painkiller_damage_reduction": player.painkiller_damage_reduction,
 				"flashlight_enabled": player.flashlight_enabled
 			}
 	get_tree().change_scene_to_file("res://scenes/world/main_world.tscn")

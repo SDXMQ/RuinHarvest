@@ -374,6 +374,10 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 		if effects.get("cures_bleeding", false): stats.append(" • [color=#ff79c6]출혈 지혈 효과[/color]")
 		if effects.get("cures_fracture", false): stats.append(" • [color=#ff79c6]골절 치료 효과[/color]")
 		if effects.get("cures_infection", false): stats.append(" • [color=#50fa7b]생체 감염(바이오하자드) 완치[/color]")
+		if effects.has("damage_reduction_duration"):
+			var red_pct: int = int(round(float(effects.get("damage_reduction", 0.25)) * 100.0))
+			var dur_sec: int = int(round(float(effects.get("damage_reduction_duration", 60.0))))
+			stats.append(" • 피해 감소 버프: [color=#50fa7b]-%d%% (%d초)[/color]" % [red_pct, dur_sec])
 		if effects.get("poison_resist", false): stats.append(" • [color=#bd93f9]독성/방독 저항[/color]")
 		
 		var max_s = int(data.get("max_stack", 1))

@@ -109,6 +109,20 @@ var is_exhausted: bool:
 	set(v):
 		var s = _stats()
 		if s: s.is_exhausted = v
+var painkiller_timer: float:
+	get:
+		var s = _stats()
+		return s.painkiller_timer if s else 0.0
+	set(v):
+		var s = _stats()
+		if s: s.painkiller_timer = v
+var painkiller_damage_reduction: float:
+	get:
+		var s = _stats()
+		return s.painkiller_damage_reduction if s else 0.0
+	set(v):
+		var s = _stats()
+		if s: s.painkiller_damage_reduction = v
 
 var max_hp: float:
 	get:
@@ -285,6 +299,13 @@ func get_effective_max_stamina() -> float:
 	var s = _stats()
 	return s.get_effective_max_stamina() if (s and s.has_method("get_effective_max_stamina")) else max_stamina
 
+func apply_painkiller_buff(duration: float = 60.0, reduction: float = 0.25) -> void:
+	var s = _stats()
+	if s and s.has_method("apply_painkiller_buff"):
+		s.apply_painkiller_buff(duration, reduction)
+	else:
+		stats_changed.emit()
+
 func apply_medical_effects(item_id: String) -> bool:
 	var d := ItemDatabase.get_item_data(item_id)
 	var effects: Dictionary = d.get("effects", {})
@@ -300,6 +321,9 @@ func apply_medical_effects(item_id: String) -> bool:
 		cured = true
 	if (effects.get("cures_infection", false) or int(effects.get("infection", 0)) < 0 or item_id in ["항생제", "고급 치료킷", "수술 키트"]) and is_infected:
 		is_infected = false
+		cured = true
+	if effects.has("damage_reduction_duration") or item_id == "진통제":
+		apply_painkiller_buff(float(effects.get("damage_reduction_duration", 60.0)), float(effects.get("damage_reduction", 0.25)))
 		cured = true
 	stats_changed.emit()
 	return cured
@@ -392,6 +416,12 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 			is_fractured = false
 		if effects.get("cures_infection", false) or float(effects.get("infection", 0)) < 0.0:
 			is_infected = false
+		var pk_suffix := ""
+		if effects.has("damage_reduction_duration") or item_id == "진통제":
+			var dur: float = float(effects.get("damage_reduction_duration", 60.0))
+			var red: float = float(effects.get("damage_reduction", 0.25))
+			apply_painkiller_buff(dur, red)
+			pk_suffix = " (%d초간 피해 -%d%%)" % [int(round(dur)), int(round(red * 100.0))]
 
 		if inventory_grid:
 			var cur_item: Dictionary = {}
@@ -421,7 +451,7 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 		if SoundManager:
 			SoundManager.play("menu_select")
 		if EventBus and EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💊 %s%s 사용 완료!" % [log_prefix, item_name])
+			EventBus.event_logged.emit("💊 %s%s 사용 완료!%s" % [log_prefix, item_name, pk_suffix])
 	)
 	if SoundManager:
 		SoundManager.play("menu_select")

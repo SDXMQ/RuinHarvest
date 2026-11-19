@@ -7,12 +7,12 @@ script = ExtResource("1")
 id = "진통제"
 name = "진통제"
 category = 2
-description = "강력한 진통제. 통증을 잠시 잊게 해준다."
+description = "강력한 진통제. 체력을 회복하고 60초간 받는 피해를 25% 감소시킨다."
 stackable = true
 max_stack = 5
 weight = 0.1
 rarity = 0.35
 value = 2500
 effects = {
-"hp": 25, "stress": -15
+"hp": 25, "stress": -15, "damage_reduction": 0.25, "damage_reduction_duration": 60.0
 }

@@ -48,7 +48,6 @@ func switch_weapon_slot(slot_name: String) -> void:
 	if weapon_dict.is_empty():
 		equipped_weapon_data = {}
 		equipped_weapon = "맨손"
-		EventBus.event_logged.emit("✋ [%s] 슬롯: 비어있음 (맨손)" % get_slot_display_name(slot_name))
 	elif slot_name == "throwable":
 		var t_id = weapon_dict.get("id", "수류탄")
 		equipped_weapon = weapon_dict.get("name", t_id)
@@ -57,7 +56,6 @@ func switch_weapon_slot(slot_name: String) -> void:
 			"amount": weapon_dict.get("amount", 1),
 			"computed_stats": {"damage": 145.0, "rpm": 60, "noise_radius": 800.0}
 		}
-		EventBus.event_logged.emit("💣 투척 무기: %s (x%d)" % [equipped_weapon, weapon_dict.get("amount", 1)])
 	else:
 		var rec_id = weapon_dict.get("id", "")
 		if not weapon_dict.has("parts"):
@@ -80,7 +78,6 @@ func switch_weapon_slot(slot_name: String) -> void:
 			equipped_weapon_data["durability"] = weapon_dict["durability"]
 		if weapon_dict.has("max_durability"):
 			equipped_weapon_data["max_durability"] = weapon_dict["max_durability"]
-		EventBus.event_logged.emit("🔫 무기 전환: %s [%s]" % [w_name, get_slot_display_name(slot_name)])
 			
 	weapon_changed.emit()
 	if player and player.has_signal("stats_changed"):

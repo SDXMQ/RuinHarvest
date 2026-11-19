@@ -407,7 +407,9 @@ static func update_player_hud(
 	if thirst_bar:
 		thirst_bar.value = player.thirst
 
-	var has_status: bool = bool(player.is_bleeding or player.is_fractured or player.is_infected)
+	var pk_timer: float = float(player.get("painkiller_timer")) if player.get("painkiller_timer") != null else 0.0
+	var pk_red: float = float(player.get("painkiller_damage_reduction")) if player.get("painkiller_damage_reduction") != null else 0.0
+	var has_status: bool = bool(player.is_bleeding or player.is_fractured or player.is_infected or pk_timer > 0.0)
 	if badge_bleed:
 		badge_bleed.visible = player.is_bleeding
 	if badge_fracture:
@@ -415,11 +417,42 @@ static func update_player_hud(
 	if badge_biohazard:
 		badge_biohazard.visible = player.is_infected
 
+	var badges_parent := badge_bleed.get_parent() if is_instance_valid(badge_bleed) else null
+	if badges_parent:
+		var pk_badge := badges_parent.get_node_or_null("PainkillerBadge") as PanelContainer
+		if pk_timer > 0.0:
+			if not pk_badge:
+				pk_badge = PanelContainer.new()
+				pk_badge.name = "PainkillerBadge"
+				var sb := StyleBoxFlat.new()
+				sb.bg_color = Color(0.08, 0.22, 0.24, 0.92)
+				sb.set_border_width_all(1)
+				sb.border_color = Color(0.28, 0.90, 0.78, 0.90)
+				sb.set_corner_radius_all(3)
+				sb.content_margin_left = 6
+				sb.content_margin_right = 6
+				sb.content_margin_top = 2
+				sb.content_margin_bottom = 2
+				pk_badge.add_theme_stylebox_override("panel", sb)
+				var pk_lbl := Label.new()
+				pk_lbl.name = "Label"
+				pk_lbl.add_theme_font_size_override("font_size", 10)
+				pk_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.85))
+				pk_badge.add_child(pk_lbl)
+				badges_parent.add_child(pk_badge)
+			pk_badge.visible = true
+			var lbl := pk_badge.get_node_or_null("Label") as Label
+			if lbl:
+				lbl.text = "💊 진통제 %ds (-%d%%)" % [ceili(pk_timer), int(round(pk_red * 100.0))]
+		elif pk_badge:
+			pk_badge.visible = false
+
 	if status_label:
 		var statuses: Array[String] = []
 		if player.is_bleeding: statuses.append("출혈")
 		if player.is_fractured: statuses.append("골절")
 		if player.is_infected: statuses.append("감염")
+		if pk_timer > 0.0: statuses.append("진통제(%ds)" % ceili(pk_timer))
 		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
 		status_label.visible = not has_status
 

@@ -301,6 +301,8 @@ func _ready() -> void:
 		player.is_bleeding = s.get("is_bleeding", false)
 		player.is_fractured = s.get("is_fractured", false)
 		player.is_infected = s.get("is_infected", false)
+		player.painkiller_timer = float(s.get("painkiller_timer", 0.0))
+		player.painkiller_damage_reduction = float(s.get("painkiller_damage_reduction", 0.0))
 		player.set_flashlight(s.get("flashlight_enabled", true))
 		GameManager.current_world_data.erase("player_stats")
 		

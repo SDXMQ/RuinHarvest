@@ -2463,6 +2463,9 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 	if effects.get("cures_bleeding", false): player.is_bleeding = false
 	if effects.get("cures_fracture", false): player.is_fractured = false
 	if effects.get("cures_infection", false) or effects.get("infection", 0) < 0: player.is_infected = false
+	if effects.has("damage_reduction_duration") or str(item.get("id", "")) == "진통제":
+		if player.has_method("apply_painkiller_buff"):
+			player.apply_painkiller_buff(float(effects.get("damage_reduction_duration", 60.0)), float(effects.get("damage_reduction", 0.25)))
 	
 	player.stats_changed.emit()
 	if SoundManager: SoundManager.play("menu_select")

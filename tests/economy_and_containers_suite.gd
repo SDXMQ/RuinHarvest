@@ -25,6 +25,7 @@ func run_all() -> void:
 	await _test_hideout_to_raid_pouch_and_inventory_window_guards()
 	await _test_popup_rebind_and_sort_survival()
 	await _test_recursive_container_gameplay_integrations()
+	await _test_261118_play_feedback_regressions()
 
 	print("=== Summary: %d passed, %d failed ===" % [_passed, _failed])
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -969,4 +970,173 @@ func _test_recursive_container_gameplay_integrations() -> void:
 	r_grid.queue_free()
 	bag_mat_grid.queue_free()
 	part_case_grid.queue_free()
+	await get_tree().process_frame
+
+func _test_261118_play_feedback_regressions() -> void:
+	print("-- [Test 11] 261118 Play Feedback Regressions (Fonts, Hideout UI, WB Confirm, Map/Inv Live, Painkiller, Silent Switch) --")
+	var root := get_tree().get_root()
+
+	# 1. Display / Fonts & Settings UI
+	var font_imp := FileAccess.get_file_as_string("res://assets/fonts/Galmuri11.ttf.import")
+	_assert(font_imp.contains("oversampling=0.0") and font_imp.contains("antialiasing=1"), "Galmuri11.ttf.import uses dynamic oversampling=0.0 & antialiasing=1")
+
+	var settings_win: Control = load("res://scenes/ui/settings_window.tscn").instantiate()
+	_assert(settings_win.process_mode == Node.PROCESS_MODE_ALWAYS, "SettingsWindow has PROCESS_MODE_ALWAYS")
+	settings_win.free()
+
+	var main_menu: Control = load("res://scenes/main_menu/main_menu.tscn").instantiate()
+	_assert(main_menu.has_node("VBoxContainer/SettingsButton"), "MainMenu exposes SettingsButton")
+	main_menu.free()
+
+	# 2. Hideout: SettingsBtn, Paperdoll, Dynamic Grids, Traders Buy/Sell Split & Toggle, Market Guide & Fit Grids
+	var hw_data := _make_test_world_data()
+	hw_data["player"]["rubles"] = 80000
+	hw_data["hideout"]["stash"] = [
+		{"uid": InventoryGrid.next_uid(), "id": "금시계", "amount": 1, "w": 1, "h": 1, "x": 0, "y": 0},
+		{"uid": InventoryGrid.next_uid(), "id": "고철", "amount": 5, "w": 1, "h": 1, "x": 1, "y": 0},
+		{"uid": InventoryGrid.next_uid(), "id": "붕대", "amount": 2, "w": 1, "h": 1, "x": 2, "y": 0}
+	]
+	GameManager.current_world_data = hw_data.duplicate(true)
+	var hideout: Control = load("res://scenes/hideout/hideout.tscn").instantiate()
+	root.add_child(hideout)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	_assert(hideout.has_node("TopBar/TopToolBar/SettingsBtn"), "Hideout TopToolBar exposes SettingsBtn")
+	_assert(is_instance_valid(hideout.character_paperdoll_preview), "Hideout StashTab created Minecraft-style character paperdoll preview")
+	hideout.equipment_data["vest"] = {"id": "2레벨_방탄복", "name": "2레벨 방탄복"}
+	hideout._update_equipment_ui()
+	_assert(String(hideout.character_paperdoll_preview.equipment_data.get("vest", {}).get("id", "")) == "2레벨_방탄복", "Paperdoll preview syncs equipped vest dynamically")
+
+	var wide_probe := Control.new()
+	wide_probe.size = Vector2(460.0, 320.0)
+	var fitted_cell: float = hideout._compute_fit_cell_size(wide_probe, 6, InventoryUIHelper.CELL_SIZE, 56.0)
+	wide_probe.free()
+	_assert(fitted_cell > InventoryUIHelper.CELL_SIZE, "Hideout _compute_fit_cell_size scales grid cells larger on wide panels (got %.1f)" % fitted_cell)
+
+	var p_scroll := hideout.player_grid_control.get_parent() as ScrollContainer
+	var s_scroll := hideout.stash_grid_control.get_parent() as ScrollContainer
+	_assert(p_scroll != null and p_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "StashTab PlayerPanel Scroll disables horizontal scrollbar")
+	_assert(s_scroll != null and s_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "StashTab StashPanel Scroll disables horizontal scrollbar")
+
+	_assert(hideout.trader_mode_tabs != null and hideout.trader_mode_tabs.get_tab_count() == 2, "TradersTab splits Buy and Sell into 2 sub-tabs")
+	var shop_scroll := hideout.trader_items_vbox.get_parent() as ScrollContainer
+	_assert(shop_scroll != null and shop_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "TradersTab Shop scroll disables horizontal scrollbar")
+
+	hideout._auto_select_bulk_sell("valuables")
+	var selected_val_cnt: int = hideout.selected_sell_uids.size()
+	hideout._auto_select_bulk_sell("valuables")
+	_assert(selected_val_cnt > 0 and hideout.selected_sell_uids.is_empty(), "TradersTab '환금템 모두 담기' toggles select and deselect cleanly")
+
+	hideout._auto_select_bulk_sell("non_gear")
+	var selected_ng_cnt: int = hideout.selected_sell_uids.size()
+	hideout._auto_select_bulk_sell("non_gear")
+	_assert(selected_ng_cnt > selected_val_cnt and hideout.selected_sell_uids.is_empty(), "TradersTab '장비/무기 제외 모두 담기' toggles select and deselect cleanly")
+
+	var m_guide: Node = hideout.find_child("MarketGuidePanel", true, false)
+	var m_shop_scroll := hideout.market_items_vbox.get_parent() as ScrollContainer
+	_assert(m_guide != null, "MarketTab displays MarketGuidePanel consignment instructions")
+	_assert(m_shop_scroll != null and m_shop_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "MarketTab listings scroll disables horizontal scrollbar")
+	_assert(hideout.market_grids_scroll != null and hideout.market_grids_scroll.horizontal_scroll_mode == ScrollContainer.SCROLL_MODE_DISABLED, "MarketTab register grids scroll disables horizontal scrollbar")
+
+	# 3. Workbench Confirmation Dialogs (Preset Purchase & Weapon/Armor Repairs)
+	var wb: Control = hideout.workbench
+	GameManager.current_world_data["player"]["rubles"] = 500000
+	wb.equipment_data["vest"] = {"id": "1레벨_방탄복", "name": "1레벨 방탄복", "durability": 20.0, "max_durability": 40.0}
+	wb.wb_selected_weapon = WeaponPartsDatabase.create_default_weapon("M4_리시버")
+	wb.wb_selected_weapon["durability"] = 40.0
+	wb.wb_selected_weapon["max_durability"] = 100.0
+	wb._apply_workbench_preset(wb.WEAPON_PRESETS["M4_리시버"][0])
+	var rubles_before_preset: int = int(GameManager.current_world_data["player"]["rubles"])
+	wb._buy_and_assemble_preset()
+	_assert(is_instance_valid(wb.active_confirm_dialog) and int(GameManager.current_world_data["player"]["rubles"]) == rubles_before_preset, "Workbench preset buy waits for confirmation dialog before charging RUB")
+	var preset_cbtn := wb.active_confirm_dialog.find_child("ConfirmBtn", true, false) as Button
+	preset_cbtn.pressed.emit()
+	_assert(not is_instance_valid(wb.active_confirm_dialog) and int(GameManager.current_world_data["player"]["rubles"]) < rubles_before_preset, "Confirming preset dialog deducts missing parts RUB")
+
+	var rubles_before_w_rep: int = int(GameManager.current_world_data["player"]["rubles"])
+	wb._repair_selected_weapon(false)
+	_assert(is_instance_valid(wb.active_confirm_dialog) and int(GameManager.current_world_data["player"]["rubles"]) == rubles_before_w_rep, "Workbench weapon repair waits for confirmation dialog")
+	var w_cbtn := wb.active_confirm_dialog.find_child("ConfirmBtn", true, false) as Button
+	w_cbtn.pressed.emit()
+	_assert(int(GameManager.current_world_data["player"]["rubles"]) < rubles_before_w_rep and absf(float(wb.wb_selected_weapon.get("durability", 0.0)) - 100.0) < 0.01, "Confirming weapon repair deducts RUB and restores durability")
+
+	var rubles_before_a_rep: int = int(GameManager.current_world_data["player"]["rubles"])
+	wb._repair_equipped_armor("vest", false)
+	_assert(is_instance_valid(wb.active_confirm_dialog) and int(GameManager.current_world_data["player"]["rubles"]) == rubles_before_a_rep, "Workbench armor repair waits for confirmation dialog")
+	var a_cbtn := wb.active_confirm_dialog.find_child("ConfirmBtn", true, false) as Button
+	a_cbtn.pressed.emit()
+	_assert(int(GameManager.current_world_data["player"]["rubles"]) < rubles_before_a_rep and absf(float(wb.equipment_data["vest"].get("durability", 0.0)) - 40.0) < 0.01, "Confirming armor repair deducts RUB and restores armor durability")
+
+	hideout.queue_free()
+	await get_tree().process_frame
+
+	# 4. MapWindow Pin Panning, Recenter & MainWorld Live Time + Player Painkiller & Silent Switch
+	var mw_ui: Control = load("res://scenes/ui/map_window.tscn").instantiate()
+	root.add_child(mw_ui)
+	await get_tree().process_frame
+	_assert(mw_ui.process_mode == Node.PROCESS_MODE_ALWAYS, "MapWindow uses PROCESS_MODE_ALWAYS")
+	mw_ui.setup(Vector2(1000.0, 500.0), 0.0, [], "주거지")
+	var base_pin: Vector2 = mw_ui.get_player_screen_pos()
+	mw_ui.map_pan_offset = Vector2(90.0, -35.0)
+	var panned_pin: Vector2 = mw_ui.get_player_screen_pos()
+	_assert(panned_pin.distance_to(base_pin + Vector2(90.0, -35.0)) < 0.01, "MapWindow player pin follows map_pan_offset")
+	mw_ui.recenter_on_player()
+	_assert(mw_ui.get_player_screen_pos().distance_to(base_pin) < 0.01, "MapWindow recenter_on_player snaps pin back to center")
+	mw_ui.queue_free()
+	await get_tree().process_frame
+
+	GameManager.current_world_data = _make_test_world_data()
+	get_tree().paused = false
+	var world: Node2D = load("res://scenes/world/main_world.tscn").instantiate()
+	root.add_child(world)
+	await get_tree().process_frame
+
+	world._open_map_window()
+	await get_tree().process_frame
+	_assert(not get_tree().paused and world.player.ui_input_blocked, "MainWorld keeps game unpaused and blocks player input while MapWindow is open")
+	world.current_map_window._on_close_pressed()
+	await get_tree().process_frame
+	_assert(not world.player.ui_input_blocked, "Closing MapWindow re-enables player input")
+
+	world._open_inventory_window()
+	await get_tree().process_frame
+	_assert(not get_tree().paused and world.player.ui_input_blocked, "MainWorld keeps game unpaused and blocks player input while InventoryWindow is open")
+	world.current_inventory_window._on_close_pressed()
+	await get_tree().process_frame
+	_assert(not world.player.ui_input_blocked, "Closing InventoryWindow re-enables player input")
+
+	# 5. Painkiller 60s Damage Reduction Buff
+	var p_node: CharacterBody2D = world.player
+	p_node.equipment["helmet"] = {}
+	p_node.equipment["vest"] = {}
+	p_node.survival_stats.base_armor_defense = 0.0
+	var pk_item: Dictionary = {"uid": InventoryGrid.next_uid(), "id": "진통제", "amount": 1, "w": 1, "h": 1}
+	p_node.inventory_grid.auto_add_item("진통제", 1, pk_item)
+	p_node.use_consumable_item(pk_item)
+	p_node.complete_channeling()
+	_assert(p_node.painkiller_timer >= 59.0 and absf(p_node.painkiller_damage_reduction - 0.25) < 0.001, "Using 진통제 applies 60s 25%% damage reduction buff")
+	p_node.hp = 100.0
+	p_node.survival_stats.take_damage(40.0, "test")
+	_assert(absf(p_node.hp - 70.0) < 0.05, "Painkiller buff reduces 40.0 incoming damage to 30.0 (hp=70.0)")
+	p_node.painkiller_timer = 0.05
+	p_node.survival_stats._process(0.1)
+	_assert(p_node.painkiller_timer == 0.0 and p_node.painkiller_damage_reduction == 0.0, "Painkiller buff expires when timer reaches 0")
+	p_node.hp = 100.0
+	p_node.survival_stats.take_damage(40.0, "test")
+	_assert(absf(p_node.hp - 60.0) < 0.05, "Without Painkiller buff 40.0 damage deals full 40.0 (hp=60.0)")
+
+	# 6. Weapon Switch Does Not Emit Event Log
+	var switch_logs: Array[String] = []
+	var switch_cb := func(msg: String): switch_logs.append(msg)
+	EventBus.event_logged.connect(switch_cb)
+	p_node.weapon_handler.switch_weapon_slot("primary1")
+	p_node.weapon_handler.switch_weapon_slot("primary2")
+	p_node.weapon_handler.switch_weapon_slot("sidearm")
+	p_node.weapon_handler.switch_weapon_slot("throwable")
+	if EventBus.event_logged.is_connected(switch_cb):
+		EventBus.event_logged.disconnect(switch_cb)
+	_assert(switch_logs.is_empty(), "Switching weapon slots emits 0 EventBus.event_logged notifications")
+
+	world.queue_free()
 	await get_tree().process_frame

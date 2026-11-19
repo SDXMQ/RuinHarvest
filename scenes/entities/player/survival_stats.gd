@@ -24,6 +24,13 @@ var is_infected: bool:
 var is_fractured: bool = false
 var is_exhausted: bool = false
 var is_god_mode: bool = false
+var painkiller_timer: float = 0.0
+var painkiller_damage_reduction: float = 0.0
+
+func apply_painkiller_buff(duration: float = 60.0, reduction: float = 0.25) -> void:
+	painkiller_timer = maxf(painkiller_timer, duration)
+	painkiller_damage_reduction = maxf(painkiller_damage_reduction, clampf(reduction, 0.0, 0.75))
+	stats_changed.emit()
 
 func get_effective_max_stamina() -> float:
 	return max_stamina * 0.65 if _is_infected else max_stamina
@@ -88,6 +95,12 @@ func _process(delta: float) -> void:
 		stats_changed.emit()
 		EventBus.player_died.emit()
 		return
+
+	if painkiller_timer > 0.0:
+		painkiller_timer = maxf(0.0, painkiller_timer - delta)
+		if painkiller_timer <= 0.0:
+			painkiller_damage_reduction = 0.0
+			stats_changed.emit()
 		
 	_ui_sync_timer += delta
 	if _ui_sync_timer >= 0.2:
@@ -111,7 +124,10 @@ func take_damage(amount: float, source: String) -> void:
 	if is_god_mode: return
 	var def = get_total_armor_defense()
 	var dmg_reduction = def / (def + 80.0)
-	var actual_damage = max(1.0, amount * (1.0 - dmg_reduction))
+	var mitigated: float = amount * (1.0 - dmg_reduction)
+	if painkiller_timer > 0.0 and painkiller_damage_reduction > 0.0:
+		mitigated *= (1.0 - clampf(painkiller_damage_reduction, 0.0, 0.75))
+	var actual_damage = max(1.0, mitigated)
 	hp = max(0.0, hp - actual_damage)
 	
 	# 피격 시 착용 중인 vest와 helmet의 durability를 피격 데미지 비례(amount * 0.35)로 차감
