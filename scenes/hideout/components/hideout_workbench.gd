@@ -1387,7 +1387,7 @@ func _on_workbench_preview_draw() -> void:
 	wb_preview.draw_line(Vector2(center.x, center.y - 25), Vector2(center.x, center.y + 25), Color(0.2, 0.5, 0.7, 0.5), 1.0)
 	
 	if wb_selected_weapon.is_empty():
-		var font = ThemeDB.fallback_font
+		var font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
 		wb_preview.draw_string(font, center + Vector2(-60, 5), "총기를 선택해주세요", HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color(0.6, 0.7, 0.8))
 		return
 		

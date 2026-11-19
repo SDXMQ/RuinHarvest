@@ -462,7 +462,7 @@ func _on_hud_overlay_draw() -> void:
 	# 5. 월드 플로팅 텍스트 및 전술 상태 팝업 (플레이어 회전에 무관하게 정방향 표시)
 	if floating_texts.size() > 0:
 		_hud_overlay.draw_set_transform(Vector2(0.0, -position.y), counter_rot, Vector2.ONE)
-		var font := ThemeDB.fallback_font
+		var font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
 		for idx in range(floating_texts.size()):
 			var ft = floating_texts[idx]
 			var t := clampf(float(ft["elapsed"]) / float(ft["duration"]), 0.0, 1.0)

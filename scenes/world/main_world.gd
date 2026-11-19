@@ -423,33 +423,37 @@ func _ready() -> void:
 	if EventBus.has_signal("player_died") and not EventBus.player_died.is_connected(_close_non_pausing_modals):
 		EventBus.player_died.connect(_close_non_pausing_modals)
 	
+	var is_sandbox: bool = GameManager and GameManager.is_sandbox_mode()
 	if EventBus.has_signal("event_logged"):
-		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
 		if is_sandbox:
 			EventBus.event_logged.emit("🛠️ 샌드박스 모드: [F1] 키를 눌러 모든 무기/부품을 소환할 수 있습니다.")
 		else:
-			EventBus.event_logged.emit("★ 레이드 시작: 탈출 지점을 찾아 안전하게 탈출하십시오. [F1: 치트/스포너]")
+			EventBus.event_logged.emit("★ 레이드 시작: 탈출 지점을 찾아 안전하게 탈출하십시오.")
 	
 	GameManager.current_state = GameManager.GameState.IN_GAME
 	
 	# 작전 개시 및 초기 상태 안내 로그 출력
-	var raid_mins = int(round(raid_total_time / 60.0))
-	_on_event_logged("★ [작전 개시] %d분 생존 레이드가 시작되었습니다." % raid_mins)
+	if raid_total_time >= 90000.0 * 60.0 or (GameManager and GameManager.raid_duration_minutes >= 90000.0):
+		_on_event_logged("★ [작전 개시] 무제한 시간 샌드박스 레이드가 시작되었습니다.")
+	else:
+		var raid_mins = int(round(raid_total_time / 60.0))
+		_on_event_logged("★ [작전 개시] %d분 생존 레이드가 시작되었습니다." % raid_mins)
 	if WeatherSystem:
 		_on_event_logged("🌦️ 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
 		
-	# 화면 우상단 샌드박스/치트 도구 버튼 추가
-	var tool_btn = Button.new()
-	tool_btn.name = "SandboxToolBtn"
-	tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
-	tool_btn.focus_mode = Control.FOCUS_NONE
-	tool_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	tool_btn.offset_left = -160.0
-	tool_btn.offset_top = 10.0
-	tool_btn.offset_right = -10.0
-	tool_btn.offset_bottom = 44.0
-	tool_btn.pressed.connect(_open_item_spawner)
-	$UI.add_child(tool_btn)
+	# 화면 우상단 샌드박스/치트 도구 버튼은 샌드박스 모드에서만 노출
+	if is_sandbox:
+		var tool_btn = Button.new()
+		tool_btn.name = "SandboxToolBtn"
+		tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
+		tool_btn.focus_mode = Control.FOCUS_NONE
+		tool_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+		tool_btn.offset_left = -160.0
+		tool_btn.offset_top = 10.0
+		tool_btn.offset_right = -10.0
+		tool_btn.offset_bottom = 44.0
+		tool_btn.pressed.connect(_open_item_spawner)
+		$UI.add_child(tool_btn)
 	HudTacticalHelper.style_status_badges([badge_bleed, badge_fracture, badge_biohazard])
 	
 	if ResponsiveManager:
@@ -646,10 +650,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			_on_event_logged("⚠️ 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
 		get_viewport().set_input_as_handled()
 		
-	# 크리에이티브 아이템 스포너 열기 (F1 키)
-	if event is InputEventKey and event.physical_keycode == KEY_F1 and event.pressed:
-		_open_item_spawner()
-		get_viewport().set_input_as_handled()
+	# 크리에이티브 아이템 스포너 열기 (F1 키 — 샌드박스 모드 전용)
+	if event is InputEventKey and event.physical_keycode == KEY_F1 and event.pressed and not event.echo:
+		if GameManager and GameManager.is_sandbox_mode():
+			_open_item_spawner()
+			get_viewport().set_input_as_handled()
 
 func player_has_radio() -> bool:
 	if not player or not player.inventory_grid:
@@ -778,6 +783,8 @@ func _on_radio_scan_requested(scan_type: String) -> void:
 			_on_event_logged("📻 [군사 암호 감청] 보스 생체 신호 소멸 확인.")
 
 func _open_item_spawner() -> void:
+	if not (GameManager and GameManager.is_sandbox_mode()):
+		return
 	if current_spawner_window != null: return
 	get_tree().paused = true
 	current_spawner_window = ItemSpawnerScene.instantiate()
@@ -879,6 +886,7 @@ func _on_compass_draw() -> void:
 			compass_bar.draw_rect(Rect2(sx, h - 1.0 - tick_h, 1.0, tick_h), Color(0.42, 0.48, 0.58, 0.75), true)
 	
 	# N, E, S, W 방위각 눈금
+	var compass_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
 	var cardinal_dirs = {
 		0.0: "E",
 		90.0: "S",
@@ -894,7 +902,7 @@ func _on_compass_draw() -> void:
 		if abs(diff) <= fov / 2.0:
 			var x = floorf(center_x + diff * pixels_per_deg)
 			compass_bar.draw_rect(Rect2(x - 1.0, h - 7.0, 2.0, 6.0), Color(0.92, 0.68, 0.22, 0.95), true)
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 4, h - 9), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
+			compass_bar.draw_string(compass_font, Vector2(x - 4, h - 9), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
 			
 	# 탈출구 마커 (초록색 다이아몬드)
 	for pt in extraction_points_data:
@@ -946,7 +954,7 @@ func _on_compass_draw() -> void:
 					pt_col = Color(0.2, 0.85, 1.0)
 					txt_col = Color(0.4, 0.9, 1.0)
 			compass_bar.draw_colored_polygon(diamond, pt_col)
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
+			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
 	# 항공 보급품 마커 (주황/붉은 픽셀 박스)
 	for ad in airdrop_points_data:
@@ -960,7 +968,7 @@ func _on_compass_draw() -> void:
 			var x = floorf(center_x + diff * pixels_per_deg)
 			var dist = player.global_position.distance_to(ad["pos"])
 			compass_bar.draw_rect(Rect2(x - 4.0, 5.0, 8.0, 8.0), Color(1.0, 0.45, 0.15), true)
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(x - 14, 22), "📦%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
+			compass_bar.draw_string(compass_font, Vector2(x - 14, 22), "📦%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
 			
 	# 랜드마크 보스 마커 (붉은 왕관/해골 표식)
 	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
@@ -974,7 +982,7 @@ func _on_compass_draw() -> void:
 			var bx = floorf(center_x + b_diff * pixels_per_deg)
 			var b_dist = player.global_position.distance_to(boss_entity.global_position)
 			compass_bar.draw_rect(Rect2(bx - 4.0, 5.0, 8.0, 8.0), Color(0.95, 0.15, 0.2), true)
-			compass_bar.draw_string(ThemeDB.fallback_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
+			compass_bar.draw_string(compass_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
 			
 	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 지원)
 	var objs_to_draw = field_objectives if field_objectives.size() > 0 else ([landmark_objective] if is_instance_valid(landmark_objective) else [])
@@ -991,7 +999,7 @@ func _on_compass_draw() -> void:
 				var o_dist = player.global_position.distance_to(obj_ref.global_position)
 				var icon_str = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "📡"
 				compass_bar.draw_rect(Rect2(ox - 3.0, 6.0, 6.0, 6.0), Color(0.2, 0.88, 1.0), true)
-				compass_bar.draw_string(ThemeDB.fallback_font, Vector2(ox - 16, 22), "%s%.0fm" % [icon_str, o_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
+				compass_bar.draw_string(compass_font, Vector2(ox - 16, 22), "%s%.0fm" % [icon_str, o_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
 
 	# 정중앙 조준 눈금 (픽셀 스텝 역삼각형 포인터)
 	compass_bar.draw_rect(Rect2(center_x - 3.0, 1.0, 6.0, 2.0), Color(1.0, 0.85, 0.2), true)
@@ -1156,8 +1164,12 @@ func _process(delta: float) -> void:
 		if badge_biohazard and badge_biohazard.visible:
 			badge_biohazard.modulate.a = pulse_alpha
 
-		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신
-		if not get_tree().paused and raid_time_remaining > 0:
+		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신 (99999분 이상 설정 시 무제한 표시)
+		var is_unlimited_time: bool = raid_total_time >= 90000.0 * 60.0 or (GameManager and GameManager.raid_duration_minutes >= 90000.0)
+		if is_unlimited_time:
+			if raid_timer_label:
+				raid_timer_label.text = "탈출 시간: 무제한"
+		elif not get_tree().paused and raid_time_remaining > 0:
 			raid_time_remaining -= delta
 			var minutes = int(raid_time_remaining / 60.0)
 			var seconds = int(raid_time_remaining) % 60
@@ -1646,8 +1658,7 @@ func _on_chunk_unloaded(_chunk_pos: Vector2i) -> void:
 
 func _can_instant_extract() -> bool:
 	# 샌드박스 모드에서만 ESC 메뉴를 통한 즉시 안전 탈출 허용 (일반 모드는 인게임 탈출구에서만 가능)
-	var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
-	return is_sandbox
+	return GameManager != null and GameManager.is_sandbox_mode()
 
 func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused

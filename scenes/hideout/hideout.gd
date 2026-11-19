@@ -160,11 +160,13 @@ func _ready() -> void:
 		insurance_btn.pressed.connect(_on_insurance_pressed)
 		top_tools.add_child(insurance_btn)
 		
-		var tool_btn = Button.new()
-		tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
-		tool_btn.custom_minimum_size = Vector2(0, 32)
-		tool_btn.pressed.connect(_open_item_spawner)
-		top_tools.add_child(tool_btn)
+		if GameManager and GameManager.is_sandbox_mode():
+			var tool_btn = Button.new()
+			tool_btn.name = "SandboxToolBtn"
+			tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
+			tool_btn.custom_minimum_size = Vector2(0, 32)
+			tool_btn.pressed.connect(_open_item_spawner)
+			top_tools.add_child(tool_btn)
 		
 		var range_btn = Button.new()
 		range_btn.text = "🎯 사격장 (F2)"
@@ -522,31 +524,20 @@ func _load_data() -> void:
 		var p_items: Array = p_data.get("inventory", []).duplicate(true)
 		var stash_items: Array = w_data.get("hideout", {}).get("stash", []).duplicate(true)
 		
-		# 장비 데이터 로드 (초기 시작 총기는 기본 조립 파츠 및 탄약 완비 상태로 생성)
-		if p_data.has("equipment") and not p_data["equipment"].is_empty():
-			equipment_data = p_data["equipment"].duplicate(true)
+		# 장비 데이터 로드 (최초 새 게임 1회만 기본 스타터 장비 지급, 사망/초기화 이후 재지급 금지)
+		var base_eq: Dictionary = GameManager.create_empty_equipment() if GameManager else {"helmet": {}, "vest": {}, "backpack": {}, "bottom": {}, "primary1": {}, "primary2": {}, "sidearm": {}, "throwable": {}}
+		var p_eq_raw = p_data.get("equipment", {})
+		var p_eq_dict: Dictionary = p_eq_raw if p_eq_raw is Dictionary else {}
+		var is_fresh_uninitialized: bool = (not bool(p_data.get("equipment_initialized", false))) and int(w_data.get("current_day", 1)) <= 1 and int(p_data.get("raids_survived", 0)) <= 0 and (not GameManager or GameManager.last_raid_result.is_empty())
+		if p_eq_dict.is_empty() and is_fresh_uninitialized:
+			equipment_data = GameManager.create_starter_equipment() if GameManager else base_eq.duplicate(true)
+			p_data["equipment"] = equipment_data.duplicate(true)
+			p_data["equipment_initialized"] = true
 		else:
-			var starter_m4 = WeaponPartsDatabase.compute_weapon_from_dict({
-				"id": "M4_리시버",
-				"type": "assembled_weapon",
-				"name": WeaponPartsDatabase.RECEIVERS["M4_리시버"].get("name", "M4A1 카빈 리시버"),
-				"receiver": "M4_리시버",
-				"loaded_ammo": "5.56mm",
-				"parts": {"barrel": "짧은_총열", "optic": "기본_아이언사이트", "magazine": "표준_탄창"},
-				"durability": 100.0
-			})
-			starter_m4["current_magazine_ammo"] = int(starter_m4.get("computed_stats", {}).get("magazine_size", 30))
-			var starter_m9 = WeaponPartsDatabase.create_default_weapon("M9_리시버")
-			equipment_data = {
-				"helmet": {"id": "1레벨_헬멧", "name": "1레벨 오토바이 헬멧"},
-				"vest": {"id": "1레벨_방탄복", "name": "1레벨 경찰 조끼"},
-				"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
-				"bottom": {"id": "운동화", "name": "운동화"},
-				"primary1": starter_m4,
-				"primary2": {},
-				"sidearm": starter_m9,
-				"throwable": {"id": "수류탄", "amount": 2}
-			}
+			equipment_data = p_eq_dict.duplicate(true)
+			for eq_k in base_eq.keys():
+				if not equipment_data.has(eq_k):
+					equipment_data[eq_k] = base_eq[eq_k]
 		
 		# 착용 배낭 및 시설 업그레이드에 맞춰 그리드 크기 먼저 확장
 		_apply_backpack_grid_size()
@@ -3046,7 +3037,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.physical_keycode == KEY_B:
 			_open_weapon_modding_window()
 		elif event.physical_keycode == KEY_F1:
-			_open_item_spawner()
+			if GameManager and GameManager.is_sandbox_mode():
+				_open_item_spawner()
 		elif event.physical_keycode == KEY_F2:
 			_open_shooting_range()
 		elif event.physical_keycode == KEY_TAB or event.physical_keycode == KEY_I:
@@ -3075,6 +3067,8 @@ func _open_inventory_window() -> void:
 		win.window_closed.connect(func(): _on_grid_changed())
 
 func _open_item_spawner() -> void:
+	if not (GameManager and GameManager.is_sandbox_mode()):
+		return
 	var spawner_scene = preload("res://scenes/ui/item_spawner_window.tscn")
 	if spawner_scene:
 		var win = spawner_scene.instantiate()

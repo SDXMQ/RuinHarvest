@@ -363,6 +363,7 @@ func _get_target_defs(w: float, h: float) -> Array:
 func _on_range_canvas_draw() -> void:
 	var w = range_canvas.size.x
 	var h = range_canvas.size.y
+	var range_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
 	
 	# 1. 사격 레인 배경 (벽돌 및 바닥 원근선)
 	range_canvas.draw_rect(Rect2(0, 0, w, h), Color(0.08, 0.10, 0.08))
@@ -405,7 +406,7 @@ func _on_range_canvas_draw() -> void:
 		
 		# 거리 라벨
 		var dist_text = "%s" % t["name"]
-		range_canvas.draw_string(ThemeDB.fallback_font, tp + Vector2(-40.0 * sc, 80.0 * sc), dist_text, HORIZONTAL_ALIGNMENT_CENTER, 80.0 * sc, int(11 * sc + 3), Color(0.9, 0.9, 0.8))
+		range_canvas.draw_string(range_font, tp + Vector2(-40.0 * sc, 80.0 * sc), dist_text, HORIZONTAL_ALIGNMENT_CENTER, 80.0 * sc, int(11 * sc + 3), Color(0.9, 0.9, 0.8))
 
 	# 3. 누적 탄흔(Bullet Holes) 렌더링
 	for h_data in bullet_holes:
@@ -433,7 +434,7 @@ func _on_range_canvas_draw() -> void:
 		range_canvas.draw_line(crosshair_center + Vector2(0, -reticle_r - 12), crosshair_center + Vector2(0, -6), Color(0.2, 1.0, 0.4), 1.5)
 		range_canvas.draw_line(crosshair_center + Vector2(0, 6), crosshair_center + Vector2(0, reticle_r + 12), Color(0.2, 1.0, 0.4), 1.5)
 		range_canvas.draw_circle(crosshair_center, 2.5, Color(1.0, 0.2, 0.2)) # 적색 도트
-		range_canvas.draw_string(ThemeDB.fallback_font, crosshair_center + Vector2(16, -16), "ADS [%.1fx]" % zoom_val, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.2, 1.0, 0.4))
+		range_canvas.draw_string(range_font, crosshair_center + Vector2(16, -16), "ADS [%.1fx]" % zoom_val, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.2, 1.0, 0.4))
 	else:
 		# 비조준 지향사격 모드: 동적 탄착군 분산 원 + 4방향 틱
 		var acc = float(computed_stats.get("accuracy", 75.0))
@@ -451,7 +452,7 @@ func _on_range_canvas_draw() -> void:
 	for ft in floating_texts:
 		var alpha = clamp(ft["life"] / 0.65, 0.0, 1.0)
 		var f_col = Color(ft["color"].r, ft["color"].g, ft["color"].b, alpha)
-		range_canvas.draw_string(ThemeDB.fallback_font, ft["pos"] + Vector2(-20, -8), ft["text"], HORIZONTAL_ALIGNMENT_CENTER, 80, 12, f_col)
+		range_canvas.draw_string(range_font, ft["pos"] + Vector2(-20, -8), ft["text"], HORIZONTAL_ALIGNMENT_CENTER, 80, 12, f_col)
 
 func _on_close_pressed() -> void:
 	queue_free()

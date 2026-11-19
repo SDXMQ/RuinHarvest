@@ -558,5 +558,6 @@ static func draw_pixel_crosshair(ctrl: Control, m_pos: Vector2, spread: float, i
 
 	if is_jammed and floori(float(Time.get_ticks_msec()) / 250.0) % 2 == 0:
 		var jam_pos := Vector2(cx + 16.0, cy + 16.0)
-		ctrl.draw_string(ThemeDB.fallback_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.9))
-		ctrl.draw_string(ThemeDB.fallback_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
+		var jam_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
+		ctrl.draw_string(jam_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.9))
+		ctrl.draw_string(jam_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))

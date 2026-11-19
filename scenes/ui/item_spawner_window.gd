@@ -330,6 +330,8 @@ func _add_raid_time() -> void:
 	var cur_scene = get_tree().current_scene
 	if cur_scene and "raid_time_remaining" in cur_scene:
 		cur_scene.raid_time_remaining += 600.0 # +10분
+		if GameManager:
+			GameManager.raid_duration_minutes += 10.0
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⏳ 레이드 시간 10분 연장 완료!")
 

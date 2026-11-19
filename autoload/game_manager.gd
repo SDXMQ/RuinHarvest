@@ -57,16 +57,60 @@ func _on_enemy_killed(enemy_type: String, faction: String, _pos: Vector2) -> voi
 	if active_wep_id != "":
 		HideoutProgression.record_weapon_kill(current_world_data, active_wep_id, 1)
 
+func create_empty_equipment() -> Dictionary:
+	return {
+		"helmet": {},
+		"vest": {},
+		"backpack": {},
+		"bottom": {},
+		"primary1": {},
+		"primary2": {},
+		"sidearm": {},
+		"throwable": {}
+	}
+
+func create_starter_equipment() -> Dictionary:
+	var starter_m4: Dictionary = WeaponPartsDatabase.compute_weapon_from_dict({
+		"id": "M4_리시버",
+		"type": "assembled_weapon",
+		"name": String(WeaponPartsDatabase.RECEIVERS["M4_리시버"].get("name", "M4A1 카빈 리시버")),
+		"receiver": "M4_리시버",
+		"loaded_ammo": "5.56mm",
+		"parts": {"barrel": "짧은_총열", "optic": "기본_아이언사이트", "magazine": "표준_탄창"},
+		"durability": 100.0
+	})
+	starter_m4["current_magazine_ammo"] = int(starter_m4.get("computed_stats", {}).get("magazine_size", 15))
+	var starter_m9: Dictionary = WeaponPartsDatabase.create_default_weapon("M9_리시버")
+	return {
+		"helmet": {"id": "1레벨_헬멧", "name": "1레벨 오토바이 헬멧"},
+		"vest": {"id": "1레벨_방탄복", "name": "1레벨 경찰 조끼"},
+		"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
+		"bottom": {"id": "운동화", "name": "운동화"},
+		"primary1": starter_m4,
+		"primary2": {},
+		"sidearm": starter_m9,
+		"throwable": {"id": "수류탄", "amount": 2}
+	}
+
+func is_sandbox_mode() -> bool:
+	if not (current_world_data is Dictionary):
+		return false
+	var ws_raw = current_world_data.get("world_settings", {})
+	var ws: Dictionary = ws_raw if ws_raw is Dictionary else {}
+	return String(ws.get("mode", "")) == "sandbox" or bool(ws.get("sandbox_mode", false)) or String(current_world_data.get("difficulty", "")) == "sandbox"
+
 func _process(delta: float) -> void:
-	if current_state == GameState.IN_GAME and not is_paused:
+	if current_state == GameState.IN_GAME and not is_paused and not (get_tree() and get_tree().paused):
 		time_elapsed_in_raid += delta
-		# 레이드 시간 초과 시 MIA(Missing In Action) 처리 (안전 컨테이너 아이템 보존)
-		if time_elapsed_in_raid >= raid_duration_minutes * 60.0:
-			var cur_items: Array = []
-			var p_node = get_tree().get_first_node_in_group("player") if get_tree() else null
-			if p_node and "inventory_grid" in p_node and p_node.inventory_grid:
-				cur_items = p_node.inventory_grid.items.duplicate(true)
-			end_raid("mia", cur_items)
+		var cur_scene: Node = get_tree().current_scene if get_tree() else null
+		# 씬(MainWorld / BuildingInterior) 자체가 raid_time_remaining을 관리하지 않는 경우에만 백업 MIA 타이머 동작
+		if not (cur_scene and "raid_time_remaining" in cur_scene) and raid_duration_minutes < 90000.0:
+			if time_elapsed_in_raid >= raid_duration_minutes * 60.0:
+				var cur_items: Array = []
+				var p_node = get_tree().get_first_node_in_group("player") if get_tree() else null
+				if p_node and "inventory_grid" in p_node and p_node.inventory_grid:
+					cur_items = p_node.inventory_grid.items.duplicate(true)
+				end_raid("mia", cur_items)
 
 # ============================================================
 # 씬 전환 및 플로우 제어
@@ -103,8 +147,7 @@ func toggle_pause() -> void:
 # ============================================================
 func start_new_game(world_settings: Dictionary = {}) -> void:
 	current_save_slot = "save_" + str(Time.get_unix_time_from_system())
-	if world_settings.has("raid_duration_minutes"):
-		raid_duration_minutes = float(world_settings["raid_duration_minutes"])
+	raid_duration_minutes = float(world_settings.get("raid_duration_minutes", 30.0))
 	
 	# 기본 초기 데이터 세팅
 	current_world_data = {
@@ -125,7 +168,8 @@ func start_new_game(world_settings: Dictionary = {}) -> void:
 				{"id": "붕대", "amount": 2, "x": 0, "y": 1},
 				{"id": "생수", "amount": 1, "x": 2, "y": 0}
 			],
-			"equipment": {}
+			"equipment": create_starter_equipment(),
+			"equipment_initialized": true
 		},
 		"hideout": {
 			"stash": [],
@@ -150,6 +194,9 @@ func load_game(slot_name: String) -> void:
 	if not data.is_empty():
 		current_save_slot = slot_name
 		current_world_data = data
+		var ws_raw = data.get("world_settings", {})
+		var ws_load: Dictionary = ws_raw if ws_raw is Dictionary else {}
+		raid_duration_minutes = float(ws_load.get("raid_duration_minutes", 30.0))
 		if FleaMarket:
 			FleaMarket.load_from_save_dict(data.get("flea_market", {}))
 		change_state(GameState.HIDEOUT)
@@ -164,6 +211,10 @@ func start_raid() -> void:
 	raid_power_restored = false
 	if current_world_data is Dictionary:
 		current_world_data["raid_power_restored"] = false
+		var ws_raw = current_world_data.get("world_settings", {})
+		var ws_raid: Dictionary = ws_raw if ws_raw is Dictionary else {}
+		if ws_raid.has("raid_duration_minutes"):
+			raid_duration_minutes = float(ws_raid.get("raid_duration_minutes", raid_duration_minutes))
 	change_state(GameState.RAID_LOADING)
 	TransitionManager.change_scene("res://scenes/world/main_world.tscn", "fade", 1.0)
 	current_state = GameState.IN_GAME
@@ -263,6 +314,7 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 			if item:
 				saved_items.append(item.duplicate(true))
 		current_world_data["player"]["inventory"] = saved_items
+		current_world_data["player"]["equipment_initialized"] = true
 		
 		if current_save_slot != "":
 			SaveManager.save_game(current_world_data, current_save_slot)
@@ -276,23 +328,29 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 				if int(item.get("x", 0)) + w <= 2 and int(item.get("y", 0)) + h <= 2:
 					pouch_items.append(item.duplicate(true))
 		current_world_data["player"]["inventory"] = pouch_items
+		current_world_data["player"]["equipment_initialized"] = true
 		last_raid_result["pouch_saved_count"] = pouch_items.size()
 		
-		# 장비 보험(Insurance) 적용 여부 확인
+		# 장비 보험(Insurance) 적용 여부 확인 (미가입 시 장착 장비 전실, 무료 스타터 재지급 없음)
 		if current_world_data["player"].get("insured", false):
 			current_world_data["player"]["insured"] = false
 			last_raid_result["insurance_claimed"] = true
 		else:
 			last_raid_result["insurance_claimed"] = false
+			current_world_data["player"]["equipment"] = create_empty_equipment()
 		
 		var diff = current_world_data.get("difficulty", "normal")
 		var ws = current_world_data.get("world_settings", {})
 		var is_permadeath = ws.get("permadeath", false) or (GameSettings.DIFFICULTY_PRESETS.has(diff) and GameSettings.DIFFICULTY_PRESETS[diff].get("permadeath", false))
 		if is_permadeath:
+			last_raid_result["permadeath"] = true
 			if current_save_slot != "":
 				SaveManager.delete_save(current_save_slot)
 				current_save_slot = ""
-				current_world_data.clear()
+			current_world_data.clear()
+			EventBus.raid_ended.emit(result, last_raid_result)
+			change_state(GameState.MAIN_MENU)
+			return
 		else:
 			if current_save_slot != "":
 				SaveManager.save_game(current_world_data, current_save_slot)

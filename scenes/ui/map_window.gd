@@ -241,9 +241,11 @@ func _on_map_draw() -> void:
 				map_canvas.draw_texture_rect(chunk_tex, chunk_rect, false)
 		map_canvas.draw_rect(chunk_rect, Color(0.22, 0.32, 0.22, 0.2), false, 1.0)
 	
+	var ui_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
+
 	# 3. 은신처(0,0) 및 동심원 거리계
 	map_canvas.draw_circle(map_origin, 4.0, Color(0.85, 0.85, 0.2))
-	map_canvas.draw_string(ThemeDB.fallback_font, map_origin + Vector2(6, 4), "은신처 (0,0)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.85, 0.85, 0.2, 0.8))
+	map_canvas.draw_string(ui_font, map_origin + Vector2(6, 4), "은신처 (0,0)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.85, 0.85, 0.2, 0.8))
 	
 	map_canvas.draw_arc(map_origin, 1000.0 * scale_factor, 0, TAU, 36, Color(0.35, 0.45, 0.35, 0.25), 1.0)
 	map_canvas.draw_arc(map_origin, 2000.0 * scale_factor, 0, TAU, 48, Color(0.35, 0.45, 0.35, 0.25), 1.0)
@@ -266,7 +268,7 @@ func _on_map_draw() -> void:
 					var b_pos = map_origin + boss_entity.global_position * scale_factor
 					if o_pos.distance_to(b_pos) < 32.0:
 						obj_label_offset = Vector2(11, 14)
-				map_canvas.draw_string(ThemeDB.fallback_font, o_pos + obj_label_offset, "%s %s (%.0fm)" % [o_icon, o_title, dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, o_col)
+				map_canvas.draw_string(ui_font, o_pos + obj_label_offset, "%s %s (%.0fm)" % [o_icon, o_title, dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, o_col)
 				
 	# 5. 항공 보급품 (에어드랍 크레이트)
 	for a_pt in airdrop_points:
@@ -275,7 +277,7 @@ func _on_map_draw() -> void:
 			var dist = player_pos.distance_to(a_pt["pos"])
 			map_canvas.draw_rect(Rect2(a_pos - Vector2(5, 5), Vector2(10, 10)), Color(1.0, 0.65, 0.15))
 			map_canvas.draw_arc(a_pos, 8.5, 0, TAU, 12, Color(1.0, 0.85, 0.3), 1.5)
-			map_canvas.draw_string(ThemeDB.fallback_font, a_pos + Vector2(11, 4), "🪂 %s (%.0fm)" % [a_pt.get("name", "보급품"), dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.75, 0.25))
+			map_canvas.draw_string(ui_font, a_pos + Vector2(11, 4), "🪂 %s (%.0fm)" % [a_pt.get("name", "보급품"), dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.75, 0.25))
 
 	# 5-B. 잠긴 특수 건물(경찰서 무기고·병원 금고·군사 벙커) 자물쇠(🔒) 마커 (무전 스캔 또는 정보 센터 보유 시)
 	if is_vault_intel_unlocked():
@@ -286,7 +288,7 @@ func _on_map_draw() -> void:
 				var v_dist := player_pos.distance_to(vm["pos"])
 				map_canvas.draw_circle(v_pos, 5.5, Color(0.98, 0.78, 0.18, 0.92))
 				map_canvas.draw_arc(v_pos, 8.5, 0, TAU, 14, Color(1.0, 0.9, 0.35), 1.4)
-				map_canvas.draw_string(ThemeDB.fallback_font, v_pos + Vector2(10, 4), "%s (%.0fm)" % [vm["label"], v_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.32))
+				map_canvas.draw_string(ui_font, v_pos + Vector2(10, 4), "%s (%.0fm)" % [vm["label"], v_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.32))
 
 	# 6. 랜드마크 보스 마커
 	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
@@ -302,7 +304,7 @@ func _on_map_draw() -> void:
 					if b_pos.distance_to(o_pos) < 32.0:
 						b_label_offset = Vector2(13, -10)
 						break
-			map_canvas.draw_string(ThemeDB.fallback_font, b_pos + b_label_offset, "💀 랜드마크 보스 (%.0fm)" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
+			map_canvas.draw_string(ui_font, b_pos + b_label_offset, "💀 랜드마크 보스 (%.0fm)" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
 
 	# 7. 조건부 탈출구 3종 마커 (일반 / 차량 / 벙커 + 조건 충족 여부 실시간 시각화)
 	for pt in extraction_points:
@@ -337,17 +339,17 @@ func _on_map_draw() -> void:
 			map_canvas.draw_arc(pt_pos, 11.0, 0, TAU, 16, arc_col, 1.5)
 			var base_text = "[%s] %s (%.0fm)" % [z_tag, pt["name"], dist]
 			var base_col = Color(0.72, 0.72, 0.75, 0.65) if is_locked else z_col
-			map_canvas.draw_string(ThemeDB.fallback_font, pt_pos + Vector2(13, 4), base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, base_col)
+			map_canvas.draw_string(ui_font, pt_pos + Vector2(13, 4), base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, base_col)
 			if is_locked and lock_reason != "":
-				var base_w = ThemeDB.fallback_font.get_string_size(base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
-				map_canvas.draw_string(ThemeDB.fallback_font, pt_pos + Vector2(17.0 + base_w, 4), "[%s]" % lock_reason, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.38, 0.38, 0.85))
+				var base_w = ui_font.get_string_size(base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+				map_canvas.draw_string(ui_font, pt_pos + Vector2(17.0 + base_w, 4), "[%s]" % lock_reason, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.38, 0.38, 0.85))
 			
 	# 8. 플레이어 위치 (드래그 팬 및 실시간 이동이 반영된 실제 월드->화면 좌표)
 	var player_screen: Vector2 = map_origin + player_pos * scale_factor
 	map_canvas.draw_circle(player_screen, 6.0, Color.RED)
 	var forward = Vector2.RIGHT.rotated(player_rot) * 16.0
 	map_canvas.draw_line(player_screen, player_screen + forward, Color.YELLOW, 2.5)
-	map_canvas.draw_string(ThemeDB.fallback_font, player_screen + Vector2(10, -6), "내 위치", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
+	map_canvas.draw_string(ui_font, player_screen + Vector2(10, -6), "내 위치", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
 
 	# 9. 우상단 전술 범례 (TACTICAL LEGEND) 패널
 	var leg_w = 154.0
@@ -356,7 +358,7 @@ func _on_map_draw() -> void:
 	var leg_y = 8.0
 	map_canvas.draw_rect(Rect2(leg_x, leg_y, leg_w, leg_h), Color(0.06, 0.09, 0.07, 0.9))
 	map_canvas.draw_rect(Rect2(leg_x, leg_y, leg_w, leg_h), Color(0.25, 0.38, 0.25, 0.85), false, 1.0)
-	map_canvas.draw_string(ThemeDB.fallback_font, Vector2(leg_x + 8, leg_y + 15), "■ 전술 범례 (LEGEND)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.65, 0.95, 0.65))
+	map_canvas.draw_string(ui_font, Vector2(leg_x + 8, leg_y + 15), "■ 전술 범례 (LEGEND)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.65, 0.95, 0.65))
 	
 	var legend_entries = [
 		{"col": Color.YELLOW, "text": "▲ 플레이어"},
@@ -370,7 +372,7 @@ func _on_map_draw() -> void:
 	var cur_ly = leg_y + 30.0
 	for le in legend_entries:
 		map_canvas.draw_circle(Vector2(leg_x + 12, cur_ly - 3), 3.0, le["col"])
-		map_canvas.draw_string(ThemeDB.fallback_font, Vector2(leg_x + 22, cur_ly), le["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.9, 0.85))
+		map_canvas.draw_string(ui_font, Vector2(leg_x + 22, cur_ly), le["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.9, 0.85))
 		cur_ly += 14.5
 
 func _input(event: InputEvent) -> void:

@@ -277,7 +277,7 @@ func _load_crisp_pixel_font(res_path: String) -> Font:
 			ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
 			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
 			ff.multichannel_signed_distance_field = false
-			ff.allow_system_fallback = false
+			ff.allow_system_fallback = true
 			ff.hinting = TextServer.HINTING_LIGHT
 			ff.generate_mipmaps = false
 			ff.oversampling = 0.0

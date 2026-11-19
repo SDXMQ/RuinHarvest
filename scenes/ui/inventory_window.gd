@@ -211,22 +211,27 @@ func setup(p_player: CharacterBody2D, p_grid: InventoryGrid = null, p_equip: Dic
 	if target_inventory and not target_inventory.inventory_changed.is_connected(_update_container_list):
 		target_inventory.inventory_changed.connect(_update_container_list)
 		
-	if player and "equipment" in player and not player.equipment.is_empty():
+	var base_eq: Dictionary = GameManager.create_empty_equipment() if GameManager else {
+		"helmet": {}, "vest": {}, "backpack": {}, "bottom": {},
+		"primary1": {}, "primary2": {}, "sidearm": {}, "throwable": {}
+	}
+	if player and "equipment" in player:
+		if not (player.equipment is Dictionary) or player.equipment.is_empty():
+			player.equipment = base_eq.duplicate(true)
+		else:
+			for slot_k in base_eq.keys():
+				if not player.equipment.has(slot_k):
+					player.equipment[slot_k] = base_eq[slot_k]
 		equipment_data = player.equipment
-	elif not p_equip.is_empty():
+	elif p_equip is Dictionary and not p_equip.is_empty():
 		equipment_data = p_equip
+		for slot_k in base_eq.keys():
+			if not equipment_data.has(slot_k):
+				equipment_data[slot_k] = base_eq[slot_k]
 	else:
-		equipment_data = {
-			"helmet": {},
-			"vest": {},
-			"backpack": {"id": "1레벨_가방", "name": "1레벨 소형 배낭"},
-			"bottom": {},
-			"primary1": WeaponPartsDatabase.create_default_weapon("M4_리시버"),
-			"primary2": {},
-			"sidearm": WeaponPartsDatabase.create_default_weapon("M9_리시버"),
-			"throwable": {"id": "수류탄", "amount": 2}
-		}
-		if player: player.set("equipment", equipment_data)
+		equipment_data = base_eq.duplicate(true)
+		if player:
+			player.set("equipment", equipment_data)
 		
 	# 무기 부품 키 "parts" 단일화 및 computed_stats 동기화
 	for slot_k in ["primary1", "primary2", "sidearm"]:

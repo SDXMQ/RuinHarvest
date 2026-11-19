@@ -632,7 +632,11 @@ func _process(delta: float) -> void:
 		if badge_biohazard and badge_biohazard.visible:
 			badge_biohazard.modulate.a = pulse_alpha
 
-	if not get_tree().paused and raid_time_remaining > 0:
+	var is_unlimited_time: bool = raid_time_remaining >= 90000.0 * 60.0 or (GameManager and GameManager.raid_duration_minutes >= 90000.0)
+	if is_unlimited_time:
+		if raid_timer_label:
+			raid_timer_label.text = "탈출 시간: 무제한"
+	elif not get_tree().paused and raid_time_remaining > 0:
 		raid_time_remaining -= delta
 		var minutes = int(raid_time_remaining / 60.0)
 		var seconds = int(raid_time_remaining) % 60
@@ -1002,7 +1006,7 @@ func _on_exit_pressed() -> void:
 			if not GameManager.current_world_data.has("player"):
 				GameManager.current_world_data["player"] = {}
 			GameManager.current_world_data["player"]["equipment"] = player.equipment.duplicate(true)
-		var is_sandbox = GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
+		var is_sandbox: bool = GameManager.is_sandbox_mode()
 		if is_sandbox:
 			GameManager.end_raid("survived", get_backpack_items())
 		else:
