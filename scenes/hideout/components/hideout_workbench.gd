@@ -33,6 +33,7 @@ var wb_active_slot: String = ""
 var wb_current_preset_parts: Dictionary = {}
 var wb_missing_preset_cost: int = 0
 var wb_missing_preset_parts: Array = []
+var active_confirm_dialog: Control = null
 
 func _ready() -> void:
 	if wb_preview:
@@ -46,6 +47,121 @@ func setup(p_player_grid: InventoryGrid, p_stash_grid: InventoryGrid, p_equipmen
 	player_grid_mgr = p_player_grid
 	stash_grid_mgr = p_stash_grid
 	equipment_data = p_equipment
+
+func _exit_tree() -> void:
+	_close_confirm_dialog()
+
+func _input(event: InputEvent) -> void:
+	if is_instance_valid(active_confirm_dialog) and event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE:
+			_close_confirm_dialog()
+			if get_viewport():
+				get_viewport().set_input_as_handled()
+
+func _close_confirm_dialog() -> void:
+	if is_instance_valid(active_confirm_dialog):
+		active_confirm_dialog.queue_free()
+	active_confirm_dialog = null
+
+func _get_dialog_mount_parent() -> Node:
+	var cur: Node = self
+	var highest_ctrl: Control = self
+	while cur.get_parent() != null:
+		cur = cur.get_parent()
+		if cur is Window:
+			break
+		if cur is Control:
+			highest_ctrl = cur as Control
+	return highest_ctrl
+
+func _show_confirm_dialog(title_text: String, body_text: String, confirm_label: String, on_confirm: Callable) -> void:
+	_close_confirm_dialog()
+	var overlay := ColorRect.new()
+	overlay.name = "WorkbenchConfirmDialog"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.color = Color(0.0, 0.0, 0.0, 0.62)
+	overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	overlay.z_index = 280
+	overlay.gui_input.connect(func(ev: InputEvent):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_RIGHT:
+			_close_confirm_dialog()
+	)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.custom_minimum_size = Vector2(400, 0)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.09, 0.11, 0.15, 0.98)
+	sb.set_border_width_all(2)
+	sb.border_color = Color(0.95, 0.72, 0.25, 0.90)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 18
+	sb.content_margin_right = 18
+	sb.content_margin_top = 14
+	sb.content_margin_bottom = 14
+	panel.add_theme_stylebox_override("panel", sb)
+	center.add_child(panel)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 10)
+	panel.add_child(vbox)
+
+	var title_lbl := Label.new()
+	title_lbl.name = "ConfirmTitleLabel"
+	title_lbl.text = title_text
+	if PixelAssetManager:
+		title_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+	title_lbl.add_theme_font_size_override("font_size", 14)
+	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
+	vbox.add_child(title_lbl)
+
+	var body_lbl := Label.new()
+	body_lbl.name = "ConfirmBodyLabel"
+	body_lbl.text = body_text
+	body_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	body_lbl.add_theme_font_size_override("font_size", 12)
+	body_lbl.add_theme_color_override("font_color", Color(0.88, 0.92, 0.96))
+	vbox.add_child(body_lbl)
+
+	var sep := HSeparator.new()
+	vbox.add_child(sep)
+
+	var btn_row := HBoxContainer.new()
+	btn_row.alignment = BoxContainer.ALIGNMENT_END
+	btn_row.add_theme_constant_override("separation", 10)
+	vbox.add_child(btn_row)
+
+	var cancel_btn := Button.new()
+	cancel_btn.name = "CancelBtn"
+	cancel_btn.theme_type_variation = &"SmallButton"
+	cancel_btn.custom_minimum_size = Vector2(96, 32)
+	cancel_btn.text = "취소"
+	cancel_btn.pressed.connect(func():
+		if SoundManager: SoundManager.play("menu_move")
+		_close_confirm_dialog()
+	)
+	btn_row.add_child(cancel_btn)
+
+	var confirm_btn := Button.new()
+	confirm_btn.name = "ConfirmBtn"
+	confirm_btn.theme_type_variation = &"PrimaryButton"
+	confirm_btn.custom_minimum_size = Vector2(128, 32)
+	confirm_btn.text = confirm_label
+	confirm_btn.pressed.connect(func():
+		_close_confirm_dialog()
+		if on_confirm.is_valid():
+			on_confirm.call()
+	)
+	btn_row.add_child(confirm_btn)
+
+	active_confirm_dialog = overlay
+	_get_dialog_mount_parent().add_child(overlay)
+	if SoundManager:
+		SoundManager.play("menu_select")
 
 # ============================================================
 const WEAPON_PRESETS = {
@@ -755,7 +871,40 @@ func _repair_selected_weapon(use_scrap: bool) -> void:
 	var cur_dur = float(wb_selected_weapon.get("durability", max_dur))
 	if max_dur - cur_dur <= 0.1:
 		return
-		
+
+	var w_name := str(wb_selected_weapon.get("name", w_meta.get("name", w_id)))
+	if use_scrap:
+		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
+		if _get_total_scrap_count() < scrap_cost:
+			return
+		_show_confirm_dialog(
+			"🔧 무기 수리 확인",
+			"%s 내구도(%.0f → %.0f)를 복구하시겠습니까?\n소모 비용: 고철 %d개" % [w_name, cur_dur, max_dur, scrap_cost],
+			"고철 %d개 소모 수리" % scrap_cost,
+			func(): _execute_repair_selected_weapon(true)
+		)
+	else:
+		var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
+		var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+		if cur_rubles < rub_cost:
+			return
+		_show_confirm_dialog(
+			"🔧 무기 수리 확인",
+			"%s 내구도(%.0f → %.0f)를 수리하시겠습니까?\n소모 비용: %d RUB (보유: %d RUB)" % [w_name, cur_dur, max_dur, rub_cost, cur_rubles],
+			"%d RUB 결제 수리" % rub_cost,
+			func(): _execute_repair_selected_weapon(false)
+		)
+
+func _execute_repair_selected_weapon(use_scrap: bool) -> void:
+	if wb_selected_weapon.is_empty():
+		return
+	var w_id = wb_selected_weapon.get("id", wb_selected_weapon.get("receiver", "M4_리시버"))
+	var w_meta = ItemDatabase.get_item_data(w_id)
+	var max_dur = float(wb_selected_weapon.get("max_durability", w_meta.get("max_durability", 100.0)))
+	var cur_dur = float(wb_selected_weapon.get("durability", max_dur))
+	if max_dur - cur_dur <= 0.1:
+		return
+
 	if use_scrap:
 		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
 		if _get_total_scrap_count() < scrap_cost:
@@ -769,7 +918,7 @@ func _repair_selected_weapon(use_scrap: bool) -> void:
 		if GameManager and GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
 		money_spent.emit(rub_cost)
-		
+
 	wb_selected_weapon["durability"] = max_dur
 	_save_workbench_weapon()
 	_refresh_workbench_stats_comparison()
@@ -784,7 +933,41 @@ func _repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
 	var cur_dur = float(armor_dict.get("durability", max_dur))
 	if max_dur - cur_dur <= 0.1:
 		return
-		
+
+	var a_name := str(armor_dict.get("name", a_meta.get("name", a_id)))
+	if use_scrap:
+		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
+		if _get_total_scrap_count() < scrap_cost:
+			return
+		_show_confirm_dialog(
+			"🛡️ 방어구 수리 확인",
+			"%s 내구도(%.0f → %.0f)를 복구하시겠습니까?\n소모 비용: 고철 %d개" % [a_name, cur_dur, max_dur, scrap_cost],
+			"고철 %d개 소모 수리" % scrap_cost,
+			func(): _execute_repair_equipped_armor(slot_key, true)
+		)
+	else:
+		var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
+		var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+		if cur_rubles < rub_cost:
+			return
+		_show_confirm_dialog(
+			"🛡️ 방어구 수리 확인",
+			"%s 내구도(%.0f → %.0f)를 수리하시겠습니까?\n소모 비용: %d RUB (보유: %d RUB)" % [a_name, cur_dur, max_dur, rub_cost, cur_rubles],
+			"%d RUB 결제 수리" % rub_cost,
+			func(): _execute_repair_equipped_armor(slot_key, false)
+		)
+
+func _execute_repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
+	var armor_dict = equipment_data.get(slot_key, {})
+	if armor_dict.is_empty():
+		return
+	var a_id = armor_dict.get("id", "")
+	var a_meta = ItemDatabase.get_item_data(a_id)
+	var max_dur = float(armor_dict.get("max_durability", a_meta.get("max_durability", 100.0)))
+	var cur_dur = float(armor_dict.get("durability", max_dur))
+	if max_dur - cur_dur <= 0.1:
+		return
+
 	if use_scrap:
 		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
 		if _get_total_scrap_count() < scrap_cost:
@@ -798,7 +981,7 @@ func _repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
 		if GameManager and GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
 		money_spent.emit(rub_cost)
-		
+
 	armor_dict["durability"] = max_dur
 	equipment_data[slot_key] = armor_dict
 	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
@@ -913,22 +1096,51 @@ func _buy_and_assemble_preset() -> void:
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("⚠️ 먼저 적용할 프리셋을 선택해주세요.")
 		return
-		
-	var cur_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0) if GameManager else 0
-	
+
+	var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
 	if wb_missing_preset_cost > 0:
 		if cur_rubles < wb_missing_preset_cost:
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("❌ 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [wb_missing_preset_cost, cur_rubles])
 			if SoundManager: SoundManager.play("hit_melee")
 			return
-			
+		var part_names: Array[String] = []
+		for i in range(mini(5, wb_missing_preset_parts.size())):
+			var pid := str(wb_missing_preset_parts[i])
+			part_names.append(str(WeaponPartsDatabase.PARTS.get(pid, {}).get("name", pid)))
+		var extra_cnt := wb_missing_preset_parts.size() - part_names.size()
+		var list_txt := ", ".join(part_names) + (" 외 %d종" % extra_cnt if extra_cnt > 0 else "")
+		_show_confirm_dialog(
+			"🛒 부족 부품 구매 후 조립 확인",
+			"미보유 부품 %d종(%s)을 시장가 %d RUB에 즉시 구매하여 조립하시겠습니까?\n(현재 보유 자금: %d RUB → 결제 후: %d RUB)" % [
+				wb_missing_preset_parts.size(), list_txt, wb_missing_preset_cost, cur_rubles, cur_rubles - wb_missing_preset_cost
+			],
+			"%d RUB 구매·조립" % wb_missing_preset_cost,
+			func(): _execute_buy_and_assemble_preset()
+		)
+		return
+
+	_execute_buy_and_assemble_preset()
+
+func _execute_buy_and_assemble_preset() -> void:
+	if wb_current_preset_parts.is_empty():
+		return
+
+	var cur_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0) if GameManager else 0
+
+	if wb_missing_preset_cost > 0:
+		if cur_rubles < wb_missing_preset_cost:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("❌ 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [wb_missing_preset_cost, cur_rubles])
+			if SoundManager: SoundManager.play("hit_melee")
+			return
+
 		# 자금 차감
 		cur_rubles -= wb_missing_preset_cost
 		if GameManager and GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"]["rubles"] = cur_rubles
 		money_spent.emit(wb_missing_preset_cost)
-		
+
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("💰 %d RUB로 부족한 부품 %d종을 시장에서 즉시 구매하여 조립했습니다!" % [wb_missing_preset_cost, wb_missing_preset_parts.size()])
 	else:
