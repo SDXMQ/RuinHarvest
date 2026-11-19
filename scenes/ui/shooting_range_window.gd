@@ -181,12 +181,11 @@ func _process(delta: float) -> void:
 	if muzzle_flash_timer > 0.0:
 		muzzle_flash_timer -= delta
 		
-	# 연사 총기(RPM >= 300)는 좌클릭 유지 시 자동 사격
+	# 자동 화기(fire_mode == "auto")는 좌클릭 유지 시 자동 사격
 	if range_canvas and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and fire_cooldown <= 0.0:
 		var mouse_p = range_canvas.get_local_mouse_position()
 		if Rect2(Vector2.ZERO, range_canvas.size).has_point(mouse_p):
-			var rpm = computed_stats.get("rpm", 150)
-			if rpm >= 300:
+			if WeaponPartsDatabase.is_automatic_weapon(computed_stats):
 				_try_fire()
 			
 	# 플로팅 텍스트 업데이트

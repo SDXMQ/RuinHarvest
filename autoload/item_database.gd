@@ -498,39 +498,61 @@ func get_item_data(id: String) -> Dictionary:
 
 func generate_loot(table_name: String, rolls: int = 3) -> Array[Dictionary]:
 	var results: Array[Dictionary] = []
-	var pool = loot_tables.get(table_name, loot_tables.get("crate", []))
-	
+	var pool: Array = loot_tables.get(table_name, loot_tables.get("crate", []))
+	if pool.is_empty() or rolls <= 0:
+		return results
+
+	var total_weight: float = 0.0
+	for entry in pool:
+		total_weight += max(0.0, float(entry.get("chance", 0.0)))
+	if total_weight <= 0.0:
+		return results
+
 	for i in range(rolls):
+		var roll_val: float = randf() * total_weight
+		var acc: float = 0.0
+		var chosen: Dictionary = pool[pool.size() - 1]
 		for entry in pool:
-			if randf() < entry["chance"]:
-				var drop_id := resolve_item_id(String(entry["id"]))
-				var drop_amt := int(entry.get("amount", 0))
-				if drop_amt <= 0:
-					if is_ammo_item(drop_id):
-						drop_amt = randi_range(6, 12) if drop_id.contains("12게이지") else randi_range(12, 24)
-					else:
-						drop_amt = 1
-				_add_to_loot(results, drop_id, drop_amt)
+			acc += max(0.0, float(entry.get("chance", 0.0)))
+			if roll_val <= acc:
+				chosen = entry
 				break
+		var drop_id: String = resolve_item_id(String(chosen["id"]))
+		var drop_amt: int = int(chosen.get("amount", 0))
+		if drop_amt <= 0:
+			if is_ammo_item(drop_id):
+				drop_amt = randi_range(6, 12) if drop_id.contains("12게이지") else randi_range(12, 24)
+			else:
+				drop_amt = 1
+		_add_to_loot(results, drop_id, drop_amt)
 				
 	return results
 
 func _add_to_loot(results: Array, id: String, amount: int) -> void:
-	var item_data = get_item_data(id)
-	var max_stack = item_data.get("max_stack", 1)
+	var item_data: Dictionary = get_item_data(id)
+	var max_stack: int = max(1, int(item_data.get("max_stack", 1)))
+	var rem: int = amount
 	
 	for res in results:
-		if res["id"] == id and res["amount"] < max_stack:
-			res["amount"] += amount
+		if rem <= 0:
 			return
+		if res["id"] == id and int(res["amount"]) < max_stack:
+			var space: int = max_stack - int(res["amount"])
+			var add_cnt: int = min(rem, space)
+			res["amount"] = int(res["amount"]) + add_cnt
+			rem -= add_cnt
 			
-	results.append({"id": id, "amount": amount})
+	while rem > 0:
+		var chunk: int = min(rem, max_stack)
+		results.append({"id": id, "amount": chunk})
+		rem -= chunk
 
 func get_item_grid_size(id: String) -> Vector2i:
 	if _cached_grid_sizes.has(id):
 		return _cached_grid_sizes[id]
 		
-	var data = get_item_data(id)
+	var resolved_id: String = resolve_item_id(id)
+	var data = get_item_data(resolved_id)
 	var size = Vector2i(1, 1)
 	if data.has("grid_w") and data.has("grid_h"):
 		size = Vector2i(data["grid_w"], data["grid_h"])
@@ -539,8 +561,8 @@ func get_item_grid_size(id: String) -> Vector2i:
 		var type = data.get("type", "")
 		
 		# 무기 부착물/파츠
-		if WeaponPartsDatabase and WeaponPartsDatabase.PARTS.has(id):
-			var pslot = WeaponPartsDatabase.PARTS[id].get("slot", "")
+		if WeaponPartsDatabase and WeaponPartsDatabase.PARTS.has(resolved_id):
+			var pslot = WeaponPartsDatabase.PARTS[resolved_id].get("slot", "")
 			if pslot == "barrel" or pslot == "stock":
 				size = Vector2i(1, 2)
 			else:
@@ -548,11 +570,11 @@ func get_item_grid_size(id: String) -> Vector2i:
 		elif cat == ItemCategory.WEAPON or type == "receiver":
 			if type == "melee":
 				size = Vector2i(1, 3)
-			elif id == "권총" or id.begins_with("M9") or id.begins_with("MP5"):
+			elif resolved_id == "권총" or resolved_id.begins_with("M9") or resolved_id.begins_with("MP5"):
 				size = Vector2i(1, 2)
-			elif id == "수류탄":
+			elif resolved_id == "수류탄":
 				size = Vector2i(1, 1)
-			elif id == "탄약" or id.contains("9mm") or id.contains("5.56") or id.contains("7.62") or id.contains("12게이지") or id.contains(".45"):
+			elif resolved_id == "탄약" or resolved_id.contains("9mm") or resolved_id.contains("5.56") or resolved_id.contains("7.62") or resolved_id.contains("12게이지") or resolved_id.contains(".45"):
 				size = Vector2i(1, 1)
 			else:
 				size = Vector2i(2, 4) # 소총, 샷건, 저격총 등
@@ -564,12 +586,12 @@ func get_item_grid_size(id: String) -> Vector2i:
 			elif slot == "bottom": size = Vector2i(2, 1)
 			else: size = Vector2i(2, 2)
 		elif cat == ItemCategory.MEDICAL:
-			if id.contains("상자") or id.contains("키트"):
+			if resolved_id.contains("상자") or resolved_id.contains("키트"):
 				size = Vector2i(2, 2)
 			else:
 				size = Vector2i(1, 1)
 		elif cat == ItemCategory.TOOL:
-			if id.contains("망원경"):
+			if resolved_id.contains("망원경"):
 				size = Vector2i(1, 2)
 			else:
 				size = Vector2i(1, 1)
