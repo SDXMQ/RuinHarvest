@@ -255,7 +255,7 @@ func get_current_price(item_name: String) -> int:
 	var elasticity := get_supply_elasticity_multiplier(item_name)
 	return maxi(10, int(round(float(base_market) * elasticity)))
 
-func update_market_prices(in_game_day: int) -> void:
+func update_market_prices(in_game_day: int, roll_new_trends: bool = true) -> void:
 	var rng = RandomNumberGenerator.new()
 	
 	for item_name in _get_all_known_item_ids():
@@ -264,7 +264,9 @@ func update_market_prices(in_game_day: int) -> void:
 		rng.seed = hash(item_name) + in_game_day * 10007
 		
 		if rng.randf() < 0.2:
-			trends[item_name] = rng.randf_range(-0.15, 0.30)
+			var rolled_trend: float = rng.randf_range(-0.15, 0.30)
+			if roll_new_trends or not trends.has(item_name):
+				trends[item_name] = rolled_trend
 			
 		var category = data.get("category", -1)
 		var sigma = 0.05
@@ -498,6 +500,7 @@ func load_from_save_dict(data: Dictionary) -> void:
 		return
 	if data.has("current_day"):
 		current_day = maxi(1, int(data.get("current_day", current_day)))
+	var has_saved_trends: bool = data.get("trends") is Dictionary and not data["trends"].is_empty()
 	if data.get("trends") is Dictionary:
 		trends = data["trends"].duplicate(true)
 	if data.get("supply_pressure") is Dictionary:
@@ -509,6 +512,6 @@ func load_from_save_dict(data: Dictionary) -> void:
 				player_listings.append(p.duplicate(true))
 	next_listing_id = maxi(next_listing_id, int(data.get("next_listing_id", next_listing_id)))
 	next_player_listing_id = maxi(next_player_listing_id, int(data.get("next_player_listing_id", next_player_listing_id)))
-	update_market_prices(current_day)
+	update_market_prices(current_day, not has_saved_trends)
 	refresh_listings(current_day)
 	refresh_daily_bounties(current_day)
