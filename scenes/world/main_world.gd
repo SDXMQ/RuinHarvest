@@ -412,11 +412,14 @@ func _ready() -> void:
 	hit_arc_overlay.name = "HitArcOverlay"
 	hit_arc_overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
 	hit_arc_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hit_arc_overlay.z_index = 150
 	hit_arc_overlay.draw.connect(_on_hit_arc_draw)
 	$UI/HUD.add_child(hit_arc_overlay)
 	
 	if EventBus.has_signal("player_hit_direction"):
 		EventBus.player_hit_direction.connect(_on_player_hit_direction)
+	if EventBus.has_signal("player_died") and not EventBus.player_died.is_connected(_close_non_pausing_modals):
+		EventBus.player_died.connect(_close_non_pausing_modals)
 	
 	if EventBus.has_signal("event_logged"):
 		var is_sandbox = GameManager and GameManager.current_world_data.get("world_settings", {}).get("mode", "") == "sandbox"
@@ -820,7 +823,8 @@ func _open_crafting_window() -> void:
 	)
 
 func _open_map_window() -> void:
-	get_tree().paused = true
+	if is_instance_valid(current_map_window):
+		return
 	current_map_window = MapWindowScene.instantiate()
 	$UI.add_child(current_map_window)
 	
@@ -831,8 +835,14 @@ func _open_map_window() -> void:
 		biome = chunk_manager.generator.get_biome(cx, cy)
 		
 	var chunks_dict = chunk_manager.loaded_chunks if chunk_manager else {}
-	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome, boss_entity, airdrop_points_data, field_objectives, chunks_dict)
-	current_map_window.window_closed.connect(func(): current_map_window = null)
+	current_map_window.setup(player.global_position, player.rotation, extraction_points_data, biome, boss_entity, airdrop_points_data, field_objectives, chunks_dict, player, chunk_manager)
+	if is_instance_valid(player):
+		player.ui_input_blocked = _has_open_modal_window()
+	current_map_window.window_closed.connect(func():
+		current_map_window = null
+		if is_instance_valid(player):
+			player.ui_input_blocked = _has_open_modal_window()
+	)
 
 func _on_compass_draw() -> void:
 	if not player: return
@@ -1027,7 +1037,7 @@ func _on_field_objective_wave_triggered(obj_pos: Vector2, obj_kind: int) -> void
 	entities_layer.add_child(wave_enemy)
 
 func _on_crosshair_draw() -> void:
-	if not crosshair_overlay or not player or get_tree().paused:
+	if not crosshair_overlay or not player or get_tree().paused or _has_open_modal_window():
 		return
 	var m_pos = crosshair_overlay.get_local_mouse_position()
 	var is_ads = player.player_camera.is_aiming_ads if player.player_camera else false
@@ -1107,6 +1117,7 @@ func _update_weather_particles(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	if player:
+		player.ui_input_blocked = _has_open_modal_window()
 		chunk_manager.update_chunks(player.global_position)
 		if compass_bar:
 			compass_bar.queue_redraw()
@@ -1596,14 +1607,30 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 func _open_inventory_window(target_inv: Inventory = null, title: String = "") -> void:
 	if is_instance_valid(current_inventory_window): return
 	if not is_inside_tree() or get_tree() == null: return
-	get_tree().paused = true
 	current_inventory_window = InventoryWindowScene.instantiate()
 	$UI.add_child(current_inventory_window)
 	current_inventory_window.setup(player, player.inventory_grid, player.equipment, target_inv, title)
+	if is_instance_valid(player):
+		player.ui_input_blocked = _has_open_modal_window()
 	current_inventory_window.window_closed.connect(func():
 		current_inventory_window = null
+		if is_instance_valid(player):
+			player.ui_input_blocked = _has_open_modal_window()
 		_on_player_stats_changed()
 	)
+
+func _close_non_pausing_modals() -> void:
+	if is_instance_valid(current_inventory_window):
+		if current_inventory_window.has_method("_on_close_pressed"):
+			current_inventory_window._on_close_pressed()
+		else:
+			current_inventory_window.queue_free()
+		current_inventory_window = null
+	if is_instance_valid(current_map_window):
+		current_map_window.queue_free()
+		current_map_window = null
+	if is_instance_valid(player):
+		player.ui_input_blocked = _has_open_modal_window()
 
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
 	_open_inventory_window(target_inv, title)

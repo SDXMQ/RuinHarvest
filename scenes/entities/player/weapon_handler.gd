@@ -29,7 +29,7 @@ func _process(delta: float) -> void:
 		reload_timer -= delta
 		if reload_timer <= 0:
 			_finish_reload()
-	elif not get_tree().paused and player and player.hp > 0:
+	elif not get_tree().paused and player and player.hp > 0 and not player.get("ui_input_blocked"):
 		# 연사 총기(RPM >= 200)는 좌클릭 유지 시 자동 사격 지원
 		if Input.is_action_pressed("attack") and not equipped_weapon_data.is_empty() and active_weapon_slot != "throwable":
 			var rpm = equipped_weapon_data.get("computed_stats", {}).get("rpm", 150)

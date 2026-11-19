@@ -539,6 +539,8 @@ func _spawn_entities() -> void:
 			player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
 		if player.weapon_handler.has_signal("ammo_changed"):
 			player.weapon_handler.ammo_changed.connect(_update_quickslot_bar)
+	if EventBus.has_signal("player_died") and not EventBus.player_died.is_connected(_close_non_pausing_modals):
+		EventBus.player_died.connect(_close_non_pausing_modals)
 	_setup_quickslot_bar()
 	_on_player_stats_changed()
 	
@@ -597,6 +599,7 @@ func _process(delta: float) -> void:
 		pl.energy = maxf(0.08, e)
 
 	if player:
+		player.ui_input_blocked = _has_open_modal_window()
 		if crosshair_overlay:
 			var w_stats = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
 			var acc = float(w_stats.get("accuracy", 78.0))
@@ -645,7 +648,7 @@ func _process(delta: float) -> void:
 				GameManager.end_raid("mia", get_backpack_items())
 
 func _on_crosshair_draw() -> void:
-	if not crosshair_overlay or not player or get_tree().paused:
+	if not crosshair_overlay or not player or get_tree().paused or _has_open_modal_window():
 		return
 	var m_pos = crosshair_overlay.get_local_mouse_position()
 	var is_ads = player.player_camera.is_aiming_ads if player.player_camera else false
@@ -741,14 +744,27 @@ func _open_crafting_window() -> void:
 
 func _open_inventory_window(target_inv: Inventory = null, title: String = "") -> void:
 	if is_instance_valid(current_inventory_window): return
-	get_tree().paused = true
 	current_inventory_window = InventoryWindowScene.instantiate()
 	$UI.add_child(current_inventory_window)
 	current_inventory_window.setup(player, player.inventory_grid, player.equipment, target_inv, title)
+	if is_instance_valid(player):
+		player.ui_input_blocked = _has_open_modal_window()
 	current_inventory_window.window_closed.connect(func():
 		current_inventory_window = null
+		if is_instance_valid(player):
+			player.ui_input_blocked = _has_open_modal_window()
 		_on_player_stats_changed()
 	)
+
+func _close_non_pausing_modals() -> void:
+	if is_instance_valid(current_inventory_window):
+		if current_inventory_window.has_method("_on_close_pressed"):
+			current_inventory_window._on_close_pressed()
+		else:
+			current_inventory_window.queue_free()
+		current_inventory_window = null
+	if is_instance_valid(player):
+		player.ui_input_blocked = _has_open_modal_window()
 
 func _open_settings_window() -> void:
 	if is_instance_valid(current_settings_window):

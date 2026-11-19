@@ -18,6 +18,7 @@ signal channel_cancelled()
 var is_crouching: bool = false
 var is_sprinting: bool = false
 var _overweight_tier: int = 0
+var ui_input_blocked: bool = false
 
 var is_channeling: bool = false
 var channel_timer: float = 0.0
@@ -206,15 +207,24 @@ func _ready() -> void:
 	EventBus.player_died.connect(_on_death)
 
 func _process(_delta: float) -> void:
+	if ui_input_blocked:
+		return
 	look_at(get_global_mouse_position())
 
 func _physics_process(delta: float) -> void:
 	if hp <= 0: return
-	_handle_movement(delta)
+	if ui_input_blocked:
+		is_sprinting = false
+		if player_camera:
+			player_camera.is_aiming_ads = false
+		velocity = velocity.move_toward(Vector2.ZERO, friction * delta)
+		move_and_slide()
+	else:
+		_handle_movement(delta)
 	_handle_channeling(delta)
 
 func _unhandled_input(event: InputEvent) -> void:
-	if hp <= 0: return
+	if hp <= 0 or ui_input_blocked: return
 	
 	if event.is_action_pressed("flashlight"):
 		player_lighting.toggle_flashlight()

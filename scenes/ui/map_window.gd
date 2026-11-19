@@ -16,6 +16,10 @@ var loaded_chunks: Dictionary = {}
 var chunk_minimap_textures: Dictionary = {}
 var scale_factor: float = 0.085
 var map_pan_offset: Vector2 = Vector2.ZERO
+var view_center_world: Vector2 = Vector2.ZERO
+var player_ref: Node2D = null
+var chunk_manager_ref: Node = null
+var recenter_btn: Button = null
 var is_panning: bool = false
 
 signal window_closed
@@ -47,8 +51,9 @@ func get_or_bake_chunk_texture(cpos: Vector2i, c_data: Dictionary) -> ImageTextu
 	chunk_minimap_textures[cpos] = tex
 	return tex
 
-func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_node: Node2D = null, airdrops: Array = [], objectives: Array = [], loaded_chunks_dict: Dictionary = {}) -> void:
+func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_node: Node2D = null, airdrops: Array = [], objectives: Array = [], loaded_chunks_dict: Dictionary = {}, p_player_ref: Node2D = null, p_chunk_manager: Node = null) -> void:
 	player_pos = pos
+	view_center_world = pos
 	player_rot = rot
 	extraction_points = extract_pts
 	current_biome = biome
@@ -56,6 +61,8 @@ func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_nod
 	airdrop_points = airdrops
 	field_objectives_list = objectives
 	loaded_chunks = loaded_chunks_dict
+	player_ref = p_player_ref
+	chunk_manager_ref = p_chunk_manager
 	chunk_minimap_textures.clear()
 	for cpos in loaded_chunks.keys():
 		var c_data = loaded_chunks[cpos]
@@ -131,10 +138,54 @@ static func extract_locked_vault_markers(chunks_dict: Dictionary) -> Array[Dicti
 func _ready() -> void:
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
+		var panel_parent := close_btn.get_parent()
+		if panel_parent and not panel_parent.has_node("RecenterBtn"):
+			recenter_btn = Button.new()
+			recenter_btn.name = "RecenterBtn"
+			recenter_btn.text = "🎯 내 위치"
+			recenter_btn.tooltip_text = "내 현재 위치로 지도 중심 이동 (Space)"
+			recenter_btn.custom_minimum_size = Vector2(96, 36)
+			recenter_btn.layout_mode = 1
+			recenter_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+			recenter_btn.offset_left = -228.0
+			recenter_btn.offset_top = -56.0
+			recenter_btn.offset_right = -128.0
+			recenter_btn.offset_bottom = -20.0
+			recenter_btn.pressed.connect(recenter_on_player)
+			panel_parent.add_child(recenter_btn)
+	if info_label:
+		info_label.offset_right = -238.0
+		info_label.clip_text = true
 	if map_canvas:
 		map_canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 		map_canvas.draw.connect(_on_map_draw)
 		map_canvas.gui_input.connect(_on_map_canvas_gui_input)
+
+func _process(_delta: float) -> void:
+	var dirty := false
+	if is_instance_valid(player_ref):
+		if player_pos != player_ref.global_position or absf(player_rot - player_ref.rotation) > 0.001:
+			player_pos = player_ref.global_position
+			player_rot = player_ref.rotation
+			dirty = true
+	if is_instance_valid(chunk_manager_ref):
+		if "loaded_chunks" in chunk_manager_ref:
+			loaded_chunks = chunk_manager_ref.loaded_chunks
+			dirty = true
+	if info_label and is_instance_valid(player_ref):
+		info_label.text = "현재 위치: (%.1f, %.1f) | 작전 구역: %s | 로드 청크: %d개" % [player_pos.x, player_pos.y, current_biome, loaded_chunks.size()]
+	if dirty and map_canvas:
+		map_canvas.queue_redraw()
+
+func recenter_on_player() -> void:
+	view_center_world = player_pos
+	map_pan_offset = Vector2.ZERO
+	if map_canvas:
+		map_canvas.queue_redraw()
+
+func get_player_screen_pos() -> Vector2:
+	var c: Vector2 = (map_canvas.size * 0.5) if map_canvas else Vector2.ZERO
+	return c + map_pan_offset + (player_pos - view_center_world) * scale_factor
 
 func _on_map_canvas_gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -155,9 +206,9 @@ func _on_map_canvas_gui_input(event: InputEvent) -> void:
 		accept_event()
 
 func _on_map_draw() -> void:
-	var w = map_canvas.size.x
-	var h = map_canvas.size.y
-	var center = Vector2(w / 2.0, h / 2.0)
+	var w: float = map_canvas.size.x
+	var h: float = map_canvas.size.y
+	var center: Vector2 = Vector2(w / 2.0, h / 2.0)
 	
 	# 1. 지도 배경 및 전술 격자선
 	map_canvas.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.09, 0.12, 0.10, 0.96))
@@ -168,7 +219,7 @@ func _on_map_draw() -> void:
 	for y in range(0, int(h), int(grid_size)):
 		map_canvas.draw_line(Vector2(0, y), Vector2(w, y), Color(0.18, 0.26, 0.18, 0.35))
 		
-	var map_origin = center + map_pan_offset - player_pos * scale_factor
+	var map_origin: Vector2 = center + map_pan_offset - view_center_world * scale_factor
 
 	# 2. 로드된 청크 지형/도로/건물 개요 렌더링
 	var chunk_px_size = 16.0 * 32.0 * scale_factor # 512 * 0.085 = 43.52px
@@ -291,11 +342,12 @@ func _on_map_draw() -> void:
 				var base_w = ThemeDB.fallback_font.get_string_size(base_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
 				map_canvas.draw_string(ThemeDB.fallback_font, pt_pos + Vector2(17.0 + base_w, 4), "[%s]" % lock_reason, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.38, 0.38, 0.85))
 			
-	# 8. 플레이어 위치 (중앙, 노란색 시선 화살표)
-	map_canvas.draw_circle(center, 6.0, Color.RED)
+	# 8. 플레이어 위치 (드래그 팬 및 실시간 이동이 반영된 실제 월드->화면 좌표)
+	var player_screen: Vector2 = map_origin + player_pos * scale_factor
+	map_canvas.draw_circle(player_screen, 6.0, Color.RED)
 	var forward = Vector2.RIGHT.rotated(player_rot) * 16.0
-	map_canvas.draw_line(center, center + forward, Color.YELLOW, 2.5)
-	map_canvas.draw_string(ThemeDB.fallback_font, center + Vector2(10, -6), "내 위치", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
+	map_canvas.draw_line(player_screen, player_screen + forward, Color.YELLOW, 2.5)
+	map_canvas.draw_string(ThemeDB.fallback_font, player_screen + Vector2(10, -6), "내 위치", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
 
 	# 9. 우상단 전술 범례 (TACTICAL LEGEND) 패널
 	var leg_w = 154.0
@@ -321,12 +373,20 @@ func _on_map_draw() -> void:
 		map_canvas.draw_string(ThemeDB.fallback_font, Vector2(leg_x + 22, cur_ly), le["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.9, 0.85))
 		cur_ly += 14.5
 
-func _unhandled_input(event: InputEvent) -> void:
-	if visible and (event.is_action_pressed("map") or event.is_action_pressed("pause") or (event is InputEventKey and event.physical_keycode == KEY_M and event.pressed)):
-		_on_close_pressed()
-		get_viewport().set_input_as_handled()
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_SPACE or event.physical_keycode == KEY_SPACE:
+			recenter_on_player()
+			if get_viewport():
+				get_viewport().set_input_as_handled()
+			return
+		if event.is_action_pressed("map") or event.is_action_pressed("pause") or event.physical_keycode == KEY_M or event.keycode == KEY_M or event.physical_keycode == KEY_ESCAPE or event.keycode == KEY_ESCAPE:
+			_on_close_pressed()
+			if get_viewport():
+				get_viewport().set_input_as_handled()
 
 func _on_close_pressed() -> void:
-	get_tree().paused = false
 	queue_free()
 	window_closed.emit()

@@ -2525,8 +2525,6 @@ func _on_close_pressed() -> void:
 		player.refresh_equipped_weapon(false)
 	elif player and player.has_method("switch_weapon_slot"):
 		player.switch_weapon_slot(player.active_weapon_slot)
-	if is_inside_tree() and get_tree():
-		get_tree().paused = false
 	queue_free()
 	window_closed.emit()
 
