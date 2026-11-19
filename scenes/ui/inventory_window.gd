@@ -908,6 +908,7 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					elif src == "weapon_slot":
 						var s_name = drag_data.get("slot_name", "")
 						equipment_data[s_name] = {}
+						_sync_weapon_to_player(s_name)
 						_update_weapons_ui()
 					elif src == "attachment":
 						var w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", "primary1"))
@@ -1501,6 +1502,8 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 		
 	if src == "grid":
 		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	elif src == "split":
+		drag_data["is_split"] = false
 	elif src == "popup_grid":
 		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
 		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
@@ -1921,7 +1924,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 			if old_count > 0 and old_ammo != "":
 				var rem = inventory_grid.auto_add_item(old_ammo, old_count) if inventory_grid else old_count
 				if rem > 0:
-					_spawn_ground_item(old_ammo, rem)
+					_handle_overflow_item({"id": old_ammo, "amount": rem})
 			load_amt = min(drag_amt, max_mag)
 			final_mag_ammo = load_amt
 
@@ -2016,6 +2019,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 		return
 		
 	if src == "grid": inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	elif src == "split": drag_data["is_split"] = false
 	elif src == "popup_grid":
 		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
 		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
@@ -2038,7 +2042,11 @@ func _try_equip_weapon(slot_key: String) -> void:
 	equipment_data[slot_key] = item
 	
 	if not prev.is_empty():
-		inventory_grid.auto_add_item(prev.get("id", ""), prev.get("amount", 1), prev)
+		var rem = inventory_grid.auto_add_item(prev.get("id", ""), prev.get("amount", 1), prev) if inventory_grid else int(prev.get("amount", 1))
+		if rem > 0:
+			var overflow_w: Dictionary = prev.duplicate(true)
+			overflow_w["amount"] = rem
+			_handle_overflow_item(overflow_w)
 		
 	_sync_weapon_to_player(slot_key)
 	_update_weapons_ui()
@@ -2090,6 +2098,8 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 	var src = drag_data.get("source", "")
 	if src == "grid":
 		inventory_grid.remove_item_by_uid(item.get("uid", ""))
+	elif src == "split":
+		drag_data["is_split"] = false
 	elif src == "popup_grid":
 		var p_grid: InventoryGrid = drag_data.get("source_grid") as InventoryGrid
 		if p_grid: p_grid.remove_item_by_uid(item.get("uid", ""))
@@ -2152,7 +2162,9 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 	_sync_weapon_to_player(weapon_slot_key)
 	
 	if prev_part != "":
-		inventory_grid.auto_add_item(prev_part, 1)
+		var rem = inventory_grid.auto_add_item(prev_part, 1) if inventory_grid else 1
+		if rem > 0:
+			_handle_overflow_item({"id": prev_part, "amount": rem})
 		
 	_update_weapons_ui()
 	if SoundManager: SoundManager.play("menu_select")
@@ -2306,9 +2318,13 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 			var prev_equipped = equipment_data.get(slot, {})
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
 			equipment_data[slot] = item
-			if not prev_equipped.is_empty():
-				inventory_grid.auto_add_item(prev_equipped.get("id", ""), prev_equipped.get("amount", 1), prev_equipped)
 			_apply_backpack_grid_size()
+			if not prev_equipped.is_empty():
+				var rem = inventory_grid.auto_add_item(prev_equipped.get("id", ""), prev_equipped.get("amount", 1), prev_equipped) if inventory_grid else int(prev_equipped.get("amount", 1))
+				if rem > 0:
+					var overflow_eq = prev_equipped.duplicate(true)
+					overflow_eq["amount"] = rem
+					_handle_overflow_item(overflow_eq)
 			_update_equipment_ui()
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):
@@ -2345,7 +2361,11 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 		item = WeaponPartsDatabase.compute_weapon_from_dict(item)
 		equipment_data[target_slot] = item
 		if not prev_weapon.is_empty():
-			inventory_grid.auto_add_item(prev_weapon.get("id", ""), prev_weapon.get("amount", 1), prev_weapon)
+			var rem = inventory_grid.auto_add_item(prev_weapon.get("id", ""), prev_weapon.get("amount", 1), prev_weapon) if inventory_grid else int(prev_weapon.get("amount", 1))
+			if rem > 0:
+				var overflow_w = prev_weapon.duplicate(true)
+				overflow_w["amount"] = rem
+				_handle_overflow_item(overflow_w)
 		_sync_weapon_to_player(target_slot)
 		_update_weapons_ui()
 		if SoundManager: SoundManager.play("menu_select")
@@ -2432,10 +2452,13 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 			equipment_data[best_slot]["parts"] = w_parts
 			equipment_data[best_slot]["attachments"] = w_parts
 			equipment_data[best_slot] = WeaponPartsDatabase.compute_weapon_from_dict(equipment_data[best_slot])
+			_clamp_weapon_excess_ammo(equipment_data[best_slot])
 			_sync_weapon_to_player(best_slot)
 			
 			if prev_part != "":
-				inventory_grid.auto_add_item(prev_part, 1)
+				var rem = inventory_grid.auto_add_item(prev_part, 1) if inventory_grid else 1
+				if rem > 0:
+					_handle_overflow_item({"id": prev_part, "amount": rem})
 			_update_weapons_ui()
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):

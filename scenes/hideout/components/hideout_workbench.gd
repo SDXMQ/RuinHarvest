@@ -30,6 +30,8 @@ var wb_selected_weapon: Dictionary = {}
 var wb_base_stats: Dictionary = {}
 var wb_weapon_source: Dictionary = {}
 var wb_active_slot: String = ""
+var wb_committed_parts: Dictionary = {}
+var wb_preset_pending_assembly: bool = false
 var wb_current_preset_parts: Dictionary = {}
 var wb_missing_preset_cost: int = 0
 var wb_missing_preset_parts: Array = []
@@ -455,6 +457,10 @@ func _populate_workbench_weapon_list() -> void:
 func _select_workbench_weapon(weapon_dict: Dictionary, source_info: Dictionary) -> void:
 	wb_weapon_source = source_info
 	wb_selected_weapon = weapon_dict.duplicate(true)
+	wb_preset_pending_assembly = false
+	wb_current_preset_parts.clear()
+	wb_missing_preset_parts.clear()
+	wb_missing_preset_cost = 0
 	
 	var raw_id = wb_selected_weapon.get("receiver", wb_selected_weapon.get("id", "M4_리시버"))
 	var rec_id = WeaponPartsDatabase.resolve_receiver_id(raw_id)
@@ -462,11 +468,16 @@ func _select_workbench_weapon(weapon_dict: Dictionary, source_info: Dictionary) 
 	if not wb_selected_weapon.has("parts"):
 		wb_selected_weapon["parts"] = wb_selected_weapon.get("attachments", {}).duplicate(true)
 	wb_selected_weapon["attachments"] = wb_selected_weapon["parts"]
+	wb_committed_parts = wb_selected_weapon["parts"].duplicate(true)
 		
 	# 모딩 전 기준 스탯 산출
 	var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
 	wb_base_stats = WeaponPartsDatabase.compute_weapon_stats(rec_id, wb_selected_weapon["parts"], wb_selected_weapon.get("loaded_ammo", def_ammo))
 	wb_selected_weapon["computed_stats"] = wb_base_stats
+	
+	if wb_preset_buy_btn:
+		wb_preset_buy_btn.text = "🛒 프리셋을 선택해 주세요"
+		wb_preset_buy_btn.remove_theme_color_override("font_color")
 	
 	wb_active_slot = ""
 	_build_workbench_slots()
@@ -640,22 +651,123 @@ func _populate_workbench_compat_parts(slot_name: String) -> void:
 		)
 		wb_compat_hbox.add_child(btn)
 
+func _flatten_parts_dict(parts_dict: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for slot_k in parts_dict.keys():
+		var v = parts_dict[slot_k]
+		if v is Array:
+			for sub in v:
+				var s := String(sub)
+				if s != "":
+					out.append(s)
+		else:
+			var s := String(v)
+			if s != "":
+				out.append(s)
+	return out
+
+func _return_parts_to_storage(part_ids: Array) -> bool:
+	var placed: Array[Dictionary] = []
+	for raw_pid in part_ids:
+		var p_id := String(raw_pid)
+		if p_id == "":
+			continue
+		var stored := false
+		if stash_grid_mgr and stash_grid_mgr.auto_add_item(p_id, 1) == 0:
+			placed.append({"grid": stash_grid_mgr, "uid": String(stash_grid_mgr.items[-1].get("uid", ""))})
+			stored = true
+		elif player_grid_mgr and player_grid_mgr.auto_add_item(p_id, 1) == 0:
+			placed.append({"grid": player_grid_mgr, "uid": String(player_grid_mgr.items[-1].get("uid", ""))})
+			stored = true
+		if not stored:
+			for rec in placed:
+				if rec["uid"] != "":
+					rec["grid"].remove_item_by_uid(rec["uid"], true)
+			return false
+	return true
+
+func _commit_selected_weapon_to_source() -> void:
+	if wb_selected_weapon.is_empty():
+		return
+	var src_type := str(wb_weapon_source.get("type", ""))
+	if src_type == "equipment":
+		var s_key := str(wb_weapon_source.get("slot", ""))
+		if s_key != "":
+			equipment_data[s_key] = wb_selected_weapon.duplicate(true)
+	elif src_type == "stash" and stash_grid_mgr:
+		var uid := str(wb_weapon_source.get("uid", ""))
+		for i in range(stash_grid_mgr.items.size()):
+			if stash_grid_mgr.items[i].get("uid", "") == uid:
+				stash_grid_mgr.items[i] = wb_selected_weapon.duplicate(true)
+				stash_grid_mgr.grid_changed.emit()
+				break
+	elif src_type == "player" and player_grid_mgr:
+		var uid := str(wb_weapon_source.get("uid", ""))
+		for i in range(player_grid_mgr.items.size()):
+			if player_grid_mgr.items[i].get("uid", "") == uid:
+				player_grid_mgr.items[i] = wb_selected_weapon.duplicate(true)
+				player_grid_mgr.grid_changed.emit()
+				break
+
+func _cancel_pending_preset_preview() -> void:
+	if not wb_preset_pending_assembly:
+		return
+	wb_preset_pending_assembly = false
+	wb_current_preset_parts.clear()
+	wb_missing_preset_parts.clear()
+	wb_missing_preset_cost = 0
+	if not wb_selected_weapon.is_empty():
+		wb_selected_weapon["parts"] = wb_committed_parts.duplicate(true)
+		wb_selected_weapon["attachments"] = wb_selected_weapon["parts"]
+		var rec_id = wb_selected_weapon.get("receiver", "M4_리시버")
+		var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
+		wb_selected_weapon["computed_stats"] = WeaponPartsDatabase.compute_weapon_stats(rec_id, wb_selected_weapon["parts"], wb_selected_weapon.get("loaded_ammo", def_ammo))
+	if wb_preset_buy_btn:
+		wb_preset_buy_btn.text = "🛒 프리셋을 선택해 주세요"
+		wb_preset_buy_btn.remove_theme_color_override("font_color")
+	_build_workbench_slots()
+	_refresh_workbench_stats_comparison()
+	if wb_preview: wb_preview.queue_redraw()
+
 func _attach_workbench_part(slot_name: String, part_id: String) -> void:
 	if wb_selected_weapon.is_empty(): return
-	var parts = wb_selected_weapon.get("parts", {})
+	if wb_preset_pending_assembly:
+		_cancel_pending_preset_preview()
+	var owned_pool := _get_owned_parts_list()
+	if int(owned_pool.get(part_id, 0)) <= 0:
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 보유 중인 [%s] 부품이 없습니다." % part_id)
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+
+	var parts: Dictionary = wb_selected_weapon.get("parts", {})
 	var prev_part = parts.get(slot_name, "")
-	
-	# 기존 부품이 있다면 창고로 반환
+	var to_return: Array[String] = []
 	if prev_part is Array:
 		for p in prev_part:
-			if p != "" and p != part_id and stash_grid_mgr:
-				stash_grid_mgr.auto_add_item(p, 1)
-	elif prev_part is String and prev_part != "" and prev_part != part_id:
-		if stash_grid_mgr:
-			stash_grid_mgr.auto_add_item(prev_part, 1)
-			
-	# 새 부품을 소지품에서 차감
-	_remove_owned_part_from_inv(part_id)
+			if String(p) != "":
+				to_return.append(String(p))
+	elif prev_part is String and prev_part != "":
+		to_return.append(prev_part)
+
+	# 동일 부품 재클릭 시 중복 소비/반환 방지
+	if prev_part is String and prev_part == part_id:
+		return
+	if prev_part is Array and prev_part.size() == 1 and String(prev_part[0]) == part_id:
+		return
+
+	if not _remove_owned_part_from_inv(part_id):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 부품 차감에 실패했습니다.")
+		return
+
+	if not to_return.is_empty() and not _return_parts_to_storage(to_return):
+		# 공간 부족 시 새 부품 복구 후 중단
+		_return_parts_to_storage([part_id])
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 기존 부품을 교체할 수 없습니다.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
 	
 	if slot_name == "rail":
 		parts["rail"] = [part_id]
@@ -664,11 +776,14 @@ func _attach_workbench_part(slot_name: String, part_id: String) -> void:
 		
 	wb_selected_weapon["parts"] = parts
 	wb_selected_weapon["attachments"] = parts
+	wb_committed_parts = parts.duplicate(true)
 	
 	# 스탯 재계산
 	var rec_id = wb_selected_weapon.get("receiver", "M4_리시버")
 	var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
 	wb_selected_weapon["computed_stats"] = WeaponPartsDatabase.compute_weapon_stats(rec_id, parts, wb_selected_weapon.get("loaded_ammo", def_ammo))
+	_commit_selected_weapon_to_source()
+	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
 	
 	if SoundManager: SoundManager.play("menu_select")
 	_build_workbench_slots()
@@ -678,26 +793,38 @@ func _attach_workbench_part(slot_name: String, part_id: String) -> void:
 
 func _detach_workbench_part(slot_name: String) -> void:
 	if wb_selected_weapon.is_empty(): return
-	var parts = wb_selected_weapon.get("parts", {})
+	if wb_preset_pending_assembly:
+		_cancel_pending_preset_preview()
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("ℹ️ 프리셋 미리보기가 취소되어 실제 장착 상태로 복원되었습니다.")
+		return
+	var parts: Dictionary = wb_selected_weapon.get("parts", {})
 	if not parts.has(slot_name): return
 	var prev_part = parts.get(slot_name)
-	
+	var to_return: Array[String] = []
 	if prev_part is Array:
 		for p in prev_part:
-			if p != "" and stash_grid_mgr:
-				stash_grid_mgr.auto_add_item(p, 1)
-		parts.erase(slot_name)
+			if String(p) != "":
+				to_return.append(String(p))
 	elif prev_part is String and prev_part != "":
-		if stash_grid_mgr:
-			stash_grid_mgr.auto_add_item(prev_part, 1)
-		parts.erase(slot_name)
+		to_return.append(prev_part)
+
+	if not to_return.is_empty() and not _return_parts_to_storage(to_return):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 부품을 분리할 수 없습니다.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+	parts.erase(slot_name)
 		
 	wb_selected_weapon["parts"] = parts
 	wb_selected_weapon["attachments"] = parts
+	wb_committed_parts = parts.duplicate(true)
 	
 	var rec_id = wb_selected_weapon.get("receiver", "M4_리시버")
 	var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
 	wb_selected_weapon["computed_stats"] = WeaponPartsDatabase.compute_weapon_stats(rec_id, parts, wb_selected_weapon.get("loaded_ammo", def_ammo))
+	_commit_selected_weapon_to_source()
+	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
 	
 	if SoundManager: SoundManager.play("menu_select")
 	_build_workbench_slots()
@@ -1044,32 +1171,30 @@ func _populate_workbench_presets() -> void:
 		wb_preset_vbox.add_child(btn)
 
 func _apply_workbench_preset(preset_dict: Dictionary) -> void:
+	if not wb_preset_pending_assembly:
+		wb_committed_parts = wb_selected_weapon.get("parts", {}).duplicate(true)
 	wb_current_preset_parts = preset_dict.get("parts", {}).duplicate(true)
 	wb_missing_preset_parts.clear()
 	wb_missing_preset_cost = 0
 	
-	# 내 인벤토리에서 보유한 부품 목록 수집
+	# 이미 총기에 장착 중인 부품(wb_committed_parts)은 그대로 재사용하고, 나머지 필요 부품만 인벤토리와 대조
+	var committed_counts := {}
+	for cp in _flatten_parts_dict(wb_committed_parts):
+		committed_counts[cp] = int(committed_counts.get(cp, 0)) + 1
+
 	var owned_pool = _get_owned_parts_list()
-	
-	for slot_name in wb_current_preset_parts.keys():
-		var target_part = wb_current_preset_parts[slot_name]
-		if target_part is Array:
-			for tp in target_part:
-				if not owned_pool.has(tp) or owned_pool[tp] <= 0:
-					wb_missing_preset_parts.append(tp)
-					var p_val = WeaponPartsDatabase.PARTS.get(tp, {}).get("value", 5000)
-					wb_missing_preset_cost += p_val
-				else:
-					owned_pool[tp] -= 1
+	for tp in _flatten_parts_dict(wb_current_preset_parts):
+		if int(committed_counts.get(tp, 0)) > 0:
+			committed_counts[tp] -= 1
+		elif not owned_pool.has(tp) or owned_pool[tp] <= 0:
+			wb_missing_preset_parts.append(tp)
+			var p_val = WeaponPartsDatabase.PARTS.get(tp, {}).get("value", 5000)
+			wb_missing_preset_cost += p_val
 		else:
-			if not owned_pool.has(target_part) or owned_pool[target_part] <= 0:
-				wb_missing_preset_parts.append(target_part)
-				var p_val = WeaponPartsDatabase.PARTS.get(target_part, {}).get("value", 5000)
-				wb_missing_preset_cost += p_val
-			else:
-				owned_pool[target_part] -= 1
+			owned_pool[tp] -= 1
 				
-	# 무기 파츠에 프리셋 적용 (가상 세팅)
+	# 무기 파츠에 프리셋 적용 (가상 미리보기 — [구매 후 조립] 완료 전까지 실제 저장 차단)
+	wb_preset_pending_assembly = true
 	wb_selected_weapon["parts"] = wb_current_preset_parts.duplicate(true)
 	wb_selected_weapon["attachments"] = wb_selected_weapon["parts"]
 	
@@ -1079,7 +1204,7 @@ func _apply_workbench_preset(preset_dict: Dictionary) -> void:
 	
 	if wb_preset_buy_btn:
 		if wb_missing_preset_parts.is_empty():
-			wb_preset_buy_btn.text = "✅ 모든 부품 보유 중 (즉시 조립 완료)"
+			wb_preset_buy_btn.text = "🔧 보유 부품으로 프리셋 조립 확정 (0 RUB)"
 			wb_preset_buy_btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
 		else:
 			wb_preset_buy_btn.text = "🛒 부족 부품 %d종 구매 후 조립: %d RUB" % [wb_missing_preset_parts.size(), wb_missing_preset_cost]
@@ -1126,35 +1251,76 @@ func _execute_buy_and_assemble_preset() -> void:
 	if wb_current_preset_parts.is_empty():
 		return
 
-	var cur_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0) if GameManager else 0
+	# committed vs target multiset 계산
+	var committed_counts := {}
+	for cp in _flatten_parts_dict(wb_committed_parts):
+		committed_counts[cp] = int(committed_counts.get(cp, 0)) + 1
 
-	if wb_missing_preset_cost > 0:
-		if cur_rubles < wb_missing_preset_cost:
-			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("❌ 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [wb_missing_preset_cost, cur_rubles])
-			if SoundManager: SoundManager.play("hit_melee")
-			return
+	var needed_parts: Array[String] = []
+	for tp in _flatten_parts_dict(wb_current_preset_parts):
+		if int(committed_counts.get(tp, 0)) > 0:
+			committed_counts[tp] -= 1
+		else:
+			needed_parts.append(tp)
 
-		# 자금 차감
-		cur_rubles -= wb_missing_preset_cost
+	var surplus_parts: Array[String] = []
+	for cp in committed_counts.keys():
+		var rem_cnt := int(committed_counts[cp])
+		for _k in range(rem_cnt):
+			surplus_parts.append(String(cp))
+
+	# 미보유/보유 비용 재검증
+	var owned_pool := _get_owned_parts_list()
+	var inv_consume_parts: Array[String] = []
+	var missing_buy_parts: Array[String] = []
+	var recalc_cost: int = 0
+	for np in needed_parts:
+		if int(owned_pool.get(np, 0)) > 0:
+			owned_pool[np] -= 1
+			inv_consume_parts.append(np)
+		else:
+			missing_buy_parts.append(np)
+			recalc_cost += int(WeaponPartsDatabase.PARTS.get(np, {}).get("value", 5000))
+
+	var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+	if recalc_cost > 0 and cur_rubles < recalc_cost:
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("❌ 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [recalc_cost, cur_rubles])
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+
+	# 기존 장착 잉여 부품 먼저 창고/배낭 반환 (공간 부족 시 거래 중단)
+	if not surplus_parts.is_empty() and not _return_parts_to_storage(surplus_parts):
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 기존 장착 부품을 반환할 수 없습니다.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+
+	# 자금 차감
+	if recalc_cost > 0:
+		cur_rubles -= recalc_cost
 		if GameManager and GameManager.current_world_data.has("player"):
 			GameManager.current_world_data["player"]["rubles"] = cur_rubles
-		money_spent.emit(wb_missing_preset_cost)
-
+		money_spent.emit(recalc_cost)
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💰 %d RUB로 부족한 부품 %d종을 시장에서 즉시 구매하여 조립했습니다!" % [wb_missing_preset_cost, wb_missing_preset_parts.size()])
+			EventBus.event_logged.emit("💰 %d RUB로 부족한 부품 %d종을 시장에서 즉시 구매하여 조립했습니다!" % [recalc_cost, missing_buy_parts.size()])
 	else:
 		if EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("✅ 보유 중인 부품으로 프리셋 조립을 완료했습니다.")
-			
-	# 내 인벤토리에서 실제 보유 중이던 부품들 차감
-	for slot in wb_current_preset_parts.keys():
-		var p = wb_current_preset_parts[slot]
-		if p is Array:
-			for single_p in p:
-				_remove_owned_part_from_inv(single_p)
-		else:
-			_remove_owned_part_from_inv(p)
+
+	# 보유 중이던 신규 부품만 인벤토리에서 차감
+	for cid in inv_consume_parts:
+		_remove_owned_part_from_inv(cid)
+
+	wb_preset_pending_assembly = false
+	wb_committed_parts = wb_current_preset_parts.duplicate(true)
+	wb_selected_weapon["parts"] = wb_committed_parts.duplicate(true)
+	wb_selected_weapon["attachments"] = wb_selected_weapon["parts"]
+	var rec_id = wb_selected_weapon.get("receiver", "M4_리시버")
+	var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
+	wb_selected_weapon["computed_stats"] = WeaponPartsDatabase.compute_weapon_stats(rec_id, wb_committed_parts, wb_selected_weapon.get("loaded_ammo", def_ammo))
+	_commit_selected_weapon_to_source()
+	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
 			
 	wb_missing_preset_cost = 0
 	wb_missing_preset_parts.clear()
@@ -1182,33 +1348,18 @@ func _get_owned_parts_list() -> Dictionary:
 
 func _save_workbench_weapon() -> void:
 	if wb_selected_weapon.is_empty(): return
+	if wb_preset_pending_assembly or not wb_missing_preset_parts.is_empty():
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 프리셋 미리보기 상태입니다. 먼저 [구매 후 조립] 버튼으로 조립을 완료하세요.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
 	
-	var src_type = wb_weapon_source.get("type", "")
 	var rec_id = wb_selected_weapon.get("receiver", "M4_리시버")
 	var r_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
 	wb_selected_weapon["name"] = r_data.get("name", rec_id) + " (모딩)"
 	wb_selected_weapon["attachments"] = wb_selected_weapon.get("parts", {}).duplicate(true)
-	
-	if src_type == "equipment":
-		var s_key = wb_weapon_source.get("slot", "primary1")
-		equipment_data[s_key] = wb_selected_weapon.duplicate(true)
-		# equipment_data updated
-	elif src_type == "stash":
-		var uid = wb_weapon_source.get("uid", "")
-		if stash_grid_mgr:
-			for i in range(stash_grid_mgr.items.size()):
-				if stash_grid_mgr.items[i].get("uid", "") == uid:
-					stash_grid_mgr.items[i] = wb_selected_weapon.duplicate(true)
-					stash_grid_mgr.grid_changed.emit()
-					break
-	elif src_type == "player":
-		var uid = wb_weapon_source.get("uid", "")
-		if player_grid_mgr:
-			for i in range(player_grid_mgr.items.size()):
-				if player_grid_mgr.items[i].get("uid", "") == uid:
-					player_grid_mgr.items[i] = wb_selected_weapon.duplicate(true)
-					player_grid_mgr.grid_changed.emit()
-					break
+	wb_committed_parts = wb_selected_weapon.get("parts", {}).duplicate(true)
+	_commit_selected_weapon_to_source()
 					
 	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
 	if EventBus.has_signal("event_logged"):

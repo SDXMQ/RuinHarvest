@@ -272,15 +272,41 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 	var target_item: Dictionary = grid.get_item_by_uid(item_uid)
 	if target_item.is_empty():
 		return false
-	if not _deduct_player_rubles(FULTON_EXTRACT_COST):
+	if _get_player_rubles() < FULTON_EXTRACT_COST:
 		if status_feedback_lbl:
 			status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
 			status_feedback_lbl.text = "⚠️ 잔액이 부족합니다. (필요: %d RUB)" % FULTON_EXTRACT_COST
 		return false
 
 	var stash_entry: Dictionary = target_item.duplicate(true)
-	for coord_k in ["x", "y", "rotated"]:
+	for coord_k in ["x", "y", "rotated", "uid"]:
 		stash_entry.erase(coord_k)
+
+	if GameManager:
+		var stash_arr: Array = GameManager.current_world_data.get("hideout", {}).get("stash", [])
+		var stash_h: int = HideoutProgression.get_stash_grid_height(GameManager.current_world_data)
+		var sim_stash := InventoryGrid.new()
+		sim_stash.grid_width = 10
+		sim_stash.grid_height = stash_h
+		sim_stash.has_secure_container = false
+		sim_stash._init_grid_map()
+		if stash_arr is Array:
+			sim_stash.load_items(stash_arr)
+		var can_fit_stash := sim_stash.can_fit_item(str(stash_entry.get("id", "")), maxi(1, int(stash_entry.get("amount", 1))), stash_entry)
+		sim_stash.free()
+		if not can_fit_stash:
+			if status_feedback_lbl:
+				status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+				status_feedback_lbl.text = "⚠️ 은신처 창고 공간이 가득 차서 풀턴 회수가 불가합니다."
+			if SoundManager:
+				SoundManager.play("hit_melee")
+			return false
+
+	if not _deduct_player_rubles(FULTON_EXTRACT_COST):
+		if status_feedback_lbl:
+			status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
+			status_feedback_lbl.text = "⚠️ 잔액이 부족합니다. (필요: %d RUB)" % FULTON_EXTRACT_COST
+		return false
 
 	grid.remove_item_by_uid(item_uid)
 
@@ -289,6 +315,7 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 			GameManager.current_world_data["hideout"] = {"stash": [], "upgrades": {}}
 		elif not GameManager.current_world_data["hideout"].has("stash"):
 			GameManager.current_world_data["hideout"]["stash"] = []
+		stash_entry["uid"] = InventoryGrid.next_uid()
 		GameManager.current_world_data["hideout"]["stash"].append(stash_entry)
 		if GameManager.current_save_slot != "":
 			SaveManager.save_game(GameManager.current_world_data, GameManager.current_save_slot)

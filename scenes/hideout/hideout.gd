@@ -473,6 +473,8 @@ func _process(_delta: float) -> void:
 func _on_tab_changed(tab: int) -> void:
 	if tooltip: tooltip.hide()
 	_close_context_menu()
+	if tab != 3 and workbench and workbench.has_method("_cancel_pending_preset_preview"):
+		workbench._cancel_pending_preset_preview()
 	if tab != 0:
 		_sync_all_open_popups()
 		close_all_container_popups()
@@ -2089,20 +2091,30 @@ func _apply_marquee_selection(m_rect: Rect2, mgr: InventoryGrid, is_stash: bool,
 		SoundManager.play("menu_select" if added_cnt > 0 else "menu_move")
 
 func _buy_item(item_id: String, amount: int, price: int) -> void:
-	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
-	if user_rubles < price: return
-	
+	var user_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0))
+	if user_rubles < price or amount <= 0:
+		return
+
+	# 배낭 또는 창고에 실제 수납 먼저 시도 (공간 부족 시 자금 차감 방지)
+	var remaining := player_grid_mgr.auto_add_item(item_id, amount) if player_grid_mgr else amount
+	if remaining > 0 and stash_grid_mgr:
+		remaining = stash_grid_mgr.auto_add_item(item_id, remaining)
+	var added := amount - remaining
+	if added <= 0:
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 배낭과 창고 공간이 모두 부족하여 구매할 수 없습니다.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
+
+	var actual_cost := price if added >= amount else maxi(1, int(ceil(float(price) * float(added) / float(amount))))
 	# 자금 차감 및 거래자 누적 거래액 & 시세 탄력성 반영
-	GameManager.current_world_data["player"]["rubles"] -= price
-	HideoutProgression.record_trader_transaction(GameManager.current_world_data, current_trader_id, price)
+	GameManager.current_world_data["player"]["rubles"] -= actual_cost
+	HideoutProgression.record_trader_transaction(GameManager.current_world_data, current_trader_id, actual_cost)
 	if FleaMarket:
-		FleaMarket.record_player_purchase(item_id, amount)
+		FleaMarket.record_player_purchase(item_id, added)
+	if remaining > 0 and EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("⚠️ 공간이 부족하여 %d/%d개만 구매했습니다. (%d RUB 결제)" % [added, amount, actual_cost])
 	_update_money_label()
-	
-	# 배낭 또는 창고에 아이템 지급 (Auto-Fit)
-	var remaining = player_grid_mgr.auto_add_item(item_id, amount)
-	if remaining > 0:
-		stash_grid_mgr.auto_add_item(item_id, remaining)
 		
 	if SoundManager: SoundManager.play("menu_select")
 	_refresh_trader_ui()
@@ -2519,6 +2531,16 @@ func _try_register_selected_market_item() -> void:
 func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	var user_rubles = GameManager.current_world_data.get("player", {}).get("rubles", 0)
 	if user_rubles < total_price: return
+	var preview_item := str(listing.get("item_name", ""))
+	var preview_amt := maxi(1, int(listing.get("count", 1)))
+	var preview_cd: Dictionary = listing.get("custom_data", {}) if (listing.get("custom_data") is Dictionary) else {}
+	var can_fit_p := player_grid_mgr != null and player_grid_mgr.can_fit_item(preview_item, preview_amt, preview_cd)
+	var can_fit_s := stash_grid_mgr != null and stash_grid_mgr.can_fit_item(preview_item, preview_amt, preview_cd)
+	if not can_fit_p and not can_fit_s:
+		if EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 배낭과 창고 공간이 모두 부족하여 플리마켓 물품을 구매할 수 없습니다.")
+		if SoundManager: SoundManager.play("hit_melee")
+		return
 	var res := FleaMarket.purchase_listing(listing, 1)
 	if not bool(res.get("success", false)):
 		_refresh_market_ui()
@@ -2527,11 +2549,11 @@ func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	GameManager.current_world_data["player"]["rubles"] -= actual_cost
 	_update_money_label()
 	
-	var b_item := str(res.get("item_name", listing.get("item_name", "")))
-	var b_amt := int(res.get("amount", listing.get("count", 1)))
-	var remaining = player_grid_mgr.auto_add_item(b_item, b_amt)
-	if remaining > 0:
-		stash_grid_mgr.auto_add_item(b_item, remaining)
+	var b_item := str(res.get("item_name", preview_item))
+	var b_amt := int(res.get("amount", preview_amt))
+	var remaining = player_grid_mgr.auto_add_item(b_item, b_amt, preview_cd) if player_grid_mgr else b_amt
+	if remaining > 0 and stash_grid_mgr:
+		stash_grid_mgr.auto_add_item(b_item, remaining, preview_cd)
 		
 	if SoundManager: SoundManager.play("menu_select")
 	
@@ -2551,7 +2573,9 @@ func _register_market_item(uid: String, is_stash: bool, item_id: String, amount:
 			EventBus.event_logged.emit("⚠️ 등록 수수료(%d RUB)가 부족합니다." % fee)
 		return
 		
-	if not FleaMarket.register_item(item_id, amount, ask_unit_price, true):
+	var src_mgr: InventoryGrid = stash_grid_mgr if is_stash else player_grid_mgr
+	var item_dict: Dictionary = src_mgr.get_item_by_uid(uid) if (src_mgr and uid != "") else {}
+	if not FleaMarket.register_item(item_id, amount, ask_unit_price, true, item_dict):
 		return
 
 	GameManager.current_world_data["player"]["rubles"] -= fee
@@ -3001,6 +3025,8 @@ func _on_result_close_pressed() -> void:
 	result_dialog.visible = false
 
 func _on_raid_pressed() -> void:
+	if workbench and workbench.has_method("_cancel_pending_preset_preview"):
+		workbench._cancel_pending_preset_preview()
 	if SoundManager: SoundManager.play("menu_select")
 	_sync_save_data()
 	if GameManager: GameManager.start_raid()

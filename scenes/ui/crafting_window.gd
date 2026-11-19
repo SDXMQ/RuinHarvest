@@ -122,6 +122,8 @@ func _count_material(mat_id: String) -> int:
 
 func _craft_item(result_id: String, recipe: Dictionary) -> void:
 	if not player_inv: return
+
+	var inv_backup: Array = player_inv.items.duplicate(true) if player_inv.has_method("load_items") else []
 	
 	# 재료 차감
 	for mat_id in recipe["requirements"].keys():
@@ -130,14 +132,35 @@ func _craft_item(result_id: String, recipe: Dictionary) -> void:
 			player_inv.remove_item(mat_id, req_cnt)
 					
 	# 완성품 지급
+	var out_amt: int = int(recipe["amount"])
+	var overflow_rem: int = 0
 	if player_inv.has_method("auto_add_item"):
-		var rem = player_inv.auto_add_item(result_id, recipe["amount"])
-		if rem > 0 and EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 가방 공간이 부족하여 일부 아이템을 수령하지 못했습니다.")
+		overflow_rem = player_inv.auto_add_item(result_id, out_amt)
 	elif player_inv.has_method("add_item"):
-		player_inv.add_item(result_id, recipe["amount"])
+		overflow_rem = player_inv.add_item(result_id, out_amt)
 		if player_inv.has_signal("inventory_changed"):
 			player_inv.inventory_changed.emit()
+
+	if overflow_rem > 0:
+		var p_node = get_tree().get_first_node_in_group("player") if (is_inside_tree() and get_tree()) else null
+		var cur_scene = get_tree().current_scene if (is_inside_tree() and get_tree()) else null
+		if p_node != null and cur_scene != null:
+			var GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
+			var g_item = GroundItemScene.instantiate()
+			g_item.global_position = p_node.global_position + Vector2(randf_range(-16.0, 16.0), randf_range(-16.0, 16.0))
+			var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
+			parent_target.add_child(g_item)
+			g_item.setup(result_id, overflow_rem, {})
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("📦 가방 공간이 부족하여 제작품 [%s] x%d을(를) 바닥에 내려놓았습니다." % [result_id, overflow_rem])
+		else:
+			if player_inv.has_method("load_items"):
+				player_inv.load_items(inv_backup)
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("⚠️ 가방 공간이 부족하여 제작을 완료할 수 없습니다.")
+			if SoundManager:
+				SoundManager.play("hit_melee")
+			return
 	
 	if EventBus.has_signal("event_logged"):
 		var d = ItemDatabase.get_item_data(result_id)

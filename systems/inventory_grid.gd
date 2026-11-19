@@ -25,6 +25,23 @@ static func next_uid() -> String:
 	_uid_counter += 1
 	return "item_%d" % _uid_counter
 
+static func _sync_uid_counter_for_uid(uid_str: String) -> void:
+	if uid_str.begins_with("item_"):
+		var num_str := uid_str.substr(5)
+		if num_str.is_valid_int():
+			_uid_counter = maxi(_uid_counter, num_str.to_int())
+
+static func sync_uid_counter_from_items(item_list: Array) -> void:
+	for it in item_list:
+		if not (it is Dictionary):
+			continue
+		var u := String(it.get("uid", ""))
+		if u != "":
+			_sync_uid_counter_for_uid(u)
+		var inner = it.get("inner_items", [])
+		if inner is Array and not inner.is_empty():
+			sync_uid_counter_from_items(inner)
+
 static func is_same_item_id(a: String, b: String) -> bool:
 	if a == b:
 		return true
@@ -288,6 +305,7 @@ func clear() -> void:
 
 func load_items(saved_items: Array) -> void:
 	clear()
+	sync_uid_counter_from_items(saved_items)
 	for it in saved_items:
 		if not (it is Dictionary) or not it.has("id"): continue
 		var item = it.duplicate(true)
@@ -333,20 +351,12 @@ func _init_grid_map() -> void:
 		var cur_h = item.get("w", 1) if item.get("rotated", false) else item.get("h", 1)
 		_mark_grid(item.get("x", 0), item.get("y", 0), cur_w, cur_h, item.get("uid", ""))
 
-func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "", item_id: String = "", item_dict: Dictionary = {}) -> bool:
+func _can_place_in_map(target_map: Array, w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "", check_id: String = "", probe_dict: Dictionary = {}) -> bool:
 	if target_x < 0 or target_y < 0:
 		return false
 	if target_x + w > grid_width or target_y + h > grid_height:
 		return false
-		
-	var check_id = item_id
-	var probe_dict: Dictionary = item_dict
-	if check_id == "" and ignore_uid != "":
-		var existing = get_item_by_uid(ignore_uid)
-		check_id = existing.get("id", "")
-		if probe_dict.is_empty():
-			probe_dict = existing
-	
+
 	var accept_res := can_accept_item(probe_dict, check_id)
 	if not bool(accept_res.get("ok", true)):
 		return false
@@ -357,18 +367,28 @@ func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: St
 			return false
 		if check_id != "" and not is_allowed_in_secure_container(check_id):
 			return false
-		
+
 	for dy in range(h):
 		for dx in range(w):
 			var gx = target_x + dx
 			var gy = target_y + dy
-			if gy >= grid_map.size() or gx >= grid_map[gy].size():
+			if gy >= target_map.size() or gx >= target_map[gy].size():
 				return false
-			var occ = grid_map[gy][gx]
+			var occ = target_map[gy][gx]
 			if occ != "" and occ != ignore_uid:
 				return false
-				
+
 	return true
+
+func can_place_item(w: int, h: int, target_x: int, target_y: int, ignore_uid: String = "", item_id: String = "", item_dict: Dictionary = {}) -> bool:
+	var check_id = item_id
+	var probe_dict: Dictionary = item_dict
+	if check_id == "" and ignore_uid != "":
+		var existing = get_item_by_uid(ignore_uid)
+		check_id = existing.get("id", "")
+		if probe_dict.is_empty():
+			probe_dict = existing
+	return _can_place_in_map(grid_map, w, h, target_x, target_y, ignore_uid, check_id, probe_dict)
 
 func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = false) -> bool:
 	var item_id = item.get("id", "")
@@ -384,6 +404,8 @@ func place_item(item: Dictionary, target_x: int, target_y: int, rotated: bool = 
 	if uid == "":
 		uid = next_uid()
 		item["uid"] = uid
+	else:
+		_sync_uid_counter_for_uid(String(uid))
 		
 	if not can_place_item(actual_w, actual_h, target_x, target_y, uid, item_id, item):
 		return false
@@ -666,6 +688,61 @@ func find_first_fit(base_w: int, base_h: int, item_id: String = "", item_dict: D
 					return {"found": true, "x": x, "y": y, "rotated": true}
 					
 	return {"found": false, "x": -1, "y": -1, "rotated": false}
+
+func can_fit_item(id: String, amount: int = 1, custom_data: Dictionary = {}) -> bool:
+	if amount <= 0:
+		return true
+	var resolved_id = ItemDatabase.resolve_item_id(id) if ItemDatabase and ItemDatabase.has_method("resolve_item_id") else id
+	var item_data = ItemDatabase.get_item_data(resolved_id)
+	var max_stack = maxi(1, int(item_data.get("max_stack", 1)))
+	var remaining = amount
+
+	var probe_dict: Dictionary = custom_data.duplicate(true) if not custom_data.is_empty() else {}
+	probe_dict["id"] = resolved_id
+	var accept_res := can_accept_item(probe_dict, resolved_id)
+	if not bool(accept_res.get("ok", true)):
+		return false
+
+	if max_stack > 1:
+		for item in items:
+			if is_same_item_id(String(item.get("id", "")), resolved_id) and int(item.get("amount", 1)) < max_stack:
+				remaining -= (max_stack - int(item.get("amount", 1)))
+				if remaining <= 0:
+					return true
+
+	var sim_map: Array = []
+	for row in grid_map:
+		sim_map.append(row.duplicate())
+
+	var base_size := ItemDatabase.get_item_grid_size(resolved_id)
+	var stack_idx := 0
+	while remaining > 0:
+		var fit := {"found": false, "x": -1, "y": -1, "w": base_size.x, "h": base_size.y}
+		for y in range(grid_height - base_size.y + 1):
+			for x in range(grid_width - base_size.x + 1):
+				if _can_place_in_map(sim_map, base_size.x, base_size.y, x, y, "", resolved_id, probe_dict):
+					fit = {"found": true, "x": x, "y": y, "w": base_size.x, "h": base_size.y}
+					break
+			if fit["found"]:
+				break
+		if not fit["found"] and base_size.x != base_size.y:
+			for y in range(grid_height - base_size.x + 1):
+				for x in range(grid_width - base_size.y + 1):
+					if _can_place_in_map(sim_map, base_size.y, base_size.x, x, y, "", resolved_id, probe_dict):
+						fit = {"found": true, "x": x, "y": y, "w": base_size.y, "h": base_size.x}
+						break
+				if fit["found"]:
+					break
+		if not fit["found"]:
+			return false
+		stack_idx += 1
+		var mark_uid := "__sim_%d__" % stack_idx
+		for dy in range(int(fit["h"])):
+			for dx in range(int(fit["w"])):
+				sim_map[int(fit["y"]) + dy][int(fit["x"]) + dx] = mark_uid
+		remaining -= mini(max_stack, remaining)
+
+	return true
 
 func auto_add_item(id: String, amount: int, custom_data: Dictionary = {}) -> int:
 	var resolved_id = ItemDatabase.resolve_item_id(id) if ItemDatabase and ItemDatabase.has_method("resolve_item_id") else id

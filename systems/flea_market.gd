@@ -32,7 +32,7 @@ const RARE_MARKET_POOL: Array[String] = [
 
 const BOUNTY_MULTIPLIER: float = 2.5
 const BOUNTY_CANDIDATE_POOL: Array[String] = [
-	"고철", "폐전선", "비상용 배터리", "CPU", "그래픽카드",
+	"비상용 배터리", "CPU", "그래픽카드",
 	"라디오 부품", "기계 부품", "화약", "금시계", "은반지", "암호화된 SSD", "약초"
 ]
 
@@ -439,7 +439,7 @@ func _remove_player_listing_mirror(player_listing_id: int) -> void:
 		if l is Dictionary and bool(l.get("is_player", false)) and int(l.get("id", -1)) == player_listing_id:
 			listings.remove_at(i)
 
-func register_item(item_name: String, count: int, price: int, upfront_fee_paid: bool = false) -> bool:
+func register_item(item_name: String, count: int, price: int, upfront_fee_paid: bool = false, custom_data: Dictionary = {}) -> bool:
 	var resolved := _resolve_id(item_name)
 	if resolved in ["Scav 식별줄(Dogtag)", "Scav 인식표"] or item_name in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
 		return false
@@ -449,6 +449,7 @@ func register_item(item_name: String, count: int, price: int, upfront_fee_paid: 
 		return false
 		
 	var fee_rate := calculate_listing_fee_rate(resolved, price)
+	var sanitized_cd := InventoryGrid.sanitize_custom_data(custom_data) if not custom_data.is_empty() else {}
 	var entry = {
 		"id": next_player_listing_id,
 		"item_name": resolved,
@@ -463,6 +464,8 @@ func register_item(item_name: String, count: int, price: int, upfront_fee_paid: 
 		"seller": "플레이어",
 		"timer": 2.0
 	}
+	if not sanitized_cd.is_empty():
+		entry["custom_data"] = sanitized_cd
 	player_listings.append(entry)
 	listings.append(entry.duplicate(true))
 	listings.sort_custom(func(a, b): return int(a.get("price", 0)) < int(b.get("price", 0)))
@@ -471,16 +474,19 @@ func register_item(item_name: String, count: int, price: int, upfront_fee_paid: 
 	return true
 
 func add_listing(listing_data: Dictionary) -> bool:
+	var raw_cd: Dictionary = listing_data.get("custom_data", {}) if (listing_data.get("custom_data") is Dictionary) else {}
 	return register_item(
 		String(listing_data.get("item_name", "")),
 		int(listing_data.get("count", 1)),
 		int(listing_data.get("price", 100)),
-		bool(listing_data.get("upfront_fee_paid", false))
+		bool(listing_data.get("upfront_fee_paid", false)),
+		raw_cd
 	)
 
 func to_save_dict() -> Dictionary:
 	return {
 		"current_day": current_day,
+		"trends": trends.duplicate(true),
 		"supply_pressure": supply_pressure.duplicate(true),
 		"player_listings": player_listings.duplicate(true),
 		"next_listing_id": next_listing_id,
@@ -492,6 +498,8 @@ func load_from_save_dict(data: Dictionary) -> void:
 		return
 	if data.has("current_day"):
 		current_day = maxi(1, int(data.get("current_day", current_day)))
+	if data.get("trends") is Dictionary:
+		trends = data["trends"].duplicate(true)
 	if data.get("supply_pressure") is Dictionary:
 		supply_pressure = data["supply_pressure"].duplicate(true)
 	if data.get("player_listings") is Array:

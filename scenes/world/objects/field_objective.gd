@@ -153,11 +153,32 @@ func complete_objective(player_node: Node2D = null) -> bool:
 		GameManager.current_world_data["player"]["field_objectives_completed"] = prev_cnt + 1
 		
 	if player_node and "inventory_grid" in player_node and player_node.inventory_grid:
-		player_node.inventory_grid.auto_add_item("암호화된 SSD", 1)
+		var reward_ids: Array[String] = ["암호화된 SSD"]
 		if objective_kind == ObjectiveKind.HOSPITAL_BIOSAMPLER:
-			player_node.inventory_grid.auto_add_item("고급 치료킷", 1)
+			reward_ids.append("고급 치료킷")
 		elif objective_kind == ObjectiveKind.COMMERCIAL_RELAY:
-			player_node.inventory_grid.auto_add_item("장거리 무전기", 1)
+			reward_ids.append("장거리 무전기")
+		var dropped_rewards: Array[String] = []
+		for r_id in reward_ids:
+			var rem: int = player_node.inventory_grid.auto_add_item(r_id, 1)
+			if rem > 0:
+				var GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
+				var g_item = GroundItemScene.instantiate()
+				g_item.global_position = player_node.global_position + Vector2(randf_range(-18.0, 18.0), randf_range(-18.0, 18.0))
+				var cur_scene = get_tree().current_scene if (is_inside_tree() and get_tree()) else null
+				var parent_target: Node = null
+				if cur_scene:
+					parent_target = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
+				elif get_parent():
+					parent_target = get_parent()
+				if parent_target:
+					parent_target.add_child(g_item)
+					g_item.setup(r_id, rem, {})
+					dropped_rewards.append(r_id)
+				else:
+					g_item.free()
+		if not dropped_rewards.is_empty() and EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("📦 가방 공간이 부족하여 임무 보상(%s)을 바닥에 드랍했습니다." % ", ".join(dropped_rewards))
 		
 	if SoundManager:
 		SoundManager.play("level_up")

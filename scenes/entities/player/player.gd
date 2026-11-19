@@ -402,6 +402,37 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 	start_channeling(duration, item_name, func():
 		if not is_instance_valid(self):
 			return
+		if inventory_grid:
+			var cur_item: Dictionary = {}
+			if target_uid != "":
+				var uid_res := inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+					return String(it.get("uid", "")) == target_uid
+				)
+				if bool(uid_res.get("found", false)):
+					cur_item = uid_res.get("item", {})
+			if cur_item.is_empty():
+				var id_res := inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
+					return InventoryGrid.is_same_item_id(String(it.get("id", "")), item_id)
+				)
+				if bool(id_res.get("found", false)):
+					cur_item = id_res.get("item", {})
+			if cur_item.is_empty():
+				if EventBus and EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("⚠️ 사용할 아이템이 인벤토리에 없어 취소되었습니다.")
+				if SoundManager:
+					SoundManager.play("hit_melee")
+				return
+			var amt := int(cur_item.get("amount", 1))
+			if amt > 1:
+				cur_item["amount"] = amt - 1
+				inventory_grid.grid_changed.emit()
+			else:
+				var rm_uid := String(cur_item.get("uid", ""))
+				if rm_uid != "":
+					inventory_grid.remove_item_by_uid_recursive(rm_uid)
+				else:
+					inventory_grid.remove_item(item_id, 1)
+
 		if effects.has("hp"):
 			hp = min(max_hp, hp + float(effects["hp"]))
 		if effects.has("hunger"):
@@ -422,30 +453,6 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 			var red: float = float(effects.get("damage_reduction", 0.25))
 			apply_painkiller_buff(dur, red)
 			pk_suffix = " (%d초간 피해 -%d%%)" % [int(round(dur)), int(round(red * 100.0))]
-
-		if inventory_grid:
-			var cur_item: Dictionary = {}
-			if target_uid != "":
-				var uid_res := inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
-					return String(it.get("uid", "")) == target_uid
-				)
-				if bool(uid_res.get("found", false)):
-					cur_item = uid_res.get("item", {})
-			if cur_item.is_empty():
-				var id_res := inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
-					return String(it.get("id", "")) == item_id
-				)
-				if bool(id_res.get("found", false)):
-					cur_item = id_res.get("item", {})
-			if not cur_item.is_empty():
-				var amt := int(cur_item.get("amount", 1))
-				if amt > 1:
-					cur_item["amount"] = amt - 1
-					inventory_grid.grid_changed.emit()
-				else:
-					inventory_grid.remove_item_by_uid_recursive(String(cur_item.get("uid", "")))
-			elif target_uid != "":
-				inventory_grid.remove_item_by_uid_recursive(target_uid)
 
 		stats_changed.emit()
 		if SoundManager:
@@ -645,10 +652,24 @@ func apply_backpack_grid_size() -> void:
 		var b_grid = d.get("backpack_grid", Vector2i(6, 5))
 		new_w = b_grid.x
 		new_h = b_grid.y
+	var dropped_items: Array = []
 	if inventory_grid.has_method("resize_grid"):
-		inventory_grid.resize_grid(new_w, new_h)
+		dropped_items = inventory_grid.resize_grid(new_w, new_h)
 	elif inventory_grid.has_method("resize"):
 		inventory_grid.resize(new_w, new_h)
+	if not dropped_items.is_empty() and is_inside_tree() and get_tree() and get_tree().current_scene:
+		var cur_scene = get_tree().current_scene
+		var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
+		var GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
+		for it in dropped_items:
+			if not (it is Dictionary) or it.is_empty():
+				continue
+			var g_item = GroundItemScene.instantiate()
+			g_item.global_position = global_position + Vector2(randf_range(-20.0, 20.0), randf_range(-20.0, 20.0))
+			parent_target.add_child(g_item)
+			g_item.setup(String(it.get("id", "")), maxi(1, int(it.get("amount", 1))), InventoryGrid.sanitize_custom_data(it))
+		if EventBus and EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("📦 가방 축소로 넘친 아이템 %d종을 바닥에 내려놓았습니다." % dropped_items.size())
 
 func apply_damage(amount: float, source: String = "unknown") -> void:
 	_on_player_damaged(amount, source)

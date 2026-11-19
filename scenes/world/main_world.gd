@@ -807,7 +807,8 @@ func _open_weapon_modding_window() -> void:
 		$UI.add_child(win)
 		var cur_w = player.equipped_weapon_data if player else {}
 		var inv_target = player.inventory_grid if player else null
-		win.setup(inv_target, null, cur_w)
+		var slot_key: String = player.active_weapon_slot if (player and "active_weapon_slot" in player) else ""
+		win.setup(inv_target, null, cur_w, slot_key)
 		win.window_closed.connect(func():
 			current_modding_window = null
 			_on_player_stats_changed()

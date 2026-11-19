@@ -19,6 +19,7 @@ const SLOT_NAMES_KR = {
 const ShootingRangeScript = preload("res://scenes/ui/shooting_range_window.gd")
 
 var current_receiver_id: String = "M9_리시버"
+var target_weapon_slot: String = ""
 var current_weapon: Dictionary = {}
 var original_attached_parts: Dictionary = {}
 var original_magazine_ammo: int = 0
@@ -36,9 +37,10 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_ui()
 
-func setup(p_inv: InventoryGrid, s_inv: InventoryGrid = null, initial_weapon: Dictionary = {}) -> void:
+func setup(p_inv: InventoryGrid, s_inv: InventoryGrid = null, initial_weapon: Dictionary = {}, p_slot_key: String = "") -> void:
 	player_inv = p_inv
 	stash_inv = s_inv
+	target_weapon_slot = p_slot_key
 	if not initial_weapon.is_empty() and initial_weapon.has("id"):
 		current_receiver_id = WeaponPartsDatabase.resolve_receiver_id(initial_weapon["id"])
 		current_weapon = initial_weapon.duplicate(true)
@@ -81,16 +83,28 @@ func _consume_part_from_inventories(part_id: String) -> bool:
 		return true
 	return false
 
-func _return_part_to_inventories(part_id: String) -> void:
-	if part_id == "":
+func _return_part_to_inventories(part_id: String, amount: int = 1) -> void:
+	if part_id == "" or amount <= 0:
 		return
-	var rem = 1
+	var rem := amount
 	if player_inv:
-		rem = player_inv.auto_add_item(part_id, 1)
+		rem = player_inv.auto_add_item(part_id, rem)
 	if rem > 0 and stash_inv:
 		rem = stash_inv.auto_add_item(part_id, rem)
-	if rem > 0 and EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⚠️ 인벤토리 공간이 부족하여 [%s] 회수에 실패했습니다." % part_id)
+	if rem > 0:
+		var p_node = get_tree().get_first_node_in_group("player") if (is_inside_tree() and get_tree()) else null
+		var cur_scene = get_tree().current_scene if (is_inside_tree() and get_tree()) else null
+		if p_node != null and cur_scene != null:
+			var GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
+			var g_item = GroundItemScene.instantiate()
+			g_item.global_position = p_node.global_position + Vector2(randf_range(-16.0, 16.0), randf_range(-16.0, 16.0))
+			var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
+			parent_target.add_child(g_item)
+			g_item.setup(part_id, rem, {})
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("📦 인벤토리 공간 부족으로 [%s]을(를) 바닥에 드랍했습니다." % part_id)
+		elif EventBus.has_signal("event_logged"):
+			EventBus.event_logged.emit("⚠️ 인벤토리 공간이 부족하여 [%s] 회수에 실패했습니다." % part_id)
 
 func _build_ui() -> void:
 	var bg = ColorRect.new()
@@ -506,20 +520,35 @@ func _recompute_and_update_ui() -> void:
 		stat_bars[key]["lbl"].text = str(snapped(val, 0.1))
 
 func _sync_to_equipped_player_weapon() -> void:
-	var player_node = get_tree().get_first_node_in_group("player")
+	var player_node = get_tree().get_first_node_in_group("player") if (is_inside_tree() and get_tree()) else null
 	if not player_node:
 		return
 	if "equipment" in player_node and player_node.equipment is Dictionary:
-		for s_key in ["primary1", "primary2", "sidearm"]:
-			var eq = player_node.equipment.get(s_key, {})
-			if not eq.is_empty():
-				var eq_id = WeaponPartsDatabase.resolve_receiver_id(String(eq.get("id", "")))
-				if eq_id == current_receiver_id:
-					player_node.equipment[s_key]["parts"] = current_weapon.get("parts", {}).duplicate(true)
-					player_node.equipment[s_key]["attachments"] = player_node.equipment[s_key]["parts"]
-					player_node.equipment[s_key]["name"] = current_weapon.get("name", "")
-					player_node.equipment[s_key]["computed_stats"] = current_weapon.get("computed_stats", {}).duplicate(true)
-					player_node.equipment[s_key]["current_magazine_ammo"] = current_weapon.get("current_magazine_ammo", 0)
+		var resolved_slot := ""
+		if target_weapon_slot != "" and player_node.equipment.has(target_weapon_slot):
+			var eq_t = player_node.equipment.get(target_weapon_slot, {})
+			if eq_t is Dictionary and not eq_t.is_empty():
+				if WeaponPartsDatabase.resolve_receiver_id(String(eq_t.get("id", ""))) == current_receiver_id:
+					resolved_slot = target_weapon_slot
+		if resolved_slot == "" and "active_weapon_slot" in player_node:
+			var act_s := String(player_node.active_weapon_slot)
+			var eq_a = player_node.equipment.get(act_s, {})
+			if eq_a is Dictionary and not eq_a.is_empty():
+				if WeaponPartsDatabase.resolve_receiver_id(String(eq_a.get("id", ""))) == current_receiver_id:
+					resolved_slot = act_s
+		if resolved_slot == "":
+			for s_key in ["primary1", "primary2", "sidearm"]:
+				var eq = player_node.equipment.get(s_key, {})
+				if eq is Dictionary and not eq.is_empty():
+					if WeaponPartsDatabase.resolve_receiver_id(String(eq.get("id", ""))) == current_receiver_id:
+						resolved_slot = s_key
+						break
+		if resolved_slot != "":
+			player_node.equipment[resolved_slot]["parts"] = current_weapon.get("parts", {}).duplicate(true)
+			player_node.equipment[resolved_slot]["attachments"] = player_node.equipment[resolved_slot]["parts"]
+			player_node.equipment[resolved_slot]["name"] = current_weapon.get("name", "")
+			player_node.equipment[resolved_slot]["computed_stats"] = current_weapon.get("computed_stats", {}).duplicate(true)
+			player_node.equipment[resolved_slot]["current_magazine_ammo"] = current_weapon.get("current_magazine_ammo", 0)
 		if player_node.has_method("refresh_equipped_weapon"):
 			player_node.refresh_equipped_weapon(false)
 		elif player_node.has_method("switch_weapon_slot") and "active_weapon_slot" in player_node:
@@ -563,9 +592,10 @@ func _on_assemble_pressed() -> void:
 	if cur_ammo > max_mag:
 		var excess = cur_ammo - max_mag
 		var cal_list: Array = stats.get("ammo_types", ["9mm"])
-		var cal_id = String(cal_list[0]) if cal_list.size() > 0 else "9mm"
-		if player_inv:
-			player_inv.auto_add_item(cal_id, excess)
+		var cal_id := String(current_weapon.get("loaded_ammo", ""))
+		if cal_id == "":
+			cal_id = String(cal_list[0]) if cal_list.size() > 0 else "9mm"
+		_return_part_to_inventories(cal_id, excess)
 		cur_ammo = max_mag
 	current_weapon["current_magazine_ammo"] = clampi(cur_ammo, 0, max_mag)
 	original_magazine_ammo = int(current_weapon["current_magazine_ammo"])
@@ -605,9 +635,10 @@ func _on_disassemble_pressed() -> void:
 	if cur_ammo > max_mag:
 		var excess = cur_ammo - max_mag
 		var cal_list: Array = stats.get("ammo_types", ["9mm"])
-		var cal_id = String(cal_list[0]) if cal_list.size() > 0 else "9mm"
-		if player_inv:
-			player_inv.auto_add_item(cal_id, excess)
+		var cal_id := String(current_weapon.get("loaded_ammo", ""))
+		if cal_id == "":
+			cal_id = String(cal_list[0]) if cal_list.size() > 0 else "9mm"
+		_return_part_to_inventories(cal_id, excess)
 		cur_ammo = max_mag
 	current_weapon["current_magazine_ammo"] = clampi(cur_ammo, 0, max_mag)
 	original_magazine_ammo = int(current_weapon["current_magazine_ammo"])

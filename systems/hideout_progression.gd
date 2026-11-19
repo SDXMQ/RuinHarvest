@@ -723,13 +723,29 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			comp_btn.disabled = not can_complete
 			var q_cap = q
 			comp_btn.pressed.connect(func():
+				var s_backup: Array = s_grid.items.duplicate(true) if s_grid else []
+				var p_backup: Array = p_grid.items.duplicate(true) if p_grid else []
 				for it_id in req_items.keys():
 					consume_total_item(it_id, int(req_items[it_id]), p_grid, s_grid)
-				w_data["player"]["rubles"] = int(w_data["player"].get("rubles", 0)) + int(q_cap["reward_rubles"])
+				var all_rewards_fit := true
 				for r_it in q_cap.get("reward_items", []):
-					var rem = s_grid.auto_add_item(r_it["id"], int(r_it["amount"])) if s_grid else int(r_it["amount"])
+					var r_amt := int(r_it["amount"])
+					var rem := s_grid.auto_add_item(r_it["id"], r_amt) if s_grid else r_amt
 					if rem > 0 and p_grid:
-						p_grid.auto_add_item(r_it["id"], rem)
+						rem = p_grid.auto_add_item(r_it["id"], rem)
+					if rem > 0:
+						all_rewards_fit = false
+						break
+				if not all_rewards_fit:
+					if s_grid:
+						s_grid.load_items(s_backup)
+					if p_grid:
+						p_grid.load_items(p_backup)
+					if EventBus.has_signal("event_logged"):
+						EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 의뢰 보상을 수령할 수 없습니다.")
+					if SoundManager: SoundManager.play("hit_melee")
+					return
+				w_data["player"]["rubles"] = int(w_data["player"].get("rubles", 0)) + int(q_cap["reward_rubles"])
 				completed_list.append(q_cap["id"])
 				if SoundManager: SoundManager.play("level_up")
 				if hideout.has_method("_update_money_label"):

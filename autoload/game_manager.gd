@@ -212,6 +212,8 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 				if ret_id == "":
 					continue
 				var bsize := ItemDatabase.get_item_grid_size(ret_id) if ItemDatabase else Vector2i(1, 1)
+				var raw_cd: Dictionary = sale.get("custom_data", {}) if (sale.get("custom_data") is Dictionary) else {}
+				var clean_cd := InventoryGrid.sanitize_custom_data(raw_cd)
 				var ret_entry := {
 					"uid": InventoryGrid.next_uid(),
 					"id": ret_id,
@@ -220,6 +222,15 @@ func end_raid(result: String, looted_items: Array = []) -> void:
 					"h": bsize.y,
 					"rotated": false
 				}
+				if not clean_cd.is_empty():
+					for k in InventoryGrid.PRESERVED_CUSTOM_KEYS:
+						if clean_cd.has(k):
+							ret_entry[k] = clean_cd[k].duplicate(true) if (clean_cd[k] is Dictionary or clean_cd[k] is Array) else clean_cd[k]
+					var stripped_cd := clean_cd.duplicate(true)
+					stripped_cd.erase("inner_items")
+					stripped_cd.erase("inner_grid_w")
+					stripped_cd.erase("inner_grid_h")
+					ret_entry["custom_data"] = stripped_cd
 				InventoryGrid.ensure_container_defaults(ret_entry)
 				stash_arr.append(ret_entry)
 				returned_items.append({"item_name": ret_id, "count": ret_amt})
