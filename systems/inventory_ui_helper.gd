@@ -196,7 +196,7 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 	var matched_uids: Dictionary = ctrl.get_meta("matched_uids", {}) if ctrl.has_meta("matched_uids") else {}
 	var unavailable_uids: Dictionary = ctrl.get_meta("unavailable_uids", {}) if ctrl.has_meta("unavailable_uids") else {}
 	var active_focus_uid: String = str(ctrl.get_meta("active_focus_uid", "")) if ctrl.has_meta("active_focus_uid") else ""
-	var lbl_font_sz: int = 10
+	var lbl_font_sz: int = 11 if cell_size >= 48.0 else 10
 	
 	# 0. 전체 그리드 베이스 배경 (다크 택티컬 스틸 웰)
 	var full_rect := Rect2(0.0, 0.0, float(w) * cell_size, float(h) * cell_size)

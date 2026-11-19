@@ -45,6 +45,7 @@ const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
 const SplitDialogScene = preload("res://scenes/ui/split_dialog.tscn")
 var tooltip: PanelContainer
 const ShootingRangeScript = preload("res://scenes/ui/shooting_range_window.gd")
+const CharacterPaperdollPreviewScript = preload("res://scenes/hideout/components/character_paperdoll_preview.gd")
 
 # 2D 인벤토리 그리드 시스템
 var player_grid_mgr: InventoryGrid
@@ -52,6 +53,14 @@ var stash_grid_mgr: InventoryGrid
 var equipment_data: Dictionary = {}
 
 const CELL_SIZE: float = InventoryUIHelper.CELL_SIZE
+var player_cell_size: float = CELL_SIZE
+var stash_cell_size: float = CELL_SIZE
+var sell_player_cell_size: float = CELL_SIZE
+var sell_stash_cell_size: float = CELL_SIZE
+var market_player_cell_size: float = CELL_SIZE
+var market_stash_cell_size: float = CELL_SIZE
+var _drag_preview_cell_size: float = CELL_SIZE
+var character_paperdoll_preview: Control = null
 
 # 드래그 앤 드롭 상태
 var is_dragging: bool = false
@@ -261,6 +270,8 @@ func _ready() -> void:
 	
 	# 장비 슬롯 연결
 	_connect_equipment_slots()
+	_setup_character_paperdoll_ui()
+	_setup_stash_grid_scaling()
 	_setup_traders_bulk_ui()
 	_setup_market_controls()
 	
@@ -298,17 +309,110 @@ func _ready() -> void:
 		ResponsiveManager.breakpoint_changed.connect(_on_responsive_breakpoint_changed)
 		ResponsiveManager.window_resized.connect(_on_responsive_window_resized)
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, ResponsiveManager.current_viewport_size)
+	call_deferred("_update_all_hideout_grid_sizes")
 
 var progression_tab: Control = null
 var service_record_tab: Control = null
 var _is_loading_data: bool = false
+
+func _compute_fit_cell_size(scroll_ctrl: Control, grid_cols: int, min_cell: float = CELL_SIZE, max_cell: float = 56.0) -> float:
+	if not is_instance_valid(scroll_ctrl) or grid_cols <= 0:
+		return min_cell
+	var avail_w := scroll_ctrl.size.x - 14.0
+	if avail_w <= 60.0:
+		return min_cell
+	return clampf(floorf(avail_w / float(grid_cols)), min_cell, max_cell)
+
+func _get_grid_cell_size(ctrl: Control) -> float:
+	if ctrl == player_grid_control:
+		return player_cell_size
+	elif ctrl == stash_grid_control:
+		return stash_cell_size
+	elif ctrl == sell_player_grid_ctrl:
+		return sell_player_cell_size
+	elif ctrl == sell_stash_grid_ctrl:
+		return sell_stash_cell_size
+	elif ctrl == market_player_grid_ctrl:
+		return market_player_cell_size
+	elif ctrl == market_stash_grid_ctrl:
+		return market_stash_cell_size
+	return CELL_SIZE
+
+func _update_all_hideout_grid_sizes() -> void:
+	if player_grid_control and player_grid_mgr:
+		var p_scroll := player_grid_control.get_parent() as ScrollContainer
+		player_cell_size = _compute_fit_cell_size(p_scroll, player_grid_mgr.grid_width, CELL_SIZE, 56.0)
+		player_grid_control.custom_minimum_size = Vector2(player_grid_mgr.grid_width * player_cell_size, player_grid_mgr.grid_height * player_cell_size)
+		player_grid_control.queue_redraw()
+	if stash_grid_control and stash_grid_mgr:
+		var s_scroll := stash_grid_control.get_parent() as ScrollContainer
+		stash_cell_size = _compute_fit_cell_size(s_scroll, stash_grid_mgr.grid_width, CELL_SIZE, 56.0)
+		stash_grid_control.custom_minimum_size = Vector2(stash_grid_mgr.grid_width * stash_cell_size, stash_grid_mgr.grid_height * stash_cell_size)
+		stash_grid_control.queue_redraw()
+
+func _setup_stash_grid_scaling() -> void:
+	for ctrl in [player_grid_control, stash_grid_control]:
+		if ctrl and ctrl.get_parent() is ScrollContainer:
+			var sc := ctrl.get_parent() as ScrollContainer
+			sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+			if not sc.resized.is_connected(_update_all_hideout_grid_sizes):
+				sc.resized.connect(_update_all_hideout_grid_sizes)
+
+func _setup_character_paperdoll_ui() -> void:
+	var equip_scroll := get_node_or_null("CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll") as ScrollContainer
+	if equip_scroll:
+		equip_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var slots_vbox := get_node_or_null("CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox") as VBoxContainer
+	if not slots_vbox:
+		return
+	var top_hbox := HBoxContainer.new()
+	top_hbox.name = "ArmorPaperdollHBox"
+	top_hbox.add_theme_constant_override("separation", 8)
+	slots_vbox.add_child(top_hbox)
+	slots_vbox.move_child(top_hbox, 0)
+
+	var armor_col := VBoxContainer.new()
+	armor_col.name = "ArmorSlotsCol"
+	armor_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	armor_col.size_flags_stretch_ratio = 1.05
+	armor_col.add_theme_constant_override("separation", 6)
+	top_hbox.add_child(armor_col)
+
+	for slot_btn in [helmet_slot, vest_slot, backpack_slot, bottom_slot]:
+		if is_instance_valid(slot_btn) and slot_btn.get_parent() == slots_vbox:
+			slots_vbox.remove_child(slot_btn)
+			armor_col.add_child(slot_btn)
+			slot_btn.custom_minimum_size = Vector2(118, 42)
+			slot_btn.clip_text = true
+
+	var doll_panel := PanelContainer.new()
+	doll_panel.name = "PaperdollPanel"
+	doll_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	doll_panel.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	doll_panel.size_flags_stretch_ratio = 0.95
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.05, 0.07, 0.10, 0.95)
+	sb.set_border_width_all(1)
+	sb.border_color = Color(0.24, 0.34, 0.44, 0.85)
+	sb.set_corner_radius_all(4)
+	doll_panel.add_theme_stylebox_override("panel", sb)
+	top_hbox.add_child(doll_panel)
+
+	character_paperdoll_preview = CharacterPaperdollPreviewScript.new()
+	character_paperdoll_preview.name = "CharacterPaperdollPreview"
+	character_paperdoll_preview.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	character_paperdoll_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	character_paperdoll_preview.custom_minimum_size = Vector2(126, 186)
+	doll_panel.add_child(character_paperdoll_preview)
 
 func _apply_stash_upgrade_size() -> void:
 	if not stash_grid_mgr or not GameManager: return
 	var new_h = HideoutProgression.get_stash_grid_height(GameManager.current_world_data)
 	stash_grid_mgr.resize_grid(10, new_h)
 	if stash_grid_control:
-		stash_grid_control.custom_minimum_size = Vector2(10 * CELL_SIZE, new_h * CELL_SIZE)
+		var s_scroll := stash_grid_control.get_parent() as ScrollContainer
+		stash_cell_size = _compute_fit_cell_size(s_scroll, 10, CELL_SIZE, 56.0)
+		stash_grid_control.custom_minimum_size = Vector2(10 * stash_cell_size, new_h * stash_cell_size)
 		stash_grid_control.queue_redraw()
 
 func _on_responsive_breakpoint_changed(new_bp: ResponsiveManager.Breakpoint, vp_size: Vector2) -> void:
@@ -337,6 +441,7 @@ func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector
 			if PixelAssetManager:
 				$TopBar/MoneyLabel.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
 			$TopBar/MoneyLabel.add_theme_font_size_override("font_size", 24)
+	call_deferred("_update_all_hideout_grid_sizes")
 
 func _process(_delta: float) -> void:
 	if tooltip and tooltip.visible:
@@ -352,10 +457,13 @@ func _on_tab_changed(tab: int) -> void:
 		close_all_container_popups()
 	if tab == 0:
 		_refresh_stash_ui()
+		call_deferred("_update_all_hideout_grid_sizes")
 	elif tab == 1:
 		_refresh_trader_ui()
+		call_deferred("_update_all_hideout_grid_sizes")
 	elif tab == 2:
 		_refresh_market_ui()
+		call_deferred("_update_all_hideout_grid_sizes")
 	elif tab == 3:
 		_refresh_workbench_ui()
 	elif tab == 4 and progression_tab:
@@ -526,7 +634,9 @@ func _apply_backpack_grid_size() -> void:
 					EventBus.event_logged.emit("⚠️ 창고 공간이 부족하여 일부 아이템(%s)을 보관하지 못했습니다!" % overflow_it.get("name", overflow_it.get("id", "")))
 			
 	if player_grid_control:
-		player_grid_control.custom_minimum_size = Vector2(new_w * CELL_SIZE, new_h * CELL_SIZE)
+		var p_scroll := player_grid_control.get_parent() as ScrollContainer
+		player_cell_size = _compute_fit_cell_size(p_scroll, new_w, CELL_SIZE, 56.0)
+		player_grid_control.custom_minimum_size = Vector2(new_w * player_cell_size, new_h * player_cell_size)
 		player_grid_control.queue_redraw()
 
 func _on_player_grid_draw() -> void:
@@ -536,7 +646,7 @@ func _on_stash_grid_draw() -> void:
 	_draw_2d_grid(stash_grid_control, stash_grid_mgr, hovered_stash_cell, false)
 
 func _draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: Vector2i, is_player_grid: bool) -> void:
-	InventoryUIHelper.draw_2d_grid(ctrl, grid_mgr, hovered_cell, is_player_grid, is_dragging, drag_data, CELL_SIZE)
+	InventoryUIHelper.draw_2d_grid(ctrl, grid_mgr, hovered_cell, is_player_grid, is_dragging, drag_data, _get_grid_cell_size(ctrl))
 
 
 # ============================================================
@@ -549,10 +659,11 @@ func _on_stash_grid_gui_input(event: InputEvent) -> void:
 	_handle_grid_input(event, stash_grid_control, stash_grid_mgr, false)
 
 func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGrid, is_player_grid: bool) -> void:
+	var csz := _get_grid_cell_size(ctrl)
 	var m_global: Vector2 = (event as InputEventMouse).global_position if event is InputEventMouse else get_global_mouse_position()
 	var local_pos: Vector2 = m_global - ctrl.get_global_rect().position
-	var cell_x = int(floor(local_pos.x / CELL_SIZE))
-	var cell_y = int(floor(local_pos.y / CELL_SIZE))
+	var cell_x = int(floor(local_pos.x / csz))
+	var cell_y = int(floor(local_pos.y / csz))
 	
 	if event is InputEventMouseMotion:
 		if cell_x >= 0 and cell_x < grid_mgr.grid_width and cell_y >= 0 and cell_y < grid_mgr.grid_height:
@@ -718,10 +829,10 @@ func _input(event: InputEvent) -> void:
 				p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
 			
 		if player_grid_control:
-			hovered_player_cell = InventoryUIHelper.calc_drag_drop_cell(player_grid_control, m_pos, player_grid_mgr, drag_data, CELL_SIZE)
+			hovered_player_cell = InventoryUIHelper.calc_drag_drop_cell(player_grid_control, m_pos, player_grid_mgr, drag_data, player_cell_size)
 			player_grid_control.queue_redraw()
 		if stash_grid_control:
-			hovered_stash_cell = InventoryUIHelper.calc_drag_drop_cell(stash_grid_control, m_pos, stash_grid_mgr, drag_data, CELL_SIZE)
+			hovered_stash_cell = InventoryUIHelper.calc_drag_drop_cell(stash_grid_control, m_pos, stash_grid_mgr, drag_data, stash_cell_size)
 			stash_grid_control.queue_redraw()
 			
 		# 마우스 아래의 장비 슬롯 감지 및 하이라이트
@@ -770,7 +881,14 @@ func _rebuild_drag_preview() -> void:
 	var item_dict: Dictionary = drag_data.get("item", {})
 	if item_dict.is_empty():
 		return
-	drag_preview_node = InventoryUIHelper.build_drag_preview(item_dict, bool(drag_data.get("rotated", false)), CELL_SIZE)
+	var src_grid = drag_data.get("source_grid")
+	if src_grid == player_grid_mgr:
+		_drag_preview_cell_size = player_cell_size
+	elif src_grid == stash_grid_mgr:
+		_drag_preview_cell_size = stash_cell_size
+	else:
+		_drag_preview_cell_size = CELL_SIZE
+	drag_preview_node = InventoryUIHelper.build_drag_preview(item_dict, bool(drag_data.get("rotated", false)), _drag_preview_cell_size)
 	add_child(drag_preview_node)
 	_update_drag_preview_pos()
 
@@ -782,7 +900,7 @@ func _update_drag_preview_pos() -> void:
 	var base_size := ItemDatabase.get_item_grid_size(str(item_dict.get("id", "")))
 	var cur_w := int(item_dict.get("h", base_size.y)) if is_rot else int(item_dict.get("w", base_size.x))
 	var cur_h := int(item_dict.get("w", base_size.x)) if is_rot else int(item_dict.get("h", base_size.y))
-	var center_offset := Vector2(float(cur_w) * CELL_SIZE * 0.5, float(cur_h) * CELL_SIZE * 0.5)
+	var center_offset := Vector2(float(cur_w) * _drag_preview_cell_size * 0.5, float(cur_h) * _drag_preview_cell_size * 0.5)
 	drag_preview_node.global_position = get_global_mouse_position() - center_offset
 
 func _end_drag() -> void:
@@ -842,13 +960,13 @@ func _handle_hideout_global_drop(drop_pos: Vector2 = Vector2.INF) -> void:
 	
 	# 1. 플레이어 배낭 2D 그리드 위인지 검사
 	if player_grid_control.get_global_rect().has_point(m_pos):
-		var p_cell := InventoryUIHelper.calc_drag_drop_cell(player_grid_control, m_pos, player_grid_mgr, drag_data, CELL_SIZE)
+		var p_cell := InventoryUIHelper.calc_drag_drop_cell(player_grid_control, m_pos, player_grid_mgr, drag_data, player_cell_size)
 		_try_drop_on_hideout_grid(player_grid_mgr, p_cell.x, p_cell.y, true)
 		return
 		
 	# 2. 은신처 창고 2D 그리드 위인지 검사
 	if stash_grid_control.get_global_rect().has_point(m_pos):
-		var s_cell := InventoryUIHelper.calc_drag_drop_cell(stash_grid_control, m_pos, stash_grid_mgr, drag_data, CELL_SIZE)
+		var s_cell := InventoryUIHelper.calc_drag_drop_cell(stash_grid_control, m_pos, stash_grid_mgr, drag_data, stash_cell_size)
 		_try_drop_on_hideout_grid(stash_grid_mgr, s_cell.x, s_cell.y, false)
 		return
 		
@@ -1062,6 +1180,8 @@ func _update_equipment_ui() -> void:
 	_render_equip_slot_button(primary2_slot, "primary2", "🔫 주무기 2")
 	_render_equip_slot_button(sidearm_slot, "sidearm", "🗡️ 보조 무기")
 	_render_equip_slot_button(throwable_slot, "throwable", "💣 투척 무기")
+	if is_instance_valid(character_paperdoll_preview):
+		character_paperdoll_preview.update_equipment(equipment_data)
 
 func _render_equip_slot_button(btn: Button, slot_name: String, default_text: String) -> void:
 	InventoryUIHelper.render_equip_slot_button(btn, slot_name, default_text, equipment_data)
@@ -2450,9 +2570,10 @@ func _toggle_lock_at_mouse() -> bool:
 		var ctrl: Control = pair[0]
 		var mgr: InventoryGrid = pair[1]
 		if is_instance_valid(ctrl) and mgr and ctrl.is_visible_in_tree() and ctrl.get_global_rect().has_point(m_pos):
+			var csz := _get_grid_cell_size(ctrl)
 			var l_pos := m_pos - ctrl.get_global_rect().position
-			var cx := int(floor(l_pos.x / CELL_SIZE))
-			var cy := int(floor(l_pos.y / CELL_SIZE))
+			var cx := int(floor(l_pos.x / csz))
+			var cy := int(floor(l_pos.y / csz))
 			var h_it := mgr.get_item_at(cx, cy)
 			if not h_it.is_empty():
 				mgr.toggle_item_lock(str(h_it.get("uid", "")))

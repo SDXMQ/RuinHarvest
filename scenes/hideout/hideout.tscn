@@ -100,8 +100,10 @@ grow_vertical = 2
 theme_override_constants/separation = 16
 
 [node name="PlayerPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox" unique_id=563997414]
-custom_minimum_size = Vector2(340, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_stretch_ratio = 0.72
 
 [node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel" unique_id=332293839]
 layout_mode = 2
@@ -123,7 +125,7 @@ custom_minimum_size = Vector2(300, 380)
 layout_mode = 2
 
 [node name="EquipPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox" unique_id=695194949]
-custom_minimum_size = Vector2(230, 0)
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 2
 
 [node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel" unique_id=2073598240]
@@ -193,6 +195,7 @@ text = "💣 투척 무기"
 [node name="StashPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox" unique_id=2013270973]
 layout_mode = 2
 size_flags_horizontal = 3
+size_flags_stretch_ratio = 1.0
 
 [node name="VBox" type="VBoxContainer" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel" unique_id=1918372826]
 layout_mode = 2
