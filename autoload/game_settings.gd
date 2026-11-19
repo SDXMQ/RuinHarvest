@@ -335,7 +335,25 @@ const SETTINGS_FILE_PATH: String = "user://game_settings.json"
 
 func _ready() -> void:
 	setup_default_input_map()
+	var had_saved_settings := FileAccess.file_exists(SETTINGS_FILE_PATH)
 	load_settings()
+	if DisplayServer.get_name() != "headless" and (had_saved_settings or fullscreen or integer_scaling):
+		apply_display_settings.call_deferred()
+
+func _input(event: InputEvent) -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		var k: int = event.physical_keycode if event.physical_keycode != 0 else event.keycode
+		if k == KEY_F11 or ((k == KEY_ENTER or k == KEY_KP_ENTER) and event.alt_pressed):
+			toggle_fullscreen()
+			if get_viewport():
+				get_viewport().set_input_as_handled()
+
+func toggle_fullscreen() -> void:
+	fullscreen = not fullscreen
+	apply_display_settings()
+	save_settings()
 
 func setup_default_input_map() -> void:
 	var bindings = {
@@ -382,17 +400,19 @@ func get_current_resolution() -> Vector2i:
 
 func apply_display_settings() -> void:
 	var res: Vector2i = get_current_resolution()
-	DisplayServer.window_set_size(res)
 	if get_tree() and get_tree().root:
 		get_tree().root.content_scale_stretch = Window.CONTENT_SCALE_STRETCH_INTEGER if integer_scaling else Window.CONTENT_SCALE_STRETCH_FRACTIONAL
+	if DisplayServer.get_name() == "headless":
+		return
 	if fullscreen:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 	else:
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+		DisplayServer.window_set_size(res)
 		# 화면 중앙 정렬
 		var screen_size: Vector2i = DisplayServer.screen_get_size()
 		var diff: Vector2i = screen_size - res
-		DisplayServer.window_set_position(Vector2i(int(float(diff.x) / 2.0), int(float(diff.y) / 2.0)))
+		DisplayServer.window_set_position(Vector2i(maxi(0, int(float(diff.x) / 2.0)), maxi(0, int(float(diff.y) / 2.0))))
 
 func save_settings() -> void:
 	var data: Dictionary = {

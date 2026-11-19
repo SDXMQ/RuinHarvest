@@ -274,13 +274,13 @@ func _load_crisp_pixel_font(res_path: String) -> Font:
 		var loaded := load(res_path)
 		if loaded is FontFile:
 			var ff: FontFile = loaded as FontFile
-			ff.antialiasing = TextServer.FONT_ANTIALIASING_NONE
-			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_DISABLED
+			ff.antialiasing = TextServer.FONT_ANTIALIASING_GRAY
+			ff.subpixel_positioning = TextServer.SUBPIXEL_POSITIONING_AUTO
 			ff.multichannel_signed_distance_field = false
 			ff.allow_system_fallback = false
-			ff.hinting = TextServer.HINTING_NONE
+			ff.hinting = TextServer.HINTING_LIGHT
 			ff.generate_mipmaps = false
-			ff.oversampling = 1.0
+			ff.oversampling = 0.0
 			_font_cache[res_path] = ff
 			return ff
 		elif loaded is Font:

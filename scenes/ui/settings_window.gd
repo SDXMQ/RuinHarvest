@@ -24,7 +24,11 @@ var integer_scale_btn: CheckButton = null
 
 func _ready() -> void:
 	# 초기화
-	fullscreen_btn.button_pressed = (DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN)
+	var win_mode := DisplayServer.window_get_mode()
+	var is_fs := (win_mode == DisplayServer.WINDOW_MODE_FULLSCREEN or win_mode == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+	if GameSettings and GameSettings.fullscreen:
+		is_fs = true
+	fullscreen_btn.button_pressed = is_fs
 	
 	resolution_opt.clear()
 	for i in range(resolutions.size()):
@@ -37,7 +41,7 @@ func _ready() -> void:
 		elif res == Vector2i(2560, 1440):
 			suffix = " (2x 정수 배율)"
 		resolution_opt.add_item("%d x %d%s" % [res.x, res.y, suffix])
-		if DisplayServer.window_get_size() == res:
+		if (GameSettings and GameSettings.resolution_index == i) or DisplayServer.window_get_size() == res:
 			resolution_opt.selected = i
 
 	var video_vbox: VBoxContainer = get_node_or_null("Panel/VBox/TabContainer/비디오/VBox") as VBoxContainer
@@ -78,13 +82,15 @@ func _on_log_count_changed(value: float) -> void:
 		GameSettings.save_settings()
 
 func _on_fullscreen_toggled(toggled_on: bool) -> void:
-	if toggled_on:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	else:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 	if GameSettings:
 		GameSettings.fullscreen = toggled_on
+		GameSettings.apply_display_settings()
 		GameSettings.save_settings()
+	elif DisplayServer.get_name() != "headless":
+		if toggled_on:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		else:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
 
 func _on_integer_scale_toggled(toggled_on: bool) -> void:
 	if get_tree() and get_tree().root:
@@ -95,20 +101,26 @@ func _on_integer_scale_toggled(toggled_on: bool) -> void:
 
 func _on_resolution_selected(index: int) -> void:
 	var res: Vector2i = resolutions[index]
-	DisplayServer.window_set_size(res)
 	if GameSettings:
 		GameSettings.resolution_index = index
+		GameSettings.apply_display_settings()
 		GameSettings.save_settings()
+	elif DisplayServer.get_name() != "headless":
+		DisplayServer.window_set_size(res)
 
 func _on_volume_changed(bus_idx: int, value: float) -> void:
 	var db = linear_to_db(max(value, 0.001))
 	AudioServer.set_bus_volume_db(bus_idx, db)
 	AudioServer.set_bus_mute(bus_idx, value <= 0.0)
 
-func _unhandled_input(event: InputEvent) -> void:
-	if visible and event.is_action_pressed("pause"):
-		_on_close_pressed()
-		get_viewport().set_input_as_handled()
+func _input(event: InputEvent) -> void:
+	if not visible:
+		return
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_ESCAPE or event.physical_keycode == KEY_ESCAPE or event.is_action_pressed("pause"):
+			_on_close_pressed()
+			if get_viewport():
+				get_viewport().set_input_as_handled()
 
 func _on_close_pressed() -> void:
 	queue_free()

@@ -103,6 +103,7 @@ var market_result_count_lbl: Label = null
 
 var insurance_btn: Button = null
 var _hideout_event_log_vbox: VBoxContainer = null
+var current_settings_window: Control = null
 
 func _ready() -> void:
 	tooltip = TooltipScene.instantiate()
@@ -156,6 +157,13 @@ func _ready() -> void:
 		range_btn.custom_minimum_size = Vector2(0, 32)
 		range_btn.pressed.connect(_open_shooting_range)
 		top_tools.add_child(range_btn)
+
+		var settings_btn = Button.new()
+		settings_btn.name = "SettingsBtn"
+		settings_btn.text = "⚙️ 설정 (F11)"
+		settings_btn.custom_minimum_size = Vector2(0, 32)
+		settings_btn.pressed.connect(_open_settings_window)
+		top_tools.add_child(settings_btn)
 	
 	# 상인 버튼 연결
 	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
@@ -2786,6 +2794,17 @@ func _open_item_spawner() -> void:
 		var win = spawner_scene.instantiate()
 		add_child(win)
 		win.window_closed.connect(func(): _on_grid_changed())
+
+func _open_settings_window() -> void:
+	if is_instance_valid(current_settings_window):
+		return
+	if SoundManager: SoundManager.play("menu_select")
+	var sett_scene = preload("res://scenes/ui/settings_window.tscn")
+	if sett_scene:
+		var win = sett_scene.instantiate()
+		current_settings_window = win
+		add_child(win)
+		win.window_closed.connect(func(): current_settings_window = null)
 
 func _open_weapon_modding_window() -> void:
 	# B 키를 누르면 바로 4번째 탭(총기 작업대)으로 전환

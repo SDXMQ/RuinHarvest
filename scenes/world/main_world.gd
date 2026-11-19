@@ -363,6 +363,22 @@ func _ready() -> void:
 	# 일시정지 메뉴 버튼 시그널 연결
 	resume_btn.pressed.connect(_on_resume_pressed)
 	exit_btn.pressed.connect(_on_exit_pressed)
+	if pause_menu:
+		var pause_center := pause_menu.get_node_or_null("CenterPanel") as Control
+		var pause_vbox := pause_menu.get_node_or_null("CenterPanel/VBoxContainer") as VBoxContainer
+		if pause_center:
+			pause_center.offset_top = -170.0
+			pause_center.offset_bottom = 170.0
+		if pause_vbox and not pause_vbox.has_node("SettingsBtn"):
+			var p_sett_btn := Button.new()
+			p_sett_btn.name = "SettingsBtn"
+			p_sett_btn.custom_minimum_size = Vector2(0, 44)
+			p_sett_btn.add_theme_font_size_override("font_size", 16)
+			p_sett_btn.text = "⚙️ 설정 (Settings)"
+			p_sett_btn.pressed.connect(_open_settings_window)
+			pause_vbox.add_child(p_sett_btn)
+			if exit_btn and exit_btn.get_parent() == pause_vbox:
+				pause_vbox.move_child(p_sett_btn, exit_btn.get_index())
 	pause_menu.visible = false
 
 	# 청크 매니저 시그널 연결
@@ -554,9 +570,11 @@ func _spawn_enemy_near_player(dist: float = 350.0) -> void:
 
 const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 const RadioWindowScene = preload("res://scenes/ui/radio_window.tscn")
+const SettingsWindowScene = preload("res://scenes/ui/settings_window.tscn")
 var current_crafting_window: Control = null
 var current_radio_window: Control = null
 var current_modding_window: Control = null
+var current_settings_window: Control = null
 
 func _has_open_modal_window() -> bool:
 	return (
@@ -566,6 +584,7 @@ func _has_open_modal_window() -> bool:
 		or is_instance_valid(current_radio_window)
 		or is_instance_valid(current_modding_window)
 		or is_instance_valid(current_spawner_window)
+		or is_instance_valid(current_settings_window)
 	)
 
 func _input(event: InputEvent) -> void:
@@ -761,6 +780,16 @@ func _open_item_spawner() -> void:
 	current_spawner_window.window_closed.connect(func():
 		current_spawner_window = null
 		_on_player_stats_changed()
+	)
+
+func _open_settings_window() -> void:
+	if is_instance_valid(current_settings_window):
+		return
+	if SoundManager: SoundManager.play("menu_select")
+	current_settings_window = SettingsWindowScene.instantiate()
+	$UI.add_child(current_settings_window)
+	current_settings_window.window_closed.connect(func():
+		current_settings_window = null
 	)
 
 func _open_weapon_modding_window() -> void:

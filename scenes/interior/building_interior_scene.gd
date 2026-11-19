@@ -45,11 +45,13 @@ const EnemyScene = preload("res://scenes/entities/enemies/enemy.tscn")
 const InventoryWindowScene = preload("res://scenes/ui/inventory_window.tscn")
 const CraftingWindowScene = preload("res://scenes/ui/crafting_window.tscn")
 const PostProcessLayerScene = preload("res://graphics/post_process_layer.tscn")
+const SettingsWindowScene = preload("res://scenes/ui/settings_window.tscn")
 
 var player: CharacterBody2D
 var current_inventory_window: Control = null
 var current_crafting_window: Control = null
 var current_modding_window: Control = null
+var current_settings_window: Control = null
 var container_inventories: Dictionary = {}
 var container_titles: Dictionary = {}
 var exit_tile_pos: Vector2i = Vector2i(7, 10)
@@ -69,6 +71,22 @@ func _ready() -> void:
 		
 	resume_btn.pressed.connect(_on_resume_pressed)
 	exit_btn.pressed.connect(_on_exit_pressed)
+	if pause_menu:
+		var pause_center := pause_menu.get_node_or_null("CenterPanel") as Control
+		var pause_vbox := pause_menu.get_node_or_null("CenterPanel/VBoxContainer") as VBoxContainer
+		if pause_center:
+			pause_center.offset_top = -175.0
+			pause_center.offset_bottom = 175.0
+		if pause_vbox and not pause_vbox.has_node("SettingsBtn"):
+			var p_sett_btn := Button.new()
+			p_sett_btn.name = "SettingsBtn"
+			p_sett_btn.custom_minimum_size = Vector2(0, 44)
+			p_sett_btn.add_theme_font_size_override("font_size", 16)
+			p_sett_btn.text = "⚙️ 설정 (Settings)"
+			p_sett_btn.pressed.connect(_open_settings_window)
+			pause_vbox.add_child(p_sett_btn)
+			if exit_btn and exit_btn.get_parent() == pause_vbox:
+				pause_vbox.move_child(p_sett_btn, exit_btn.get_index())
 	
 	# 포스트프로세싱 및 파티클
 	var pp = PostProcessLayerScene.instantiate()
@@ -653,6 +671,7 @@ func _has_open_modal_window() -> bool:
 		is_instance_valid(current_inventory_window)
 		or is_instance_valid(current_crafting_window)
 		or is_instance_valid(current_modding_window)
+		or is_instance_valid(current_settings_window)
 	)
 
 func _input(event: InputEvent) -> void:
@@ -729,6 +748,16 @@ func _open_inventory_window(target_inv: Inventory = null, title: String = "") ->
 	current_inventory_window.window_closed.connect(func():
 		current_inventory_window = null
 		_on_player_stats_changed()
+	)
+
+func _open_settings_window() -> void:
+	if is_instance_valid(current_settings_window):
+		return
+	if SoundManager: SoundManager.play("menu_select")
+	current_settings_window = SettingsWindowScene.instantiate()
+	$UI.add_child(current_settings_window)
+	current_settings_window.window_closed.connect(func():
+		current_settings_window = null
 	)
 
 func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void:
