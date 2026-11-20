@@ -39,3 +39,4 @@ tmp/
 .gemini/
 export_presets.cfg
 *.cfg
+project.godot
