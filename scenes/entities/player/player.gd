@@ -255,10 +255,17 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("reload"):
 		weapon_handler.start_reload()
 		
-	if event.is_action_pressed("attack"):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		if weapon_handler:
+			weapon_handler.set_trigger_held(false)
+
+	var is_attack_press: bool = event.is_action_pressed("attack") or (event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed)
+	if is_attack_press:
 		if is_channeling:
 			cancel_channeling()
-		weapon_handler.try_attack(Vector2.RIGHT.rotated(rotation), global_position)
+		if weapon_handler:
+			weapon_handler.set_trigger_held(true)
+			weapon_handler.try_attack(Vector2.RIGHT.rotated(rotation), global_position)
 		
 	if event is InputEventMouseButton and event.is_pressed():
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:

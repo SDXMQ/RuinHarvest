@@ -239,6 +239,22 @@ static func is_automatic_weapon(stats: Dictionary) -> bool:
 		return mode == "auto"
 	return int(stats.get("rpm", 0)) >= 300
 
+static func is_automatic_weapon_dict(weapon_dict: Dictionary) -> bool:
+	if weapon_dict.is_empty():
+		return false
+	var stats: Dictionary = weapon_dict.get("computed_stats", {}) if weapon_dict.get("computed_stats") is Dictionary else {}
+	var mode: String = String(stats.get("fire_mode", ""))
+	if mode != "":
+		return mode == "auto"
+	var raw_rec: String = String(weapon_dict.get("receiver", ""))
+	if raw_rec == "":
+		raw_rec = String(weapon_dict.get("id", ""))
+	if raw_rec != "":
+		var res_id: String = resolve_receiver_id(raw_rec)
+		if RECEIVERS.has(res_id):
+			return String(RECEIVERS[res_id].get("fire_mode", "semi")) == "auto"
+	return is_automatic_weapon(stats)
+
 static func is_modifiable_weapon(item: Dictionary) -> bool:
 	if item.is_empty(): return false
 	var it_id = item.get("id", "")
@@ -410,7 +426,9 @@ const PARTS = {
 # 4. 스탯 계산 엔진 (Compute Stats)
 # ============================================================
 static func compute_weapon_from_dict(weapon_dict: Dictionary) -> Dictionary:
-	var raw_rec: String = String(weapon_dict.get("receiver", weapon_dict.get("id", "M9_리시버")))
+	var raw_rec: String = String(weapon_dict.get("receiver", ""))
+	if raw_rec == "":
+		raw_rec = String(weapon_dict.get("id", "M9_리시버"))
 	var rec_id: String = resolve_receiver_id(raw_rec)
 	var parts: Dictionary = weapon_dict.get("parts", weapon_dict.get("attachments", {}))
 	var ammo: String = String(weapon_dict.get("loaded_ammo", ""))

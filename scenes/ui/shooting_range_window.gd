@@ -43,9 +43,8 @@ func setup(w_data: Dictionary = {}) -> void:
 	if weapon_data.is_empty():
 		weapon_data = WeaponPartsDatabase.create_default_weapon("M4_리시버")
 	
-	computed_stats = weapon_data.get("computed_stats", {})
-	if computed_stats.is_empty():
-		computed_stats = WeaponPartsDatabase.compute_weapon_from_dict(weapon_data).get("computed_stats", {})
+	computed_stats = WeaponPartsDatabase.compute_weapon_from_dict(weapon_data).get("computed_stats", {})
+	weapon_data["computed_stats"] = computed_stats
 	
 	max_mag_size = int(computed_stats.get("magazine_size", 30))
 	current_ammo = max_mag_size
@@ -187,7 +186,7 @@ func _process(delta: float) -> void:
 	if range_canvas and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and fire_cooldown <= 0.0:
 		var mouse_p = range_canvas.get_local_mouse_position()
 		if Rect2(Vector2.ZERO, range_canvas.size).has_point(mouse_p):
-			if WeaponPartsDatabase.is_automatic_weapon(computed_stats):
+			if WeaponPartsDatabase.is_automatic_weapon_dict(weapon_data):
 				_try_fire()
 			
 	# 플로팅 텍스트 업데이트

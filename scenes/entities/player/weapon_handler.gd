@@ -19,13 +19,28 @@ var is_reloading: bool = false
 var reload_timer: float = 0.0
 var is_jammed: bool = false
 var _clearing_jam: bool = false
+var _trigger_held: bool = false
 
 @onready var player = get_parent()
+
+func set_trigger_held(held: bool) -> void:
+	_trigger_held = held
+
+func is_auto_fire_input_held() -> bool:
+	if Input.is_action_pressed("attack"):
+		return true
+	if _trigger_held and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		return true
+	return false
 
 func _process(delta: float) -> void:
 	recoil_offset = lerp(recoil_offset, 0.0, delta * 15.0)
 	if attack_cooldown_timer > 0:
 		attack_cooldown_timer -= delta
+	if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("attack"):
+		_trigger_held = false
+	if get_tree().paused or not player or player.hp <= 0 or bool(player.get("ui_input_blocked")):
+		_trigger_held = false
 	if is_reloading:
 		reload_timer -= delta
 		if reload_timer <= 0:
@@ -36,9 +51,10 @@ func _process(delta: float) -> void:
 				_finish_reload()
 	elif not get_tree().paused and player and player.hp > 0 and not player.get("ui_input_blocked"):
 		# 자동 화기(fire_mode == "auto")는 좌클릭 유지 시 자동 사격 지원
-		if Input.is_action_pressed("attack") and not equipped_weapon_data.is_empty() and active_weapon_slot != "throwable":
-			var cur_stats: Dictionary = equipped_weapon_data.get("computed_stats", {})
-			if WeaponPartsDatabase.is_automatic_weapon(cur_stats) and attack_cooldown_timer <= 0:
+		if is_auto_fire_input_held() and not equipped_weapon_data.is_empty() and active_weapon_slot != "throwable":
+			if WeaponPartsDatabase.is_automatic_weapon_dict(equipped_weapon_data) and attack_cooldown_timer <= 0:
+				if player.is_channeling:
+					player.cancel_channeling()
 				try_attack(Vector2.RIGHT.rotated(player.rotation), player.global_position)
 
 func switch_weapon_slot(slot_name: String) -> void:
@@ -168,8 +184,10 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 	
 	var cur_mag = equipped_weapon_data.get("current_magazine_ammo", 0)
 	if cur_mag <= 0:
-		if get_available_ammo_count() <= 0 and player and player.has_method("show_floating_text"):
-			player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
+		if get_available_ammo_count() <= 0:
+			attack_cooldown_timer = maxf(attack_cooldown_timer, 0.35)
+			if player and player.has_method("show_floating_text"):
+				player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
 		start_reload()
 		return
 		
@@ -467,7 +485,7 @@ func start_reload() -> void:
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
 		EventBus.event_logged.emit("[icon:warn] 장전할 수 있는 호환 탄약이 없습니다!")
-		if SoundManager: SoundManager.play("hit_melee")
+		if SoundManager: SoundManager.play("dry_fire")
 		return
 		
 	is_reloading = true
