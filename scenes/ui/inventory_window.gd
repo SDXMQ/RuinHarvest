@@ -252,11 +252,26 @@ func _process(delta: float) -> void:
 		vicinity_update_timer = 0.25 # 0.25초마다 주변 탐색 갱신
 		_update_vicinity_list()
 		
-	if is_dragging and drag_preview:
-		_update_drag_preview_pos()
-		grid_control.queue_redraw()
+	if is_dragging:
+		if bool(drag_data.get("started_with_lmb", false)) and not bool(drag_data.get("is_split", false)) and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_end_drag()
+			return
+		if drag_preview:
+			_update_drag_preview_pos()
+			grid_control.queue_redraw()
 	elif tooltip and tooltip.visible:
 		tooltip.update_position(get_global_mouse_position())
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_EXIT_TREE or (what == NOTIFICATION_VISIBILITY_CHANGED and not visible):
+		if is_dragging:
+			_end_drag()
+		_close_context_menu()
+		if tooltip and is_instance_valid(tooltip):
+			tooltip.hide()
+		hovered_grid_cell = Vector2i(-1, -1)
+		if is_instance_valid(grid_control):
+			grid_control.queue_redraw()
 
 func _refresh_all() -> void:
 	_update_grid_ui_size()
@@ -283,6 +298,8 @@ func _update_grid_ui_size() -> void:
 	var total_w = inventory_grid.grid_width * CELL_SIZE
 	var total_h = inventory_grid.grid_height * CELL_SIZE
 	grid_control.custom_minimum_size = Vector2(total_w, total_h)
+	grid_control.size = Vector2(total_w, total_h)
+	grid_control.queue_redraw()
 	if grid_title_label:
 		grid_title_label.text = "BACKPACK (%d×%d, %d칸)" % [inventory_grid.grid_width, inventory_grid.grid_height, inventory_grid.grid_width * inventory_grid.grid_height]
 
@@ -360,10 +377,19 @@ func _input(event: InputEvent) -> void:
 				break
 		_highlight_compatible_slots(drag_data.get("item", {}), hovered_target_ctrl)
 		
-	# 드래그 중 마우스 버튼을 어디서든 뗐을 때 완벽한 드롭 처리
-	if is_dragging and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_handle_global_drop()
-		get_viewport().set_input_as_handled()
+	# 드래그 중 우클릭 취소 또는 분할 드래그 클릭 드롭 / 마우스 버튼 릴리즈 시 완벽한 드롭 처리
+	if is_dragging and event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			_end_drag()
+			get_viewport().set_input_as_handled()
+			return
+		elif event.pressed and event.button_index == MOUSE_BUTTON_LEFT and bool(drag_data.get("is_split", false)):
+			_handle_global_drop()
+			get_viewport().set_input_as_handled()
+			return
+		elif not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_handle_global_drop()
+			get_viewport().set_input_as_handled()
 
 var drop_targets: Array[Dictionary] = []
 
@@ -398,8 +424,8 @@ func _handle_global_drop() -> void:
 			_try_drop_on_grid(target_cell.x, target_cell.y)
 		else:
 			var local_pos = grid_control.get_local_mouse_position()
-			var cell_x = int(local_pos.x / CELL_SIZE)
-			var cell_y = int(local_pos.y / CELL_SIZE)
+			var cell_x = int(floor(local_pos.x / CELL_SIZE))
+			var cell_y = int(floor(local_pos.y / CELL_SIZE))
 			_try_drop_on_grid(cell_x, cell_y)
 		return
 		
@@ -476,8 +502,8 @@ func _handle_global_drop() -> void:
 
 func _on_grid_gui_input(event: InputEvent) -> void:
 	var local_pos = grid_control.get_local_mouse_position()
-	var cell_x = int(local_pos.x / CELL_SIZE)
-	var cell_y = int(local_pos.y / CELL_SIZE)
+	var cell_x = int(floor(local_pos.x / CELL_SIZE))
+	var cell_y = int(floor(local_pos.y / CELL_SIZE))
 	
 	if event is InputEventMouseMotion:
 		if is_dragging:
@@ -499,6 +525,8 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 		
 	elif event is InputEventMouseButton and event.pressed:
 		_close_context_menu()
+		if is_dragging:
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = inventory_grid.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
@@ -763,9 +791,10 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	context_menu_panel.position = InventoryUIHelper.clamp_popup_position(context_menu_panel, mpos, size, 8.0)
 
 func _close_context_menu() -> void:
-	if context_menu_panel:
+	if context_menu_panel and is_instance_valid(context_menu_panel):
+		context_menu_panel.visible = false
 		context_menu_panel.queue_free()
-		context_menu_panel = null
+	context_menu_panel = null
 
 func _spawn_ground_item(p_id: String, amount: int = 1) -> void:
 	_drop_item_to_world({"id": p_id, "amount": amount})
@@ -873,8 +902,8 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 	
 	# 1. 같은 아이템 위로 드롭했을 때 중첩 (스택 병합) 처리
 	var m_local = grid_control.get_local_mouse_position()
-	var mouse_cx = int(m_local.x / CELL_SIZE)
-	var mouse_cy = int(m_local.y / CELL_SIZE)
+	var mouse_cx = int(floor(m_local.x / CELL_SIZE))
+	var mouse_cy = int(floor(m_local.y / CELL_SIZE))
 	var target_item = inventory_grid.get_item_at(mouse_cx, mouse_cy)
 	if target_item.is_empty():
 		target_item = inventory_grid.get_item_at(cell_x, cell_y)
@@ -1046,6 +1075,9 @@ func _update_container_list() -> void:
 	else:
 		container_title_label.text = "CONTAINER // " + (target_title if target_title != "" else "수색 대상")
 	
+	if tooltip and tooltip.visible and not is_dragging and container_list.get_global_rect().has_point(get_global_mouse_position()):
+		tooltip.hide()
+
 	for c in container_list.get_children():
 		if c != container_empty_label:
 			c.queue_free()
@@ -1285,6 +1317,8 @@ func _update_vicinity_list(force_rebuild: bool = false) -> void:
 	if not force_rebuild and new_sig == _last_vicinity_signature:
 		return
 	_last_vicinity_signature = new_sig
+	if tooltip and tooltip.visible and not is_dragging and vicinity_list.get_global_rect().has_point(get_global_mouse_position()):
+		tooltip.hide()
 	
 	for c in vicinity_list.get_children():
 		if c != vicinity_empty_label:
@@ -1569,7 +1603,7 @@ func _update_equipment_ui() -> void:
 	_render_equip_slot_button(backpack_slot, "backpack", "PACK\n배낭")
 	_render_equip_slot_button(bottom_slot, "bottom", "BOOTS\n전술화")
 	
-	_rebuild_drop_targets()
+	_rebuild_drop_targets(true)
 	
 	# 플레이어 장비 및 방어력 스탯 동기화
 	if player:
@@ -1577,12 +1611,20 @@ func _update_equipment_ui() -> void:
 		if player.has_signal("stats_changed"):
 			player.stats_changed.emit()
 
-func _rebuild_drop_targets() -> void:
+func _rebuild_drop_targets(preserve_non_equip: bool = false) -> void:
+	_clear_slot_highlights()
+	var preserved: Array[Dictionary] = []
+	if preserve_non_equip:
+		for t in drop_targets:
+			if str(t.get("type", "")) != "equipment" and is_instance_valid(t.get("control")):
+				preserved.append(t)
 	drop_targets.clear()
 	drop_targets.append({"control": helmet_slot, "type": "equipment", "slot_name": "helmet"})
 	drop_targets.append({"control": vest_slot, "type": "equipment", "slot_name": "vest"})
 	drop_targets.append({"control": backpack_slot, "type": "equipment", "slot_name": "backpack"})
 	drop_targets.append({"control": bottom_slot, "type": "equipment", "slot_name": "bottom"})
+	for p_t in preserved:
+		drop_targets.append(p_t)
 
 func _render_equip_slot_button(btn: Button, slot_name: String, default_text: String) -> void:
 	InventoryUIHelper.render_equip_slot_button(btn, slot_name, default_text, equipment_data)
@@ -1603,10 +1645,12 @@ func _sync_weapon_to_player(slot_key: String = "") -> void:
 func _update_weapons_ui() -> void:
 	if not weapons_vbox:
 		return
+	if tooltip and tooltip.visible and not is_dragging and weapons_vbox.get_global_rect().has_point(get_global_mouse_position()):
+		tooltip.hide()
 	for c in weapons_vbox.get_children():
 		c.queue_free()
 		
-	_rebuild_drop_targets()
+	_rebuild_drop_targets(false)
 	_create_weapon_card("주무기 1", "primary1", equipment_data.get("primary1", {}))
 	_create_weapon_card("주무기 2", "primary2", equipment_data.get("primary2", {}))
 	_create_weapon_card("보조 무기", "sidearm", equipment_data.get("sidearm", {}))
@@ -2185,6 +2229,8 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 # 5. UX & 인터랙션 (드래그, 회전, 분할, 우클릭 액션)
 # ============================================================
 func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = Vector2i.ZERO, slot_name: String = "", ground_ref: Node = null, source_grid: InventoryGrid = null) -> void:
+	if is_dragging:
+		_end_drag()
 	if tooltip:
 		tooltip.hide()
 	is_dragging = true
@@ -2202,6 +2248,7 @@ func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = V
 		"rotated": item.get("rotated", false),
 		"orig_rotated": item.get("rotated", false),
 		"start_mouse_pos": get_global_mouse_position(),
+		"started_with_lmb": Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT),
 		"origin_pos": origin_pos,
 		"slot_name": slot_name,
 		"ground_ref": ground_ref,
@@ -2215,9 +2262,10 @@ func _start_drag(source_type: String, item: Dictionary, origin_pos: Vector2i = V
 	_highlight_compatible_slots(item, null)
 
 func _rebuild_drag_preview() -> void:
-	if drag_preview:
+	if drag_preview and is_instance_valid(drag_preview):
+		drag_preview.visible = false
 		drag_preview.queue_free()
-		drag_preview = null
+	drag_preview = null
 	var item = drag_data.get("item", {})
 	if item.is_empty():
 		return
@@ -2248,11 +2296,15 @@ func _end_drag() -> void:
 		drag_data["is_split"] = false
 	is_dragging = false
 	drag_data.clear()
-	if drag_preview:
+	hovered_grid_cell = Vector2i(-1, -1)
+	if drag_preview and is_instance_valid(drag_preview):
+		drag_preview.visible = false
 		drag_preview.queue_free()
-		drag_preview = null
+	drag_preview = null
+	if tooltip and is_instance_valid(tooltip):
+		tooltip.hide()
 	_clear_slot_highlights()
-	if grid_control:
+	if grid_control and is_instance_valid(grid_control):
 		grid_control.queue_redraw()
 	for p in open_container_popups.values():
 		if is_instance_valid(p) and p.grid_control:
@@ -2555,6 +2607,11 @@ func _find_main_world_node() -> Node:
 	return null
 
 func _on_close_pressed() -> void:
+	if is_dragging:
+		_end_drag()
+	_close_context_menu()
+	if tooltip and is_instance_valid(tooltip):
+		tooltip.hide()
 	_sync_all_open_popups()
 	close_all_container_popups()
 	if SoundManager: SoundManager.play("menu_select")

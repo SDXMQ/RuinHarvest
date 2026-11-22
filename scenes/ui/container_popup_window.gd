@@ -304,6 +304,21 @@ func get_hovered_item() -> Dictionary:
 	var cy := int(floor(local_pos.y / POPUP_CELL_SIZE))
 	return inner_grid.get_item_at(cx, cy)
 
+func _input(event: InputEvent) -> void:
+	if _is_dragging_window and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		_is_dragging_window = false
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_EXIT_TREE or (what == NOTIFICATION_VISIBILITY_CHANGED and not visible):
+		_is_dragging_window = false
+		hovered_cell = Vector2i(-1, -1)
+		if is_instance_valid(grid_control):
+			grid_control.queue_redraw()
+		item_unhovered.emit(self)
+
 func close_popup() -> void:
+	_is_dragging_window = false
+	visible = false
+	item_unhovered.emit(self)
 	popup_closed.emit(container_uid)
 	queue_free()

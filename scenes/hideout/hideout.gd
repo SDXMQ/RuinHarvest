@@ -118,6 +118,7 @@ var market_result_count_lbl: Label = null
 var insurance_btn: Button = null
 var _hideout_event_log_vbox: VBoxContainer = null
 var current_settings_window: Control = null
+var _current_inventory_window: Control = null
 
 func _ready() -> void:
 	tooltip = TooltipScene.instantiate()
@@ -241,9 +242,19 @@ func _ready() -> void:
 	# 2D 그리드 드로잉 및 입력 연결
 	player_grid_control.draw.connect(_on_player_grid_draw)
 	player_grid_control.gui_input.connect(_on_player_grid_gui_input)
+	player_grid_control.mouse_exited.connect(func():
+		hovered_player_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
+		if player_grid_control: player_grid_control.queue_redraw()
+	)
 	
 	stash_grid_control.draw.connect(_on_stash_grid_draw)
 	stash_grid_control.gui_input.connect(_on_stash_grid_gui_input)
+	stash_grid_control.mouse_exited.connect(func():
+		hovered_stash_cell = Vector2i(-1, -1)
+		if tooltip: tooltip.hide()
+		if stash_grid_control: stash_grid_control.queue_redraw()
+	)
 	
 	# 배낭 & 창고 정렬/빠른 보관 버튼 바 추가
 	var player_vbox = get_node_or_null("CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox")
@@ -508,12 +519,51 @@ func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector
 	call_deferred("_update_all_hideout_grid_sizes")
 
 func _process(_delta: float) -> void:
-	if tooltip and tooltip.visible:
+	if is_dragging:
+		if bool(drag_data.get("started_with_lmb", false)) and not bool(drag_data.get("is_split", false)) and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+			_end_drag()
+			return
+		if drag_preview_node:
+			_update_drag_preview_pos()
+	elif tooltip and tooltip.visible:
 		tooltip.update_position(get_global_mouse_position())
-	if is_dragging and drag_preview_node:
-		_update_drag_preview_pos()
+	if _is_marquee_selecting and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		_cancel_marquee_selection()
+
+func _cancel_marquee_selection() -> void:
+	if is_instance_valid(_marquee_ctrl):
+		_marquee_ctrl.remove_meta("marquee_rect")
+		_marquee_ctrl.queue_redraw()
+	_is_marquee_selecting = false
+	_marquee_ctrl = null
+	_marquee_grid = null
+
+func _reset_all_hovered_cells() -> void:
+	hovered_player_cell = Vector2i(-1, -1)
+	hovered_stash_cell = Vector2i(-1, -1)
+	hovered_sell_player_cell = Vector2i(-1, -1)
+	hovered_sell_stash_cell = Vector2i(-1, -1)
+	hovered_market_player_cell = Vector2i(-1, -1)
+	hovered_market_stash_cell = Vector2i(-1, -1)
+	for ctrl in [player_grid_control, stash_grid_control, sell_player_grid_ctrl, sell_stash_grid_ctrl, market_player_grid_ctrl, market_stash_grid_ctrl]:
+		if is_instance_valid(ctrl):
+			ctrl.queue_redraw()
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_WINDOW_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_EXIT_TREE:
+		if is_dragging:
+			_end_drag()
+		_cancel_marquee_selection()
+		_close_context_menu()
+		if tooltip and is_instance_valid(tooltip):
+			tooltip.hide()
+		_reset_all_hovered_cells()
 
 func _on_tab_changed(tab: int) -> void:
+	if is_dragging:
+		_end_drag()
+	_cancel_marquee_selection()
+	_reset_all_hovered_cells()
 	if tooltip: tooltip.hide()
 	_close_context_menu()
 	if tab != 3 and workbench:
@@ -749,6 +799,8 @@ func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGri
 		
 	elif event is InputEventMouseButton and event.pressed:
 		_close_context_menu()
+		if is_dragging:
+			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			var item = grid_mgr.get_item_at(cell_x, cell_y)
 			if not item.is_empty():
@@ -908,11 +960,35 @@ func _input(event: InputEvent) -> void:
 				break
 		_highlight_compatible_slots(drag_data.get("item", {}), hovered_target_ctrl)
 			
-	if is_dragging and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		_handle_hideout_global_drop(event.global_position)
+	if is_dragging and event is InputEventMouseButton:
+		if event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			_end_drag()
+			get_viewport().set_input_as_handled()
+			return
+		elif event.pressed and event.button_index == MOUSE_BUTTON_LEFT and bool(drag_data.get("is_split", false)):
+			_handle_hideout_global_drop(event.global_position)
+			get_viewport().set_input_as_handled()
+			return
+		elif not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			_handle_hideout_global_drop(event.global_position)
+			get_viewport().set_input_as_handled()
+
+	if _is_marquee_selecting and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+		var ctrl_ref := _marquee_ctrl
+		var grid_ref := _marquee_grid
+		var is_stash_ref := _marquee_is_stash
+		var raw_rect: Variant = ctrl_ref.get_meta("marquee_rect", Rect2()) if is_instance_valid(ctrl_ref) else Rect2()
+		var m_rect: Rect2 = raw_rect if raw_rect is Rect2 else Rect2()
+		_cancel_marquee_selection()
+		if is_instance_valid(ctrl_ref) and grid_ref:
+			if m_rect.size.x >= 6.0 or m_rect.size.y >= 6.0:
+				_apply_marquee_selection(m_rect, grid_ref, is_stash_ref, ctrl_ref)
+			ctrl_ref.queue_redraw()
 		get_viewport().set_input_as_handled()
 
 func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, slot_key: String = "", source_grid: InventoryGrid = null) -> void:
+	if is_dragging:
+		_end_drag()
 	is_dragging = true
 	var base_size = ItemDatabase.get_item_grid_size(item_dict.get("id", ""))
 	if not item_dict.has("w"):
@@ -931,6 +1007,7 @@ func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, sl
 		"rotated": item_dict.get("rotated", false),
 		"orig_rotated": item_dict.get("rotated", false),
 		"start_mouse_pos": get_global_mouse_position(),
+		"started_with_lmb": Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT),
 		"source_grid": resolved_grid
 	}
 	
@@ -939,9 +1016,10 @@ func _start_drag(src_name: String, item_dict: Dictionary, cell_pos: Vector2i, sl
 	_highlight_compatible_slots(item_dict, null)
 
 func _rebuild_drag_preview() -> void:
-	if drag_preview_node:
+	if drag_preview_node and is_instance_valid(drag_preview_node):
+		drag_preview_node.visible = false
 		drag_preview_node.queue_free()
-		drag_preview_node = null
+	drag_preview_node = null
 	var item_dict: Dictionary = drag_data.get("item", {})
 	if item_dict.is_empty():
 		return
@@ -980,12 +1058,15 @@ func _end_drag() -> void:
 	drag_data.clear()
 	hovered_player_cell = Vector2i(-1, -1)
 	hovered_stash_cell = Vector2i(-1, -1)
-	if drag_preview_node:
+	if drag_preview_node and is_instance_valid(drag_preview_node):
+		drag_preview_node.visible = false
 		drag_preview_node.queue_free()
-		drag_preview_node = null
+	drag_preview_node = null
+	if tooltip and is_instance_valid(tooltip):
+		tooltip.hide()
 	_clear_slot_highlights()
-	if player_grid_control: player_grid_control.queue_redraw()
-	if stash_grid_control: stash_grid_control.queue_redraw()
+	if player_grid_control and is_instance_valid(player_grid_control): player_grid_control.queue_redraw()
+	if stash_grid_control and is_instance_valid(stash_grid_control): stash_grid_control.queue_redraw()
 	for p in open_container_popups.values():
 		if is_instance_valid(p) and p.grid_control:
 			p.hovered_cell = Vector2i(-1, -1)
@@ -3028,6 +3109,7 @@ func _handle_popup_quick_action(popup: ContainerPopupWindow, item: Dictionary, _
 
 func _close_context_menu() -> void:
 	if context_menu_panel and is_instance_valid(context_menu_panel):
+		context_menu_panel.visible = false
 		context_menu_panel.queue_free()
 	context_menu_panel = null
 
@@ -3201,7 +3283,16 @@ func _on_hideout_event_logged(msg: String) -> void:
 func _on_result_close_pressed() -> void:
 	result_dialog.visible = false
 
+func _cleanup_transient_ui_state() -> void:
+	if is_dragging:
+		_end_drag()
+	_cancel_marquee_selection()
+	_close_context_menu()
+	if tooltip and is_instance_valid(tooltip):
+		tooltip.hide()
+
 func _on_raid_pressed() -> void:
+	_cleanup_transient_ui_state()
 	if workbench and workbench.has_method("_cancel_pending_preset_preview"):
 		workbench._cancel_pending_preset_preview()
 	if SoundManager: SoundManager.play("menu_select")
@@ -3209,6 +3300,7 @@ func _on_raid_pressed() -> void:
 	if GameManager: GameManager.start_raid()
 
 func _on_menu_pressed() -> void:
+	_cleanup_transient_ui_state()
 	if SoundManager: SoundManager.play("menu_select")
 	if GameManager:
 		if GameManager.current_save_slot != "":
@@ -3216,6 +3308,8 @@ func _on_menu_pressed() -> void:
 		GameManager.change_state(GameManager.GameState.MAIN_MENU)
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(_current_inventory_window) or is_instance_valid(current_settings_window):
+		return
 	var focus_owner := get_viewport().gui_get_focus_owner() if (is_inside_tree() and get_viewport()) else null
 	if focus_owner is LineEdit:
 		return
@@ -3231,6 +3325,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_inventory_window()
 
 func _open_shooting_range() -> void:
+	_cleanup_transient_ui_state()
 	if workbench and workbench.has_method("_close_confirm_dialog"):
 		workbench._close_confirm_dialog()
 	if SoundManager: SoundManager.play("menu_select")
@@ -3244,19 +3339,27 @@ func _open_shooting_range() -> void:
 	win.setup(target_wep)
 
 func _open_inventory_window() -> void:
+	if is_instance_valid(_current_inventory_window):
+		return
+	_cleanup_transient_ui_state()
 	_sync_all_open_popups()
 	close_all_container_popups()
 	var inv_scene = preload("res://scenes/ui/inventory_window.tscn")
 	if inv_scene:
 		var win = inv_scene.instantiate()
+		_current_inventory_window = win
 		add_child(win)
 		win.set("hideout_stash_grid", stash_grid_mgr)
 		win.setup(null, player_grid_mgr, equipment_data)
-		win.window_closed.connect(func(): _on_grid_changed())
+		win.window_closed.connect(func():
+			_current_inventory_window = null
+			_on_grid_changed()
+		)
 
 func _open_item_spawner() -> void:
 	if not (GameManager and GameManager.is_sandbox_mode()):
 		return
+	_cleanup_transient_ui_state()
 	if workbench and workbench.has_method("_close_confirm_dialog"):
 		workbench._close_confirm_dialog()
 	var spawner_scene = preload("res://scenes/ui/item_spawner_window.tscn")
@@ -3268,6 +3371,7 @@ func _open_item_spawner() -> void:
 func _open_settings_window() -> void:
 	if is_instance_valid(current_settings_window):
 		return
+	_cleanup_transient_ui_state()
 	if SoundManager: SoundManager.play("menu_select")
 	var sett_scene = preload("res://scenes/ui/settings_window.tscn")
 	if sett_scene:
