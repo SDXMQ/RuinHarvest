@@ -195,42 +195,43 @@ static func update_quickslot_bar(quickslot_hbox: HBoxContainer, player: Node) ->
 			has_t and amt4 > 0
 		)
 
-	# Slot 5 (Bleed), Slot 6 (Heal), Slot 7 (Ration), Slot U (Radio) — 단일 패스(Single-pass) 인벤토리 순회
-	var count5: int = 0
-	var name5: String = "붕대"
-	var icon5: String = "붕대"
-	var count6: int = 0
-	var name6: String = "구급상자"
-	var icon6: String = "구급상자"
-	var count7: int = 0
-	var name7: String = "식량/생수"
-	var icon7: String = "식량통조림"
-	var has_radio: bool = false
+	# Slot 5 (Bleed), Slot 6 (Heal), Slot 7 (Food), Slot 8 (Water), Slot U (Radio) — Player.find_quickslot_item과 1:1 일치 (중첩 컨테이너 포함)
+	var inv_grid: InventoryGrid = player.inventory_grid if ("inventory_grid" in player) else null
+	var res5 := Player.find_quickslot_item(inv_grid, "bleed")
+	var item5: Dictionary = res5.get("item", {})
+	var data5: Dictionary = res5.get("data", {})
+	var count5: int = int(res5.get("total_count", 0))
+	var icon5: String = String(item5.get("id", "붕대")) if not item5.is_empty() else "붕대"
+	var name5: String = String(data5.get("name", icon5)) if not item5.is_empty() else "붕대"
 
-	if player.inventory_grid:
-		for it in player.inventory_grid.items:
+	var res6 := Player.find_quickslot_item(inv_grid, "heal")
+	var item6: Dictionary = res6.get("item", {})
+	var data6: Dictionary = res6.get("data", {})
+	var count6: int = int(res6.get("total_count", 0))
+	var icon6: String = String(item6.get("id", "구급상자")) if not item6.is_empty() else "구급상자"
+	var name6: String = String(data6.get("name", icon6)) if not item6.is_empty() else "구급상자"
+
+	var res7 := Player.find_quickslot_item(inv_grid, "food")
+	var item7: Dictionary = res7.get("item", {})
+	var data7: Dictionary = res7.get("data", {})
+	var count7: int = int(res7.get("total_count", 0))
+	var icon7: String = String(item7.get("id", "식량통조림")) if not item7.is_empty() else "식량통조림"
+	var name7: String = String(data7.get("name", icon7)) if not item7.is_empty() else "식량"
+
+	var res8 := Player.find_quickslot_item(inv_grid, "water")
+	var item8: Dictionary = res8.get("item", {})
+	var data8: Dictionary = res8.get("data", {})
+	var count8: int = int(res8.get("total_count", 0))
+	var icon8: String = String(item8.get("id", "생수")) if not item8.is_empty() else "생수"
+	var name8: String = String(data8.get("name", icon8)) if not item8.is_empty() else "생수/음료"
+
+	var has_radio: bool = false
+	if inv_grid:
+		for it in inv_grid.get_all_items_flat(true):
 			var id: String = String(it.get("id", ""))
-			if id == "":
-				continue
-			var amt: int = int(it.get("amount", 1))
 			if id in ["장거리 무전기", "군용 무전기", "무전기"] or id.contains("무전기"):
 				has_radio = true
-			var d: Dictionary = ItemDatabase.get_item_data(id)
-			var cat: int = int(d.get("category", -1))
-			var eff: Dictionary = d.get("effects", {}) if d.get("effects") is Dictionary else {}
-			if cat == ItemDatabase.ItemCategory.MEDICAL:
-				if eff.get("cures_bleeding", false) or id.contains("붕대") or id.contains("지혈"):
-					count5 += amt
-					name5 = String(d.get("name", id))
-					icon5 = id
-				if eff.get("hp", 0) > 0 or eff.get("cures_fracture", false) or eff.get("cures_infection", false) or id.contains("구급") or id.contains("키트") or id.contains("부목"):
-					count6 += amt
-					name6 = String(d.get("name", id))
-					icon6 = id
-			if cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or eff.has("hunger") or eff.has("thirst"):
-				count7 += amt
-				name7 = String(d.get("name", id))
-				icon7 = id
+				break
 
 	var slot5: Button = quickslot_hbox.get_node_or_null("Slot5")
 	if slot5:
@@ -243,6 +244,15 @@ static func update_quickslot_bar(quickslot_hbox: HBoxContainer, player: Node) ->
 	var slot7: Button = quickslot_hbox.get_node_or_null("Slot7")
 	if slot7:
 		style_quickslot_button(slot7, "7", icon7, "x%d" % count7, "[7] %s (%d)" % [name7, count7], false, count7 > 0)
+
+	var slot8: Button = quickslot_hbox.get_node_or_null("Slot8")
+	if not slot8:
+		slot8 = Button.new()
+		slot8.name = "Slot8"
+		quickslot_hbox.add_child(slot8)
+		if slot7:
+			quickslot_hbox.move_child(slot8, slot7.get_index() + 1)
+	style_quickslot_button(slot8, "8", icon8, "x%d" % count8, "[8] %s (%d)" % [name8, count8], false, count8 > 0)
 
 	# Slot N (NVG)
 	var slotN: Button = quickslot_hbox.get_node_or_null("SlotN")
@@ -282,14 +292,15 @@ static func update_channeling_sweep(quickslot_hbox: HBoxContainer, slot_key: Str
 	var target_slot_names: Array = []
 	if slot_key == "5" or slot_key == "bleed": target_slot_names = ["Slot5"]
 	elif slot_key == "6" or slot_key == "heal": target_slot_names = ["Slot6"]
-	elif slot_key == "7" or slot_key == "ration": target_slot_names = ["Slot7"]
+	elif slot_key == "7" or slot_key == "food" or slot_key == "ration": target_slot_names = ["Slot7"]
+	elif slot_key == "8" or slot_key == "water": target_slot_names = ["Slot8"]
 	elif slot_key == "clear": target_slot_names = []
 	else:
 		var candidate = "Slot" + slot_key
 		if quickslot_hbox.has_node(candidate):
 			target_slot_names = [candidate]
 
-	for s_name in ["Slot5", "Slot6", "Slot7"]:
+	for s_name in ["Slot5", "Slot6", "Slot7", "Slot8"]:
 		var b: Button = quickslot_hbox.get_node_or_null(s_name)
 		if not b: continue
 		var sw: ColorRect = b.get_node_or_null("SweepOverlay")

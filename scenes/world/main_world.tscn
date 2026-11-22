@@ -376,9 +376,9 @@ anchor_left = 0.5
 anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
-offset_left = -260.0
+offset_left = -290.0
 offset_top = -64.0
-offset_right = 260.0
+offset_right = 290.0
 offset_bottom = -16.0
 grow_horizontal = 2
 grow_vertical = 0
@@ -429,6 +429,12 @@ custom_minimum_size = Vector2(60, 42)
 layout_mode = 2
 theme_override_font_sizes/font_size = 11
 text = "[7] 식량"
+
+[node name="Slot8" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
+custom_minimum_size = Vector2(60, 42)
+layout_mode = 2
+theme_override_font_sizes/font_size = 11
+text = "[8] 생수"
 
 [node name="SlotN" type="Button" parent="UI/HUD/QuickslotBar/HBox"]
 custom_minimum_size = Vector2(60, 42)

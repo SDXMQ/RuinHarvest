@@ -286,7 +286,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			weapon_handler.switch_weapon_slot("throwable")
 		elif code == KEY_5 or code == KEY_KP_5: _use_quickslot_item("bleed")
 		elif code == KEY_6 or code == KEY_KP_6: _use_quickslot_item("heal")
-		elif code == KEY_7 or code == KEY_KP_7: _use_quickslot_item("ration")
+		elif code == KEY_7 or code == KEY_KP_7: _use_quickslot_item("food")
+		elif code == KEY_8 or code == KEY_KP_8: _use_quickslot_item("water")
 		elif code == KEY_N or event.keycode == KEY_N or event.physical_keycode == KEY_N:
 			var l = _lighting()
 			if l and l.has_method("toggle_nvg"):
@@ -466,31 +467,62 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 		EventBus.event_logged.emit("[icon:hourglass] %s 사용 시작 (%.1f초)..." % [item_name, duration])
 	return true
 
+static func _matches_quickslot_kind(id: String, d: Dictionary, slot_kind: String) -> bool:
+	var cat: int = int(d.get("category", -1))
+	var eff: Dictionary = d.get("effects", {}) if d.get("effects") is Dictionary else {}
+	match slot_kind:
+		"bleed":
+			return cat == ItemDatabase.ItemCategory.MEDICAL and (bool(eff.get("cures_bleeding", false)) or id.contains("붕대") or id.contains("지혈"))
+		"heal":
+			return cat == ItemDatabase.ItemCategory.MEDICAL and (float(eff.get("hp", 0)) > 0.0 or bool(eff.get("cures_fracture", false)) or bool(eff.get("cures_infection", false)) or id.contains("구급") or id.contains("키트") or id.contains("부목"))
+		"food":
+			return cat == ItemDatabase.ItemCategory.FOOD or (cat != ItemDatabase.ItemCategory.WATER and float(eff.get("hunger", 0)) > 0.0)
+		"water":
+			return cat == ItemDatabase.ItemCategory.WATER or (cat != ItemDatabase.ItemCategory.FOOD and float(eff.get("thirst", 0)) > 0.0)
+		_:
+			return false
+
+static func find_quickslot_item(inv_grid: InventoryGrid, slot_kind: String, cur_hunger: float = 100.0, cur_thirst: float = 100.0) -> Dictionary:
+	if inv_grid == null:
+		return {"item": {}, "data": {}, "total_count": 0}
+	if slot_kind == "ration":
+		var food_res := find_quickslot_item(inv_grid, "food", cur_hunger, cur_thirst)
+		var water_res := find_quickslot_item(inv_grid, "water", cur_hunger, cur_thirst)
+		var has_food := not (food_res.get("item", {}) as Dictionary).is_empty()
+		var has_water := not (water_res.get("item", {}) as Dictionary).is_empty()
+		if cur_hunger <= cur_thirst:
+			return food_res if has_food else water_res
+		return water_res if has_water else food_res
+	var first_item: Dictionary = {}
+	var first_data: Dictionary = {}
+	var total_count: int = 0
+	for item in inv_grid.get_all_items_flat(true):
+		var id := String(item.get("id", ""))
+		if id == "":
+			continue
+		var d: Dictionary = ItemDatabase.get_item_data(id) if ItemDatabase else {}
+		if _matches_quickslot_kind(id, d, slot_kind):
+			if first_item.is_empty():
+				first_item = item
+				first_data = d
+			total_count += maxi(1, int(item.get("amount", 1)))
+	return {"item": first_item, "data": first_data, "total_count": total_count}
+
 func _use_quickslot_item(slot_kind: String) -> void:
 	if not inventory_grid:
 		return
-	var target_item: Dictionary = {}
-	var target_data: Dictionary = {}
-	for item in inventory_grid.get_all_items_flat(true):
-		var id = item.get("id", "")
-		var d = ItemDatabase.get_item_data(id)
-		var cat = d.get("category", -1)
-		var eff = d.get("effects", {})
-		if slot_kind == "bleed" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("cures_bleeding", false) or id.contains("붕대") or id.contains("지혈")):
-			target_item = item
-			target_data = d
-			break
-		elif slot_kind == "heal" and cat == ItemDatabase.ItemCategory.MEDICAL and (eff.get("hp", 0) > 0 or eff.get("cures_fracture", false) or eff.get("cures_infection", false) or id.contains("구급") or id.contains("키트") or id.contains("부목")):
-			target_item = item
-			target_data = d
-			break
-		elif slot_kind == "ration" and (cat == ItemDatabase.ItemCategory.FOOD or cat == ItemDatabase.ItemCategory.WATER or eff.has("hunger") or eff.has("thirst")):
-			target_item = item
-			target_data = d
-			break
+	var res := find_quickslot_item(inventory_grid, slot_kind, hunger, thirst)
+	var target_item: Dictionary = res.get("item", {})
+	var target_data: Dictionary = res.get("data", {})
 	if target_item.is_empty():
 		if EventBus.has_signal("event_logged"):
-			var label_map = {"bleed": "지혈제/붕대 [5]", "heal": "구급상자/부목 [6]", "ration": "식량/생수 [7]"}
+			var label_map = {
+				"bleed": "지혈제/붕대 [5]",
+				"heal": "구급상자/부목 [6]",
+				"food": "식량 [7]",
+				"water": "생수/음료 [8]",
+				"ration": "식량/생수 [7]"
+			}
 			EventBus.event_logged.emit("[icon:warn] 가방에 사용할 수 있는 %s 아이템이 없습니다." % label_map.get(slot_kind, "소비"))
 		return
 

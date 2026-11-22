@@ -1336,6 +1336,7 @@ func _setup_quickslot_bar() -> void:
 	var slot5 = quickslot_hbox.get_node_or_null("Slot5")
 	var slot6 = quickslot_hbox.get_node_or_null("Slot6")
 	var slot7 = quickslot_hbox.get_node_or_null("Slot7")
+	var slot8 = quickslot_hbox.get_node_or_null("Slot8")
 	var slotN = quickslot_hbox.get_node_or_null("SlotN")
 	
 	if slot1 and not slot1.pressed.is_connected(_on_quickslot_1_pressed):
@@ -1352,6 +1353,8 @@ func _setup_quickslot_bar() -> void:
 		slot6.pressed.connect(_on_quickslot_6_pressed)
 	if slot7 and not slot7.pressed.is_connected(_on_quickslot_7_pressed):
 		slot7.pressed.connect(_on_quickslot_7_pressed)
+	if slot8 and not slot8.pressed.is_connected(_on_quickslot_8_pressed):
+		slot8.pressed.connect(_on_quickslot_8_pressed)
 	if slotN and not slotN.pressed.is_connected(_on_quickslot_N_pressed):
 		slotN.pressed.connect(_on_quickslot_N_pressed)
 		
@@ -1391,7 +1394,11 @@ func _on_quickslot_6_pressed() -> void:
 
 func _on_quickslot_7_pressed() -> void:
 	if player and player.has_method("_use_quickslot_item"):
-		player._use_quickslot_item("ration")
+		player._use_quickslot_item("food")
+
+func _on_quickslot_8_pressed() -> void:
+	if player and player.has_method("_use_quickslot_item"):
+		player._use_quickslot_item("water")
 
 func _on_quickslot_N_pressed() -> void:
 	if player and player.player_lighting and player.player_lighting.has_method("toggle_nvg"):
@@ -1410,6 +1417,9 @@ func _on_quickslot_U_pressed() -> void:
 func _update_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
 	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
+	var slot8 = quickslot_hbox.get_node_or_null("Slot8")
+	if slot8 and slot8 is Button and not slot8.pressed.is_connected(_on_quickslot_8_pressed):
+		slot8.pressed.connect(_on_quickslot_8_pressed)
 	var slotU = quickslot_hbox.get_node_or_null("SlotU")
 	if slotU and slotU is Button and not slotU.pressed.is_connected(_on_quickslot_U_pressed):
 		slotU.pressed.connect(_on_quickslot_U_pressed)
@@ -1434,7 +1444,8 @@ func _on_player_channel_progress(current: float, total: float) -> void:
 		var slot_key = "6"
 		if item_str.contains("붕대") or item_str.contains("지혈"): slot_key = "5"
 		elif item_str.contains("구급") or item_str.contains("키트") or item_str.contains("부목"): slot_key = "6"
-		elif item_str.contains("식량") or item_str.contains("통조림") or item_str.contains("생수") or item_str.contains("물"): slot_key = "7"
+		elif item_str.contains("생수") or item_str.contains("물") or item_str.contains("음료") or item_str.contains("커피") or item_str.contains("드링크"): slot_key = "8"
+		elif item_str.contains("식량") or item_str.contains("통조림") or item_str.contains("고기") or item_str.contains("빵") or item_str.contains("에너지바") or item_str.contains("농작물"): slot_key = "7"
 		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, slot_key, ratio)
 
 func _on_player_channel_finished() -> void:
