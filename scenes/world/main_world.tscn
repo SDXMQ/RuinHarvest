@@ -45,7 +45,8 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Panel" type="Panel" parent="UI/HUD"]
+[node name="Panel" type="PanelContainer" parent="UI/HUD"]
+custom_minimum_size = Vector2(300, 0)
 layout_mode = 0
 offset_left = 20.0
 offset_top = 20.0
@@ -53,16 +54,7 @@ offset_right = 320.0
 offset_bottom = 120.0
 
 [node name="VBox" type="VBoxContainer" parent="UI/HUD/Panel"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-offset_left = 10.0
-offset_top = 10.0
-offset_right = -10.0
-offset_bottom = -10.0
-grow_horizontal = 2
-grow_vertical = 2
+layout_mode = 2
 theme_override_constants/separation = 4
 
 [node name="HPBar" type="ProgressBar" parent="UI/HUD/Panel/VBox"]

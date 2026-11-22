@@ -30,7 +30,7 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="Panel" parent="Center"]
-custom_minimum_size = Vector2(800, 580)
+custom_minimum_size = Vector2(960, 590)
 layout_mode = 2
 
 [node name="Title" type="Label" parent="Center/Panel"]
@@ -57,9 +57,10 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 8
 
-[node name="CheatToolbar" type="HBoxContainer" parent="Center/Panel/VBox"]
+[node name="CheatToolbar" type="HFlowContainer" parent="Center/Panel/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 6
+theme_override_constants/h_separation = 6
+theme_override_constants/v_separation = 6
 
 [node name="AddMoney10kBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2

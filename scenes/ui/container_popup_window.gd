@@ -164,6 +164,7 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 	# 2D 내부 그리드 영역
 	var grid_px_w := float(gw) * POPUP_CELL_SIZE
 	var grid_px_h := float(gh) * POPUP_CELL_SIZE
+	custom_minimum_size.x = maxf(minf(grid_px_w + 26.0, 316.0), 272.0)
 
 	scroll_container = ScrollContainer.new()
 	scroll_container.custom_minimum_size = Vector2(minf(grid_px_w + 14.0, 290.0), minf(grid_px_h + 14.0, 290.0))
