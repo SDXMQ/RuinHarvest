@@ -83,9 +83,11 @@ func _build_ui() -> void:
 	
 	weapon_title_label = Label.new()
 	weapon_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	weapon_title_label.text = "🎯 은신처 지하 사격 시험장 (Shooting Range)"
+	weapon_title_label.text = "은신처 지하 사격 시험장 (Shooting Range)"
 	weapon_title_label.add_theme_font_size_override("font_size", 16)
 	header_hbox.add_child(weapon_title_label)
+	if UiIconManager:
+		UiIconManager.set_label_icon(weapon_title_label, "target", "", 16, 6)
 	
 	infinite_ammo_chk = CheckBox.new()
 	infinite_ammo_chk.text = "무한 탄약"
@@ -147,7 +149,7 @@ func _refresh_header() -> void:
 	var acc = computed_stats.get("accuracy", 75.0)
 	var rec = computed_stats.get("recoil", 20.0)
 	var zm = computed_stats.get("zoom", 1.0)
-	weapon_title_label.text = "🎯 사격장 | [%s] 데미지:%.1f | 연사:%d RPM | 명중률:%d%% | 반동:%.1f | 줌:%.1fx" % [w_name, dmg, rpm, int(acc), rec, zm]
+	weapon_title_label.text = "사격장 | [%s] 데미지:%.1f | 연사:%d RPM | 명중률:%d%% | 반동:%.1f | 줌:%.1fx" % [w_name, dmg, rpm, int(acc), rec, zm]
 	
 	if ammo_label:
 		if is_infinite_ammo:

@@ -152,19 +152,19 @@ func _craft_item(result_id: String, recipe: Dictionary) -> void:
 			parent_target.add_child(g_item)
 			g_item.setup(result_id, overflow_rem, {})
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("📦 가방 공간이 부족하여 제작품 [%s] x%d을(를) 바닥에 내려놓았습니다." % [result_id, overflow_rem])
+				EventBus.event_logged.emit("[icon:box] 가방 공간이 부족하여 제작품 [%s] x%d을(를) 바닥에 내려놓았습니다." % [result_id, overflow_rem])
 		else:
 			if player_inv.has_method("load_items"):
 				player_inv.load_items(inv_backup)
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 가방 공간이 부족하여 제작을 완료할 수 없습니다.")
+				EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족하여 제작을 완료할 수 없습니다.")
 			if SoundManager:
 				SoundManager.play("hit_melee")
 			return
 	
 	if EventBus.has_signal("event_logged"):
 		var d = ItemDatabase.get_item_data(result_id)
-		EventBus.event_logged.emit("🔨 [%s] x%d 제작 완료!" % [d.get("name", result_id), recipe["amount"]])
+		EventBus.event_logged.emit("[icon:hammer] [%s] x%d 제작 완료!" % [d.get("name", result_id), recipe["amount"]])
 	
 	if SoundManager:
 		SoundManager.play("menu_select")

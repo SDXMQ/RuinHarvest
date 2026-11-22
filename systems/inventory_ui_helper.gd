@@ -317,8 +317,10 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 			badge_cursor_x -= 7.0
 			_draw_pixel_padlock(ctrl, Vector2(badge_cursor_x, ry0 + 2.0), Color(1.0, 0.72, 0.20, 0.98))
 		if is_wish:
-			badge_cursor_x -= 10.0
-			ctrl.draw_string(font_micro, Vector2(badge_cursor_x, ry0 + 10.0), "★", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.22, 0.98))
+			badge_cursor_x -= 11.0
+			var star_tex: Texture2D = UiIconManager.get_icon("star") if UiIconManager else null
+			if star_tex:
+				ctrl.draw_texture_rect(star_tex, Rect2(badge_cursor_x, ry0 + 1.0, 10.0, 10.0), false)
 
 		# 방어구/헬멧 내구도 바 표기 (최하단 2px, 텍스트와 비겹침)
 		var cat: int = int(d.get("category", -1))
@@ -392,7 +394,9 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 
 		if is_selected_sell:
 			ctrl.draw_rect(item_rect, Color(0.25, 0.98, 0.72, 0.98), false, 2.0)
-			ctrl.draw_string(font_micro, Vector2(rx1 - 11.0, ry1 - 4.0), "✓", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.32, 1.0, 0.68, 1.0))
+			var chk_tex: Texture2D = UiIconManager.get_icon("check") if UiIconManager else null
+			if chk_tex:
+				ctrl.draw_texture_rect(chk_tex, Rect2(rx1 - 13.0, ry1 - 13.0, 11.0, 11.0), false)
 
 	# 3. 드래그 중 고스트 프리뷰 (초록 / 빨강 픽셀 타겟 브래킷)
 	if is_dragging and hovered_cell.x >= 0 and hovered_cell.y >= 0:
@@ -489,7 +493,19 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 
 	if equipped.is_empty():
 		btn.text = default_text
-		btn.icon = null
+		if UiIconManager and not is_tall_slot:
+			btn.icon = UiIconManager.get_equip_slot_icon(slot_name)
+			btn.expand_icon = false
+			btn.add_theme_constant_override("icon_max_width", 18)
+			btn.add_theme_constant_override("h_separation", 6)
+		elif UiIconManager and is_tall_slot:
+			btn.icon = UiIconManager.get_equip_slot_icon(slot_name)
+			btn.expand_icon = false
+			btn.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			btn.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+			btn.add_theme_constant_override("icon_max_width", 18)
+		else:
+			btn.icon = null
 		if eq_overlay:
 			eq_overlay.visible = false
 		if dur_bar:
@@ -568,6 +584,7 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 				eq_overlay.visible = false
 			btn.text = disp_name
 			if ItemIconManager:
+				btn.remove_theme_constant_override("icon_max_width")
 				btn.icon = ItemIconManager.get_icon(item_id)
 				btn.expand_icon = true
 		var max_dur: float = float(equipped.get("max_durability", d.get("max_durability", 0.0)))

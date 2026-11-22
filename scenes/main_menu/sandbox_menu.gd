@@ -3,6 +3,7 @@ extends Control
 
 ## 샌드박스 커스텀 게임 설정 스크립트
 
+@onready var title_label: Label = $Center/Panel/Title
 @onready var zombie_opt: OptionButton = $Center/Panel/VBox/ZombieRow/ZombieOpt
 @onready var raid_time_opt: OptionButton = $Center/Panel/VBox/RaidTimeRow/RaidTimeOpt
 @onready var day_night_opt: OptionButton = $Center/Panel/VBox/DayNightRow/DayNightOpt
@@ -13,6 +14,8 @@ extends Control
 @onready var back_btn: Button = $Center/Panel/Buttons/BackBtn
 
 func _ready() -> void:
+	if UiIconManager:
+		UiIconManager.set_label_icon(title_label, "sandbox", "", 18, 6)
 	# 좀비 스폰 밀도
 	zombie_opt.clear()
 	zombie_opt.add_item("평화로움 (50%)", 0)

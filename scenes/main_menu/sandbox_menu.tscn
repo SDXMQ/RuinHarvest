@@ -41,7 +41,7 @@ offset_top = 16.0
 offset_bottom = 46.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 20
-text = "🛠️ 샌드박스 커스텀 게임 설정"
+text = "샌드박스 커스텀 게임 설정"
 horizontal_alignment = 1
 
 [node name="VBox" type="VBoxContainer" parent="Center/Panel"]

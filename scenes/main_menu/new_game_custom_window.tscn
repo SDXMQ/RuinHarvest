@@ -41,7 +41,7 @@ offset_top = 16.0
 offset_bottom = 46.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 20
-text = "⚙️ 새 게임 생성 및 규칙 모딩"
+text = "새 게임 생성 및 규칙 모딩"
 horizontal_alignment = 1
 
 [node name="VBox" type="VBoxContainer" parent="Center/Panel"]
@@ -67,7 +67,7 @@ text = "난이도 프리셋:"
 
 [node name="PresetOpt" type="OptionButton" parent="Center/Panel/VBox/PresetRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(210, 0)
 
 [node name="HSeparator" type="HSeparator" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -82,7 +82,7 @@ text = "좀비 스폰 밀도:"
 
 [node name="ZombieOpt" type="OptionButton" parent="Center/Panel/VBox/ZombieRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(210, 0)
 
 [node name="RaidTimeRow" type="HBoxContainer" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -94,7 +94,7 @@ text = "레이드 제한 시간:"
 
 [node name="RaidTimeOpt" type="OptionButton" parent="Center/Panel/VBox/RaidTimeRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(210, 0)
 
 [node name="LootRow" type="HBoxContainer" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -106,7 +106,7 @@ text = "파밍 루트 드롭률:"
 
 [node name="LootOpt" type="OptionButton" parent="Center/Panel/VBox/LootRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(210, 0)
 
 [node name="DayNightRow" type="HBoxContainer" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -118,7 +118,7 @@ text = "낮/밤 주기 속도:"
 
 [node name="DayNightOpt" type="OptionButton" parent="Center/Panel/VBox/DayNightRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(210, 0)
 
 [node name="MoneyRow" type="HBoxContainer" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -130,7 +130,7 @@ text = "시작 소지금:"
 
 [node name="MoneyOpt" type="OptionButton" parent="Center/Panel/VBox/MoneyRow"]
 layout_mode = 2
-custom_minimum_size = Vector2(180, 0)
+custom_minimum_size = Vector2(210, 0)
 
 [node name="PermadeathRow" type="HBoxContainer" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -161,7 +161,7 @@ theme_override_constants/separation = 16
 [node name="StartBtn" type="Button" parent="Center/Panel/Buttons"]
 layout_mode = 2
 size_flags_horizontal = 3
-text = "🚀 게임 시작 (Start Game)"
+text = "게임 시작 (Start Game)"
 
 [node name="CancelBtn" type="Button" parent="Center/Panel/Buttons"]
 layout_mode = 2

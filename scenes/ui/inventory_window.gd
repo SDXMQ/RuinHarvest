@@ -428,14 +428,14 @@ func _handle_global_drop() -> void:
 	if vicinity_rect.has_point(m_pos):
 		if player == null:
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 은신처 인벤토리 창에서는 바닥에 버릴 수 없습니다.")
+				EventBus.event_logged.emit("[icon:warn] 은신처 인벤토리 창에서는 바닥에 버릴 수 없습니다.")
 			_end_drag()
 			return
 		var src = drag_data.get("source", "")
 		var item = drag_data.get("item", {})
 		if bool(item.get("locked", false)):
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🔒 잠금된 아이템은 바닥에 버릴 수 없습니다. ([L] 키로 잠금 해제)")
+				EventBus.event_logged.emit("[icon:lock] 잠금된 아이템은 바닥에 버릴 수 없습니다. ([L] 키로 잠금 해제)")
 			if SoundManager: SoundManager.play("hit_melee")
 			_end_drag()
 			return
@@ -559,12 +559,12 @@ func perform_item_repair(item: Dictionary, slot_ref: String = "") -> bool:
 		item["max_durability"] = new_max_dur
 		item["durability"] = new_max_dur
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🛠️ [%s] 야전 응급 수리 완료! (-%d RUB, 최대 내구도 %.0f ➔ %.0f)" % [item_name, repair_cost, max_dur, new_max_dur])
+			EventBus.event_logged.emit("[icon:tools] [%s] 야전 응급 수리 완료! (-%d RUB, 최대 내구도 %.0f → %.0f)" % [item_name, repair_cost, max_dur, new_max_dur])
 	else:
 		item["max_durability"] = max_dur
 		item["durability"] = max_dur
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🔧 [%s] 은신처 정밀 수리 완료! (-%d RUB, 내구도 %.0f/%.0f)" % [item_name, repair_cost, max_dur, max_dur])
+			EventBus.event_logged.emit("[icon:wrench_blue] [%s] 은신처 정밀 수리 완료! (-%d RUB, 내구도 %.0f/%.0f)" % [item_name, repair_cost, max_dur, max_dur])
 
 	if inventory_grid:
 		inventory_grid.grid_changed.emit()
@@ -575,13 +575,15 @@ func perform_item_repair(item: Dictionary, slot_ref: String = "") -> bool:
 	if SoundManager: SoundManager.play("craft_complete")
 	return true
 
-func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, callback: Callable, is_disabled: bool = false) -> Button:
+func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, callback: Callable, is_disabled: bool = false, icon_key: String = "") -> Button:
 	var btn := Button.new()
 	btn.theme_type_variation = &"SmallButton"
 	btn.text = text_str
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.custom_minimum_size = Vector2(140, 26)
+	btn.custom_minimum_size = Vector2(156, 26)
 	btn.disabled = is_disabled
+	if icon_key != "" and UiIconManager:
+		UiIconManager.set_button(btn, icon_key, text_str, 15)
 	btn.pressed.connect(callback)
 	vbox.add_child(btn)
 	return btn
@@ -616,33 +618,33 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	vbox.add_child(HSeparator.new())
 
 	if InventoryGrid.is_container_item(item) and (source_type == "grid" or (source_type == "equipment" and slot_ref == "vest")):
-		var open_txt := "📂 포켓 열기" if source_type == "equipment" else "📂 컨테이너 열기"
+		var open_txt := "포켓 열기" if source_type == "equipment" else "컨테이너 열기"
 		_add_context_menu_btn(vbox, open_txt, func():
 			_close_context_menu()
 			open_container_popup(item, source_grid if source_type == "grid" else null)
-		)
+		, false, "folder")
 
 	if source_type in ["grid", "popup_grid"]:
 		var lock_grid: InventoryGrid = source_grid if source_grid else inventory_grid
 		var is_locked := bool(item.get("locked", false))
-		_add_context_menu_btn(vbox, "🔓 잠금 해제 (L)" if is_locked else "🔒 아이템 잠금 (L)", func():
+		_add_context_menu_btn(vbox, "잠금 해제 (L)" if is_locked else "아이템 잠금 (L)", func():
 			_close_context_menu()
 			if lock_grid:
 				var now_locked := lock_grid.toggle_item_lock(str(item.get("uid", "")))
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit(("🔒 [%s] 잠금됨" if now_locked else "🔓 [%s] 잠금 해제") % item_name)
+					EventBus.event_logged.emit(("[icon:lock] [%s] 잠금됨" if now_locked else "[icon:unlock] [%s] 잠금 해제") % item_name)
 				if SoundManager: SoundManager.play("menu_select")
-		)
+		, false, "unlock" if is_locked else "lock")
 
 	if source_type == "grid":
-		_add_context_menu_btn(vbox, "⚡ 사용 / 장착", func():
+		_add_context_menu_btn(vbox, "사용 / 장착", func():
 			_close_context_menu()
 			_handle_item_quick_action(item, true)
-		)
+		, false, "power")
 
 		var amt = int(item.get("amount", 1))
 		if amt > 1:
-			_add_context_menu_btn(vbox, "✂️ 수량 분할", func():
+			_add_context_menu_btn(vbox, "수량 분할", func():
 				_close_context_menu()
 				_open_split_dialog(item, func(split_amt):
 					var split_item = item.duplicate(true)
@@ -656,16 +658,16 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 					drag_data["split_source_grid"] = inventory_grid
 					drag_data["split_amount"] = split_amt
 				)
-			)
+			, false, "split")
 	elif source_type == "popup_grid" and source_grid:
-		_add_context_menu_btn(vbox, "📤 메인 가방으로 꺼내기", func():
+		_add_context_menu_btn(vbox, "메인 가방으로 꺼내기", func():
 			_close_context_menu()
 			var popup_ref: ContainerPopupWindow = open_container_popups.get(source_grid.owner_container_uid, null) as ContainerPopupWindow
 			if popup_ref:
 				_handle_popup_quick_action(popup_ref, item, true)
-		)
+		, false, "export_out")
 	elif source_type in ["equipment", "weapon_slot"] and slot_ref != "":
-		_add_context_menu_btn(vbox, "📤 가방으로 장착 해제", func():
+		_add_context_menu_btn(vbox, "가방으로 장착 해제", func():
 			_close_context_menu()
 			var rem = inventory_grid.auto_add_item(item.get("id", ""), item.get("amount", 1), item) if inventory_grid else 1
 			if rem <= 0:
@@ -677,7 +679,7 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 					_sync_weapon_to_player(slot_ref)
 					_update_weapons_ui()
 				if SoundManager: SoundManager.play("menu_select")
-		)
+		, false, "export_out")
 
 	var has_parts = false
 	var parts_dict: Dictionary = item.get("parts", item.get("attachments", {}))
@@ -687,18 +689,18 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 		elif pv != null and String(pv) != "": has_parts = true; break
 
 	if has_parts:
-		_add_context_menu_btn(vbox, "🔩 부품 모두 분리", func():
+		_add_context_menu_btn(vbox, "부품 모두 분리", func():
 			_close_context_menu()
 			_detach_all_item_parts(item)
 			if source_type == "weapon_slot" and slot_ref != "":
 				_sync_weapon_to_player(slot_ref)
 				_update_weapons_ui()
-		)
+		, false, "bolt")
 
 	var cur_mag_ammo = int(item.get("current_magazine_ammo", 0))
 	var loaded_ammo_type = item.get("loaded_ammo", "")
 	if cur_mag_ammo > 0 and loaded_ammo_type != "":
-		_add_context_menu_btn(vbox, "🔄 탄약 비우기 (%d발)" % cur_mag_ammo, func():
+		_add_context_menu_btn(vbox, "탄약 비우기 (%d발)" % cur_mag_ammo, func():
 			_close_context_menu()
 			var rem = inventory_grid.auto_add_item(loaded_ammo_type, cur_mag_ammo) if inventory_grid else cur_mag_ammo
 			if rem > 0:
@@ -711,8 +713,8 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 				_update_weapons_ui()
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🔄 [%s] 탄약 %d발을 회수했습니다." % [item_name, cur_mag_ammo - rem])
-		)
+				EventBus.event_logged.emit("[icon:refresh] [%s] 탄약 %d발을 회수했습니다." % [item_name, cur_mag_ammo - rem])
+		, false, "refresh")
 
 	var max_dur = float(item.get("max_durability", idata.get("max_durability", 0.0)))
 	var cur_dur = float(item.get("durability", max_dur))
@@ -720,25 +722,26 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 	if max_dur > 0 and missing_dur > 0.5:
 		var is_field_repair: bool = (GameManager != null and GameManager.current_state == GameManager.GameState.IN_GAME)
 		var repair_cost = int(ceil(missing_dur * (15.0 if is_field_repair else 10.0)))
-		var repair_txt := ("🛠️ 야전 응급 수리 (%d RUB | 최대 -10%%)" if is_field_repair else "🔧 수리하기 (%d RUB)") % repair_cost
+		var repair_txt := ("야전 응급 수리 (%d RUB | 최대 -10%%)" if is_field_repair else "수리하기 (%d RUB)") % repair_cost
 		var user_funds = _get_player_rubles()
 		if user_funds < repair_cost:
 			repair_txt += " (잔액 부족)"
 		_add_context_menu_btn(vbox, repair_txt, func():
 			_close_context_menu()
 			perform_item_repair(item, slot_ref)
-		, user_funds < repair_cost)
+		, user_funds < repair_cost, "tools" if is_field_repair else "wrench_blue")
 
 	var is_item_locked := bool(item.get("locked", false))
 	var drop_disabled := is_item_locked or (player == null)
-	var drop_lbl := "🔒 은신처 버리기 불가" if player == null else ("🔒 잠금됨 (버리기 불가)" if is_item_locked else "🗑️ 바닥에 버리기")
+	var drop_lbl := "은신처 버리기 불가" if player == null else ("잠금됨 (버리기 불가)" if is_item_locked else "바닥에 버리기")
+	var drop_icon := "lock" if (player == null or is_item_locked) else "trash"
 	_add_context_menu_btn(vbox, drop_lbl, func():
 		_close_context_menu()
 		if player == null:
 			return
 		if bool(item.get("locked", false)):
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🔒 잠금된 아이템은 바닥에 버릴 수 없습니다.")
+				EventBus.event_logged.emit("[icon:lock] 잠금된 아이템은 바닥에 버릴 수 없습니다.")
 			return
 		if source_type == "grid" and inventory_grid:
 			inventory_grid.remove_item_by_uid(item.get("uid", ""))
@@ -753,7 +756,7 @@ func _show_context_menu(item: Dictionary, source_type: String = "grid", slot_ref
 			_sync_weapon_to_player(slot_ref)
 			_update_weapons_ui()
 		_drop_item_to_world(item)
-	, drop_disabled)
+	, drop_disabled, drop_icon)
 
 	add_child(context_menu_panel)
 	var mpos = get_global_mouse_position() - global_position
@@ -812,9 +815,9 @@ func _detach_all_item_parts(item: Dictionary) -> void:
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
 		if dropped_count > 0:
-			EventBus.event_logged.emit("🔩 총기 부품 %d개를 가방에 넣고, 공간이 부족한 %d개는 바닥에 드랍했습니다." % [detached_count, dropped_count])
+			EventBus.event_logged.emit("[icon:bolt] 총기 부품 %d개를 가방에 넣고, 공간이 부족한 %d개는 바닥에 드랍했습니다." % [detached_count, dropped_count])
 		else:
-			EventBus.event_logged.emit("🔩 총기 부품 %d개를 모두 분리했습니다." % detached_count)
+			EventBus.event_logged.emit("[icon:bolt] 총기 부품 %d개를 모두 분리했습니다." % detached_count)
 
 func _clamp_weapon_excess_ammo(w_dict: Dictionary) -> void:
 	if w_dict.is_empty(): return
@@ -1010,13 +1013,13 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 		elif inventory_grid and inventory_grid.has_secure_container and cell_x < 2 and cell_y < 2:
 			if not inventory_grid.is_allowed_in_secure_container(item.get("id", "")):
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🔒 [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
+					EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
 			elif cell_x + place_w > 2 or cell_y + place_h > 2:
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🔒 [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
+					EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
 			else:
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 해당 슬롯에 이미 다른 아이템이 있습니다.")
+					EventBus.event_logged.emit("[icon:warn] 해당 슬롯에 이미 다른 아이템이 있습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		
 	_end_drag()
@@ -1032,7 +1035,16 @@ func _update_container_list() -> void:
 		return
 		
 	container_section.visible = true
-	container_title_label.text = "CONTAINER // " + (target_title if target_title != "" else "수색 대상")
+	container_title_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	container_title_label.clip_text = true
+	if UiIconManager:
+		var parsed := UiIconManager.parse_tagged_message(target_title)
+		var clean_t := String(parsed.get("clean_text", ""))
+		var title_txt := "CONTAINER // " + (clean_t if clean_t != "" else "수색 대상")
+		var icon_k := String(parsed.get("icon_key", ""))
+		UiIconManager.set_label_icon(container_title_label, icon_k if icon_k != "" else "box", title_txt, 14, 5, true)
+	else:
+		container_title_label.text = "CONTAINER // " + (target_title if target_title != "" else "수색 대상")
 	
 	for c in container_list.get_children():
 		if c != container_empty_label:
@@ -1074,19 +1086,15 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 
 	var c_item_id := str(slot_item.get("id", ""))
 	var is_wish := HideoutProgression.is_wishlist_item(c_item_id)
-	if is_wish:
-		var w_badge := Label.new()
-		w_badge.text = "★"
-		w_badge.add_theme_font_size_override("font_size", 11)
-		w_badge.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22))
-		w_badge.position = Vector2(20.0, -2.0)
-		w_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if is_wish and UiIconManager:
+		var w_badge := UiIconManager.create_icon_rect("star", 12)
+		w_badge.position = Vector2(20.0, 0.0)
 		icon_wrap.add_child(w_badge)
 	
 	var lbl = Label.new()
 	var d = ItemDatabase.get_item_data(c_item_id)
 	var amt = slot_item.get("amount", 1)
-	lbl.text = "%s%s %s" % [("★ " if is_wish else ""), d.get("name", c_item_id), ("(x%d)" % amt if amt > 1 else "")]
+	lbl.text = "%s %s" % [d.get("name", c_item_id), ("(x%d)" % amt if amt > 1 else "")]
 	if is_wish:
 		lbl.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 	lbl.add_theme_font_size_override("font_size", 12)
@@ -1115,7 +1123,7 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 					if SoundManager: SoundManager.play("menu_select")
 					_update_container_list()
 				if rem > 0 and EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+					EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족합니다.")
 			elif event.button_index == MOUSE_BUTTON_LEFT:
 				var base_size = ItemDatabase.get_item_grid_size(slot_item.get("id", ""))
 				var clean_slot_cd := InventoryGrid.sanitize_custom_data(slot_item)
@@ -1157,7 +1165,7 @@ func _loot_all_from_container() -> void:
 		if SoundManager: SoundManager.play("item_pickup")
 		_update_container_list()
 	if full_warn and EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⚠️ 가방 공간이 부족하여 일부 아이템만 획득했습니다.")
+		EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족하여 일부 아이템만 획득했습니다.")
 
 func _quick_transfer_grid_to_container(item: Dictionary) -> void:
 	if not target_inventory or not inventory_grid:
@@ -1177,7 +1185,7 @@ func _quick_transfer_grid_to_container(item: Dictionary) -> void:
 	else:
 		if SoundManager: SoundManager.play("hit_melee")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 보관함 공간이 부족합니다.")
+			EventBus.event_logged.emit("[icon:warn] 보관함 공간이 부족합니다.")
 
 func _try_drop_on_container() -> void:
 	if not target_inventory:
@@ -1255,7 +1263,7 @@ func _try_drop_on_container() -> void:
 	else:
 		if SoundManager: SoundManager.play("hit_melee")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 보관함 공간이 부족합니다.")
+			EventBus.event_logged.emit("[icon:warn] 보관함 공간이 부족합니다.")
 			
 	_end_drag()
 
@@ -1315,18 +1323,14 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 	icon_wrap.add_child(icon)
 
 	var is_wish := HideoutProgression.is_wishlist_item(g_item.item_id)
-	if is_wish:
-		var w_badge := Label.new()
-		w_badge.text = "★"
-		w_badge.add_theme_font_size_override("font_size", 11)
-		w_badge.add_theme_color_override("font_color", Color(1.0, 0.88, 0.22))
-		w_badge.position = Vector2(20.0, -2.0)
-		w_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	if is_wish and UiIconManager:
+		var w_badge := UiIconManager.create_icon_rect("star", 12)
+		w_badge.position = Vector2(20.0, 0.0)
 		icon_wrap.add_child(w_badge)
 	
 	var lbl = Label.new()
 	var d = ItemDatabase.get_item_data(g_item.item_id)
-	lbl.text = "%s%s %s" % [("★ " if is_wish else ""), d.get("name", g_item.item_id), ("(x%d)" % g_item.amount if g_item.amount > 1 else "")]
+	lbl.text = "%s %s" % [d.get("name", g_item.item_id), ("(x%d)" % g_item.amount if g_item.amount > 1 else "")]
 	if is_wish:
 		lbl.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 	lbl.add_theme_font_size_override("font_size", 12)
@@ -1367,7 +1371,7 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 					g_item.update_visuals()
 					_update_vicinity_list(true)
 					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+						EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족합니다.")
 			elif event.button_index == MOUSE_BUTTON_LEFT:
 				var base_size = ItemDatabase.get_item_grid_size(g_item.item_id)
 				var clean_cd := InventoryGrid.sanitize_custom_data(g_item.custom_data if g_item.custom_data is Dictionary else {})
@@ -1398,14 +1402,14 @@ func _handle_overflow_item(item: Dictionary) -> void:
 		var rem := hideout_stash_grid.auto_add_item(item_id, amt, item)
 		if rem <= 0:
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("📦 공간 부족으로 [%s]을(를) 은신처 창고로 이동했습니다." % ItemDatabase.get_item_data(item_id).get("name", item_id))
+				EventBus.event_logged.emit("[icon:box] 공간 부족으로 [%s]을(를) 은신처 창고로 이동했습니다." % ItemDatabase.get_item_data(item_id).get("name", item_id))
 			return
 	if inventory_grid != null:
 		var rem2 := inventory_grid.auto_add_item(item_id, amt, item)
 		if rem2 <= 0:
 			return
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 모두 부족합니다.")
+		EventBus.event_logged.emit("[icon:warn] 창고와 배낭 공간이 모두 부족합니다.")
 
 func _drop_item_to_world(item: Dictionary) -> void:
 	if not player: return
@@ -1431,7 +1435,7 @@ func _drop_item_to_world(item: Dictionary) -> void:
 	
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("📦 %s을(를) 바닥에 버렸습니다." % ItemDatabase.get_item_data(item.get("id", "")).get("name", item.get("id", "")))
+		EventBus.event_logged.emit("[icon:box] %s을(를) 바닥에 버렸습니다." % ItemDatabase.get_item_data(item.get("id", "")).get("name", item.get("id", "")))
 	if is_inside_tree():
 		_update_vicinity_list(true)
 
@@ -1484,7 +1488,7 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 	
 	if not _is_slot_compatible(item_id, slot_name):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
+			EventBus.event_logged.emit("[icon:warn] [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
 		_end_drag()
 		return
 
@@ -1492,7 +1496,7 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 		var inner_arr = item.get("inner_items", [])
 		if inner_arr is Array and not inner_arr.is_empty():
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+				EventBus.event_logged.emit("[icon:warn] 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
 			if SoundManager: SoundManager.play("hit_melee")
 			_end_drag()
 			return
@@ -1656,12 +1660,14 @@ func _create_weapon_card(title: String, slot_key: String, weapon_dict: Dictionar
 	vbox.add_child(top_hbox)
 	
 	var title_lbl = Label.new()
-	title_lbl.text = "[%s%s]" % [title, " ★장착중" if is_active_hand else ""]
+	title_lbl.text = "[%s · 장착중]" % title if is_active_hand else "[%s]" % title
 	if PixelAssetManager:
 		title_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
 	title_lbl.add_theme_font_size_override("font_size", 12)
 	title_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.55) if is_active_hand else Color(1, 0.8, 0.3))
 	top_hbox.add_child(title_lbl)
+	if is_active_hand and UiIconManager:
+		UiIconManager.set_label_icon(title_lbl, "star", "", 13, 4)
 
 	if not weapon_dict.is_empty() and ItemIconManager:
 		var icon_frame := PanelContainer.new()
@@ -1881,12 +1887,12 @@ func _try_equip_weapon(slot_key: String) -> void:
 		var target_w = equipment_data.get(slot_key, {})
 		if target_w.is_empty():
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 탄약을 장전할 무기가 슬롯에 없습니다.")
+				EventBus.event_logged.emit("[icon:warn] 탄약을 장전할 무기가 슬롯에 없습니다.")
 			_end_drag()
 			return
 		if slot_key == "throwable" or not WeaponHandler.is_firearm_dict(target_w):
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 총기가 아닌 장비(근접무기/도구)에는 탄약을 장전할 수 없습니다.")
+				EventBus.event_logged.emit("[icon:warn] 총기가 아닌 장비(근접무기/도구)에는 탄약을 장전할 수 없습니다.")
 			_end_drag()
 			return
 
@@ -1899,7 +1905,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 
 		if not (it_id in allowed_ammos or (it_id == "9mm" and "탄약" in allowed_ammos) or (it_id == "탄약" and "9mm" in allowed_ammos)):
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ [%s] 탄약은 [%s]에 호환되지 않습니다." % [it_data.get("name", it_id), target_w.get("name", rec_id)])
+				EventBus.event_logged.emit("[icon:warn] [%s] 탄약은 [%s]에 호환되지 않습니다." % [it_data.get("name", it_id), target_w.get("name", rec_id)])
 			_end_drag()
 			return
 
@@ -1919,7 +1925,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 			var needed = max(0, max_mag - old_count)
 			if needed <= 0:
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 이미 탄창이 가득 차 있습니다. (%d/%d발)" % [old_count, max_mag])
+					EventBus.event_logged.emit("[icon:warn] 이미 탄창이 가득 차 있습니다. (%d/%d발)" % [old_count, max_mag])
 				_end_drag()
 				return
 			load_amt = min(drag_amt, needed)
@@ -1995,9 +2001,9 @@ func _try_equip_weapon(slot_key: String) -> void:
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
 			if is_same_ammo:
-				EventBus.event_logged.emit("🔄 [%s] 탄약 추가 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), final_mag_ammo, max_mag])
+				EventBus.event_logged.emit("[icon:refresh] [%s] 탄약 추가 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), final_mag_ammo, max_mag])
 			else:
-				EventBus.event_logged.emit("🔄 [%s] 탄약으로 교체 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), final_mag_ammo, max_mag])
+				EventBus.event_logged.emit("[icon:refresh] [%s] 탄약으로 교체 장전 완료! (%d/%d발)" % [it_data.get("name", it_id), final_mag_ammo, max_mag])
 		_end_drag()
 		return
 
@@ -2011,7 +2017,7 @@ func _try_equip_weapon(slot_key: String) -> void:
 	
 	if not valid:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 해당 무기 슬롯에 호환되지 않는 아이템입니다.")
+			EventBus.event_logged.emit("[icon:warn] 해당 무기 슬롯에 호환되지 않는 아이템입니다.")
 		_end_drag()
 		return
 		
@@ -2064,21 +2070,21 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 	
 	if not WeaponPartsDatabase.PARTS.has(part_id):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 부착물 부품이 아닙니다.")
+			EventBus.event_logged.emit("[icon:warn] 부착물 부품이 아닙니다.")
 		_end_drag()
 		return
 		
 	var part_data = WeaponPartsDatabase.PARTS[part_id]
 	if part_data.get("slot", "") != attach_type:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 부착 슬롯이 일치하지 않습니다 (%s != %s)" % [part_data.get("slot", ""), attach_type])
+			EventBus.event_logged.emit("[icon:warn] 부착 슬롯이 일치하지 않습니다 (%s != %s)" % [part_data.get("slot", ""), attach_type])
 		_end_drag()
 		return
 
 	var w = equipment_data.get(weapon_slot_key, {})
 	if w.is_empty():
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 무기가 장착되어 있지 않습니다.")
+			EventBus.event_logged.emit("[icon:warn] 무기가 장착되어 있지 않습니다.")
 		_end_drag()
 		return
 
@@ -2089,14 +2095,14 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 		var allowed_slots = receiver_data.get("slots", {})
 		if not allowed_slots.has(attach_type):
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 해당 무기에는 이 부품을 장착할 슬롯이 없습니다.")
+				EventBus.event_logged.emit("[icon:warn] 해당 무기에는 이 부품을 장착할 슬롯이 없습니다.")
 			_end_drag()
 			return
 		var comp_cats = part_data.get("compatible_categories", ["all"])
 		var rec_cat = receiver_data.get("category", "")
 		if not ("all" in comp_cats or rec_cat in comp_cats):
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 해당 무기 카테고리와 호환되지 않는 부품입니다.")
+				EventBus.event_logged.emit("[icon:warn] 해당 무기 카테고리와 호환되지 않는 부품입니다.")
 			_end_drag()
 			return
 		
@@ -2317,7 +2323,7 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 				var inner_arr = item.get("inner_items", [])
 				if inner_arr is Array and not inner_arr.is_empty():
 					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+						EventBus.event_logged.emit("[icon:warn] 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
 					if SoundManager: SoundManager.play("hit_melee")
 					return
 			var prev_equipped = equipment_data.get(slot, {})
@@ -2334,9 +2340,9 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):
 				if not prev_equipped.is_empty():
-					EventBus.event_logged.emit("🔄 [%s] 장비 교체 완료!" % idata.get("name", id))
+					EventBus.event_logged.emit("[icon:refresh] [%s] 장비 교체 완료!" % idata.get("name", id))
 				else:
-					EventBus.event_logged.emit("🪖 [%s] 장착 완료!" % idata.get("name", id))
+					EventBus.event_logged.emit("[icon:helmet] [%s] 장착 완료!" % idata.get("name", id))
 			return
 
 	# 3. 무기류 (주무기, 권총/보조무기, 투척무기) — 탄약/도구 제외
@@ -2376,9 +2382,9 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
 			if not prev_weapon.is_empty():
-				EventBus.event_logged.emit("🔄 [%s] 무기 교체 완료!" % idata.get("name", id))
+				EventBus.event_logged.emit("[icon:refresh] [%s] 무기 교체 완료!" % idata.get("name", id))
 			else:
-				EventBus.event_logged.emit("🔫 [%s] 무기 장착 완료!" % idata.get("name", id))
+				EventBus.event_logged.emit("[icon:gun] [%s] 무기 장착 완료!" % idata.get("name", id))
 		return
 
 	# 4. 총기 부착물 (조준경, 소음기, 손잡이, 탄창, 개머리판, 총열, 레일 등)
@@ -2467,11 +2473,11 @@ func _handle_item_quick_action(item: Dictionary, ignore_container: bool = false,
 			_update_weapons_ui()
 			if SoundManager: SoundManager.play("menu_select")
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🔧 [%s] 부착 완료!" % idata.get("name", id))
+				EventBus.event_logged.emit("[icon:wrench_blue] [%s] 부착 완료!" % idata.get("name", id))
 			return
 		else:
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 장착 가능한 무기가 없습니다.")
+				EventBus.event_logged.emit("[icon:warn] 장착 가능한 무기가 없습니다.")
 			return
 
 func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
@@ -2498,7 +2504,7 @@ func _use_consumable_item(item: Dictionary, idata: Dictionary) -> void:
 	player.stats_changed.emit()
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("✨ %s을(를) 사용했습니다." % item_name)
+		EventBus.event_logged.emit("[icon:stars] %s을(를) 사용했습니다." % item_name)
 		
 	# 1개 소모
 	var amt = item.get("amount", 1)
@@ -2686,7 +2692,7 @@ func _toggle_lock_at_mouse() -> bool:
 				var now_l := p_win.inner_grid.toggle_item_lock(str(h_it.get("uid", "")))
 				var d := ItemDatabase.get_item_data(str(h_it.get("id", "")))
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit(("🔒 [%s] 잠금됨" if now_l else "🔓 [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
+					EventBus.event_logged.emit(("[icon:lock] [%s] 잠금됨" if now_l else "[icon:unlock] [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
 				if tooltip and tooltip.visible:
 					tooltip.display_item(h_it, d)
 				if SoundManager: SoundManager.play("menu_select")
@@ -2698,7 +2704,7 @@ func _toggle_lock_at_mouse() -> bool:
 			var now_l := inventory_grid.toggle_item_lock(str(h_it.get("uid", "")))
 			var d := ItemDatabase.get_item_data(str(h_it.get("id", "")))
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit(("🔒 [%s] 잠금됨" if now_l else "🔓 [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
+				EventBus.event_logged.emit(("[icon:lock] [%s] 잠금됨" if now_l else "[icon:unlock] [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
 			if tooltip and tooltip.visible:
 				tooltip.display_item(h_it, d)
 			if SoundManager: SoundManager.play("menu_select")
@@ -2710,13 +2716,13 @@ func _log_container_reject_reason(reason: String) -> void:
 		return
 	match reason:
 		"self_drop":
-			EventBus.event_logged.emit("⚠️ 자기 자신의 내부에는 넣을 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 자기 자신의 내부에는 넣을 수 없습니다.")
 		"max_depth_exceeded":
-			EventBus.event_logged.emit("⚠️ 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
+			EventBus.event_logged.emit("[icon:warn] 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
 		"filter_mismatch":
-			EventBus.event_logged.emit("🔒 해당 특수 보관함의 전용 카테고리에 맞는 아이템만 수납할 수 있습니다.")
+			EventBus.event_logged.emit("[icon:lock] 해당 특수 보관함의 전용 카테고리에 맞는 아이템만 수납할 수 있습니다.")
 		_:
-			EventBus.event_logged.emit("⚠️ 해당 위치에 아이템을 보관할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 해당 위치에 아이템을 보관할 수 없습니다.")
 
 func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -> void:
 	if not is_dragging or not popup or not popup.inner_grid:
@@ -2882,7 +2888,7 @@ func _handle_popup_quick_action(popup: ContainerPopupWindow, item: Dictionary, i
 			if SoundManager: SoundManager.play("menu_select")
 		else:
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 메인 가방 공간이 부족합니다.")
+				EventBus.event_logged.emit("[icon:warn] 메인 가방 공간이 부족합니다.")
 	elif target_inventory != null:
 		var rem := target_inventory.add_item(item_id, amt, item)
 		var added := amt - rem

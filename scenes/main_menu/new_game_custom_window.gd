@@ -3,6 +3,7 @@ extends Control
 
 ## 새 게임 시작 시 게임 규칙/난이도 모딩 윈도우
 
+@onready var title_label: Label = $Center/Panel/Title
 @onready var preset_opt: OptionButton = $Center/Panel/VBox/PresetRow/PresetOpt
 @onready var zombie_opt: OptionButton = $Center/Panel/VBox/ZombieRow/ZombieOpt
 @onready var raid_time_opt: OptionButton = $Center/Panel/VBox/RaidTimeRow/RaidTimeOpt
@@ -17,6 +18,9 @@ extends Control
 var is_updating_preset: bool = false
 
 func _ready() -> void:
+	if UiIconManager:
+		UiIconManager.set_label_icon(title_label, "settings", "", 18, 6)
+		UiIconManager.apply_button_icon(start_btn, "rocket", "", 16)
 	_setup_options()
 	preset_opt.item_selected.connect(_on_preset_selected)
 	
@@ -37,10 +41,19 @@ func _ready() -> void:
 func _setup_options() -> void:
 	# 프리셋
 	preset_opt.clear()
-	preset_opt.add_item("🟢 캐주얼 (Casual)", 0)
-	preset_opt.add_item("🟡 스탠다드 (Standard)", 1)
-	preset_opt.add_item("🔴 하드코어 (Hardcore)", 2)
-	preset_opt.add_item("⚙️ 커스텀 모딩 (Custom)", 3)
+	var preset_defs := [
+		["diff_casual", "캐주얼 (Casual)", 0],
+		["diff_standard", "스탠다드 (Standard)", 1],
+		["diff_hardcore", "하드코어 (Hardcore)", 2],
+		["diff_custom", "커스텀 모딩 (Custom)", 3],
+	]
+	for pdef in preset_defs:
+		var p_icon: Texture2D = UiIconManager.get_icon(pdef[0]) if UiIconManager else null
+		if p_icon != null:
+			preset_opt.add_icon_item(p_icon, pdef[1], pdef[2])
+		else:
+			preset_opt.add_item(pdef[1], pdef[2])
+	preset_opt.add_theme_constant_override("icon_max_width", 14)
 	
 	# 좀비 밀도
 	zombie_opt.clear()

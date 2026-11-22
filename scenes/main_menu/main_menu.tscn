@@ -166,7 +166,7 @@ text = "전술 샌드박스 (Sandbox)"
 [node name="SettingsButton" type="Button" parent="VBoxContainer" unique_id=1489203101]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "⚙️ 설정 / 화면 (F11)"
+text = "설정 / 화면 (F11)"
 
 [node name="QuitButton" type="Button" parent="VBoxContainer" unique_id=799791364]
 custom_minimum_size = Vector2(0, 40)

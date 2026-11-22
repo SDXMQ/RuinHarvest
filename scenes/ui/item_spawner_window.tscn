@@ -41,7 +41,7 @@ offset_top = 10.0
 offset_bottom = 36.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 18
-text = "🛠️ 샌드박스 크리에이티브 & 치트 관리자 (Sandbox Tools)"
+text = "샌드박스 크리에이티브 & 치트 관리자 (Sandbox Tools)"
 horizontal_alignment = 1
 
 [node name="VBox" type="VBoxContainer" parent="Center/Panel"]
@@ -63,32 +63,32 @@ theme_override_constants/separation = 6
 
 [node name="AddMoney10kBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
-text = "💰 +1만 루블"
+text = "+1만 루블"
 
 [node name="AddMoney100kBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
-text = "💰 +10만 루블"
+text = "+10만 루블"
 
 [node name="HealAllBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
-text = "❤️ 생존스탯 100% 완충"
+text = "생존스탯 100% 완충"
 
 [node name="CureAllBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
-text = "🩹 부상/감염 치료"
+text = "부상/감염 치료"
 
 [node name="GodModeCheck" type="CheckBox" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
-text = "🛡️ 무적 (God)"
+text = "무적 (God)"
 
 [node name="AddTimeBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
-text = "⏳ 레이드 +10분"
+text = "레이드 +10분"
 
 [node name="ClearInvBtn" type="Button" parent="Center/Panel/VBox/CheatToolbar"]
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.4, 0.4, 1)
-text = "🗑️ 가방 비우기"
+text = "가방 비우기"
 
 [node name="HSeparator" type="HSeparator" parent="Center/Panel/VBox"]
 layout_mode = 2
@@ -146,7 +146,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.75, 0.8, 0.85, 1)
 theme_override_font_sizes/font_size = 13
-text = "💡 아이템 클릭 시 설정된 수량만큼 배낭으로 지급됩니다."
+text = "아이템 클릭 시 설정된 수량만큼 배낭으로 지급됩니다."
 
 [node name="CloseBtn" type="Button" parent="Center/Panel/BottomHBox"]
 layout_mode = 2

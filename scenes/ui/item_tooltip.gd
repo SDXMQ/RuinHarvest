@@ -137,10 +137,12 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 
 	var status_notes: Array[String] = []
 	if bool(item.get("locked", false)):
-		status_notes.append("[color=#ffb86c]🔒 [잠금 상태] 일괄 판매·보관·버리기 보호됨 ([L] 키로 해제)[/color]")
+		var ic_lock := (UiIconManager.bbcode_icon("lock_gold", 13) + " ") if UiIconManager else ""
+		status_notes.append("[color=#ffb86c]%s[잠금 상태] 일괄 판매·보관·버리기 보호됨 ([L] 키로 해제)[/color]" % ic_lock)
 	var check_item_id := str(item.get("id", ""))
 	if HideoutProgression.is_wishlist_item(check_item_id):
-		status_notes.append("[color=#ffe066]★ [위시리스트] 은신처 업그레이드 / 상인 의뢰 필요 물자[/color]")
+		var ic_star := (UiIconManager.bbcode_icon("star", 13) + " ") if UiIconManager else ""
+		status_notes.append("[color=#ffe066]%s[위시리스트] 은신처 업그레이드 / 상인 의뢰 필요 물자[/color]" % ic_star)
 	if not status_notes.is_empty() and stats_label:
 		var extra_bb := "\n".join(status_notes)
 		if stats_label.visible and stats_label.text != "":
@@ -364,7 +366,8 @@ func _display_general_item_details(item: Dictionary, data: Dictionary) -> void:
 					"dogtag_key": "인식표 · 열쇠 · 키카드 전용"
 				}
 				stats.append(" • 수납 제한: [color=#50fa7b]%s[/color]" % str(filter_names.get(f_kind, f_kind)))
-			stats.append(" • [color=#f1fa8c]💡 더블클릭 또는 [Alt+우클릭 -> 열기]로 내부 공간 팝업[/color]")
+			var ic_tip := (UiIconManager.bbcode_icon("tip", 13) + " ") if UiIconManager else ""
+			stats.append(" • [color=#f1fa8c]%s더블클릭 또는 [Alt+우클릭 -> 열기]로 내부 공간 팝업[/color]" % ic_tip)
 			
 		var effects = data.get("effects", {})
 		if effects.has("hp"): stats.append(" • 체력 회복: [color=#50fa7b]+%d[/color]" % effects["hp"])

@@ -18,6 +18,8 @@ func _ready() -> void:
 	load_button.pressed.connect(_on_load_pressed)
 	if settings_button:
 		settings_button.pressed.connect(_on_settings_pressed)
+		if UiIconManager:
+			UiIconManager.apply_button_icon(settings_button, "settings", "", 16)
 	quit_button.pressed.connect(_on_quit_pressed)
 	
 	# 타이틀 다국어 적용 시뮬레이션

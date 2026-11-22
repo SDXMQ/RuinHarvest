@@ -35,7 +35,7 @@ func _ready() -> void:
 	search_input.text_changed.connect(func(_new_text): _filter_and_render_items())
 	category_opt.item_selected.connect(func(_idx): _filter_and_render_items())
 	
-	# 치트 버튼 시그널 연결
+	# 치트 버튼 시그널 연결 및 UI 아이콘 바인딩
 	add_money_10k_btn.pressed.connect(func(): _add_money(10000))
 	add_money_100k_btn.pressed.connect(func(): _add_money(100000))
 	heal_all_btn.pressed.connect(_heal_all_stats)
@@ -43,6 +43,19 @@ func _ready() -> void:
 	god_mode_check.toggled.connect(_toggle_god_mode)
 	add_time_btn.pressed.connect(_add_raid_time)
 	clear_inv_btn.pressed.connect(_clear_inventory)
+
+	if UiIconManager:
+		var title_lbl := get_node_or_null("Center/Panel/Title") as Label
+		if title_lbl: UiIconManager.set_label_icon(title_lbl, "sandbox", "", 18, 6)
+		UiIconManager.apply_button_icon(add_money_10k_btn, "money", "", 14)
+		UiIconManager.apply_button_icon(add_money_100k_btn, "money", "", 14)
+		UiIconManager.apply_button_icon(heal_all_btn, "heart", "", 14)
+		UiIconManager.apply_button_icon(cure_all_btn, "bandage", "", 14)
+		UiIconManager.apply_button_icon(god_mode_check, "shield_green", "", 14)
+		UiIconManager.apply_button_icon(add_time_btn, "hourglass", "", 14)
+		UiIconManager.apply_button_icon(clear_inv_btn, "trash", "", 14)
+		var hint_lbl := get_node_or_null("Center/Panel/BottomHBox/HintLabel") as Label
+		if hint_lbl: UiIconManager.set_label_icon(hint_lbl, "tip", "", 14, 5)
 	
 	# 현재 무적 상태 동기화
 	var player = _get_player()
@@ -268,11 +281,11 @@ func _spawn_item_to_player(item_id: String, item_data: Dictionary, amount: int) 
 	if spawned_successfully:
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("✨ [치트/스폰] %s x%d 지급 완료 (창고/가방)" % [item_data.get("name", item_id), amount])
+			EventBus.event_logged.emit("[icon:stars] [치트/스폰] %s x%d 지급 완료 (창고/가방)" % [item_data.get("name", item_id), amount])
 	else:
 		if SoundManager: SoundManager.play("hit_melee")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 인벤토리/창고 공간이 부족하거나 대상을 찾을 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 인벤토리/창고 공간이 부족하거나 대상을 찾을 수 없습니다.")
 
 # ============================================================
 # 치트 / 크리에이티브 관리자 기능
@@ -292,7 +305,7 @@ func _add_money(amount: int) -> void:
 			cur_scene.money_label.text = "자금: %d RUB" % cur_rubles
 			
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💰 자금 치트: +%d RUB (총 %d RUB)" % [amount, cur_rubles])
+			EventBus.event_logged.emit("[icon:money] 자금 치트: +%d RUB (총 %d RUB)" % [amount, cur_rubles])
 
 func _heal_all_stats() -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -304,7 +317,7 @@ func _heal_all_stats() -> void:
 		player.thirst = player.max_thirst
 		player.stats_changed.emit()
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("❤️ 플레이어 체력/스태미너/허기/갈증 100% 완충 완료!")
+			EventBus.event_logged.emit("[icon:heart] 플레이어 체력/스태미너/허기/갈증 100% 완충 완료!")
 
 func _cure_all_conditions() -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -315,7 +328,7 @@ func _cure_all_conditions() -> void:
 		player.is_infected = false
 		player.stats_changed.emit()
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🩹 모든 부상(출혈, 골절, 감염) 치료 완료!")
+			EventBus.event_logged.emit("[icon:bandage] 모든 부상(출혈, 골절, 감염) 치료 완료!")
 
 func _toggle_god_mode(enabled: bool) -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -323,7 +336,7 @@ func _toggle_god_mode(enabled: bool) -> void:
 	if player:
 		player.is_god_mode = enabled
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🛡️ 무적 모드 (God Mode): %s" % ("활성화" if enabled else "비활성화"))
+			EventBus.event_logged.emit("[icon:shield_green] 무적 모드 (God Mode): %s" % ("활성화" if enabled else "비활성화"))
 
 func _add_raid_time() -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -333,7 +346,7 @@ func _add_raid_time() -> void:
 		if GameManager:
 			GameManager.raid_duration_minutes += 10.0
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⏳ 레이드 시간 10분 연장 완료!")
+			EventBus.event_logged.emit("[icon:hourglass] 레이드 시간 10분 연장 완료!")
 
 func _clear_inventory() -> void:
 	if SoundManager: SoundManager.play("menu_select")
@@ -360,7 +373,7 @@ func _clear_inventory() -> void:
 		cleared = true
 		
 	if cleared and EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("🗑️ 가방 인벤토리를 모두 비웠습니다.")
+		EventBus.event_logged.emit("[icon:trash] 가방 인벤토리를 모두 비웠습니다.")
 
 # ============================================================
 # 플레이어 & 인벤토리 참조 헬퍼

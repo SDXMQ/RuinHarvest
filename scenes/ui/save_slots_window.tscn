@@ -44,7 +44,7 @@ layout_mode = 2
 layout_mode = 2
 size_flags_horizontal = 3
 theme_override_font_sizes/font_size = 18
-text = "💾 저장된 게임 불러오기 (Load Game)"
+text = "저장된 게임 불러오기 (Load Game)"
 horizontal_alignment = 1
 
 [node name="CloseBtn" type="Button" parent="Center/Panel/VBox/Header"]
@@ -82,12 +82,12 @@ theme_override_constants/separation = 12
 layout_mode = 2
 size_flags_horizontal = 3
 custom_minimum_size = Vector2(0, 36)
-text = "📂 세이브 폴더 열기 (Open Save Folder)"
+text = "세이브 폴더 열기 (Open Save Folder)"
 
 [node name="RefreshBtn" type="Button" parent="Center/Panel/VBox/Footer"]
 layout_mode = 2
-custom_minimum_size = Vector2(100, 36)
-text = "🔄 새로고침"
+custom_minimum_size = Vector2(110, 36)
+text = "새로고침"
 
 [connection signal="pressed" from="Center/Panel/VBox/Header/CloseBtn" to="." method="_on_close_pressed"]
 [connection signal="pressed" from="Center/Panel/VBox/Footer/OpenFolderBtn" to="." method="_on_open_folder_pressed"]

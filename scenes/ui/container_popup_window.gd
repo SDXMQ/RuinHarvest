@@ -148,16 +148,18 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 
 	if filter_kind != "":
 		var filter_names := {
-			"ammo": "🔒 수납 제한: 탄약 전용",
-			"medical": "🔒 수납 제한: 의약품 전용",
-			"weapon_part": "🔒 수납 제한: 총기 부품 전용",
-			"dogtag_key": "🔒 수납 제한: 인식표·열쇠·키카드 전용"
+			"ammo": "수납 제한: 탄약 전용",
+			"medical": "수납 제한: 의약품 전용",
+			"weapon_part": "수납 제한: 총기 부품 전용",
+			"dogtag_key": "수납 제한: 인식표·열쇠·키카드 전용"
 		}
 		filter_label = Label.new()
 		filter_label.text = filter_names.get(filter_kind, "")
 		filter_label.add_theme_font_size_override("font_size", 10)
 		filter_label.add_theme_color_override("font_color", Color(0.45, 0.88, 1.0))
 		root_vbox.add_child(filter_label)
+		if UiIconManager and filter_label.text != "":
+			UiIconManager.set_label_icon(filter_label, "lock", "", 12, 4)
 
 	# 2D 내부 그리드 영역
 	var grid_px_w := float(gw) * POPUP_CELL_SIZE

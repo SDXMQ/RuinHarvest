@@ -3,13 +3,20 @@ extends Control
 
 ## 세이브 파일 목록 표시, 로드 및 삭제를 담당하는 윈도우
 
+@onready var title_label: Label = $Center/Panel/VBox/Header/Title
 @onready var close_btn: Button = $Center/Panel/VBox/Header/CloseBtn
 @onready var slots_container: VBoxContainer = $Center/Panel/VBox/ScrollContainer/SlotsVBox
 @onready var no_saves_label: Label = $Center/Panel/VBox/ScrollContainer/SlotsVBox/NoSavesLabel
+@onready var open_folder_btn: Button = $Center/Panel/VBox/Footer/OpenFolderBtn
+@onready var refresh_btn: Button = $Center/Panel/VBox/Footer/RefreshBtn
 
 signal window_closed
 
 func _ready() -> void:
+	if UiIconManager:
+		UiIconManager.set_label_icon(title_label, "save", "", 18, 6)
+		UiIconManager.apply_button_icon(open_folder_btn, "folder", "", 16)
+		UiIconManager.apply_button_icon(refresh_btn, "refresh", "", 16)
 	_refresh_slots()
 
 func _refresh_slots() -> void:
@@ -51,19 +58,33 @@ func _create_save_slot_card(info: Dictionary) -> Control:
 	var w_name = info.get("world_name", "새 월드")
 	var day = info.get("day", 1)
 	var diff = info.get("difficulty", "normal")
-	title_lbl.text = "🌍 %s (Day %d) [%s]" % [w_name, day, diff.to_upper()]
+	title_lbl.text = "%s (Day %d) [%s]" % [w_name, day, diff.to_upper()]
 	title_lbl.add_theme_font_size_override("font_size", 14)
 	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.9, 0.4))
 	vbox.add_child(title_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(title_lbl, "globe", "", 14, 5)
 	
-	# 하단 정보 라벨 (소지금, 저장 일시)
-	var info_lbl = Label.new()
+	# 하단 정보 행 (소지금, 저장 일시)
 	var funds = info.get("funds", 0)
 	var save_time = info.get("save_time", "")
-	info_lbl.text = "💰 소지금: %d 루블 | 🕒 %s" % [funds, save_time]
-	info_lbl.add_theme_font_size_override("font_size", 12)
-	info_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8))
-	vbox.add_child(info_lbl)
+	var info_row = HBoxContainer.new()
+	info_row.add_theme_constant_override("separation", 5)
+	if UiIconManager:
+		info_row.add_child(UiIconManager.create_icon_rect("money", 13))
+	var funds_lbl = Label.new()
+	funds_lbl.text = "소지금: %d 루블  |" % funds
+	funds_lbl.add_theme_font_size_override("font_size", 12)
+	funds_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8))
+	info_row.add_child(funds_lbl)
+	if UiIconManager:
+		info_row.add_child(UiIconManager.create_icon_rect("clock", 13))
+	var time_lbl = Label.new()
+	time_lbl.text = str(save_time)
+	time_lbl.add_theme_font_size_override("font_size", 12)
+	time_lbl.add_theme_color_override("font_color", Color(0.7, 0.75, 0.8))
+	info_row.add_child(time_lbl)
+	vbox.add_child(info_row)
 	
 	# 우측 버튼들
 	var load_btn = Button.new()

@@ -30,7 +30,10 @@ func _ready() -> void:
 		panel.offset_bottom = 245.0
 	var title_lbl: Label = get_node_or_null("Panel/VBox/Header/Title") as Label
 	if title_lbl:
-		title_lbl.text = "📻 전술 무전기 & 암시장 드론 통신망"
+		if UiIconManager:
+			UiIconManager.set_label_icon(title_lbl, "radio", "전술 무전기 & 암시장 드론 통신망", 18, 6, true)
+		else:
+			title_lbl.text = "전술 무전기 & 암시장 드론 통신망"
 
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
@@ -56,12 +59,16 @@ func _build_radio_content() -> void:
 	funds_label.add_theme_font_size_override("font_size", 13)
 	funds_label.add_theme_color_override("font_color", Color(1.0, 0.86, 0.32))
 	scan_container.add_child(funds_label)
+	if UiIconManager:
+		UiIconManager.set_label_icon(funds_label, "money", "", 14, 5)
 
 	var scan_header := Label.new()
-	scan_header.text = "📡 주파수 신호 스캔 (Tactical Recon)"
+	scan_header.text = "주파수 신호 스캔 (Tactical Recon)"
 	scan_header.add_theme_font_size_override("font_size", 13)
 	scan_header.add_theme_color_override("font_color", Color(0.55, 0.85, 1.0))
 	scan_container.add_child(scan_header)
+	if UiIconManager:
+		UiIconManager.set_label_icon(scan_header, "signal", "", 15, 5)
 
 	var targets = [
 		{"name": "인근 생존자 / 적 신호 스캔", "type": "survivor", "cost": 50},
@@ -83,25 +90,32 @@ func _build_radio_content() -> void:
 	scan_container.add_child(drone_section_vbox)
 
 	var drone_header := Label.new()
-	drone_header.text = "🚁 암시장 긴급 드론 지원 (Black-Market Drone Ops)"
+	drone_header.text = "암시장 긴급 드론 지원 (Black-Market Drone Ops)"
 	drone_header.add_theme_font_size_override("font_size", 13)
 	drone_header.add_theme_color_override("font_color", Color(1.0, 0.72, 0.28))
 	drone_section_vbox.add_child(drone_header)
+	if UiIconManager:
+		UiIconManager.set_label_icon(drone_header, "drone", "", 15, 5)
 
 	supply_drop_btn = Button.new()
 	supply_drop_btn.name = "EmergencySupplyBtn"
 	supply_drop_btn.custom_minimum_size = Vector2(0, 38)
-	supply_drop_btn.text = "🚁 긴급 탄약·의료 드론 투하 호출 (%d RUB)" % SUPPLY_DROP_COST
+	if UiIconManager:
+		UiIconManager.set_button(supply_drop_btn, "drone", "긴급 탄약·의료 드론 투하 호출 (%d RUB)" % SUPPLY_DROP_COST, 16)
+	else:
+		supply_drop_btn.text = "긴급 탄약·의료 드론 투하 호출 (%d RUB)" % SUPPLY_DROP_COST
 	supply_drop_btn.pressed.connect(func():
 		request_emergency_supply_drop()
 	)
 	drone_section_vbox.add_child(supply_drop_btn)
 
 	var fulton_lbl := Label.new()
-	fulton_lbl.text = "🎈 풀턴 회수 드론 — 선택한 가방 아이템 1점을 은신처 창고로 즉시 안전 이송:"
+	fulton_lbl.text = "풀턴 회수 드론 — 선택한 가방 아이템 1점을 은신처 창고로 즉시 안전 이송:"
 	fulton_lbl.add_theme_font_size_override("font_size", 11)
 	fulton_lbl.add_theme_color_override("font_color", Color(0.78, 0.84, 0.9))
 	drone_section_vbox.add_child(fulton_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(fulton_lbl, "fulton", "", 14, 5)
 
 	fulton_option_btn = OptionButton.new()
 	fulton_option_btn.name = "FultonItemOption"
@@ -111,7 +125,10 @@ func _build_radio_content() -> void:
 	fulton_extract_btn = Button.new()
 	fulton_extract_btn.name = "FultonExtractBtn"
 	fulton_extract_btn.custom_minimum_size = Vector2(0, 38)
-	fulton_extract_btn.text = "🎈 선택 아이템 은신처 즉시 회수 (%d RUB)" % FULTON_EXTRACT_COST
+	if UiIconManager:
+		UiIconManager.set_button(fulton_extract_btn, "fulton", "선택 아이템 은신처 즉시 회수 (%d RUB)" % FULTON_EXTRACT_COST, 16)
+	else:
+		fulton_extract_btn.text = "선택 아이템 은신처 즉시 회수 (%d RUB)" % FULTON_EXTRACT_COST
 	fulton_extract_btn.pressed.connect(func():
 		if fulton_option_btn and fulton_option_btn.selected >= 0 and fulton_option_btn.selected < fulton_uid_list.size():
 			request_fulton_extract_item(fulton_uid_list[fulton_option_btn.selected])
@@ -169,14 +186,18 @@ func _determine_preferred_ammo() -> String:
 func _refresh_drone_ops_ui() -> void:
 	var cur_rub := _get_player_rubles()
 	if funds_label:
-		funds_label.text = "💰 보유 자금: %d RUB" % cur_rub
+		funds_label.text = "보유 자금: %d RUB" % cur_rub
 
 	if supply_drop_btn:
 		supply_drop_btn.disabled = (player == null or cur_rub < SUPPLY_DROP_COST)
-		supply_drop_btn.text = "🚁 긴급 탄약·의료 드론 투하 호출 (%d RUB)%s" % [
+		var drop_txt := "긴급 탄약·의료 드론 투하 호출 (%d RUB)%s" % [
 			SUPPLY_DROP_COST,
 			" [잔액 부족]" if cur_rub < SUPPLY_DROP_COST else ""
 		]
+		if UiIconManager:
+			UiIconManager.set_button(supply_drop_btn, "drone", drop_txt, 16)
+		else:
+			supply_drop_btn.text = drop_txt
 
 	fulton_uid_list.clear()
 	if fulton_option_btn:
@@ -221,18 +242,29 @@ func _refresh_drone_ops_ui() -> void:
 
 	if fulton_extract_btn:
 		fulton_extract_btn.disabled = (fulton_uid_list.is_empty() or cur_rub < FULTON_EXTRACT_COST)
-		fulton_extract_btn.text = "🎈 선택 아이템 은신처 즉시 회수 (%d RUB)%s" % [
+		var fulton_txt := "선택 아이템 은신처 즉시 회수 (%d RUB)%s" % [
 			FULTON_EXTRACT_COST,
 			" [잔액 부족]" if cur_rub < FULTON_EXTRACT_COST else ""
 		]
+		if UiIconManager:
+			UiIconManager.set_button(fulton_extract_btn, "fulton", fulton_txt, 16)
+		else:
+			fulton_extract_btn.text = fulton_txt
+
+func _set_feedback(icon_key: String, msg: String, color: Color) -> void:
+	if not status_feedback_lbl:
+		return
+	status_feedback_lbl.add_theme_color_override("font_color", color)
+	if UiIconManager:
+		UiIconManager.set_label_icon(status_feedback_lbl, icon_key, msg, 13, 5, true)
+	else:
+		status_feedback_lbl.text = msg
 
 func request_emergency_supply_drop() -> bool:
 	if player == null:
 		return false
 	if not _deduct_player_rubles(SUPPLY_DROP_COST):
-		if status_feedback_lbl:
-			status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
-			status_feedback_lbl.text = "⚠️ 잔액이 부족합니다. (필요: %d RUB)" % SUPPLY_DROP_COST
+		_set_feedback("warn", "잔액이 부족합니다. (필요: %d RUB)" % SUPPLY_DROP_COST, Color(1.0, 0.4, 0.4))
 		return false
 
 	var pref_ammo := _determine_preferred_ammo()
@@ -258,10 +290,8 @@ func request_emergency_supply_drop() -> bool:
 	if SoundManager:
 		SoundManager.play("craft_complete")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("★ 🚁 [긴급 드론 보급] %d RUB 결제 완료! %s 탄약 및 응급 의료품 보급함이 투하됩니다!" % [SUPPLY_DROP_COST, pref_ammo])
-	if status_feedback_lbl:
-		status_feedback_lbl.add_theme_color_override("font_color", Color(0.45, 0.95, 0.6))
-		status_feedback_lbl.text = "✓ 긴급 보급 드론 호출 완료! (%s x60 + 의료품 투하)" % pref_ammo
+		EventBus.event_logged.emit("[icon:star][icon:drone] [긴급 드론 보급] %d RUB 결제 완료! %s 탄약 및 응급 의료품 보급함이 투하됩니다!" % [SUPPLY_DROP_COST, pref_ammo])
+	_set_feedback("check", "긴급 보급 드론 호출 완료! (%s x60 + 의료품 투하)" % pref_ammo, Color(0.45, 0.95, 0.6))
 	_refresh_drone_ops_ui()
 	return true
 
@@ -273,9 +303,7 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 	if target_item.is_empty():
 		return false
 	if _get_player_rubles() < FULTON_EXTRACT_COST:
-		if status_feedback_lbl:
-			status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
-			status_feedback_lbl.text = "⚠️ 잔액이 부족합니다. (필요: %d RUB)" % FULTON_EXTRACT_COST
+		_set_feedback("warn", "잔액이 부족합니다. (필요: %d RUB)" % FULTON_EXTRACT_COST, Color(1.0, 0.4, 0.4))
 		return false
 
 	var stash_entry: Dictionary = target_item.duplicate(true)
@@ -295,17 +323,13 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 		var can_fit_stash := sim_stash.can_fit_item(str(stash_entry.get("id", "")), maxi(1, int(stash_entry.get("amount", 1))), stash_entry)
 		sim_stash.free()
 		if not can_fit_stash:
-			if status_feedback_lbl:
-				status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
-				status_feedback_lbl.text = "⚠️ 은신처 창고 공간이 가득 차서 풀턴 회수가 불가합니다."
+			_set_feedback("warn", "은신처 창고 공간이 가득 차서 풀턴 회수가 불가합니다.", Color(1.0, 0.4, 0.4))
 			if SoundManager:
 				SoundManager.play("hit_melee")
 			return false
 
 	if not _deduct_player_rubles(FULTON_EXTRACT_COST):
-		if status_feedback_lbl:
-			status_feedback_lbl.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
-			status_feedback_lbl.text = "⚠️ 잔액이 부족합니다. (필요: %d RUB)" % FULTON_EXTRACT_COST
+		_set_feedback("warn", "잔액이 부족합니다. (필요: %d RUB)" % FULTON_EXTRACT_COST, Color(1.0, 0.4, 0.4))
 		return false
 
 	grid.remove_item_by_uid(item_uid)
@@ -327,10 +351,8 @@ func request_fulton_extract_item(item_uid: String) -> bool:
 	if SoundManager:
 		SoundManager.play("craft_complete")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("★ 🎈 [풀턴 회수 완료] [%s]을(를) 은신처 창고로 즉시 안전 이송했습니다! (사망 시에도 100%% 보존)" % disp_name)
-	if status_feedback_lbl:
-		status_feedback_lbl.add_theme_color_override("font_color", Color(0.45, 0.95, 0.6))
-		status_feedback_lbl.text = "✓ [%s] 은신처 창고 이송 완료!" % disp_name
+		EventBus.event_logged.emit("[icon:star][icon:fulton] [풀턴 회수 완료] [%s]을(를) 은신처 창고로 즉시 안전 이송했습니다! (사망 시에도 100%% 보존)" % disp_name)
+	_set_feedback("check", "[%s] 은신처 창고 이송 완료!" % disp_name, Color(0.45, 0.95, 0.6))
 	_refresh_drone_ops_ui()
 	return true
 
@@ -341,7 +363,7 @@ func _scan_target(type: String) -> void:
 	if EventBus.has_signal("radio_scan_requested"):
 		EventBus.radio_scan_requested.emit(type)
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("📻 무전기 스캔 시작: " + type)
+		EventBus.event_logged.emit("[icon:radio] 무전기 스캔 시작: " + type)
 	_on_close_pressed()
 
 func _unhandled_input(event: InputEvent) -> void:

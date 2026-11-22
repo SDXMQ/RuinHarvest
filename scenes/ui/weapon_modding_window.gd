@@ -29,7 +29,7 @@ var slot_buttons: Dictionary = {} # slot -> OptionButton
 var stat_bars: Dictionary = {} # stat_key -> {bar: ProgressBar, lbl: Label}
 var receiver_option_btn: OptionButton = null
 var weapon_title_lbl: Label = null
-var special_tags_lbl: Label = null
+var special_tags_lbl: RichTextLabel = null
 var slots_container: VBoxContainer = null
 
 func _ready() -> void:
@@ -102,9 +102,9 @@ func _return_part_to_inventories(part_id: String, amount: int = 1) -> void:
 			parent_target.add_child(g_item)
 			g_item.setup(part_id, rem, {})
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("📦 인벤토리 공간 부족으로 [%s]을(를) 바닥에 드랍했습니다." % part_id)
+				EventBus.event_logged.emit("[icon:box] 인벤토리 공간 부족으로 [%s]을(를) 바닥에 드랍했습니다." % part_id)
 		elif EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 인벤토리 공간이 부족하여 [%s] 회수에 실패했습니다." % part_id)
+			EventBus.event_logged.emit("[icon:warn] 인벤토리 공간이 부족하여 [%s] 회수에 실패했습니다." % part_id)
 
 func _build_ui() -> void:
 	var bg = ColorRect.new()
@@ -129,11 +129,13 @@ func _build_ui() -> void:
 	root_vbox.add_child(header)
 
 	var title = Label.new()
-	title.text = "🔧 무기 개조 작업대 (WEAPON MODDING WORKBENCH)"
+	title.text = "무기 개조 작업대 (WEAPON MODDING WORKBENCH)"
 	title.add_theme_font_size_override("font_size", 20)
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	header.add_child(title)
+	if UiIconManager:
+		UiIconManager.set_label_icon(title, "wrench_blue", "", 20, 8)
 
 	var close_btn = Button.new()
 	close_btn.text = "닫기 [ESC]"
@@ -195,11 +197,16 @@ func _build_ui() -> void:
 	weapon_title_lbl.add_theme_font_size_override("font_size", 18)
 	weapon_title_lbl.add_theme_color_override("font_color", Color(0.3, 1.0, 0.5))
 	right_vbox.add_child(weapon_title_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(weapon_title_lbl, "gun", "", 18, 6)
 
-	special_tags_lbl = Label.new()
+	special_tags_lbl = RichTextLabel.new()
+	special_tags_lbl.bbcode_enabled = true
+	special_tags_lbl.fit_content = true
+	special_tags_lbl.scroll_active = false
 	special_tags_lbl.text = "특수 효과: 없음"
-	special_tags_lbl.add_theme_font_size_override("font_size", 12)
-	special_tags_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.95))
+	special_tags_lbl.add_theme_font_size_override("normal_font_size", 12)
+	special_tags_lbl.add_theme_color_override("default_color", Color(0.8, 0.85, 0.95))
 	special_tags_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	right_vbox.add_child(special_tags_lbl)
 
@@ -251,7 +258,10 @@ func _build_ui() -> void:
 
 	var shooting_range_btn = Button.new()
 	shooting_range_btn.name = "TestInRangeBtn"
-	shooting_range_btn.text = "🎯 사격장 테스트 (Test in Range)"
+	if UiIconManager:
+		UiIconManager.set_button(shooting_range_btn, "target", "사격장 테스트 (Test in Range)", 16)
+	else:
+		shooting_range_btn.text = "사격장 테스트 (Test in Range)"
 	shooting_range_btn.custom_minimum_size = Vector2(220, 40)
 	shooting_range_btn.pressed.connect(_on_open_shooting_range)
 	footer.add_child(shooting_range_btn)
@@ -501,13 +511,15 @@ func _recompute_and_update_ui() -> void:
 	var stats = current_weapon.get("computed_stats", {})
 
 	if weapon_title_lbl:
-		weapon_title_lbl.text = "🔫 %s (총 무게: %.1fkg)" % [current_weapon.get("name", ""), stats.get("weight", 1.0)]
+		weapon_title_lbl.text = "%s (총 무게: %.1fkg)" % [current_weapon.get("name", ""), stats.get("weight", 1.0)]
 
-	var tags = []
-	if stats.get("suppressed", false): tags.append("🔇 소음기 적용")
-	if stats.get("zoom", 1.0) > 1.05: tags.append("🔭 조준 배율 x%.1f" % stats.get("zoom", 1.0))
-	if stats.get("laser_sight", false): tags.append("🔴 레이저 조준기")
-	if stats.get("tac_flashlight", false): tags.append("🔦 전술 라이트")
+	var ic := func(k: String) -> String:
+		return (UiIconManager.bbcode_icon(k, 13) + " ") if UiIconManager else ""
+	var tags: Array[String] = []
+	if stats.get("suppressed", false): tags.append("%s소음기 적용" % ic.call("muted"))
+	if stats.get("zoom", 1.0) > 1.05: tags.append("%s조준 배율 x%.1f" % [ic.call("scope"), stats.get("zoom", 1.0)])
+	if stats.get("laser_sight", false): tags.append("%s레이저 조준기" % ic.call("laser"))
+	if stats.get("tac_flashlight", false): tags.append("%s전술 라이트" % ic.call("flashlight"))
 	tags.append("탄창 용량: %d발" % stats.get("magazine_size", 15))
 	tags.append("관통력: %d" % int(stats.get("penetration", 10)))
 
@@ -604,12 +616,12 @@ func _on_assemble_pressed() -> void:
 	_refresh_slots_for_receiver()
 	if SoundManager: SoundManager.play("craft_success")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("🔧 [%s] 개조 적용 완료! (장전 탄약: %d/%d)" % [current_weapon.get("name", ""), current_weapon["current_magazine_ammo"], max_mag])
+		EventBus.event_logged.emit("[icon:wrench_blue] [%s] 개조 적용 완료! (장전 탄약: %d/%d)" % [current_weapon.get("name", ""), current_weapon["current_magazine_ammo"], max_mag])
 
 func _on_disassemble_pressed() -> void:
 	if original_attached_parts.is_empty():
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 현재 총기에 분리할 수 있는 장착 부품이 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 현재 총기에 분리할 수 있는 장착 부품이 없습니다.")
 		return
 
 	var detached_count = 0
@@ -647,7 +659,7 @@ func _on_disassemble_pressed() -> void:
 	_refresh_slots_for_receiver()
 	if SoundManager: SoundManager.play("menu_select")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("🔩 장착된 부품 %d개를 모두 분리하여 인벤토리로 회수했습니다." % detached_count)
+		EventBus.event_logged.emit("[icon:bolt] 장착된 부품 %d개를 모두 분리하여 인벤토리로 회수했습니다." % detached_count)
 
 func _unhandled_input(event: InputEvent) -> void:
 	if visible and event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
