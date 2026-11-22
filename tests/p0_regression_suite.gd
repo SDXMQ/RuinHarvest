@@ -80,6 +80,7 @@ func run_all() -> void:
 	await _test_insurance_and_no_free_starter_refill()
 	await _test_raid_timer_unification_and_unlimited()
 	await _test_sandbox_f1_guard_and_font_fallbacks()
+	await _test_issue4_play_feedback_regressions()
 	await _test_permadeath_returns_to_main_menu()
 
 	_cleanup_temp_saves()
@@ -471,12 +472,13 @@ func _test_insurance_and_no_free_starter_refill() -> void:
 
 	GameManager.current_world_data["player"]["insured"] = false
 	GameManager.end_raid("kia", [])
+	var uninsured_kia_res: Dictionary = GameManager.last_raid_result.duplicate(true)
 	await get_tree().process_frame
 
 	var eq_after_kia: Dictionary = GameManager.current_world_data.get("player", {}).get("equipment", {})
 	_assert(eq_after_kia.get("primary1", {}).is_empty() and eq_after_kia.get("vest", {}).is_empty(), "Uninsured KIA clears equipped weapon and armor")
 	_assert(bool(GameManager.current_world_data["player"].get("equipment_initialized", false)), "Uninsured KIA marks equipment_initialized=true")
-	_assert(not bool(GameManager.last_raid_result.get("insurance_claimed", true)), "Uninsured KIA sets insurance_claimed=false")
+	_assert(not bool(uninsured_kia_res.get("insurance_claimed", true)), "Uninsured KIA sets insurance_claimed=false")
 
 	var hideout_post_kia: Control = (load("res://scenes/hideout/hideout.tscn") as PackedScene).instantiate()
 	root.add_child(hideout_post_kia)
@@ -505,9 +507,10 @@ func _test_insurance_and_no_free_starter_refill() -> void:
 	GameManager.current_world_data["player"]["equipment"] = GameManager.create_starter_equipment()
 	GameManager.current_world_data["player"]["insured"] = true
 	GameManager.end_raid("kia", [])
+	var insured_kia_res: Dictionary = GameManager.last_raid_result.duplicate(true)
 	await get_tree().process_frame
 	var eq_insured: Dictionary = GameManager.current_world_data.get("player", {}).get("equipment", {})
-	_assert(not eq_insured.get("primary1", {}).is_empty() and not bool(GameManager.current_world_data["player"].get("insured", true)) and bool(GameManager.last_raid_result.get("insurance_claimed", false)), "Insured KIA preserves equipment and consumes insured flag")
+	_assert(not eq_insured.get("primary1", {}).is_empty() and not bool(GameManager.current_world_data["player"].get("insured", true)) and bool(insured_kia_res.get("insurance_claimed", false)), "Insured KIA preserves equipment and consumes insured flag")
 
 # ------------------------------------------------------------
 # 7. Raid Timer Unification, Reload Persistence & Unlimited Mode
@@ -610,18 +613,245 @@ func _test_sandbox_f1_guard_and_font_fallbacks() -> void:
 		_assert(src != "" and not has_bare_draw, "Patched render script avoids bare ThemeDB.fallback_font (%s)" % p.get_file())
 
 # ------------------------------------------------------------
-# 9. Permadeath Returns to MAIN_MENU (Run Last)
+# 9. Issue #4 Play Feedback Regressions (Ghosting, Quickslots, Auto-Fire, Audio)
+# ------------------------------------------------------------
+func _test_issue4_play_feedback_regressions() -> void:
+	print("-- [P0 Test 9] Issue #4 Play Feedback Regressions --")
+	var root: Window = get_tree().get_root()
+
+	# 1. Bug #1: InventoryWindow & Hideout drag preview, hover cell, tooltip, marquee, popup dedupe
+	var inv_grid := InventoryGrid.new()
+	inv_grid.grid_width = 6
+	inv_grid.grid_height = 5
+	root.add_child(inv_grid)
+	inv_grid.auto_add_item("붕대", 4)
+
+	var inv_win: Control = (load("res://scenes/ui/inventory_window.tscn") as PackedScene).instantiate()
+	root.add_child(inv_win)
+	inv_win.setup(null, inv_grid, {})
+	await get_tree().process_frame
+
+	inv_win._start_drag("grid", inv_grid.items[0], Vector2i(0, 0), "", null, inv_grid)
+	inv_win.hovered_grid_cell = Vector2i(1, 1)
+	_assert(inv_win.is_dragging and inv_win.drag_preview != null, "InventoryWindow._start_drag creates drag_preview")
+	inv_win._end_drag()
+	_assert(not inv_win.is_dragging and inv_win.drag_preview == null and inv_win.hovered_grid_cell == Vector2i(-1, -1), "InventoryWindow._end_drag clears drag_preview and resets hovered_grid_cell")
+
+	var orig_bandages: Dictionary = inv_grid.items[0]
+	var split_copy: Dictionary = orig_bandages.duplicate(true)
+	split_copy["amount"] = 2
+	orig_bandages["amount"] = int(orig_bandages.get("amount", 4)) - 2
+	inv_win._start_drag("split", split_copy, Vector2i(0, 0), "", null, inv_grid)
+	inv_win.drag_data["is_split"] = true
+	inv_win.drag_data["split_source_item"] = orig_bandages
+	inv_win.drag_data["split_source_grid"] = inv_grid
+	inv_win.drag_data["split_amount"] = 2
+	if inv_win.tooltip:
+		inv_win.tooltip.visible = true
+	inv_win._on_close_pressed()
+	await get_tree().process_frame
+	_assert(inv_grid.get_item_count("붕대") == 4, "InventoryWindow._on_close_pressed restores active split-drag amount without item loss")
+	if is_instance_valid(inv_win):
+		inv_win.queue_free()
+	inv_grid.queue_free()
+	await get_tree().process_frame
+
+	GameManager.last_raid_result.clear()
+	GameManager.current_world_data = _make_test_world_data()
+	var hideout_i4: Control = (load("res://scenes/hideout/hideout.tscn") as PackedScene).instantiate()
+	root.add_child(hideout_i4)
+	await get_tree().process_frame
+
+	hideout_i4.hovered_player_cell = Vector2i(0, 0)
+	if hideout_i4.tooltip:
+		hideout_i4.tooltip.visible = true
+	hideout_i4.player_grid_control.mouse_exited.emit()
+	_assert(hideout_i4.hovered_player_cell == Vector2i(-1, -1) and (hideout_i4.tooltip == null or not hideout_i4.tooltip.visible), "Hideout player_grid_control mouse_exited clears hovered cell and hides tooltip")
+
+	hideout_i4.hovered_stash_cell = Vector2i(1, 1)
+	if hideout_i4.tooltip:
+		hideout_i4.tooltip.visible = true
+	hideout_i4.stash_grid_control.mouse_exited.emit()
+	_assert(hideout_i4.hovered_stash_cell == Vector2i(-1, -1) and (hideout_i4.tooltip == null or not hideout_i4.tooltip.visible), "Hideout stash_grid_control mouse_exited clears hovered cell and hides tooltip")
+
+	hideout_i4._is_marquee_selecting = true
+	hideout_i4._on_tab_changed(1)
+	_assert(not hideout_i4.is_dragging and not hideout_i4._is_marquee_selecting, "Hideout._on_tab_changed clears drag and marquee selection")
+
+	hideout_i4._open_inventory_window()
+	hideout_i4._open_inventory_window()
+	var inv_script := load("res://scenes/ui/inventory_window.gd")
+	var inv_win_count: int = 0
+	for ch in hideout_i4.get_children():
+		if ch.get_script() == inv_script:
+			inv_win_count += 1
+	_assert(is_instance_valid(hideout_i4._current_inventory_window) and inv_win_count == 1, "Hideout._open_inventory_window prevents stacking duplicate InventoryWindow instances")
+	if is_instance_valid(hideout_i4._current_inventory_window):
+		hideout_i4._current_inventory_window.queue_free()
+	hideout_i4.queue_free()
+	await get_tree().process_frame
+
+	# 2. Bug #2: Food [7] vs Water [8] quickslot separation & HUD 1:1 sync
+	GameManager.current_world_data = _make_test_world_data()
+	var player: CharacterBody2D = (load("res://scenes/entities/player/player.tscn") as PackedScene).instantiate()
+	root.add_child(player)
+	await get_tree().process_frame
+
+	player.inventory_grid.clear()
+	player.inventory_grid.auto_add_item("생수", 1)
+	player.inventory_grid.auto_add_item("식량통조림", 1)
+
+	var found_food: Dictionary = Player.find_quickslot_item(player.inventory_grid, "food").get("item", {})
+	var found_water: Dictionary = Player.find_quickslot_item(player.inventory_grid, "water").get("item", {})
+	_assert(String(found_food.get("id", "")) == "식량통조림", "find_quickslot_item('food') selects 식량통조림 even when 생수 comes first")
+	_assert(String(found_water.get("id", "")) == "생수", "find_quickslot_item('water') selects 생수 separately")
+
+	var world_qs: Node2D = (load("res://scenes/world/main_world.tscn") as PackedScene).instantiate()
+	root.add_child(world_qs)
+	await get_tree().process_frame
+	HudTacticalHelper.update_quickslot_bar(world_qs.quickslot_hbox, player)
+	var slot7_btn: Button = world_qs.quickslot_hbox.get_node_or_null("Slot7")
+	var slot8_btn: Button = world_qs.quickslot_hbox.get_node_or_null("Slot8")
+	var food_disp_name: String = String(ItemDatabase.get_item_data("식량통조림").get("name", "식량통조림"))
+	var water_disp_name: String = String(ItemDatabase.get_item_data("생수").get("name", "생수"))
+	_assert(slot7_btn != null and slot7_btn.tooltip_text.contains(food_disp_name) and not slot7_btn.tooltip_text.contains(water_disp_name), "Quickslot Slot7 displays food tooltip without mixing water")
+	_assert(slot8_btn != null and slot8_btn.tooltip_text.contains(water_disp_name), "Quickslot Slot8 displays water tooltip")
+	world_qs.queue_free()
+	await get_tree().process_frame
+
+	player.hunger = 50.0
+	player.thirst = 50.0
+	player._use_quickslot_item("food")
+	_assert(player.is_channeling and player.channel_item_name.contains(food_disp_name), "Quickslot [7] starts channeling 식량통조림")
+	player.complete_channeling()
+	_assert(player.hunger > 50.0 and not player.inventory_grid.has_item("식량통조림", 1) and player.inventory_grid.has_item("생수", 1), "Quickslot [7] restores hunger and leaves 생수 untouched")
+
+	player._use_quickslot_item("water")
+	_assert(player.is_channeling and player.channel_item_name.contains(water_disp_name), "Quickslot [8] starts channeling 생수")
+	player.complete_channeling()
+	_assert(player.thirst > 50.0 and not player.inventory_grid.has_item("생수", 1), "Quickslot [8] restores thirst and consumes 생수")
+
+	# 3. Bug #3: Reliable automatic fire across WeaponPartsDatabase, ShootingRangeWindow, WeaponHandler
+	var empty_rec := WeaponPartsDatabase.compute_weapon_from_dict({"id": "M4_리시버", "receiver": ""})
+	_assert(String(empty_rec.get("computed_stats", {}).get("fire_mode", "")) == "auto" and int(empty_rec.get("computed_stats", {}).get("rpm", 0)) == 360, "compute_weapon_from_dict resolves empty receiver string to id (M4_리시버)")
+
+	var legacy_m4 := {"id": "M4_리시버", "parts": {}, "computed_stats": {"rpm": 135}}
+	var legacy_ak := {"id": "AK_리시버", "parts": {}, "computed_stats": {"rpm": 110}}
+	var legacy_mp5 := {"id": "MP5_리시버", "parts": {}, "computed_stats": {}}
+	_assert(WeaponPartsDatabase.is_automatic_weapon_dict(legacy_m4) and WeaponPartsDatabase.is_automatic_weapon_dict(legacy_ak) and WeaponPartsDatabase.is_automatic_weapon_dict(legacy_mp5), "is_automatic_weapon_dict detects auto receivers despite stale legacy computed_stats")
+
+	var srw_script := load("res://scenes/ui/shooting_range_window.gd") as GDScript
+	var srw: Control = srw_script.new()
+	root.add_child(srw)
+	await get_tree().process_frame
+	srw.setup(legacy_m4)
+	_assert(String(srw.computed_stats.get("fire_mode", "")) == "auto" and int(srw.computed_stats.get("rpm", 0)) == 360, "ShootingRangeWindow.setup recomputes stale M4 stats to fire_mode=auto and rpm=360")
+	srw.queue_free()
+	await get_tree().process_frame
+
+	var prev_scene: Node = get_tree().current_scene
+	var fire_host := Node2D.new()
+	root.add_child(fire_host)
+	get_tree().current_scene = fire_host
+	get_tree().paused = false
+	player.hp = 100.0
+	player.ui_input_blocked = false
+	var auto_m4: Dictionary = WeaponPartsDatabase.create_default_weapon("M4_리시버")
+	auto_m4["current_magazine_ammo"] = 30
+	auto_m4["durability"] = 100.0
+	auto_m4["max_durability"] = 100.0
+	player.equipment["primary1"] = auto_m4
+	player.weapon_handler.equipment = player.equipment
+	player.weapon_handler.switch_weapon_slot("primary1")
+	player.weapon_handler.attack_cooldown_timer = 0.0
+	player.weapon_handler.is_reloading = false
+	player.weapon_handler.is_jammed = false
+
+	Input.action_press("attack")
+	player.weapon_handler._process(0.01)
+	player.weapon_handler._process(0.20)
+	player.weapon_handler._process(0.20)
+	Input.action_release("attack")
+
+	var ammo_after_burst: int = int(player.weapon_handler.equipped_weapon_data.get("current_magazine_ammo", 30))
+	_assert(ammo_after_burst <= 27, "WeaponHandler auto-fire fires consecutive shots while trigger is held (ammo=%d)" % ammo_after_burst)
+	player.weapon_handler._process(0.25)
+	var ammo_after_release: int = int(player.weapon_handler.equipped_weapon_data.get("current_magazine_ammo", 30))
+	_assert(ammo_after_release == ammo_after_burst and not player.weapon_handler._trigger_held, "WeaponHandler stops firing cleanly after trigger release")
+
+	get_tree().current_scene = prev_scene if is_instance_valid(prev_scene) else null
+	fire_host.queue_free()
+	player.queue_free()
+	await get_tree().process_frame
+
+	# 4. Bug #4: Audio buses, softened SFX headroom/waveform peak, SettingsWindow sync
+	var sfx_bus_idx: int = AudioServer.get_bus_index("SFX")
+	var bgm_bus_idx: int = AudioServer.get_bus_index("BGM")
+	_assert(sfx_bus_idx != -1 and bgm_bus_idx != -1, "AudioServer registers both SFX and BGM buses")
+	_assert(SoundManager._players.size() > 0 and SoundManager._players[0].bus == &"SFX" and SoundManager.SFX_BASE_GAIN_DB <= -6.0, "SoundManager routes players to SFX bus with attenuated base gain")
+
+	var max_peaks_ok: bool = true
+	for sname in ["hit_ranged", "hit_melee", "explosion", "dry_fire"]:
+		var wav: AudioStreamWAV = SoundManager.get_sound(sname)
+		var peak: float = 0.0
+		if wav and wav.data.size() >= 2:
+			for byte_i in range(0, wav.data.size() - 1, 2):
+				var amp: float = absf(float(wav.data.decode_s16(byte_i))) / 32767.0
+				if amp > peak:
+					peak = amp
+		if peak <= 0.001 or peak > 0.25:
+			max_peaks_ok = false
+	_assert(max_peaks_ok, "Procedural SFX PCM peaks stay within soft headroom (0.001 < peak <= 0.25)")
+
+	var prev_master: float = GameSettings.master_volume
+	var prev_bgm: float = GameSettings.bgm_volume
+	var prev_sfx: float = GameSettings.sfx_volume
+	var settings_existed: bool = FileAccess.file_exists(GameSettings.SETTINGS_FILE_PATH)
+	var prev_settings_raw: String = ""
+	if settings_existed:
+		var rf := FileAccess.open(GameSettings.SETTINGS_FILE_PATH, FileAccess.READ)
+		if rf:
+			prev_settings_raw = rf.get_as_text()
+			rf.close()
+
+	GameSettings.sfx_volume = 0.35
+	GameSettings.apply_audio_settings()
+	var sw: Control = (load("res://scenes/ui/settings_window.tscn") as PackedScene).instantiate()
+	root.add_child(sw)
+	await get_tree().process_frame
+	_assert(absf(sw.sfx_vol.value - 0.35) < 0.01, "SettingsWindow initializes SFXVol slider from GameSettings")
+	sw.sfx_vol.value = 0.25
+	var sfx_db_after: float = AudioServer.get_bus_volume_db(AudioServer.get_bus_index("SFX"))
+	_assert(absf(GameSettings.sfx_volume - 0.25) < 0.01 and absf(sfx_db_after - linear_to_db(0.25)) < 0.2, "SettingsWindow volume change updates GameSettings and SFX bus dB")
+	sw.queue_free()
+	await get_tree().process_frame
+
+	GameSettings.master_volume = prev_master
+	GameSettings.bgm_volume = prev_bgm
+	GameSettings.sfx_volume = prev_sfx
+	GameSettings.apply_audio_settings()
+	if settings_existed:
+		var wf := FileAccess.open(GameSettings.SETTINGS_FILE_PATH, FileAccess.WRITE)
+		if wf:
+			wf.store_string(prev_settings_raw)
+			wf.close()
+	elif FileAccess.file_exists(GameSettings.SETTINGS_FILE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(GameSettings.SETTINGS_FILE_PATH))
+
+# ------------------------------------------------------------
+# 10. Permadeath Returns to MAIN_MENU (Run Last)
 # ------------------------------------------------------------
 func _test_permadeath_returns_to_main_menu() -> void:
-	print("-- [P0 Test 9] Permadeath Deletes Save & Transitions to MAIN_MENU --")
+	print("-- [P0 Test 10] Permadeath Deletes Save & Transitions to MAIN_MENU --")
 	GameManager.start_new_game({"world_name": "HardcorePermadeath", "difficulty": "hardcore"})
 	var hc_slot: String = GameManager.current_save_slot
 	_temp_saves.append(hc_slot)
 
 	GameManager.end_raid("kia", [])
+	var permadeath_res: Dictionary = GameManager.last_raid_result.duplicate(true)
 	await get_tree().process_frame
 
-	_assert(bool(GameManager.last_raid_result.get("permadeath", false)), "Permadeath KIA sets last_raid_result.permadeath=true")
+	_assert(bool(permadeath_res.get("permadeath", false)), "Permadeath KIA sets last_raid_result.permadeath=true")
 	_assert(GameManager.current_world_data.is_empty() and GameManager.current_save_slot == "", "Permadeath KIA clears world data & save slot")
 	_assert(SaveManager.load_game(hc_slot).is_empty(), "Permadeath KIA deletes save file from disk")
 	_assert(GameManager.current_state == GameManager.GameState.MAIN_MENU, "Permadeath KIA transitions to GameState.MAIN_MENU (not HIDEOUT)")
