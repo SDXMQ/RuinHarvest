@@ -516,10 +516,12 @@ func _recompute_and_update_ui() -> void:
 	var ic := func(k: String) -> String:
 		return (UiIconManager.bbcode_icon(k, 13) + " ") if UiIconManager else ""
 	var tags: Array[String] = []
-	if stats.get("suppressed", false): tags.append("%s소음기 적용" % ic.call("muted"))
+	var is_suppressed: bool = bool(stats.get("suppressed", false)) or str(current_weapon.get("parts", {}).get("muzzle", "")).contains("소음기")
+	var has_flashlight: bool = bool(stats.get("tac_flashlight", false)) or bool(stats.get("flashlight_boost", false))
+	if is_suppressed: tags.append("%s소음기 적용" % ic.call("muted"))
 	if stats.get("zoom", 1.0) > 1.05: tags.append("%s조준 배율 x%.1f" % [ic.call("scope"), stats.get("zoom", 1.0)])
 	if stats.get("laser_sight", false): tags.append("%s레이저 조준기" % ic.call("laser"))
-	if stats.get("tac_flashlight", false): tags.append("%s전술 라이트" % ic.call("flashlight"))
+	if has_flashlight: tags.append("%s전술 라이트" % ic.call("flashlight"))
 	tags.append("탄창 용량: %d발" % stats.get("magazine_size", 15))
 	tags.append("관통력: %d" % int(stats.get("penetration", 10)))
 

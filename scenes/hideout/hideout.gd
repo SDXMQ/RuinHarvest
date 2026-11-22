@@ -199,6 +199,10 @@ func _ready() -> void:
 	therapist_btn.pressed.connect(func(): _select_trader("therapist"))
 	fence_btn.pressed.connect(func(): _select_trader("fence"))
 
+	tab_container.set_tab_title(0, "은신처 & 장비")
+	tab_container.set_tab_title(1, "상인")
+	tab_container.set_tab_title(2, "암시장")
+	tab_container.set_tab_title(3, "총기 개조실")
 	if UiIconManager:
 		UiIconManager.set_tab_icon(tab_container, 0, "stash")
 		UiIconManager.set_tab_icon(tab_container, 1, "shop")
@@ -512,8 +516,11 @@ func _process(_delta: float) -> void:
 func _on_tab_changed(tab: int) -> void:
 	if tooltip: tooltip.hide()
 	_close_context_menu()
-	if tab != 3 and workbench and workbench.has_method("_cancel_pending_preset_preview"):
-		workbench._cancel_pending_preset_preview()
+	if tab != 3 and workbench:
+		if workbench.has_method("_close_confirm_dialog"):
+			workbench._close_confirm_dialog()
+		if workbench.has_method("_cancel_pending_preset_preview"):
+			workbench._cancel_pending_preset_preview()
 	if tab != 0:
 		_sync_all_open_popups()
 		close_all_container_popups()
@@ -3077,6 +3084,25 @@ func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String 
 				_close_context_menu()
 				_handle_popup_quick_action(pop_ref, item, true)
 			, "export_out")
+	elif source_type == "equipment" and slot_ref != "":
+		_add_context_menu_btn(vbox, "창고/가방으로 장착 해제", func():
+			_close_context_menu()
+			var equipped: Dictionary = equipment_data.get(slot_ref, {})
+			if equipped.is_empty():
+				return
+			var rem := stash_grid_mgr.auto_add_item(equipped.get("id", ""), equipped.get("amount", 1), equipped)
+			if rem > 0:
+				var overflow := equipped.duplicate(true)
+				overflow["amount"] = rem
+				rem = player_grid_mgr.auto_add_item(overflow.get("id", ""), rem, overflow)
+			if rem <= 0:
+				equipment_data[slot_ref] = {}
+				_apply_backpack_grid_size()
+				_update_equipment_ui()
+				if SoundManager: SoundManager.play("menu_select")
+			elif EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("[icon:warn] 창고와 가방 공간이 부족하여 장착을 해제할 수 없습니다.")
+		, "export_out")
 
 	add_child(context_menu_panel)
 	var mpos := get_global_mouse_position() - global_position
@@ -3205,6 +3231,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_open_inventory_window()
 
 func _open_shooting_range() -> void:
+	if workbench and workbench.has_method("_close_confirm_dialog"):
+		workbench._close_confirm_dialog()
 	if SoundManager: SoundManager.play("menu_select")
 	var target_wep = equipment_data.get("primary1", {})
 	if target_wep.is_empty():
@@ -3229,6 +3257,8 @@ func _open_inventory_window() -> void:
 func _open_item_spawner() -> void:
 	if not (GameManager and GameManager.is_sandbox_mode()):
 		return
+	if workbench and workbench.has_method("_close_confirm_dialog"):
+		workbench._close_confirm_dialog()
 	var spawner_scene = preload("res://scenes/ui/item_spawner_window.tscn")
 	if spawner_scene:
 		var win = spawner_scene.instantiate()

@@ -43,7 +43,8 @@ func _ready() -> void:
 	# 1단계(FLARE_PHASE): 지면 적색 신호탄 연막 파티클/사운드
 	if SoundManager:
 		SoundManager.play("explosion_distant")
-	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+	var cur_scene: Node = get_tree().current_scene if get_tree() else null
+	var ps = cur_scene.get_node_or_null("ParticleSystem") if cur_scene else null
 	if ps:
 		ps.emit("smoke", global_position.x, global_position.y, 10)
 
@@ -114,7 +115,8 @@ func _process(delta: float) -> void:
 				# 3단계(LANDED_IMPACT): 지면 충돌 사운드, 착지 먼지 파티클, 카메라 쉐이크
 				if SoundManager:
 					SoundManager.play("hit_melee")
-				var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
+				var cur_scene: Node = get_tree().current_scene if get_tree() else null
+				var ps = cur_scene.get_node_or_null("ParticleSystem") if cur_scene else null
 				if ps:
 					ps.emit("dust", global_position.x, global_position.y, 14)
 				if EventBus.has_signal("camera_shake_requested"):
