@@ -3,9 +3,12 @@ extends Control
 
 @onready var fullscreen_btn: CheckButton = $Panel/VBox/TabContainer/비디오/VBox/FullscreenBtn
 @onready var resolution_opt: OptionButton = $Panel/VBox/TabContainer/비디오/VBox/ResolutionOpt
+@onready var master_lbl: Label = $Panel/VBox/TabContainer/오디오/VBox/MasterLbl
 @onready var master_vol: HSlider = $Panel/VBox/TabContainer/오디오/VBox/MasterVol
-@onready var sfx_vol: HSlider = $Panel/VBox/TabContainer/오디오/VBox/SFXVol
+@onready var bgm_lbl: Label = $Panel/VBox/TabContainer/오디오/VBox/BGMLbl
 @onready var bgm_vol: HSlider = $Panel/VBox/TabContainer/오디오/VBox/BGMVol
+@onready var sfx_lbl: Label = $Panel/VBox/TabContainer/오디오/VBox/SFXLbl
+@onready var sfx_vol: HSlider = $Panel/VBox/TabContainer/오디오/VBox/SFXVol
 
 @onready var log_label: Label = $Panel/VBox/TabContainer/게임플레이/VBox/LogLabel
 @onready var log_count_slider: HSlider = $Panel/VBox/TabContainer/게임플레이/VBox/LogCountSlider
@@ -59,14 +62,19 @@ func _ready() -> void:
 	if GameSettings:
 		log_count_slider.value = GameSettings.max_event_logs
 		log_label.text = "이벤트 로그 최대 개수: %d개" % GameSettings.max_event_logs
+		GameSettings.ensure_audio_buses()
+		master_vol.value = GameSettings.master_volume
+		bgm_vol.value = GameSettings.bgm_volume
+		sfx_vol.value = GameSettings.sfx_volume
+	_update_audio_labels()
 			
 	# 시그널 연결
 	fullscreen_btn.toggled.connect(_on_fullscreen_toggled)
 	resolution_opt.item_selected.connect(_on_resolution_selected)
 	
-	master_vol.value_changed.connect(func(v): _on_volume_changed(0, v))
-	bgm_vol.value_changed.connect(func(v): _on_volume_changed(1, v))
-	sfx_vol.value_changed.connect(func(v): _on_volume_changed(2, v))
+	master_vol.value_changed.connect(func(v: float): _on_volume_changed("Master", v))
+	bgm_vol.value_changed.connect(func(v: float): _on_volume_changed("BGM", v))
+	sfx_vol.value_changed.connect(func(v: float): _on_volume_changed("SFX", v))
 	
 	log_count_slider.value_changed.connect(_on_log_count_changed)
 	
@@ -108,10 +116,31 @@ func _on_resolution_selected(index: int) -> void:
 	elif DisplayServer.get_name() != "headless":
 		DisplayServer.window_set_size(res)
 
-func _on_volume_changed(bus_idx: int, value: float) -> void:
-	var db = linear_to_db(max(value, 0.001))
-	AudioServer.set_bus_volume_db(bus_idx, db)
-	AudioServer.set_bus_mute(bus_idx, value <= 0.0)
+func _update_audio_labels() -> void:
+	if master_lbl and master_vol:
+		master_lbl.text = "마스터 볼륨 (Master Volume): %d%%" % int(round(master_vol.value * 100.0))
+	if bgm_lbl and bgm_vol:
+		bgm_lbl.text = "배경음악 (BGM Volume): %d%%" % int(round(bgm_vol.value * 100.0))
+	if sfx_lbl and sfx_vol:
+		sfx_lbl.text = "효과음 (SFX Volume): %d%%" % int(round(sfx_vol.value * 100.0))
+
+func _on_volume_changed(bus_name: String, value: float) -> void:
+	var clamped: float = clampf(value, 0.0, 1.0)
+	if GameSettings:
+		if bus_name == "Master":
+			GameSettings.master_volume = clamped
+		elif bus_name == "BGM":
+			GameSettings.bgm_volume = clamped
+		elif bus_name == "SFX":
+			GameSettings.sfx_volume = clamped
+		GameSettings.apply_audio_settings()
+		GameSettings.save_settings()
+	else:
+		var idx: int = AudioServer.get_bus_index(bus_name)
+		if idx != -1:
+			AudioServer.set_bus_mute(idx, clamped <= 0.001)
+			AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(clamped, 0.0001)))
+	_update_audio_labels()
 
 func _input(event: InputEvent) -> void:
 	if not visible:

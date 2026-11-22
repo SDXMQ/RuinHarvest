@@ -316,9 +316,9 @@ var resolution_index: int = 1
 var fullscreen: bool = false
 var integer_scaling: bool = false
 var vsync: bool = true
-var master_volume: float = 0.8
-var sfx_volume: float = 0.8
-var bgm_volume: float = 0.6
+var master_volume: float = 0.7
+var sfx_volume: float = 0.5
+var bgm_volume: float = 0.5
 var language: String = "ko"
 var show_fps: bool = false
 var screen_shake: bool = true
@@ -337,6 +337,7 @@ func _ready() -> void:
 	setup_default_input_map()
 	var had_saved_settings := FileAccess.file_exists(SETTINGS_FILE_PATH)
 	load_settings()
+	apply_audio_settings()
 	if DisplayServer.get_name() != "headless" and (had_saved_settings or fullscreen or integer_scaling):
 		apply_display_settings.call_deferred()
 
@@ -413,6 +414,32 @@ func apply_display_settings() -> void:
 		var screen_size: Vector2i = DisplayServer.screen_get_size()
 		var diff: Vector2i = screen_size - res
 		DisplayServer.window_set_position(Vector2i(maxi(0, int(float(diff.x) / 2.0)), maxi(0, int(float(diff.y) / 2.0))))
+
+func ensure_audio_buses() -> void:
+	if AudioServer.get_bus_index("BGM") == -1:
+		var bgm_idx: int = AudioServer.bus_count
+		AudioServer.add_bus(bgm_idx)
+		AudioServer.set_bus_name(bgm_idx, "BGM")
+		AudioServer.set_bus_send(bgm_idx, "Master")
+	if AudioServer.get_bus_index("SFX") == -1:
+		var sfx_idx: int = AudioServer.bus_count
+		AudioServer.add_bus(sfx_idx)
+		AudioServer.set_bus_name(sfx_idx, "SFX")
+		AudioServer.set_bus_send(sfx_idx, "Master")
+
+func _apply_bus_volume(bus_name: String, linear_vol: float) -> void:
+	var idx: int = AudioServer.get_bus_index(bus_name)
+	if idx == -1:
+		return
+	var clamped: float = clampf(linear_vol, 0.0, 1.0)
+	AudioServer.set_bus_mute(idx, clamped <= 0.001)
+	AudioServer.set_bus_volume_db(idx, linear_to_db(maxf(clamped, 0.0001)))
+
+func apply_audio_settings() -> void:
+	ensure_audio_buses()
+	_apply_bus_volume("Master", master_volume)
+	_apply_bus_volume("BGM", bgm_volume)
+	_apply_bus_volume("SFX", sfx_volume)
 
 func save_settings() -> void:
 	var data: Dictionary = {
