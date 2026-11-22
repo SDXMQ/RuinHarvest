@@ -6,7 +6,7 @@ class_name CorpseBox
 
 var interactable_type: Vector2i = Vector2i(9, 2)
 var corpse_tile_pos: Vector2i = Vector2i.ZERO
-var box_title: String = "🎒 용병 유품 가방"
+var box_title: String = "[icon:backpack] 용병 유품 가방"
 var enemy_rank: int = 3 # 3: SCAV, 4: RAIDER, 5: BOSS
 var loot_inventory: Inventory = null
 var is_empty_looted: bool = false
@@ -50,9 +50,16 @@ func _on_inventory_changed() -> void:
 	queue_redraw()
 
 func get_prompt_text() -> String:
+	var icon_key := "skull" if enemy_rank >= 5 else "backpack"
+	var clean_title := box_title
+	if UiIconManager:
+		var parsed := UiIconManager.parse_tagged_message(box_title)
+		if String(parsed["icon_key"]) != "":
+			icon_key = String(parsed["icon_key"])
+		clean_title = String(parsed["clean_text"])
 	if is_empty_looted:
-		return "[E] %s (비어있음)" % box_title
-	return "[E] %s 수색하기" % box_title
+		return "[icon:%s] [E] %s (비어있음)" % [icon_key, clean_title]
+	return "[icon:%s] [E] %s 수색하기" % [icon_key, clean_title]
 
 func _draw() -> void:
 	# 바닥 그림자

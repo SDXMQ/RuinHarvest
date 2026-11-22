@@ -156,7 +156,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.25, 0.25, 1)
 theme_override_font_sizes/font_size = 11
-text = "🩸 BLEED"
+text = "BLEED"
 
 [node name="FractureBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
 visible = false
@@ -166,7 +166,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.6, 0.15, 1)
 theme_override_font_sizes/font_size = 11
-text = "🦴 FRACTURE"
+text = "FRACTURE"
 
 [node name="BiohazardBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
 visible = false
@@ -176,7 +176,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(0.25, 1, 0.35, 1)
 theme_override_font_sizes/font_size = 11
-text = "☣ BIO-HAZARD"
+text = "BIO-HAZARD"
 
 [node name="WeaponPanel" type="Panel" parent="UI/HUD"]
 layout_mode = 1
@@ -226,7 +226,7 @@ text_overrun_behavior = 3
 layout_mode = 2
 theme_override_colors/font_color = Color(0.4, 1, 0.6, 1)
 theme_override_font_sizes/font_size = 15
-text = "🔫 30 / 9mm"
+text = "30 / 9mm"
 
 [node name="DurabilityBar" type="ProgressBar" parent="UI/HUD/WeaponPanel/HBox/VBox"]
 custom_minimum_size = Vector2(0, 6)

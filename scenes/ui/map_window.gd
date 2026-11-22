@@ -130,31 +130,37 @@ static func extract_locked_vault_markers(chunks_dict: Dictionary) -> Array[Dicti
 					markers.append({
 						"tile": Vector2i(wx, wy),
 						"pos": wpos,
-						"icon": "🔒",
-						"label": "🔒 보안 구역 (무기고/금고)"
+						"icon": "lock_gold",
+						"label": "보안 구역 (무기고/금고)"
 					})
 	return markers
 
 func _ready() -> void:
+	var title_lbl: Label = get_node_or_null("Center/Panel/Title") as Label
+	if title_lbl and UiIconManager:
+		UiIconManager.set_label_icon(title_lbl, "map", "전술 작전 지도 (Tactical Map)", 18, 6, true)
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
 		var panel_parent := close_btn.get_parent()
 		if panel_parent and not panel_parent.has_node("RecenterBtn"):
 			recenter_btn = Button.new()
 			recenter_btn.name = "RecenterBtn"
-			recenter_btn.text = "🎯 내 위치"
+			if UiIconManager:
+				UiIconManager.set_button(recenter_btn, "target_blue", "내 위치", 15)
+			else:
+				recenter_btn.text = "내 위치"
 			recenter_btn.tooltip_text = "내 현재 위치로 지도 중심 이동 (Space)"
-			recenter_btn.custom_minimum_size = Vector2(96, 36)
+			recenter_btn.custom_minimum_size = Vector2(104, 36)
 			recenter_btn.layout_mode = 1
 			recenter_btn.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-			recenter_btn.offset_left = -228.0
+			recenter_btn.offset_left = -236.0
 			recenter_btn.offset_top = -56.0
 			recenter_btn.offset_right = -128.0
 			recenter_btn.offset_bottom = -20.0
 			recenter_btn.pressed.connect(recenter_on_player)
 			panel_parent.add_child(recenter_btn)
 	if info_label:
-		info_label.offset_right = -238.0
+		info_label.offset_right = -246.0
 		info_label.clip_text = true
 	if map_canvas:
 		map_canvas.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
@@ -204,6 +210,15 @@ func _on_map_canvas_gui_input(event: InputEvent) -> void:
 		map_pan_offset += event.relative
 		map_canvas.queue_redraw()
 		accept_event()
+
+func _draw_map_icon_and_text(ui_font: Font, pos: Vector2, icon_key: String, text_str: String, font_size: int, text_col: Color) -> void:
+	var tex: Texture2D = UiIconManager.get_icon(icon_key) if UiIconManager else null
+	if tex:
+		var sz := float(font_size + 2)
+		map_canvas.draw_texture_rect(tex, Rect2(pos.x, pos.y - sz + 2.0, sz, sz), false)
+		map_canvas.draw_string(ui_font, Vector2(pos.x + sz + 3.0, pos.y), text_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_col)
+	else:
+		map_canvas.draw_string(ui_font, pos, text_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_col)
 
 func _on_map_draw() -> void:
 	var w: float = map_canvas.size.x
@@ -257,7 +272,7 @@ func _on_map_draw() -> void:
 			if o_pos.x >= -40 and o_pos.x <= w + 40 and o_pos.y >= -40 and o_pos.y <= h + 40:
 				var dist = player_pos.distance_to(obj.global_position)
 				var o_col = Color(0.2, 0.95, 0.45) if obj.is_completed else Color(0.2, 0.85, 1.0)
-				var o_icon = obj.get_compass_icon() if obj.has_method("get_compass_icon") else "📡"
+				var o_icon: String = obj.get_compass_icon() if obj.has_method("get_compass_icon") else "signal"
 				var o_title = obj.get_objective_title() if obj.has_method("get_objective_title") else "단말기"
 				if obj.is_completed:
 					o_title += " [완료]"
@@ -268,7 +283,7 @@ func _on_map_draw() -> void:
 					var b_pos = map_origin + boss_entity.global_position * scale_factor
 					if o_pos.distance_to(b_pos) < 32.0:
 						obj_label_offset = Vector2(11, 14)
-				map_canvas.draw_string(ui_font, o_pos + obj_label_offset, "%s %s (%.0fm)" % [o_icon, o_title, dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, o_col)
+				_draw_map_icon_and_text(ui_font, o_pos + obj_label_offset, o_icon, "%s (%.0fm)" % [o_title, dist], 10, o_col)
 				
 	# 5. 항공 보급품 (에어드랍 크레이트)
 	for a_pt in airdrop_points:
@@ -277,9 +292,9 @@ func _on_map_draw() -> void:
 			var dist = player_pos.distance_to(a_pt["pos"])
 			map_canvas.draw_rect(Rect2(a_pos - Vector2(5, 5), Vector2(10, 10)), Color(1.0, 0.65, 0.15))
 			map_canvas.draw_arc(a_pos, 8.5, 0, TAU, 12, Color(1.0, 0.85, 0.3), 1.5)
-			map_canvas.draw_string(ui_font, a_pos + Vector2(11, 4), "🪂 %s (%.0fm)" % [a_pt.get("name", "보급품"), dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.75, 0.25))
+			_draw_map_icon_and_text(ui_font, a_pos + Vector2(11, 4), "airdrop", "%s (%.0fm)" % [a_pt.get("name", "보급품"), dist], 10, Color(1.0, 0.75, 0.25))
 
-	# 5-B. 잠긴 특수 건물(경찰서 무기고·병원 금고·군사 벙커) 자물쇠(🔒) 마커 (무전 스캔 또는 정보 센터 보유 시)
+	# 5-B. 잠긴 특수 건물(경찰서 무기고·병원 금고·군사 벙커) 자물쇠 마커 (무전 스캔 또는 정보 센터 보유 시)
 	if is_vault_intel_unlocked():
 		var vault_markers := extract_locked_vault_markers(loaded_chunks)
 		for vm in vault_markers:
@@ -288,7 +303,7 @@ func _on_map_draw() -> void:
 				var v_dist := player_pos.distance_to(vm["pos"])
 				map_canvas.draw_circle(v_pos, 5.5, Color(0.98, 0.78, 0.18, 0.92))
 				map_canvas.draw_arc(v_pos, 8.5, 0, TAU, 14, Color(1.0, 0.9, 0.35), 1.4)
-				map_canvas.draw_string(ui_font, v_pos + Vector2(10, 4), "%s (%.0fm)" % [vm["label"], v_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.88, 0.32))
+				_draw_map_icon_and_text(ui_font, v_pos + Vector2(10, 4), String(vm.get("icon", "lock_gold")), "%s (%.0fm)" % [vm["label"], v_dist], 10, Color(1.0, 0.88, 0.32))
 
 	# 6. 랜드마크 보스 마커
 	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
@@ -304,7 +319,7 @@ func _on_map_draw() -> void:
 					if b_pos.distance_to(o_pos) < 32.0:
 						b_label_offset = Vector2(13, -10)
 						break
-			map_canvas.draw_string(ui_font, b_pos + b_label_offset, "💀 랜드마크 보스 (%.0fm)" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.35, 0.35))
+			_draw_map_icon_and_text(ui_font, b_pos + b_label_offset, "skull", "랜드마크 보스 (%.0fm)" % dist, 11, Color(1.0, 0.35, 0.35))
 
 	# 7. 조건부 탈출구 3종 마커 (일반 / 차량 / 벙커 + 조건 충족 여부 실시간 시각화)
 	for pt in extraction_points:
@@ -352,27 +367,26 @@ func _on_map_draw() -> void:
 	map_canvas.draw_string(ui_font, player_screen + Vector2(10, -6), "내 위치", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color.YELLOW)
 
 	# 9. 우상단 전술 범례 (TACTICAL LEGEND) 패널
-	var leg_w = 154.0
-	var leg_h = 136.0
+	var leg_w = 166.0
+	var leg_h = 138.0
 	var leg_x = w - leg_w - 8.0
 	var leg_y = 8.0
 	map_canvas.draw_rect(Rect2(leg_x, leg_y, leg_w, leg_h), Color(0.06, 0.09, 0.07, 0.9))
 	map_canvas.draw_rect(Rect2(leg_x, leg_y, leg_w, leg_h), Color(0.25, 0.38, 0.25, 0.85), false, 1.0)
-	map_canvas.draw_string(ui_font, Vector2(leg_x + 8, leg_y + 15), "■ 전술 범례 (LEGEND)", HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.65, 0.95, 0.65))
+	_draw_map_icon_and_text(ui_font, Vector2(leg_x + 8, leg_y + 15), "map", "전술 범례 (LEGEND)", 10, Color(0.65, 0.95, 0.65))
 	
 	var legend_entries = [
-		{"col": Color.YELLOW, "text": "▲ 플레이어"},
-		{"col": Color(0.2, 1.0, 0.3), "text": "● 일반 탈출구 (7s)"},
-		{"col": Color(1.0, 0.82, 0.15), "text": "◆ 차량 탈출 (3,000 R)"},
-		{"col": Color(0.2, 0.85, 1.0), "text": "⬢ 비상 벙커 (해킹)"},
-		{"col": Color(0.2, 0.85, 1.0), "text": "📡 필드 퀘스트 목표"},
-		{"col": Color(1.0, 0.65, 0.15), "text": "🪂 군용 항공 보급품"},
-		{"col": Color(1.0, 0.2, 0.2), "text": "💀 랜드마크 보스"}
+		{"icon": "target_blue", "text": "플레이어"},
+		{"icon": "extract", "text": "일반 탈출구 (7s)"},
+		{"icon": "vehicle", "text": "차량 탈출 (3,000 R)"},
+		{"icon": "bunker", "text": "비상 벙커 (해킹)"},
+		{"icon": "signal", "text": "필드 퀘스트 목표"},
+		{"icon": "airdrop", "text": "군용 항공 보급품"},
+		{"icon": "skull", "text": "랜드마크 보스"}
 	]
-	var cur_ly = leg_y + 30.0
+	var cur_ly = leg_y + 31.0
 	for le in legend_entries:
-		map_canvas.draw_circle(Vector2(leg_x + 12, cur_ly - 3), 3.0, le["col"])
-		map_canvas.draw_string(ui_font, Vector2(leg_x + 22, cur_ly), le["text"], HORIZONTAL_ALIGNMENT_LEFT, -1, 9, Color(0.85, 0.9, 0.85))
+		_draw_map_icon_and_text(ui_font, Vector2(leg_x + 10, cur_ly), String(le["icon"]), String(le["text"]), 9, Color(0.85, 0.9, 0.85))
 		cur_ly += 14.5
 
 func _input(event: InputEvent) -> void:

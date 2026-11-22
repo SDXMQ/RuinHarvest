@@ -82,7 +82,10 @@ func _ready() -> void:
 			p_sett_btn.name = "SettingsBtn"
 			p_sett_btn.custom_minimum_size = Vector2(0, 44)
 			p_sett_btn.add_theme_font_size_override("font_size", 16)
-			p_sett_btn.text = "⚙️ 설정 (Settings)"
+			if UiIconManager:
+				UiIconManager.set_button(p_sett_btn, "settings", "설정 (Settings)", 16)
+			else:
+				p_sett_btn.text = "설정 (Settings)"
 			p_sett_btn.pressed.connect(_open_settings_window)
 			pause_vbox.add_child(p_sett_btn)
 			if exit_btn and exit_btn.get_parent() == pause_vbox:
@@ -122,15 +125,19 @@ func _ready() -> void:
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
 		raid_time_remaining = GameManager.current_world_data["raid_time_remaining"]
 		
-	var type_names = {
-		"house": "🏠 폐가 내부",
-		"shop": "🏪 상점 내부",
-		"store": "🏪 상점 내부",
-		"hospital": "🏥 폐병원 내부",
-		"military": "🪖 군사시설 내부"
+	var type_info := {
+		"house": {"icon": "house", "text": "폐가 내부"},
+		"shop": {"icon": "shop", "text": "상점 내부"},
+		"store": {"icon": "shop", "text": "상점 내부"},
+		"hospital": {"icon": "hospital", "text": "폐병원 내부"},
+		"military": {"icon": "military", "text": "군사시설 내부"},
 	}
 	if building_title_label:
-		building_title_label.text = type_names.get(b_type, "🏢 버려진 건물 내부")
+		var t_cfg: Dictionary = type_info.get(b_type, {"icon": "building", "text": "버려진 건물 내부"})
+		if UiIconManager:
+			UiIconManager.set_label_icon(building_title_label, String(t_cfg["icon"]), String(t_cfg["text"]), 18, 6, true)
+		else:
+			building_title_label.text = String(t_cfg["text"])
 		
 	var gen_script = load("res://world/interior/building_interior.gd")
 	building_data = gen_script.generate_interior(b_type, b_seed)
@@ -175,9 +182,9 @@ func _ensure_tactical_hud_widgets() -> void:
 			status_badges_container.add_theme_constant_override("separation", 4)
 			vbox.add_child(status_badges_container)
 			
-			badge_bleed = _create_status_badge("BleedBadge", "🩸 BLEED", Color(1, 0.25, 0.25))
-			badge_fracture = _create_status_badge("FractureBadge", "🦴 FRACTURE", Color(1, 0.6, 0.15))
-			badge_biohazard = _create_status_badge("BiohazardBadge", "☣ BIO-HAZARD", Color(0.25, 1, 0.35))
+			badge_bleed = _create_status_badge("BleedBadge", "BLEED", Color(1, 0.25, 0.25))
+			badge_fracture = _create_status_badge("FractureBadge", "FRACTURE", Color(1, 0.6, 0.15))
+			badge_biohazard = _create_status_badge("BiohazardBadge", "BIO-HAZARD", Color(0.25, 1, 0.35))
 			status_badges_container.add_child(badge_bleed)
 			status_badges_container.add_child(badge_fracture)
 			status_badges_container.add_child(badge_biohazard)
@@ -872,7 +879,7 @@ func _on_quickslot_N_pressed() -> void:
 		_update_quickslot_bar()
 
 func _on_quickslot_U_pressed() -> void:
-	_on_event_logged("📻 실내에서는 전파가 차폐되어 야외로 나가야 드론/무전 호출이 가능합니다.")
+	_on_event_logged("[icon:radio] 실내에서는 전파가 차폐되어 야외로 나가야 드론/무전 호출이 가능합니다.")
 
 func _update_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
@@ -913,15 +920,21 @@ func _on_player_channel_finished() -> void:
 
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_inventory_window == null:
-		interact_prompt.visible = can_interact
 		var check_pos = player.global_position + Vector2.RIGHT.rotated(player.rotation) * 32.0
 		var t_pos = object_layer.local_to_map(check_pos)
-		if t_pos == exit_tile_pos:
-			interact_prompt.text = "[E] 건물 밖으로 나가기"
+		var final_text := "[icon:door_exit] [E] 건물 밖으로 나가기" if t_pos == exit_tile_pos else text
+		if UiIconManager:
+			var parsed := UiIconManager.parse_tagged_message(final_text)
+			UiIconManager.set_label_icon(interact_prompt, String(parsed["icon_key"]), String(parsed["clean_text"]), 18, 6, true)
+			UiIconManager.sync_label_row_visibility(interact_prompt, can_interact)
 		else:
-			interact_prompt.text = text
+			interact_prompt.visible = can_interact
+			interact_prompt.text = final_text
 	elif interact_prompt:
-		interact_prompt.visible = false
+		if UiIconManager:
+			UiIconManager.sync_label_row_visibility(interact_prompt, false)
+		else:
+			interact_prompt.visible = false
 
 func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_inventory_window != null: return
@@ -934,7 +947,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		_lights_enabled = not _lights_enabled
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💡 실내 비상등 전원: %s" % ("ON" if _lights_enabled else "OFF"))
+			EventBus.event_logged.emit("[icon:tip] 실내 비상등 전원: %s" % ("ON" if _lights_enabled else "OFF"))
 		return
 
 	if TileManager.is_door_closed(type) or TileManager.is_door_open(type):

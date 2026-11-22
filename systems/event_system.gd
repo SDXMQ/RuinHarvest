@@ -204,12 +204,12 @@ func _resolve_and_apply_event(event: GameEvent, p_override: Node = null) -> bool
 		var threshold = float(event_data.get("defense_check", 20.0))
 		if evaluate_raid_defense(threshold, p_override):
 			_apply_event_to_live_player(event, p_override)
-			add_log("✓ " + event.title + ": " + event_data.get("defense_success_msg", ""))
+			add_log("[icon:check] " + event.title + ": " + event_data.get("defense_success_msg", ""))
 			return true
 		else:
 			var fail_eff: Dictionary = event_data.get("defense_fail_effects", {})
 			_apply_effect_dict(fail_eff, p_override)
-			add_log("⚠ " + event.title + ": " + event_data.get("defense_fail_msg", "습격 방어에 실패했습니다!"))
+			add_log("[icon:warn] " + event.title + ": " + event_data.get("defense_fail_msg", "습격 방어에 실패했습니다!"))
 			var payload = event_data.duplicate(true)
 			if not payload.has("raider_count"):
 				payload["raider_count"] = randi_range(2, 3)
@@ -218,7 +218,7 @@ func _resolve_and_apply_event(event: GameEvent, p_override: Node = null) -> bool
 			return false
 	else:
 		_apply_event_to_live_player(event, p_override)
-		add_log("★ " + event.title + ": " + event.description)
+		add_log("[icon:star] " + event.title + ": " + event.description)
 		if EventBus and EventBus.has_signal("random_world_event_triggered"):
 			EventBus.random_world_event_triggered.emit(event.id, event.data)
 		return true

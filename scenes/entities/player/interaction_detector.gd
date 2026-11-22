@@ -25,7 +25,7 @@ func _on_player_damaged_interrupt(_amount: float, _source: String) -> void:
 		if is_instance_valid(active_objective_node) and active_objective_node.has_method("set_hold_progress"):
 			active_objective_node.set_hold_progress(0.0)
 		if EventBus and EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 피격으로 인해 단말기 해킹 작업이 중단되었습니다!")
+			EventBus.event_logged.emit("[icon:warn] 피격으로 인해 단말기 해킹 작업이 중단되었습니다!")
 
 func _process(delta: float) -> void:
 	if interact_cooldown > 0:
@@ -83,16 +83,16 @@ func _update_interaction(delta: float) -> void:
 			if rem <= 0:
 				closest_ground_item.queue_free()
 				if SoundManager: SoundManager.play("menu_select")
-				EventBus.event_logged.emit("📦 %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), orig_amt])
+				EventBus.event_logged.emit("[icon:loot] %s x%d 획득!" % [idata.get("name", closest_ground_item.item_id), orig_amt])
 			else:
 				var picked = orig_amt - rem
 				closest_ground_item.amount = rem
 				closest_ground_item.update_visuals()
 				if picked > 0:
 					if SoundManager: SoundManager.play("menu_select")
-					EventBus.event_logged.emit("📦 %s x%d 획득! (바닥에 %d개 남음)" % [idata.get("name", closest_ground_item.item_id), picked, rem])
+					EventBus.event_logged.emit("[icon:loot] %s x%d 획득! (바닥에 %d개 남음)" % [idata.get("name", closest_ground_item.item_id), picked, rem])
 				else:
-					EventBus.event_logged.emit("⚠️ 가방 공간이 부족합니다.")
+					EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족합니다.")
 		interact_prompt.emit(true, prompt_text)
 		return
 
@@ -108,7 +108,7 @@ func _update_interaction(delta: float) -> void:
 				closest_corpse = cb
 	if closest_corpse:
 		can_interact = true
-		prompt_text = closest_corpse.get_prompt_text() if closest_corpse.has_method("get_prompt_text") else "[E] 🎒 시체 가방 수색하기"
+		prompt_text = closest_corpse.get_prompt_text() if closest_corpse.has_method("get_prompt_text") else "[icon:backpack] [E] 시체 가방 수색하기"
 		interactable_type = Vector2i(9, 2)
 		interactable_tile_pos = closest_corpse.get("corpse_tile_pos") if closest_corpse.get("corpse_tile_pos") != null else Vector2i(int(floor(closest_corpse.global_position.x / 32.0)), int(floor(closest_corpse.global_position.y / 32.0)))
 		interact_prompt.emit(true, prompt_text)
@@ -137,16 +137,16 @@ func _update_interaction(delta: float) -> void:
 				if i_type == Vector2i(5, 1):
 					prompt_text = "[E] 폐차 트렁크 열기"
 				elif i_type == Vector2i(7, 2):
-					prompt_text = "[E] 🪂 항공 보급품 상자 열기"
+					prompt_text = "[icon:airdrop] [E] 항공 보급품 상자 열기"
 				elif i_type == Vector2i(9, 2):
-					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[E] 🎒 용병 시체 가방 수색하기"
+					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[icon:backpack] [E] 용병 시체 가방 수색하기"
 					if collider.get("corpse_tile_pos") != null:
 						interactable_tile_pos = collider.get("corpse_tile_pos")
 						interactable_type = i_type
 						found_entity = true
 						break
 				else:
-					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[E 3초 홀드] 📡 랜드마크 기밀 단말기 해킹"
+					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[icon:signal] [E 3초 홀드] 랜드마크 기밀 단말기 해킹"
 					active_objective_node = collider
 				interactable_type = i_type
 				if object_layer:
@@ -177,7 +177,7 @@ func _update_interaction(delta: float) -> void:
 				vault_timer = 0.0
 				interact_cooldown = 0.4
 				EventBus.noise_created.emit(player.global_position, 120.0, "vault")
-				EventBus.event_logged.emit("🏃 창문을 뛰어넘었습니다.")
+				EventBus.event_logged.emit("[icon:run] 창문을 뛰어넘었습니다.")
 				if SoundManager: SoundManager.play("footstep")
 				return
 		else:
@@ -237,7 +237,7 @@ static func _get_tile_interaction_prompt(tile_coords: Vector2i) -> String:
 	if TileManager.is_window_broken(tile_coords):
 		return "[E 꾹 누르기] 창문 넘어가기"
 	if tile_coords == TileManager.OBJ_LIGHT_SWITCH:
-		return "[E] ⚡ 주 발전기 / 조명 스위치 가동 (전력 및 벙커 개방)"
+		return "[icon:power] [E] 주 발전기 / 조명 스위치 가동 (전력 및 벙커 개방)"
 	if TileManager.is_bed(tile_coords):
 		return "[E] 침대 수색하기"
 	if TileManager.is_desk(tile_coords):
@@ -245,5 +245,5 @@ static func _get_tile_interaction_prompt(tile_coords: Vector2i) -> String:
 	if TileManager.is_shelf(tile_coords):
 		return "[E] 선반장 수색하기"
 	if TileManager.is_door_locked(tile_coords):
-		return "[E] 🔒 보안 잠금문 해제 (열쇠 / 보안 키카드)"
+		return "[icon:lock] [E] 보안 잠금문 해제 (열쇠 / 보안 키카드)"
 	return ""

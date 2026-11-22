@@ -230,7 +230,7 @@ func activate_power_switch(tile_pos: Vector2i, world_pos: Vector2 = Vector2.ZERO
 		SoundManager.play("menu_select")
 	if world_pos != Vector2.ZERO:
 		EventBus.noise_created.emit(world_pos, 180.0, "generator")
-	EventBus.event_logged.emit("⚡ [주 발전기 가동] 건물 실내 조명(%d개소) 및 전력이 복구되었습니다! 전자식 보안 잠금문 및 지하 벙커 탈출구가 개방됩니다!" % lit_count)
+	EventBus.event_logged.emit("[icon:power] [주 발전기 가동] 건물 실내 조명(%d개소) 및 전력이 복구되었습니다! 전자식 보안 잠금문 및 지하 벙커 탈출구가 개방됩니다!" % lit_count)
 	return {
 		"power_restored": true,
 		"unlocked_doors": unlocked_doors,
@@ -376,7 +376,10 @@ func _ready() -> void:
 			p_sett_btn.name = "SettingsBtn"
 			p_sett_btn.custom_minimum_size = Vector2(0, 44)
 			p_sett_btn.add_theme_font_size_override("font_size", 16)
-			p_sett_btn.text = "⚙️ 설정 (Settings)"
+			if UiIconManager:
+				UiIconManager.set_button(p_sett_btn, "settings", "설정 (Settings)", 16)
+			else:
+				p_sett_btn.text = "설정 (Settings)"
 			p_sett_btn.pressed.connect(_open_settings_window)
 			pause_vbox.add_child(p_sett_btn)
 			if exit_btn and exit_btn.get_parent() == pause_vbox:
@@ -426,29 +429,32 @@ func _ready() -> void:
 	var is_sandbox: bool = GameManager and GameManager.is_sandbox_mode()
 	if EventBus.has_signal("event_logged"):
 		if is_sandbox:
-			EventBus.event_logged.emit("🛠️ 샌드박스 모드: [F1] 키를 눌러 모든 무기/부품을 소환할 수 있습니다.")
+			EventBus.event_logged.emit("[icon:sandbox] 샌드박스 모드: [F1] 키를 눌러 모든 무기/부품을 소환할 수 있습니다.")
 		else:
-			EventBus.event_logged.emit("★ 레이드 시작: 탈출 지점을 찾아 안전하게 탈출하십시오.")
+			EventBus.event_logged.emit("[icon:star] 레이드 시작: 탈출 지점을 찾아 안전하게 탈출하십시오.")
 	
 	GameManager.current_state = GameManager.GameState.IN_GAME
 	
 	# 작전 개시 및 초기 상태 안내 로그 출력
 	if raid_total_time >= 90000.0 * 60.0 or (GameManager and GameManager.raid_duration_minutes >= 90000.0):
-		_on_event_logged("★ [작전 개시] 무제한 시간 샌드박스 레이드가 시작되었습니다.")
+		_on_event_logged("[icon:star] [작전 개시] 무제한 시간 샌드박스 레이드가 시작되었습니다.")
 	else:
 		var raid_mins = int(round(raid_total_time / 60.0))
-		_on_event_logged("★ [작전 개시] %d분 생존 레이드가 시작되었습니다." % raid_mins)
+		_on_event_logged("[icon:star] [작전 개시] %d분 생존 레이드가 시작되었습니다." % raid_mins)
 	if WeatherSystem:
-		_on_event_logged("🌦️ 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
+		_on_event_logged("[icon:weather] 현재 날씨: [%s]" % WeatherSystem.get_weather_name(WeatherSystem.current_weather))
 		
 	# 화면 우상단 샌드박스/치트 도구 버튼은 샌드박스 모드에서만 노출
 	if is_sandbox:
 		var tool_btn = Button.new()
 		tool_btn.name = "SandboxToolBtn"
-		tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
+		if UiIconManager:
+			UiIconManager.set_button(tool_btn, "sandbox", "샌드박스 도구 (F1)", 15)
+		else:
+			tool_btn.text = "샌드박스 도구 (F1)"
 		tool_btn.focus_mode = Control.FOCUS_NONE
 		tool_btn.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-		tool_btn.offset_left = -160.0
+		tool_btn.offset_left = -170.0
 		tool_btn.offset_top = 10.0
 		tool_btn.offset_right = -10.0
 		tool_btn.offset_bottom = 44.0
@@ -469,14 +475,20 @@ func _on_responsive_window_resized(vp_size: Vector2) -> void:
 		_apply_responsive_layout(ResponsiveManager.current_breakpoint, vp_size)
 
 func _apply_responsive_layout(bp: ResponsiveManager.Breakpoint, _vp_size: Vector2) -> void:
-	var tool_btn = $UI.get_node_or_null("SandboxToolBtn")
+	var tool_btn = $UI.get_node_or_null("SandboxToolBtn") as Button
 	if tool_btn:
 		if bp == ResponsiveManager.Breakpoint.COMPACT:
-			tool_btn.text = "🛠️ (F1)"
-			tool_btn.offset_left = -80.0
+			if UiIconManager:
+				UiIconManager.set_button(tool_btn, "sandbox", "(F1)", 14)
+			else:
+				tool_btn.text = "(F1)"
+			tool_btn.offset_left = -84.0
 		else:
-			tool_btn.text = "🛠️ 샌드박스 도구 (F1)"
-			tool_btn.offset_left = -160.0
+			if UiIconManager:
+				UiIconManager.set_button(tool_btn, "sandbox", "샌드박스 도구 (F1)", 15)
+			else:
+				tool_btn.text = "샌드박스 도구 (F1)"
+			tool_btn.offset_left = -170.0
 
 func _get_random_spawn_pos() -> Vector2:
 	var angle = randf() * TAU
@@ -647,7 +659,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if player_has_radio():
 			open_radio_window()
 		else:
-			_on_event_logged("⚠️ 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
+			_on_event_logged("[icon:warn] 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
 		get_viewport().set_input_as_handled()
 		
 	# 크리에이티브 아이템 스포너 열기 (F1 키 — 샌드박스 모드 전용)
@@ -751,7 +763,7 @@ func spawn_emergency_drone_crate(drop_pos: Vector2, primary_ammo: String = "5.56
 	inv.add_item("구급상자", 1)
 	inv.add_item("붕대", 2)
 	inv.add_item("생수", 1)
-	inv.set_meta("custom_title", "🚁 암시장 긴급 탄약·의료 드론 보급함")
+	inv.set_meta("custom_title", "[icon:drone] 암시장 긴급 탄약·의료 드론 보급함")
 	container_inventories[tile_pos] = inv
 
 	airdrop_points_data.append({
@@ -767,20 +779,20 @@ func _on_radio_scan_requested(scan_type: String) -> void:
 		return
 	if scan_type == "survivor":
 		var enemies_cnt := get_tree().get_nodes_in_group("enemies").size() if get_tree() else 0
-		_on_event_logged("📻 [주파수 스캔] 현재 반경 내 감지된 생체/적대 신호: %d개" % enemies_cnt)
+		_on_event_logged("[icon:radio] [주파수 스캔] 현재 반경 내 감지된 생체/적대 신호: %d개" % enemies_cnt)
 	elif scan_type == "supply":
 		if airdrop_points_data.is_empty():
 			_spawn_airdrop_crate()
 		else:
 			var nearest = airdrop_points_data.back()
 			var dist = player.global_position.distance_to(nearest["pos"])
-			_on_event_logged("📻 [보급 추적] 최근 보급 투하 지점까지 거리: %.0fm" % dist)
+			_on_event_logged("[icon:radio] [보급 추적] 최근 보급 투하 지점까지 거리: %.0fm" % dist)
 	elif scan_type == "military":
 		if is_instance_valid(boss_entity):
 			var dist_b = player.global_position.distance_to(boss_entity.global_position)
-			_on_event_logged("📻 [군사 암호 감청] 지휘관 보스 신호 포착 — 거리 %.0fm" % dist_b)
+			_on_event_logged("[icon:radio] [군사 암호 감청] 지휘관 보스 신호 포착 — 거리 %.0fm" % dist_b)
 		else:
-			_on_event_logged("📻 [군사 암호 감청] 보스 생체 신호 소멸 확인.")
+			_on_event_logged("[icon:radio] [군사 암호 감청] 보스 생체 신호 소멸 확인.")
 
 func _open_item_spawner() -> void:
 	if not (GameManager and GameManager.is_sandbox_mode()):
@@ -956,7 +968,7 @@ func _on_compass_draw() -> void:
 			compass_bar.draw_colored_polygon(diamond, pt_col)
 			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
-	# 항공 보급품 마커 (주황/붉은 픽셀 박스)
+	# 항공 보급품 마커 (SVG 아이콘 + 거리)
 	for ad in airdrop_points_data:
 		var dir_to_ad = player.global_position.direction_to(ad["pos"])
 		var ad_deg = rad_to_deg(dir_to_ad.angle())
@@ -967,10 +979,14 @@ func _on_compass_draw() -> void:
 		if abs(diff) <= fov / 2.0:
 			var x = floorf(center_x + diff * pixels_per_deg)
 			var dist = player.global_position.distance_to(ad["pos"])
-			compass_bar.draw_rect(Rect2(x - 4.0, 5.0, 8.0, 8.0), Color(1.0, 0.45, 0.15), true)
-			compass_bar.draw_string(compass_font, Vector2(x - 14, 22), "📦%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
+			var ad_tex: Texture2D = UiIconManager.get_icon("airdrop") if UiIconManager else null
+			if ad_tex:
+				compass_bar.draw_texture_rect(ad_tex, Rect2(x - 5.0, 3.0, 10.0, 10.0), false)
+			else:
+				compass_bar.draw_rect(Rect2(x - 4.0, 5.0, 8.0, 8.0), Color(1.0, 0.45, 0.15), true)
+			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
 			
-	# 랜드마크 보스 마커 (붉은 왕관/해골 표식)
+	# 랜드마크 보스 마커 (SVG 해골 + 거리)
 	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
 		var dir_to_boss = player.global_position.direction_to(boss_entity.global_position)
 		var boss_deg = rad_to_deg(dir_to_boss.angle())
@@ -981,10 +997,14 @@ func _on_compass_draw() -> void:
 		if abs(b_diff) <= fov / 2.0:
 			var bx = floorf(center_x + b_diff * pixels_per_deg)
 			var b_dist = player.global_position.distance_to(boss_entity.global_position)
-			compass_bar.draw_rect(Rect2(bx - 4.0, 5.0, 8.0, 8.0), Color(0.95, 0.15, 0.2), true)
-			compass_bar.draw_string(compass_font, Vector2(bx - 16, 22), "💀%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
+			var boss_tex: Texture2D = UiIconManager.get_icon("skull") if UiIconManager else null
+			if boss_tex:
+				compass_bar.draw_texture_rect(boss_tex, Rect2(bx - 5.0, 3.0, 10.0, 10.0), false)
+			else:
+				compass_bar.draw_rect(Rect2(bx - 4.0, 5.0, 8.0, 8.0), Color(0.95, 0.15, 0.2), true)
+			compass_bar.draw_string(compass_font, Vector2(bx - 12, 22), "%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
 			
-	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 지원)
+	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 SVG 아이콘 + 거리)
 	var objs_to_draw = field_objectives if field_objectives.size() > 0 else ([landmark_objective] if is_instance_valid(landmark_objective) else [])
 	for obj_ref in objs_to_draw:
 		if is_instance_valid(obj_ref) and not bool(obj_ref.get("is_completed")):
@@ -997,9 +1017,13 @@ func _on_compass_draw() -> void:
 			if abs(o_diff) <= fov / 2.0:
 				var ox = floorf(center_x + o_diff * pixels_per_deg)
 				var o_dist = player.global_position.distance_to(obj_ref.global_position)
-				var icon_str = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "📡"
-				compass_bar.draw_rect(Rect2(ox - 3.0, 6.0, 6.0, 6.0), Color(0.2, 0.88, 1.0), true)
-				compass_bar.draw_string(compass_font, Vector2(ox - 16, 22), "%s%.0fm" % [icon_str, o_dist], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
+				var icon_key: String = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "signal"
+				var obj_tex: Texture2D = UiIconManager.get_icon(icon_key) if UiIconManager else null
+				if obj_tex:
+					compass_bar.draw_texture_rect(obj_tex, Rect2(ox - 5.0, 3.0, 10.0, 10.0), false)
+				else:
+					compass_bar.draw_rect(Rect2(ox - 3.0, 6.0, 6.0, 6.0), Color(0.2, 0.88, 1.0), true)
+				compass_bar.draw_string(compass_font, Vector2(ox - 12, 22), "%.0fm" % o_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
 
 	# 정중앙 조준 눈금 (픽셀 스텝 역삼각형 포인터)
 	compass_bar.draw_rect(Rect2(center_x - 3.0, 1.0, 6.0, 2.0), Color(1.0, 0.85, 0.2), true)
@@ -1096,7 +1120,7 @@ func _spawn_airdrop_crate() -> void:
 	if SoundManager:
 		SoundManager.play("explosion_distant")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("★ 🪂 [긴급 공수] 군용 항공 보급품이 투하되었습니다! (나침반 📦 마커 확인)")
+		EventBus.event_logged.emit("[icon:airdrop] [긴급 공수] 군용 항공 보급품이 투하되었습니다! (나침반 [icon:airdrop] 마커 확인)")
 
 func _on_airdrop_crate_landed(drop_pos: Vector2) -> void:
 	# 보급품 착지(LANDED_IMPACT) 시점에 주변 정예 호위 병력(RAIDER 1명, SCAV 1명) 스폰
@@ -1218,7 +1242,7 @@ func _process(delta: float) -> void:
 						if EventBus.has_signal("camera_shake_requested"):
 							EventBus.camera_shake_requested.emit(4.5, 0.45)
 						if EventBus.has_signal("event_logged"):
-							EventBus.event_logged.emit("⚡ 콰르릉! 폭풍우 뇌우가 근처에 내리쳤습니다!")
+							EventBus.event_logged.emit("[icon:power] 콰르릉! 폭풍우 뇌우가 근처에 내리쳤습니다!")
 			else:
 				storm_lightning_active = false
 				_update_day_night_cycle()
@@ -1374,14 +1398,14 @@ func _on_quickslot_N_pressed() -> void:
 		player.player_lighting.toggle_nvg()
 		if SoundManager: SoundManager.play("menu_select")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🥽 야간투시경(NVG): %s" % ("ON" if player.player_lighting.nvg_enabled else "OFF"))
+			EventBus.event_logged.emit("[icon:nvg] 야간투시경(NVG): %s" % ("ON" if player.player_lighting.nvg_enabled else "OFF"))
 		_update_quickslot_bar()
 
 func _on_quickslot_U_pressed() -> void:
 	if player_has_radio():
 		open_radio_window()
 	else:
-		_on_event_logged("⚠️ 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
+		_on_event_logged("[icon:warn] 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
 
 func _update_quickslot_bar() -> void:
 	if not quickslot_hbox or not player: return
@@ -1422,10 +1446,18 @@ func _on_player_channel_finished() -> void:
 		
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
 	if interact_prompt and current_inventory_window == null:
-		interact_prompt.visible = can_interact
-		interact_prompt.text = text
+		if UiIconManager:
+			var parsed := UiIconManager.parse_tagged_message(text)
+			UiIconManager.set_label_icon(interact_prompt, String(parsed["icon_key"]), String(parsed["clean_text"]), 18, 6, true)
+			UiIconManager.sync_label_row_visibility(interact_prompt, can_interact)
+		else:
+			interact_prompt.visible = can_interact
+			interact_prompt.text = text
 	elif interact_prompt:
-		interact_prompt.visible = false
+		if UiIconManager:
+			UiIconManager.sync_label_row_visibility(interact_prompt, false)
+		else:
+			interact_prompt.visible = false
 		
 func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_inventory_window != null: return
@@ -1464,11 +1496,11 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		slots = 8
 	elif type == Vector2i(7, 2): # Airdrop Crate
 		table_name = "military"
-		loot_title = "🪂 군용 항공 보급품"
+		loot_title = "[icon:airdrop] 군용 항공 보급품"
 		slots = 12
 	elif type == Vector2i(9, 2): # Mercenary Corpse Box
 		table_name = "military"
-		loot_title = "🎒 용병 유품 가방"
+		loot_title = "[icon:backpack] 용병 유품 가방"
 		slots = 8
 	elif type == Vector2i(5, 2): # OBJ_LIGHT_SWITCH
 		activate_power_switch(tile_pos, world_pos)
@@ -1500,7 +1532,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 					key_item_ref = card_match.get("item", {})
 		if not has_valid_key:
 			if SoundManager: SoundManager.play("hit_melee")
-			EventBus.event_logged.emit("🔒 잠겨 있습니다! [%s]가 가방 또는 안전 컨테이너에 필요합니다." % req_key)
+			EventBus.event_logged.emit("[icon:lock] 잠겨 있습니다! [%s]가 가방 또는 안전 컨테이너에 필요합니다." % req_key)
 			return
 		var key_destroyed := false
 		var rem_uses := 0
@@ -1529,9 +1561,9 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		EventBus.noise_created.emit(world_pos, 140.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
 		if key_destroyed:
-			EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다! (열쇠 내구도 소진으로 파손됨)" % used_key_name)
+			EventBus.event_logged.emit("[icon:unlock] [%s]로 보안 잠금문을 개방했습니다! (열쇠 내구도 소진으로 파손됨)" % used_key_name)
 		else:
-			EventBus.event_logged.emit("🔓 [%s]로 보안 잠금문을 개방했습니다! (남은 사용 횟수: %d/%d)" % [used_key_name, rem_uses, max_uses])
+			EventBus.event_logged.emit("[icon:unlock] [%s]로 보안 잠금문을 개방했습니다! (남은 사용 횟수: %d/%d)" % [used_key_name, rem_uses, max_uses])
 		if SoundManager: SoundManager.play("item_pickup")
 		return
 	elif TileManager.is_door_closed(type): # OBJ_DOOR_CLOSED / _V
@@ -1540,7 +1572,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_toggled_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
-		EventBus.event_logged.emit("🚪 문을 열었습니다.")
+		EventBus.event_logged.emit("[icon:door] 문을 열었습니다.")
 		if SoundManager: SoundManager.play("menu_select")
 		return
 	elif TileManager.is_door_open(type): # OBJ_DOOR_OPEN / _V
@@ -1549,7 +1581,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_toggled_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, false)
-		EventBus.event_logged.emit("🚪 문을 닫았습니다.")
+		EventBus.event_logged.emit("[icon:door] 문을 닫았습니다.")
 		if SoundManager: SoundManager.play("menu_select")
 		return
 	elif TileManager.is_window(type): # OBJ_WINDOW / _V
@@ -1559,7 +1591,7 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		EventBus.noise_created.emit(world_pos, 400.0, "break")
 		EventBus.door_toggled.emit(tile_pos, true)
 		EventBus.window_broken.emit(tile_pos)
-		EventBus.event_logged.emit("💥 창문이 깨졌습니다! (큰 소음 발생)")
+		EventBus.event_logged.emit("[icon:explosion] 창문이 깨졌습니다! (큰 소음 발생)")
 		if SoundManager: SoundManager.play("hit_melee")
 		var ps = get_node_or_null("ParticleSystem")
 		if ps: ps.emit("spark", world_pos.x, world_pos.y, 10)
@@ -1579,12 +1611,12 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 						if t_name == "hospital":
 							in_locked_vault_kind = "medical"
 							table_name = "locked_medical"
-							loot_title = "🏥 원장실 보안 보관함"
+							loot_title = "[icon:hospital] 원장실 보안 보관함"
 							slots = 12
 						else:
 							in_locked_vault_kind = "armory"
 							table_name = "locked_armory"
-							loot_title = "🔐 특수 무기고 보관함"
+							loot_title = "[icon:key] 특수 무기고 보관함"
 							slots = 12
 		var inv: Inventory
 		if container_inventories.has(tile_pos):

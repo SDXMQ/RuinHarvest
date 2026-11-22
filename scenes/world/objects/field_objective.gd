@@ -112,20 +112,20 @@ func _process(delta: float) -> void:
 func get_objective_title() -> String:
 	match objective_kind:
 		ObjectiveKind.HOSPITAL_BIOSAMPLER:
-			return "🧬 병원 생체 표본 채취기 가동"
+			return "병원 생체 표본 채취기 가동"
 		ObjectiveKind.COMMERCIAL_RELAY:
-			return "📻 상업 지구 무선 중계기 수리"
+			return "상업 지구 무선 중계기 수리"
 		_:
-			return "📡 군사 기지 전술 단말기 해킹"
+			return "군사 기지 전술 단말기 해킹"
 
 func get_prompt_text() -> String:
-	return "[E 3초 홀드] %s" % get_objective_title()
+	return "[icon:%s] [E 3초 홀드] %s" % [get_compass_icon(), get_objective_title()]
 
 func get_compass_icon() -> String:
 	match objective_kind:
-		ObjectiveKind.HOSPITAL_BIOSAMPLER: return "🧬"
-		ObjectiveKind.COMMERCIAL_RELAY: return "📻"
-		_: return "📡"
+		ObjectiveKind.HOSPITAL_BIOSAMPLER: return "dna"
+		ObjectiveKind.COMMERCIAL_RELAY: return "radio"
+		_: return "signal"
 
 func set_hold_progress(ratio: float) -> void:
 	hold_progress = clamp(ratio, 0.0, 1.0)
@@ -135,7 +135,7 @@ func set_hold_progress(ratio: float) -> void:
 		if EventBus.has_signal("noise_created"):
 			EventBus.noise_created.emit(global_position, 480.0, "beacon")
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🚨 [%s] 가동 소음으로 인해 주변 감염체와 무장 병력이 몰려옵니다!" % get_objective_title())
+			EventBus.event_logged.emit("[icon:siren] [%s] 가동 소음으로 인해 주변 감염체와 무장 병력이 몰려옵니다!" % get_objective_title())
 	queue_redraw()
 
 func complete_objective(player_node: Node2D = null) -> bool:
@@ -178,14 +178,14 @@ func complete_objective(player_node: Node2D = null) -> bool:
 				else:
 					g_item.free()
 		if not dropped_rewards.is_empty() and EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("📦 가방 공간이 부족하여 임무 보상(%s)을 바닥에 드랍했습니다." % ", ".join(dropped_rewards))
+			EventBus.event_logged.emit("[icon:box] 가방 공간이 부족하여 임무 보상(%s)을 바닥에 드랍했습니다." % ", ".join(dropped_rewards))
 		
 	if SoundManager:
 		SoundManager.play("level_up")
 	if EventBus.has_signal("noise_created"):
 		EventBus.noise_created.emit(global_position, 320.0, "beacon")
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("★ %s 성공! (암호화된 SSD 확보 & 생존 탈출 시 +15,000 RUB 보너스)" % get_objective_title())
+		EventBus.event_logged.emit("[icon:star] %s 성공! (암호화된 SSD 확보 & 생존 탈출 시 +15,000 RUB 보너스)" % get_objective_title())
 	queue_redraw()
 	return true
 

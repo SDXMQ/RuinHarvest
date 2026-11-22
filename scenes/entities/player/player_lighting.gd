@@ -73,7 +73,7 @@ func toggle_nvg() -> void:
 	nvg_enabled = not nvg_enabled
 	set_flashlight(flashlight_enabled)
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("🥽 전술 야간투시경(NVG): %s" % ("ON" if nvg_enabled else "OFF"))
+		EventBus.event_logged.emit("[icon:nvg] 전술 야간투시경(NVG): %s" % ("ON" if nvg_enabled else "OFF"))
 
 func set_flashlight(enabled: bool) -> void:
 	flashlight_enabled = enabled

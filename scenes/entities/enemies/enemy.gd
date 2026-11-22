@@ -440,7 +440,7 @@ func _physics_process(delta: float) -> void:
 								chunk_mgr.object_layer.set_cell(t_pos, 0, TileManager.get_window_broken_tile(win_coords))
 								EventBus.noise_created.emit(forward_pos, 400.0, "break")
 								EventBus.window_broken.emit(t_pos)
-								EventBus.event_logged.emit("💥 적이 창문을 깨부수고 침입합니다!")
+								EventBus.event_logged.emit("[icon:explosion] 적이 창문을 깨부수고 침입합니다!")
 								if SoundManager: SoundManager.play("hit_melee")
 								attack_timer = 1.0
 					
@@ -817,7 +817,7 @@ func _try_attack(victim: Node2D = null) -> void:
 					if target_player.has_signal("stats_changed"):
 						target_player.stats_changed.emit()
 					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("☣️ [경고] 야간 추격자의 발톱에 긁혀 변이 감염(Infection) 상태가 되었습니다!")
+						EventBus.event_logged.emit("[icon:biohazard] [경고] 야간 추격자의 발톱에 긁혀 변이 감염(Infection) 상태가 되었습니다!")
 			if EventBus.has_signal("player_hit_direction"):
 				EventBus.player_hit_direction.emit(global_position)
 		elif target_node.has_method("take_damage"):
@@ -861,7 +861,7 @@ func _throw_boss_grenade(target_pos: Vector2) -> void:
 		"damage": 45.0
 	})
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⚠️ 💣 [경고] 보스가 세열 수류탄을 투척했습니다! (1.8초 후 폭발, 반경 120px 이탈 요망)")
+		EventBus.event_logged.emit("[icon:warn] [icon:grenade] [경고] 보스가 세열 수류탄을 투척했습니다! (1.8초 후 폭발, 반경 120px 이탈 요망)")
 	if has_node("Visuals"):
 		get_node("Visuals").queue_redraw()
 
@@ -940,12 +940,12 @@ func _die() -> void:
 			type_str = "boss"
 			faction_str = "raider"
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("★ 💀 [보스 처치] 구역 지휘관 '강철의 보스'를 사살했습니다! 최고급 전리품을 확인하십시오!")
+				EventBus.event_logged.emit("[icon:star] [icon:skull] [보스 처치] 구역 지휘관 '강철의 보스'를 사살했습니다! 최고급 전리품을 확인하십시오!")
 		EnemyType.NIGHT_STALKER:
 			type_str = "night_stalker"
 			faction_str = "infected"
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🌙 [변이체 처치] 어둠 속의 '야간 추격자'를 사살했습니다!")
+				EventBus.event_logged.emit("[icon:moon] [변이체 처치] 어둠 속의 '야간 추격자'를 사살했습니다!")
 	EventBus.enemy_killed.emit(type_str, faction_str, global_position)
 	_spawn_loot_drop()
 	queue_free()
@@ -1100,13 +1100,13 @@ func _spawn_corpse_loot_box(drops: Array) -> void:
 				if found_free:
 					break
 
-	var title := "🎒 스캐브 유품 가방"
+	var title := "[icon:backpack] 스캐브 유품 가방"
 	var rank := 3
 	if enemy_type == EnemyType.RAIDER:
-		title = "🎒 정예 레이더 군장 상자"
+		title = "[icon:backpack] 정예 레이더 군장 상자"
 		rank = 4
 	elif enemy_type == EnemyType.BOSS:
-		title = "💀 보스 지휘관 특수 군장함"
+		title = "[icon:skull] 보스 지휘관 특수 군장함"
 		rank = 5
 
 	var inv := Inventory.new()

@@ -145,7 +145,7 @@ func _on_body_entered(body: Node2D) -> void:
 				if player_ref.has_method("show_floating_text"):
 					player_ref.show_floating_text("[%d RUB 필요]" % required_rubles, Color(1.0, 0.8, 0.2))
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🚕 탈출 차량 이용 불가: 탑승 비용 %d RUB가 필요합니다! (현재: %d RUB)" % [required_rubles, rubles])
+					EventBus.event_logged.emit("[icon:vehicle] 탈출 차량 이용 불가: 탑승 비용 %d RUB가 필요합니다! (현재: %d RUB)" % [required_rubles, rubles])
 				if SoundManager: SoundManager.play("hit_melee")
 				return
 		elif extraction_type == ExtractionType.BUNKER:
@@ -161,7 +161,7 @@ func _on_body_entered(body: Node2D) -> void:
 				if player_ref.has_method("show_floating_text"):
 					player_ref.show_floating_text("[벙커 격벽 폐쇄: 필드 목표 완료 필요]", Color(0.2, 0.85, 1.0))
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🔒 지하 벙커 탈출구 폐쇄됨: 필드 목표 단말기 1개 이상 가동/해킹 필요!")
+					EventBus.event_logged.emit("[icon:lock] 지하 벙커 탈출구 폐쇄됨: 필드 목표 단말기 1개 이상 가동/해킹 필요!")
 				if SoundManager: SoundManager.play("hit_melee")
 				return
 
@@ -183,12 +183,12 @@ func _trigger_extraction() -> void:
 			var cur_rub = int(GameManager.current_world_data["player"].get("rubles", 0))
 			if cur_rub < required_rubles:
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🚕 탈출 차량 이용 불가: 탑승 비용 %d RUB가 부족합니다! (현재: %d RUB)" % [required_rubles, cur_rub])
+					EventBus.event_logged.emit("[icon:vehicle] 탈출 차량 이용 불가: 탑승 비용 %d RUB가 부족합니다! (현재: %d RUB)" % [required_rubles, cur_rub])
 				extract_cancelled.emit()
 				return
 			GameManager.current_world_data["player"]["rubles"] = max(0, cur_rub - required_rubles)
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🚕 탈출 차량 탑승료 %d RUB 결제 완료." % required_rubles)
+				EventBus.event_logged.emit("[icon:vehicle] 탈출 차량 탑승료 %d RUB 결제 완료." % required_rubles)
 	elif extraction_type == ExtractionType.BUNKER:
 		var obj_done = false
 		if GameManager:
@@ -200,7 +200,7 @@ func _trigger_extraction() -> void:
 				obj_done = true
 		if not obj_done:
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("🔒 지하 벙커 탈출구 폐쇄됨: 필드 목표 단말기 1개 이상 가동/해킹 필요!")
+				EventBus.event_logged.emit("[icon:lock] 지하 벙커 탈출구 폐쇄됨: 필드 목표 단말기 1개 이상 가동/해킹 필요!")
 			extract_cancelled.emit()
 			return
 				

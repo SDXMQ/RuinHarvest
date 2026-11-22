@@ -147,7 +147,7 @@ func take_damage(amount: float, source: String) -> void:
 					if player.has_method("show_floating_text"):
 						player.show_floating_text("[BROKEN]", Color(1.0, 0.25, 0.25))
 					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("🛡️ [%s] 내구도가 0이 되어 방어력을 상실했습니다!" % d.get("name", eq.get("id", slot)))
+						EventBus.event_logged.emit("[icon:shield_red] [%s] 내구도가 0이 되어 방어력을 상실했습니다!" % d.get("name", eq.get("id", slot)))
 				
 	if source == "zombie" and randf() < 0.28:
 		is_infected = true

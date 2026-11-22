@@ -88,7 +88,7 @@ func _update_weather(dt: float) -> void:
 				current_weather = target_weather
 				EventBus.weather_changed.emit(get_weather_name(current_weather))
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🌦️ 기상 변화: [%s]" % get_weather_name(current_weather))
+					EventBus.event_logged.emit("[icon:weather] 기상 변화: [%s]" % get_weather_name(current_weather))
 				weather_changed.emit(current_weather)
 	else:
 		intensity = 1.0

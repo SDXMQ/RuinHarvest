@@ -293,7 +293,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				l.toggle_nvg()
 				if SoundManager: SoundManager.play("menu_select")
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🥽 야간투시경(NVG): %s" % ("ON" if l.nvg_enabled else "OFF"))
+					EventBus.event_logged.emit("[icon:nvg] 야간투시경(NVG): %s" % ("ON" if l.nvg_enabled else "OFF"))
 
 func get_effective_max_stamina() -> float:
 	var s = _stats()
@@ -366,7 +366,7 @@ func cancel_channeling() -> void:
 	channel_item_name = ""
 	channel_cancelled.emit()
 	if EventBus.has_signal("event_logged") and prev_name != "":
-		EventBus.event_logged.emit("❌ [%s] 사용이 취소되었습니다." % prev_name)
+		EventBus.event_logged.emit("[icon:error] [%s] 사용이 취소되었습니다." % prev_name)
 
 func complete_channeling() -> void:
 	if not is_channeling:
@@ -418,7 +418,7 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 					cur_item = id_res.get("item", {})
 			if cur_item.is_empty():
 				if EventBus and EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 사용할 아이템이 인벤토리에 없어 취소되었습니다.")
+					EventBus.event_logged.emit("[icon:warn] 사용할 아이템이 인벤토리에 없어 취소되었습니다.")
 				if SoundManager:
 					SoundManager.play("hit_melee")
 				return
@@ -458,12 +458,12 @@ func use_consumable_item(item: Dictionary, item_data: Dictionary = {}, log_prefi
 		if SoundManager:
 			SoundManager.play("menu_select")
 		if EventBus and EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💊 %s%s 사용 완료!%s" % [log_prefix, item_name, pk_suffix])
+			EventBus.event_logged.emit("[icon:pill] %s%s 사용 완료!%s" % [log_prefix, item_name, pk_suffix])
 	)
 	if SoundManager:
 		SoundManager.play("menu_select")
 	if EventBus and EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⏳ %s 사용 시작 (%.1f초)..." % [item_name, duration])
+		EventBus.event_logged.emit("[icon:hourglass] %s 사용 시작 (%.1f초)..." % [item_name, duration])
 	return true
 
 func _use_quickslot_item(slot_kind: String) -> void:
@@ -491,7 +491,7 @@ func _use_quickslot_item(slot_kind: String) -> void:
 	if target_item.is_empty():
 		if EventBus.has_signal("event_logged"):
 			var label_map = {"bleed": "지혈제/붕대 [5]", "heal": "구급상자/부목 [6]", "ration": "식량/생수 [7]"}
-			EventBus.event_logged.emit("⚠️ 가방에 사용할 수 있는 %s 아이템이 없습니다." % label_map.get(slot_kind, "소비"))
+			EventBus.event_logged.emit("[icon:warn] 가방에 사용할 수 있는 %s 아이템이 없습니다." % label_map.get(slot_kind, "소비"))
 		return
 
 	use_consumable_item(target_item, target_data, "[퀵슬롯] ")
@@ -669,7 +669,7 @@ func apply_backpack_grid_size() -> void:
 			parent_target.add_child(g_item)
 			g_item.setup(String(it.get("id", "")), maxi(1, int(it.get("amount", 1))), InventoryGrid.sanitize_custom_data(it))
 		if EventBus and EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("📦 가방 축소로 넘친 아이템 %d종을 바닥에 내려놓았습니다." % dropped_items.size())
+			EventBus.event_logged.emit("[icon:box] 가방 축소로 넘친 아이템 %d종을 바닥에 내려놓았습니다." % dropped_items.size())
 
 func apply_damage(amount: float, source: String = "unknown") -> void:
 	_on_player_damaged(amount, source)
@@ -701,7 +701,7 @@ func _on_death() -> void:
 	_is_dying = true
 	velocity = Vector2.ZERO
 	if SoundManager: SoundManager.play("player_death")
-	EventBus.event_logged.emit("☠️ 플레이어가 사망했습니다. (작전 실패)")
+	EventBus.event_logged.emit("[icon:death] 플레이어가 사망했습니다. (작전 실패)")
 	var cur_items: Array = inventory_grid.items.duplicate(true) if inventory_grid else []
 	var timer = get_tree().create_timer(1.2, true, false, true)
 	timer.timeout.connect(func():

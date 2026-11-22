@@ -319,12 +319,22 @@ static func style_hud_bars(hp_bar: ProgressBar, stamina_bar: ProgressBar, hunger
 
 static func style_status_badges(badges: Array) -> void:
 	var badge_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("toast", 6.0, 3.0, 6.0, 3.0, 3) if PixelAssetManager else null
+	var badge_icon_map := {
+		"BleedBadge": {"key": "bleed", "text": "BLEED"},
+		"FractureBadge": {"key": "fracture", "text": "FRACTURE"},
+		"BiohazardBadge": {"key": "biohazard", "text": "BIO-HAZARD"},
+	}
 	for b in badges:
 		if is_instance_valid(b) and b is Control:
 			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			b.focus_mode = Control.FOCUS_NONE
 			if badge_sb != null:
 				b.add_theme_stylebox_override("panel", badge_sb)
+			if UiIconManager and badge_icon_map.has(b.name):
+				var cfg: Dictionary = badge_icon_map[b.name]
+				var lbl: Label = b.get_node_or_null("Label") as Label
+				if lbl:
+					UiIconManager.set_label_icon(lbl, String(cfg["key"]), String(cfg["text"]), 13, 4, true)
 
 static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) -> StyleBox:
 	if PixelAssetManager:
@@ -336,28 +346,53 @@ static func spawn_event_toast(owner_node: Node, event_log_vbox: VBoxContainer, m
 	if not is_instance_valid(event_log_vbox) or not is_instance_valid(owner_node):
 		return
 	var max_logs: int = GameSettings.max_event_logs if GameSettings else 3
-	var accent_col := Color(1.0, 0.8, 0.2)
-	var font_col := Color(0.92, 0.94, 0.96)
-	if msg.begins_with("★"):
-		accent_col = Color(1.0, 0.8, 0.2)
-		font_col = Color(1.0, 0.9, 0.4)
-	elif msg.begins_with("✓") or msg.begins_with("📦") or msg.begins_with("💊") or msg.begins_with("🔓"):
-		accent_col = Color(0.3, 0.9, 0.4)
-		font_col = Color(0.6, 1.0, 0.6)
-	elif msg.begins_with("✗") or msg.begins_with("💀") or msg.begins_with("⚠️") or msg.begins_with("🔒"):
-		accent_col = Color(0.9, 0.3, 0.3)
-		font_col = Color(1.0, 0.5, 0.5)
-	elif msg.begins_with("🌦️") or msg.begins_with("🌅") or msg.begins_with("📻") or msg.begins_with("💡"):
-		accent_col = Color(0.3, 0.7, 1.0)
-		font_col = Color(0.6, 0.85, 1.0)
+	var parsed: Dictionary = UiIconManager.parse_tagged_message(msg, 13) if UiIconManager else {
+		"icon_key": "",
+		"icon_keys": [],
+		"clean_text": msg,
+		"body_bbcode": msg,
+		"has_inline_icons": false,
+		"accent_color": Color(1.0, 0.8, 0.2),
+		"font_color": Color(0.92, 0.94, 0.96),
+	}
+	var accent_col: Color = parsed["accent_color"]
+	var font_col: Color = parsed["font_color"]
+	var icon_keys: Array = parsed["icon_keys"]
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", make_event_toast_stylebox(accent_col))
-	var lbl := Label.new()
-	lbl.text = msg
-	lbl.add_theme_font_size_override("font_size", 12)
-	lbl.add_theme_color_override("font_color", font_col)
-	panel.add_child(lbl)
+	var hbox := HBoxContainer.new()
+	hbox.add_theme_constant_override("separation", 6)
+	hbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	if UiIconManager:
+		for ik in icon_keys:
+			var icon_rect := UiIconManager.create_icon_rect(String(ik), 14)
+			hbox.add_child(icon_rect)
+
+	if bool(parsed["has_inline_icons"]) and UiIconManager:
+		var rtl := RichTextLabel.new()
+		rtl.bbcode_enabled = true
+		rtl.fit_content = true
+		rtl.scroll_active = false
+		rtl.autowrap_mode = TextServer.AUTOWRAP_OFF
+		rtl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		rtl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		rtl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rtl.add_theme_font_size_override("normal_font_size", 12)
+		rtl.add_theme_color_override("default_color", font_col)
+		rtl.text = String(parsed["body_bbcode"])
+		hbox.add_child(rtl)
+	else:
+		var lbl := Label.new()
+		lbl.text = String(parsed["clean_text"])
+		lbl.add_theme_font_size_override("font_size", 12)
+		lbl.add_theme_color_override("font_color", font_col)
+		lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		hbox.add_child(lbl)
+
+	panel.add_child(hbox)
 	event_log_vbox.add_child(panel)
 
 	while event_log_vbox.get_child_count() > max_logs:
@@ -434,16 +469,20 @@ static func update_player_hud(
 				sb.content_margin_top = 2
 				sb.content_margin_bottom = 2
 				pk_badge.add_theme_stylebox_override("panel", sb)
-				var pk_lbl := Label.new()
-				pk_lbl.name = "Label"
-				pk_lbl.add_theme_font_size_override("font_size", 10)
-				pk_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.85))
-				pk_badge.add_child(pk_lbl)
+				var pk_row: HBoxContainer = UiIconManager.create_icon_label("pill", "", 10, Color(0.45, 1.0, 0.85), 13, 4) if UiIconManager else HBoxContainer.new()
+				pk_row.name = "Row"
+				if not pk_row.has_node("Label"):
+					var pk_lbl := Label.new()
+					pk_lbl.name = "Label"
+					pk_lbl.add_theme_font_size_override("font_size", 10)
+					pk_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.85))
+					pk_row.add_child(pk_lbl)
+				pk_badge.add_child(pk_row)
 				badges_parent.add_child(pk_badge)
 			pk_badge.visible = true
-			var lbl := pk_badge.get_node_or_null("Label") as Label
+			var lbl := pk_badge.get_node_or_null("Row/Label") as Label
 			if lbl:
-				lbl.text = "💊 진통제 %ds (-%d%%)" % [ceili(pk_timer), int(round(pk_red * 100.0))]
+				lbl.text = "진통제 %ds (-%d%%)" % [ceili(pk_timer), int(round(pk_red * 100.0))]
 		elif pk_badge:
 			pk_badge.visible = false
 
@@ -457,13 +496,17 @@ static func update_player_hud(
 		status_label.visible = not has_status
 
 	if weapon_panel:
-		var radio_badge: Label = weapon_panel.get_node_or_null("RadioHudBadge") as Label
+		var radio_badge: Control = weapon_panel.get_node_or_null("RadioHudBadge") as Control
 		if not radio_badge:
-			radio_badge = Label.new()
+			if UiIconManager:
+				radio_badge = UiIconManager.create_icon_label("signal", "[U] 무전 호출 가능", 11, Color(0.35, 0.95, 1.0), 14, 4)
+			else:
+				var fallback_rb := Label.new()
+				fallback_rb.text = "[U] 무전 호출 가능"
+				fallback_rb.add_theme_font_size_override("font_size", 11)
+				fallback_rb.add_theme_color_override("font_color", Color(0.35, 0.95, 1.0))
+				radio_badge = fallback_rb
 			radio_badge.name = "RadioHudBadge"
-			radio_badge.text = "📡 [U] 무전 호출 가능"
-			radio_badge.add_theme_font_size_override("font_size", 11)
-			radio_badge.add_theme_color_override("font_color", Color(0.35, 0.95, 1.0))
 			radio_badge.position = Vector2(6, -20)
 			weapon_panel.add_child(radio_badge)
 		radio_badge.visible = has_radio
@@ -479,14 +522,23 @@ static func update_player_hud(
 
 		if ammo_label:
 			if player.equipped_weapon_data.is_empty():
-				ammo_label.text = "👊 맨손 (주먹)"
+				if UiIconManager:
+					UiIconManager.set_label_icon(ammo_label, "fist", "맨손 (주먹)", 15, 5, true)
+				else:
+					ammo_label.text = "맨손 (주먹)"
 				ammo_label.add_theme_color_override("font_color", Color(0.7, 0.7, 0.7))
 			elif player.active_weapon_slot == "throwable" or str(player.equipped_weapon_data.get("type", "")) == "throwable":
 				var amt: int = int(player.equipped_weapon_data.get("amount", 1))
-				ammo_label.text = "💣 수량: %d개" % amt
+				if UiIconManager:
+					UiIconManager.set_label_icon(ammo_label, "bomb", "수량: %d개" % amt, 15, 5, true)
+				else:
+					ammo_label.text = "수량: %d개" % amt
 				ammo_label.add_theme_color_override("font_color", Color(1.0, 0.6, 0.2))
 			elif not WeaponHandler.is_firearm_dict(player.equipped_weapon_data):
-				ammo_label.text = "🗡️ 근접 무기 (좌클릭 타격)"
+				if UiIconManager:
+					UiIconManager.set_label_icon(ammo_label, "melee", "근접 무기 (좌클릭 타격)", 15, 5, true)
+				else:
+					ammo_label.text = "근접 무기 (좌클릭 타격)"
 				ammo_label.add_theme_color_override("font_color", Color(0.85, 0.9, 0.95))
 			else:
 				var cur_mag: int = int(player.equipped_weapon_data.get("current_magazine_ammo", 0))
@@ -496,7 +548,11 @@ static func update_player_hud(
 				var compat_list: Array = player._get_compatible_ammo_types() if player.has_method("_get_compatible_ammo_types") else []
 				var cal: String = str(compat_list[0]) if compat_list.size() > 0 else "9mm"
 				var cal_disp: String = "9mm 탄약" if cal in ["9mm", "탄약"] else cal.replace("_", " ")
-				ammo_label.text = "🔫 %d / %d  [%s: %d]" % [cur_mag, mag_size, cal_disp, reserve_ammo]
+				var ammo_txt := "%d / %d  [%s: %d]" % [cur_mag, mag_size, cal_disp, reserve_ammo]
+				if UiIconManager:
+					UiIconManager.set_label_icon(ammo_label, "gun", ammo_txt, 15, 5, true)
+				else:
+					ammo_label.text = ammo_txt
 				ammo_label.add_theme_color_override("font_color", Color.RED if cur_mag == 0 else Color(0.4, 1.0, 0.6))
 
 		if weapon_durability_bar:

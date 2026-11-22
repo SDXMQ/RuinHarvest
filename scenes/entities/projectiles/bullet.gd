@@ -103,7 +103,7 @@ func _on_body_entered(body: Node2D) -> void:
 			layer.set_cell(hit_tile_pos, 0, TileManager.get_window_broken_tile(coords))
 			EventBus.noise_created.emit(global_position, 400.0, "break")
 			EventBus.window_broken.emit(hit_tile_pos)
-			EventBus.event_logged.emit("💥 총격으로 창문이 깨졌습니다!")
+			EventBus.event_logged.emit("[icon:explosion] 총격으로 창문이 깨졌습니다!")
 			if SoundManager: SoundManager.play("hit_melee")
 			var ps = get_tree().current_scene.get_node_or_null("ParticleSystem") if get_tree() and get_tree().current_scene else null
 			if ps: ps.emit("spark", global_position.x, global_position.y, 6)

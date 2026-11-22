@@ -127,7 +127,7 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[JAMMED - 철컥!]", Color(1.0, 0.4, 0.2))
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 총기 노리쇠가 걸려있습니다! [R 키로 탄걸림 제거]")
+			EventBus.event_logged.emit("[icon:warn] 총기 노리쇠가 걸려있습니다! [R 키로 탄걸림 제거]")
 		if SoundManager: SoundManager.play("dry_fire")
 		return
 		
@@ -139,7 +139,7 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[BROKEN]", Color(1.0, 0.25, 0.25))
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 총기 내구도가 0이 되어 격발할 수 없습니다! (작업대 수리 필요)")
+			EventBus.event_logged.emit("[icon:warn] 총기 내구도가 0이 되어 격발할 수 없습니다! (작업대 수리 필요)")
 		if SoundManager: SoundManager.play("dry_fire")
 		return
 
@@ -158,7 +158,7 @@ func try_attack(aim_dir: Vector2, spawn_pos: Vector2) -> void:
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[JAMMED]", Color(1.0, 0.4, 0.2))
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 총기 기능고장(Jam) 발생! 탄피가 걸렸습니다. [R 키로 조치]")
+			EventBus.event_logged.emit("[icon:warn] 총기 기능고장(Jam) 발생! 탄피가 걸렸습니다. [R 키로 조치]")
 		if SoundManager: SoundManager.play("dry_fire")
 		return
 
@@ -263,7 +263,7 @@ func _melee_punch(aim_dir: Vector2, spawn_pos: Vector2, melee_dmg: float = 18.0)
 			obj_layer.set_cell(check_tile, 0, TileManager.get_window_broken_tile(w_coords))
 			EventBus.noise_created.emit(spawn_pos, 350.0, "break")
 			EventBus.window_broken.emit(check_tile)
-			EventBus.event_logged.emit("💥 근접 타격으로 창문을 깼습니다!")
+			EventBus.event_logged.emit("[icon:explosion] 근접 타격으로 창문을 깼습니다!")
 			hit_any = true
 			
 	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
@@ -440,7 +440,7 @@ func cycle_ammo_type() -> void:
 	if player.has_method("show_floating_text"):
 		player.show_floating_text("[AMMO: %s]" % preferred_ammo_type, Color(1.0, 0.88, 0.35))
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("🔄 [Alt+R] 탄종 선택: %s" % preferred_ammo_type)
+		EventBus.event_logged.emit("[icon:refresh] [Alt+R] 탄종 선택: %s" % preferred_ammo_type)
 	start_reload()
 
 func start_reload() -> void:
@@ -456,7 +456,7 @@ func start_reload() -> void:
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[CLEAR]", Color(0.4, 1.0, 0.5))
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🔧 탄걸림 기능고장 조치 완료! 노리쇠를 전진시켰습니다.")
+			EventBus.event_logged.emit("[icon:wrench_blue] 탄걸림 기능고장 조치 완료! 노리쇠를 전진시켰습니다.")
 		if SoundManager: SoundManager.play("menu_select")
 		return
 
@@ -466,7 +466,7 @@ func start_reload() -> void:
 	if get_available_ammo_count() <= 0:
 		if player and player.has_method("show_floating_text"):
 			player.show_floating_text("[NO AMMO]", Color(1.0, 0.35, 0.35))
-		EventBus.event_logged.emit("⚠️ 장전할 수 있는 호환 탄약이 없습니다!")
+		EventBus.event_logged.emit("[icon:warn] 장전할 수 있는 호환 탄약이 없습니다!")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 		
@@ -474,7 +474,7 @@ func start_reload() -> void:
 	reload_timer = get_effective_reload_speed()
 	if player and player.has_method("show_floating_text"):
 		player.show_floating_text("[RELOADING...]", Color(0.4, 0.9, 1.0))
-	EventBus.event_logged.emit("🔄 재장전 중... (%.1f초)" % reload_timer)
+	EventBus.event_logged.emit("[icon:reload] 재장전 중... (%.1f초)" % reload_timer)
 	if SoundManager: SoundManager.play("menu_select")
 
 func get_current_weapon_mastery() -> Dictionary:
@@ -567,7 +567,7 @@ func _finish_reload() -> void:
 	ammo_changed.emit()
 	if player and player.has_signal("stats_changed"):
 		player.stats_changed.emit()
-	EventBus.event_logged.emit("✅ 재장전 완료! (%d/%d)" % [equipped_weapon_data["current_magazine_ammo"], mag_size])
+	EventBus.event_logged.emit("[icon:ok] 재장전 완료! (%d/%d)" % [equipped_weapon_data["current_magazine_ammo"], mag_size])
 
 func get_compatible_ammo_types() -> Array:
 	if not is_firearm_equipped():
