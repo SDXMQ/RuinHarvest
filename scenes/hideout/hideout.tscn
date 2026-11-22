@@ -113,7 +113,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(0.3, 0.8, 1, 1)
 theme_override_font_sizes/font_size = 14
-text = "🎒 출격용 배낭 (2D Grid)"
+text = "출격용 배낭 (2D Grid)"
 horizontal_alignment = 1
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox" unique_id=1484203917]
@@ -136,7 +136,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
 theme_override_font_sizes/font_size = 14
-text = "👤 캐릭터 장비 설정"
+text = "캐릭터 장비 설정"
 horizontal_alignment = 1
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox" unique_id=1356313442]
@@ -152,22 +152,22 @@ theme_override_constants/separation = 6
 [node name="HelmetSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=549586663]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "🪖 헬멧"
+text = "헬멧"
 
 [node name="VestSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=2108694527]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "🦺 방탄복"
+text = "방탄복"
 
 [node name="BackpackSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=190721525]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "🎒 배낭 (용량 결정)"
+text = "배낭 (용량 결정)"
 
 [node name="BottomSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=891496699]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "👟 하의/신발"
+text = "하의/신발"
 
 [node name="HSeparator" type="HSeparator" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=1177389711]
 layout_mode = 2
@@ -175,22 +175,22 @@ layout_mode = 2
 [node name="Primary1Slot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=1415585492]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "🔫 주무기 1"
+text = "주무기 1"
 
 [node name="Primary2Slot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=1097921428]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "🔫 주무기 2"
+text = "주무기 2"
 
 [node name="SidearmSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=1025348901]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "🗡️ 보조 무기"
+text = "보조 무기"
 
 [node name="ThrowableSlot" type="Button" parent="CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Scroll/SlotsVBox" unique_id=1066321035]
 custom_minimum_size = Vector2(0, 40)
 layout_mode = 2
-text = "💣 투척 무기"
+text = "투척 무기"
 
 [node name="StashPanel" type="PanelContainer" parent="CenterArea/TabContainer/StashTab/HBox" unique_id=2013270973]
 layout_mode = 2
@@ -205,7 +205,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.8, 0.3, 1)
 theme_override_font_sizes/font_size = 14
-text = "🏢 은신처 창고 (10x12 대용량 보관함)"
+text = "은신처 창고 (10x12 대용량 보관함)"
 horizontal_alignment = 1
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox" unique_id=782399901]
@@ -241,17 +241,17 @@ theme_override_constants/separation = 16
 [node name="PraporBtn" type="Button" parent="CenterArea/TabContainer/TradersTab/VBox/TraderButtons" unique_id=611692560]
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
-text = "🔫 프라포 (무기/탄약)"
+text = "프라포 (무기/탄약)"
 
 [node name="TherapistBtn" type="Button" parent="CenterArea/TabContainer/TradersTab/VBox/TraderButtons" unique_id=128845633]
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
-text = "💉 테라피스트 (의료/식량)"
+text = "테라피스트 (의료/식량)"
 
 [node name="FenceBtn" type="Button" parent="CenterArea/TabContainer/TradersTab/VBox/TraderButtons" unique_id=875381220]
 custom_minimum_size = Vector2(160, 40)
 layout_mode = 2
-text = "🔩 펜스 (잡화/암시장)"
+text = "펜스 (잡화/암시장)"
 
 [node name="Header" type="Panel" parent="CenterArea/TabContainer/TradersTab/VBox" unique_id=185741856]
 custom_minimum_size = Vector2(0, 36)
@@ -290,7 +290,7 @@ offset_top = 4.0
 offset_bottom = 24.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 12
-text = "💰 내 배낭에서 판매하기 (클릭 시 매각)"
+text = "내 배낭에서 판매하기 (클릭 시 매각)"
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/TradersTab/VBox/SellArea" unique_id=1023625288]
 layout_mode = 1
@@ -365,7 +365,7 @@ offset_top = 4.0
 offset_bottom = 24.0
 grow_horizontal = 2
 theme_override_font_sizes/font_size = 12
-text = "💰 내 배낭 아이템 등록하기 (클릭 시 플리마켓 매물로 등록)"
+text = "내 배낭 아이템 등록하기 (클릭 시 플리마켓 매물로 등록)"
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/MarketTab/VBox/RegisterArea" unique_id=1722999626]
 layout_mode = 1
@@ -421,7 +421,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(0.3, 0.8, 1, 1)
 theme_override_font_sizes/font_size = 14
-text = "📋 내 보유 총기 목록"
+text = "내 보유 총기 목록"
 horizontal_alignment = 1
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/WeaponListPanel/VBox" unique_id=1616531056]
@@ -445,7 +445,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 14
-text = "🔫 총기 실시간 비주얼 & 부착물 슬롯"
+text = "총기 실시간 비주얼 & 부착물 슬롯"
 horizontal_alignment = 1
 
 [node name="PreviewPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/ModdingCenterPanel/VBox" unique_id=1627070974]
@@ -478,7 +478,7 @@ theme_override_constants/separation = 8
 layout_mode = 2
 theme_override_colors/font_color = Color(0.4, 0.9, 0.5, 1)
 theme_override_font_sizes/font_size = 14
-text = "📊 무기 스탯 실시간 비교 (델타)"
+text = "무기 스탯 실시간 비교 (델타)"
 horizontal_alignment = 1
 
 [node name="StatsScroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox" unique_id=1522610034]
@@ -498,7 +498,7 @@ layout_mode = 2
 layout_mode = 2
 theme_override_colors/font_color = Color(0.9, 0.7, 1, 1)
 theme_override_font_sizes/font_size = 13
-text = "📐 추천 스마트 프리셋 (Presets)"
+text = "추천 스마트 프리셋 (Presets)"
 horizontal_alignment = 1
 
 [node name="PresetButtonsVBox" type="VBoxContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox" unique_id=1192227522]
@@ -509,13 +509,13 @@ theme_override_constants/separation = 4
 custom_minimum_size = Vector2(0, 34)
 layout_mode = 2
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
-text = "🛒 부족 부품 구매 후 일괄 조립"
+text = "부족 부품 구매 후 일괄 조립"
 
 [node name="SaveWeaponBtn" type="Button" parent="CenterArea/TabContainer/WorkbenchTab/VBox/MainHBox/StatsAndPresetPanel/VBox" unique_id=669371675]
 custom_minimum_size = Vector2(0, 36)
 layout_mode = 2
 theme_override_colors/font_color = Color(0.3, 1, 0.5, 1)
-text = "💾 모딩 완료 및 저장/장착"
+text = "모딩 완료 및 저장/장착"
 
 [node name="CompatPartsPanel" type="PanelContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox" unique_id=271048524]
 custom_minimum_size = Vector2(0, 100)
@@ -529,7 +529,7 @@ theme_override_constants/separation = 4
 layout_mode = 2
 theme_override_colors/font_color = Color(0.7, 0.85, 1, 1)
 theme_override_font_sizes/font_size = 12
-text = "🧰 내 보유 호환 부품 (클릭 시 원클릭 교체 / 우클릭 시 탈착)"
+text = "내 보유 호환 부품 (클릭 시 원클릭 교체 / 우클릭 시 탈착)"
 
 [node name="Scroll" type="ScrollContainer" parent="CenterArea/TabContainer/WorkbenchTab/VBox/CompatPartsPanel/VBox" unique_id=1651021379]
 layout_mode = 2
@@ -590,10 +590,10 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -250.0
-offset_top = -150.0
-offset_right = 250.0
-offset_bottom = 150.0
+offset_left = -280.0
+offset_top = -185.0
+offset_right = 280.0
+offset_bottom = 185.0
 grow_horizontal = 2
 grow_vertical = 2
 
@@ -616,12 +616,11 @@ theme_override_font_sizes/font_size = 22
 text = "결과"
 horizontal_alignment = 1
 
-[node name="Desc" type="Label" parent="ResultDialog/VBox" unique_id=1910961737]
+[node name="Desc" type="RichTextLabel" parent="ResultDialog/VBox" unique_id=1910961737]
 layout_mode = 2
 size_flags_vertical = 3
+bbcode_enabled = true
 text = "설명"
-horizontal_alignment = 1
-vertical_alignment = 1
 
 [node name="CloseBtn" type="Button" parent="ResultDialog/VBox" unique_id=213551900]
 custom_minimum_size = Vector2(0, 40)

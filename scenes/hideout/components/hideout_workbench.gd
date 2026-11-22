@@ -42,8 +42,27 @@ func _ready() -> void:
 		wb_preview.draw.connect(_on_workbench_preview_draw)
 	if wb_preset_buy_btn:
 		wb_preset_buy_btn.pressed.connect(_buy_and_assemble_preset)
+		if UiIconManager:
+			UiIconManager.apply_button_icon(wb_preset_buy_btn, "cart", "", 15)
 	if wb_save_btn:
 		wb_save_btn.pressed.connect(_save_workbench_weapon)
+		if UiIconManager:
+			UiIconManager.apply_button_icon(wb_save_btn, "save", "", 15)
+	if UiIconManager:
+		var wl_title := get_node_or_null("VBox/MainHBox/WeaponListPanel/VBox/Title") as Label
+		if wl_title:
+			UiIconManager.set_label_icon(wl_title, "clipboard", "", 16, 6)
+		var mc_title := get_node_or_null("VBox/MainHBox/ModdingCenterPanel/VBox/Title") as Label
+		if mc_title:
+			UiIconManager.set_label_icon(mc_title, "gun_gold", "", 16, 6)
+		var st_title := get_node_or_null("VBox/MainHBox/StatsAndPresetPanel/VBox/StatsTitle") as Label
+		if st_title:
+			UiIconManager.set_label_icon(st_title, "stats", "", 16, 6)
+		var pr_title := get_node_or_null("VBox/MainHBox/StatsAndPresetPanel/VBox/PresetTitle") as Label
+		if pr_title:
+			UiIconManager.set_label_icon(pr_title, "preset", "", 15, 6)
+		if wb_compat_title:
+			UiIconManager.set_label_icon(wb_compat_title, "toolbox", "", 15, 6)
 
 func setup(p_player_grid: InventoryGrid, p_stash_grid: InventoryGrid, p_equipment: Dictionary) -> void:
 	player_grid_mgr = p_player_grid
@@ -112,14 +131,17 @@ func _show_confirm_dialog(title_text: String, body_text: String, confirm_label: 
 	vbox.add_theme_constant_override("separation", 10)
 	panel.add_child(vbox)
 
+	var parsed_title: Dictionary = UiIconManager.parse_tagged_message(title_text) if UiIconManager else {"icon_key": "", "clean_text": title_text}
 	var title_lbl := Label.new()
 	title_lbl.name = "ConfirmTitleLabel"
-	title_lbl.text = title_text
+	title_lbl.text = String(parsed_title.get("clean_text", title_text))
 	if PixelAssetManager:
 		title_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
 	title_lbl.add_theme_font_size_override("font_size", 14)
 	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	vbox.add_child(title_lbl)
+	if UiIconManager and String(parsed_title.get("icon_key", "")) != "":
+		UiIconManager.set_label_icon(title_lbl, String(parsed_title.get("icon_key", "")), "", 16, 6)
 
 	var body_lbl := Label.new()
 	body_lbl.name = "ConfirmBodyLabel"
@@ -169,7 +191,8 @@ func _show_confirm_dialog(title_text: String, body_text: String, confirm_label: 
 const WEAPON_PRESETS = {
 	"M4_리시버": [
 		{
-			"name": "🎯 무반동 레이저 세팅",
+			"icon": "target",
+			"name": "무반동 레이저 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "컴펜세이터",
@@ -181,7 +204,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "🤫 소음 암살 저격 세팅",
+			"icon": "stealth",
+			"name": "소음 암살 저격 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "소음기",
@@ -193,7 +217,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "⚡ 초경량 CQC 돌격 세팅",
+			"icon": "power",
+			"name": "초경량 CQC 돌격 세팅",
 			"parts": {
 				"barrel": "짧은_총열",
 				"muzzle": "플래시_소염기",
@@ -207,7 +232,8 @@ const WEAPON_PRESETS = {
 	],
 	"AK_리시버": [
 		{
-			"name": "🎯 스페츠나츠 무반동 세팅",
+			"icon": "target",
+			"name": "스페츠나츠 무반동 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "컴펜세이터",
@@ -219,7 +245,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "🤫 소음 야간 침투 세팅",
+			"icon": "stealth",
+			"name": "소음 야간 침투 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "소음기",
@@ -233,7 +260,8 @@ const WEAPON_PRESETS = {
 	],
 	"M9_리시버": [
 		{
-			"name": "🤫 비밀 요원 소음 권총",
+			"icon": "stealth",
+			"name": "비밀 요원 소음 권총",
 			"parts": {
 				"barrel": "짧은_총열",
 				"muzzle": "소음기",
@@ -243,7 +271,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "⚡ 컴팩트 속사 권총",
+			"icon": "power",
+			"name": "컴팩트 속사 권총",
 			"parts": {
 				"barrel": "짧은_총열",
 				"muzzle": "컴펜세이터",
@@ -255,7 +284,8 @@ const WEAPON_PRESETS = {
 	],
 	"레밍턴_리시버": [
 		{
-			"name": "💥 파쇄 벅샷 산탄 세팅",
+			"icon": "explosion",
+			"name": "파쇄 벅샷 산탄 세팅",
 			"parts": {
 				"barrel": "짧은_총열",
 				"muzzle": "컴펜세이터",
@@ -265,7 +295,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "🎯 정밀 슬러그 스나이퍼",
+			"icon": "target",
+			"name": "정밀 슬러그 스나이퍼",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"optic": "2배율_조준경",
@@ -276,7 +307,8 @@ const WEAPON_PRESETS = {
 	],
 	"레버액션_리시버": [
 		{
-			"name": "🤠 카우보이 헌터 세팅",
+			"icon": "bullseye",
+			"name": "카우보이 헌터 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"optic": "2배율_조준경",
@@ -285,7 +317,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "🤫 전술 택티컬 소음 레버액션",
+			"icon": "stealth",
+			"name": "전술 택티컬 소음 레버액션",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "소음기",
@@ -295,7 +328,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "⚡ 단축 기동형 카빈 세팅",
+			"icon": "power",
+			"name": "단축 기동형 카빈 세팅",
 			"parts": {
 				"barrel": "짧은_총열",
 				"muzzle": "컴펜세이터",
@@ -307,7 +341,8 @@ const WEAPON_PRESETS = {
 	],
 	"레버액션 소총": [
 		{
-			"name": "🤠 카우보이 헌터 세팅",
+			"icon": "bullseye",
+			"name": "카우보이 헌터 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"optic": "2배율_조준경",
@@ -316,7 +351,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "🤫 전술 택티컬 소음 레버액션",
+			"icon": "stealth",
+			"name": "전술 택티컬 소음 레버액션",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "소음기",
@@ -326,7 +362,8 @@ const WEAPON_PRESETS = {
 			}
 		},
 		{
-			"name": "⚡ 단축 기동형 카빈 세팅",
+			"icon": "power",
+			"name": "단축 기동형 카빈 세팅",
 			"parts": {
 				"barrel": "짧은_총열",
 				"muzzle": "컴펜세이터",
@@ -338,7 +375,8 @@ const WEAPON_PRESETS = {
 	],
 	"SV98_리시버": [
 		{
-			"name": "🔭 8배율 초장거리 저격 세팅",
+			"icon": "scope",
+			"name": "8배율 초장거리 저격 세팅",
 			"parts": {
 				"barrel": "정밀_롱헤비_총열",
 				"muzzle": "소음기",
@@ -476,7 +514,10 @@ func _select_workbench_weapon(weapon_dict: Dictionary, source_info: Dictionary) 
 	wb_selected_weapon["computed_stats"] = wb_base_stats
 	
 	if wb_preset_buy_btn:
-		wb_preset_buy_btn.text = "🛒 프리셋을 선택해 주세요"
+		if UiIconManager:
+			UiIconManager.set_button(wb_preset_buy_btn, "cart", "프리셋을 선택해 주세요", 15)
+		else:
+			wb_preset_buy_btn.text = "프리셋을 선택해 주세요"
 		wb_preset_buy_btn.remove_theme_color_override("font_color")
 	
 	wb_active_slot = ""
@@ -572,17 +613,17 @@ func _populate_workbench_compat_parts(slot_name: String) -> void:
 		c.queue_free()
 		
 	if wb_selected_weapon.is_empty():
-		wb_compat_title.text = "🧰 호환 부품: 총기를 먼저 선택해주세요."
+		wb_compat_title.text = "호환 부품: 총기를 먼저 선택해주세요."
 		return
 		
 	if slot_name == "":
-		wb_compat_title.text = "🧰 위 슬롯 카드(총열, 총구, 스코프 등)를 클릭하면 내 창고/배낭의 호환 부품이 표시됩니다."
+		wb_compat_title.text = "위 슬롯 카드(총열, 총구, 스코프 등)를 클릭하면 내 창고/배낭의 호환 부품이 표시됩니다."
 		return
 		
 	var rec_id = wb_selected_weapon.get("receiver", "M4_리시버")
 	var r_data = WeaponPartsDatabase.RECEIVERS.get(rec_id, {})
 	var cat = r_data.get("category", "rifle")
-	wb_compat_title.text = "🧰 [%s] 슬롯 호환 부품 목록 (내 창고/배낭 소지품):" % slot_name
+	wb_compat_title.text = "[%s] 슬롯 호환 부품 목록 (내 창고/배낭 소지품):" % slot_name
 	
 	# 내 인벤토리에서 해당 슬롯에 맞는 부품 검색
 	var owned_compat_parts = []
@@ -619,8 +660,11 @@ func _populate_workbench_compat_parts(slot_name: String) -> void:
 		
 	if cur_p_str != "":
 		var detach_btn = Button.new()
-		detach_btn.text = "❌ 부품 분리(탈착)"
-		detach_btn.custom_minimum_size = Vector2(110, 40)
+		if UiIconManager:
+			UiIconManager.set_button(detach_btn, "error", "부품 분리(탈착)", 14)
+		else:
+			detach_btn.text = "부품 분리(탈착)"
+		detach_btn.custom_minimum_size = Vector2(130, 40)
 		detach_btn.add_theme_color_override("font_color", Color(1.0, 0.4, 0.4))
 		detach_btn.pressed.connect(func(): _detach_workbench_part(slot_name))
 		wb_compat_hbox.add_child(detach_btn)
@@ -723,7 +767,10 @@ func _cancel_pending_preset_preview() -> void:
 		var def_ammo = WeaponPartsDatabase.RECEIVERS.get(rec_id, {}).get("default_ammo", "9mm")
 		wb_selected_weapon["computed_stats"] = WeaponPartsDatabase.compute_weapon_stats(rec_id, wb_selected_weapon["parts"], wb_selected_weapon.get("loaded_ammo", def_ammo))
 	if wb_preset_buy_btn:
-		wb_preset_buy_btn.text = "🛒 프리셋을 선택해 주세요"
+		if UiIconManager:
+			UiIconManager.set_button(wb_preset_buy_btn, "cart", "프리셋을 선택해 주세요", 15)
+		else:
+			wb_preset_buy_btn.text = "프리셋을 선택해 주세요"
 		wb_preset_buy_btn.remove_theme_color_override("font_color")
 	_build_workbench_slots()
 	_refresh_workbench_stats_comparison()
@@ -736,7 +783,7 @@ func _attach_workbench_part(slot_name: String, part_id: String) -> void:
 	var owned_pool := _get_owned_parts_list()
 	if int(owned_pool.get(part_id, 0)) <= 0:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 보유 중인 [%s] 부품이 없습니다." % part_id)
+			EventBus.event_logged.emit("[icon:warn] 보유 중인 [%s] 부품이 없습니다." % part_id)
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 
@@ -758,14 +805,14 @@ func _attach_workbench_part(slot_name: String, part_id: String) -> void:
 
 	if not _remove_owned_part_from_inv(part_id):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 부품 차감에 실패했습니다.")
+			EventBus.event_logged.emit("[icon:warn] 부품 차감에 실패했습니다.")
 		return
 
 	if not to_return.is_empty() and not _return_parts_to_storage(to_return):
 		# 공간 부족 시 새 부품 복구 후 중단
 		_return_parts_to_storage([part_id])
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 기존 부품을 교체할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 창고와 배낭 공간이 부족하여 기존 부품을 교체할 수 없습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	
@@ -796,7 +843,7 @@ func _detach_workbench_part(slot_name: String) -> void:
 	if wb_preset_pending_assembly:
 		_cancel_pending_preset_preview()
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("ℹ️ 프리셋 미리보기가 취소되어 실제 장착 상태로 복원되었습니다.")
+			EventBus.event_logged.emit("[icon:info] 프리셋 미리보기가 취소되어 실제 장착 상태로 복원되었습니다.")
 		return
 	var parts: Dictionary = wb_selected_weapon.get("parts", {})
 	if not parts.has(slot_name): return
@@ -811,7 +858,7 @@ func _detach_workbench_part(slot_name: String) -> void:
 
 	if not to_return.is_empty() and not _return_parts_to_storage(to_return):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 부품을 분리할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 창고와 배낭 공간이 부족하여 부품을 분리할 수 없습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	parts.erase(slot_name)
@@ -853,22 +900,25 @@ func _refresh_workbench_stats_comparison() -> void:
 	var cur_stats = wb_selected_weapon.get("computed_stats", {})
 	var base = wb_base_stats if not wb_base_stats.is_empty() else cur_stats
 	
-	_add_stat_compare_row("💥 데미지", base.get("damage", 20.0), cur_stats.get("damage", 20.0), "%.1f", true)
-	_add_stat_compare_row("🎯 정확도", base.get("accuracy", 70.0), cur_stats.get("accuracy", 70.0), "%d%%", true)
-	_add_stat_compare_row("⚡ 연사력 (RPM)", base.get("rpm", 150), cur_stats.get("rpm", 150), "%d", true)
-	_add_stat_compare_row("🔄 반동 제어", base.get("recoil", 30.0), cur_stats.get("recoil", 30.0), "%.1f", false) # 반동 감소가 좋음
-	_add_stat_compare_row("🔭 유효 사거리", base.get("range", 10.0), cur_stats.get("range", 10.0), "%.1fm", true)
-	_add_stat_compare_row("🔍 조준경 줌", base.get("zoom", 1.0), cur_stats.get("zoom", 1.0), "%.1fx", true)
-	_add_stat_compare_row("📦 탄창 용량", base.get("magazine_size", 15), cur_stats.get("magazine_size", 15), "%d발", true)
-	_add_stat_compare_row("🔊 사격 소음", base.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false) # 소음 감소가 좋음
-	_add_stat_compare_row("⚖️ 총기 무게", base.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false) # 무게 감소가 좋음
+	_add_stat_compare_row("explosion", "데미지", base.get("damage", 20.0), cur_stats.get("damage", 20.0), "%.1f", true)
+	_add_stat_compare_row("target", "정확도", base.get("accuracy", 70.0), cur_stats.get("accuracy", 70.0), "%d%%", true)
+	_add_stat_compare_row("power", "연사력 (RPM)", base.get("rpm", 150), cur_stats.get("rpm", 150), "%d", true)
+	_add_stat_compare_row("refresh", "반동 제어", base.get("recoil", 30.0), cur_stats.get("recoil", 30.0), "%.1f", false) # 반동 감소가 좋음
+	_add_stat_compare_row("scope", "유효 사거리", base.get("range", 10.0), cur_stats.get("range", 10.0), "%.1fm", true)
+	_add_stat_compare_row("zoom", "조준경 줌", base.get("zoom", 1.0), cur_stats.get("zoom", 1.0), "%.1fx", true)
+	_add_stat_compare_row("box", "탄창 용량", base.get("magazine_size", 15), cur_stats.get("magazine_size", 15), "%d발", true)
+	_add_stat_compare_row("sound", "사격 소음", base.get("noise_radius", 600.0), cur_stats.get("noise_radius", 600.0), "%dpx", false) # 소음 감소가 좋음
+	_add_stat_compare_row("weight", "총기 무게", base.get("weight", 2.0), cur_stats.get("weight", 2.0), "%.2fkg", false) # 무게 감소가 좋음
 	_build_repair_controls()
 	
 	if not wb_selected_weapon.is_empty():
 		var sep2 = HSeparator.new()
 		wb_stats_vbox.add_child(sep2)
 		var test_btn = Button.new()
-		test_btn.text = "🎯 사격 시험 (Test Fire)"
+		if UiIconManager:
+			UiIconManager.set_button(test_btn, "target", "사격 시험 (Test Fire)", 15)
+		else:
+			test_btn.text = "사격 시험 (Test Fire)"
 		test_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		test_btn.pressed.connect(_open_shooting_range_test)
 		wb_stats_vbox.add_child(test_btn)
@@ -925,10 +975,12 @@ func _build_repair_controls() -> void:
 	var cur_scrap = _get_total_scrap_count()
 	
 	var dur_lbl = Label.new()
-	dur_lbl.text = "🛠️ 총기 내구도: %.1f / %.0f" % [cur_dur, max_dur]
+	dur_lbl.text = "총기 내구도: %.1f / %.0f" % [cur_dur, max_dur]
 	dur_lbl.add_theme_font_size_override("font_size", 11)
 	dur_lbl.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5) if missing <= 0.1 else Color(1.0, 0.78, 0.3))
 	wb_stats_vbox.add_child(dur_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(dur_lbl, "tools", "", 13, 5)
 	
 	var btn_hbox = HBoxContainer.new()
 	btn_hbox.add_theme_constant_override("separation", 4)
@@ -936,7 +988,15 @@ func _build_repair_controls() -> void:
 	var rub_btn = Button.new()
 	rub_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	rub_btn.add_theme_font_size_override("font_size", 10)
-	rub_btn.text = "🔧 루블 수리 (%d RUB)" % rub_cost if missing > 0.1 else "✅ 내구도 100%"
+	if UiIconManager:
+		UiIconManager.set_button(
+			rub_btn,
+			"wrench_blue" if missing > 0.1 else "ok",
+			"루블 수리 (%d RUB)" % rub_cost if missing > 0.1 else "내구도 100%",
+			13
+		)
+	else:
+		rub_btn.text = "루블 수리 (%d RUB)" % rub_cost if missing > 0.1 else "내구도 100%"
 	rub_btn.disabled = (missing <= 0.1 or cur_rubles < rub_cost)
 	rub_btn.pressed.connect(func(): _repair_selected_weapon(false))
 	btn_hbox.add_child(rub_btn)
@@ -944,7 +1004,15 @@ func _build_repair_controls() -> void:
 	var scrap_btn = Button.new()
 	scrap_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	scrap_btn.add_theme_font_size_override("font_size", 10)
-	scrap_btn.text = "🔩 고철 수리 (%d/%d)" % [cur_scrap, scrap_cost] if missing > 0.1 else "🔩 수리 불필요"
+	if UiIconManager:
+		UiIconManager.set_button(
+			scrap_btn,
+			"bolt",
+			"고철 수리 (%d/%d)" % [cur_scrap, scrap_cost] if missing > 0.1 else "수리 불필요",
+			13
+		)
+	else:
+		scrap_btn.text = "고철 수리 (%d/%d)" % [cur_scrap, scrap_cost] if missing > 0.1 else "수리 불필요"
 	scrap_btn.disabled = (missing <= 0.1 or cur_scrap < scrap_cost)
 	scrap_btn.pressed.connect(func(): _repair_selected_weapon(true))
 	btn_hbox.add_child(scrap_btn)
@@ -961,13 +1029,16 @@ func _build_repair_controls() -> void:
 		var a_miss = max(0.0, a_max - a_cur)
 		var a_rub = calculate_repair_cost_rubles(a_cur, a_max)
 		var a_scr = calculate_repair_cost_scrap(a_cur, a_max)
-		var slot_title = "🪖 헬멧" if a_slot == "helmet" else "🦺 방탄복"
+		var slot_title = "헬멧" if a_slot == "helmet" else "방탄복"
+		var slot_icon = "helmet" if a_slot == "helmet" else "vest"
 		
 		var a_row = HBoxContainer.new()
 		a_row.add_theme_constant_override("separation", 4)
+		if UiIconManager:
+			a_row.add_child(UiIconManager.create_icon_rect(slot_icon, 13))
 		var a_lbl = Label.new()
 		a_lbl.text = "%s (%.0f/%.0f)" % [slot_title, a_cur, a_max]
-		a_lbl.custom_minimum_size = Vector2(92, 0)
+		a_lbl.custom_minimum_size = Vector2(76, 0)
 		a_lbl.add_theme_font_size_override("font_size", 10)
 		a_row.add_child(a_lbl)
 		
@@ -1005,7 +1076,7 @@ func _repair_selected_weapon(use_scrap: bool) -> void:
 		if _get_total_scrap_count() < scrap_cost:
 			return
 		_show_confirm_dialog(
-			"🔧 무기 수리 확인",
+			"[icon:wrench_blue] 무기 수리 확인",
 			"%s 내구도(%.0f → %.0f)를 복구하시겠습니까?\n소모 비용: 고철 %d개" % [w_name, cur_dur, max_dur, scrap_cost],
 			"고철 %d개 소모 수리" % scrap_cost,
 			func(): _execute_repair_selected_weapon(true)
@@ -1016,7 +1087,7 @@ func _repair_selected_weapon(use_scrap: bool) -> void:
 		if cur_rubles < rub_cost:
 			return
 		_show_confirm_dialog(
-			"🔧 무기 수리 확인",
+			"[icon:wrench_blue] 무기 수리 확인",
 			"%s 내구도(%.0f → %.0f)를 수리하시겠습니까?\n소모 비용: %d RUB (보유: %d RUB)" % [w_name, cur_dur, max_dur, rub_cost, cur_rubles],
 			"%d RUB 결제 수리" % rub_cost,
 			func(): _execute_repair_selected_weapon(false)
@@ -1067,7 +1138,7 @@ func _repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
 		if _get_total_scrap_count() < scrap_cost:
 			return
 		_show_confirm_dialog(
-			"🛡️ 방어구 수리 확인",
+			"[icon:shield] 방어구 수리 확인",
 			"%s 내구도(%.0f → %.0f)를 복구하시겠습니까?\n소모 비용: 고철 %d개" % [a_name, cur_dur, max_dur, scrap_cost],
 			"고철 %d개 소모 수리" % scrap_cost,
 			func(): _execute_repair_equipped_armor(slot_key, true)
@@ -1078,7 +1149,7 @@ func _repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
 		if cur_rubles < rub_cost:
 			return
 		_show_confirm_dialog(
-			"🛡️ 방어구 수리 확인",
+			"[icon:shield] 방어구 수리 확인",
 			"%s 내구도(%.0f → %.0f)를 수리하시겠습니까?\n소모 비용: %d RUB (보유: %d RUB)" % [a_name, cur_dur, max_dur, rub_cost, cur_rubles],
 			"%d RUB 결제 수리" % rub_cost,
 			func(): _execute_repair_equipped_armor(slot_key, false)
@@ -1114,13 +1185,16 @@ func _execute_repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
 	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
 	_refresh_workbench_stats_comparison()
 
-func _add_stat_compare_row(title: String, base_val: float, cur_val: float, fmt: String, higher_is_better: bool) -> void:
+func _add_stat_compare_row(icon_key: String, title: String, base_val: float, cur_val: float, fmt: String, higher_is_better: bool) -> void:
 	var row = HBoxContainer.new()
 	row.add_theme_constant_override("separation", 4)
 	
+	if UiIconManager and icon_key != "":
+		row.add_child(UiIconManager.create_icon_rect(icon_key, 13))
+	
 	var t_lbl = Label.new()
 	t_lbl.text = title
-	t_lbl.custom_minimum_size = Vector2(100, 0)
+	t_lbl.custom_minimum_size = Vector2(84, 0)
 	t_lbl.add_theme_font_size_override("font_size", 11)
 	t_lbl.add_theme_color_override("font_color", Color(0.8, 0.85, 0.9))
 	row.add_child(t_lbl)
@@ -1161,7 +1235,10 @@ func _populate_workbench_presets() -> void:
 	
 	for p in presets:
 		var btn = Button.new()
-		btn.text = p["name"]
+		if UiIconManager:
+			UiIconManager.set_button(btn, String(p.get("icon", "preset")), String(p["name"]), 15)
+		else:
+			btn.text = String(p["name"])
 		btn.custom_minimum_size = Vector2(0, 30)
 		btn.add_theme_font_size_override("font_size", 12)
 		btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
@@ -1204,10 +1281,17 @@ func _apply_workbench_preset(preset_dict: Dictionary) -> void:
 	
 	if wb_preset_buy_btn:
 		if wb_missing_preset_parts.is_empty():
-			wb_preset_buy_btn.text = "🔧 보유 부품으로 프리셋 조립 확정 (0 RUB)"
+			if UiIconManager:
+				UiIconManager.set_button(wb_preset_buy_btn, "wrench_blue", "보유 부품으로 프리셋 조립 확정 (0 RUB)", 15)
+			else:
+				wb_preset_buy_btn.text = "보유 부품으로 프리셋 조립 확정 (0 RUB)"
 			wb_preset_buy_btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
 		else:
-			wb_preset_buy_btn.text = "🛒 부족 부품 %d종 구매 후 조립: %d RUB" % [wb_missing_preset_parts.size(), wb_missing_preset_cost]
+			var buy_txt := "부족 부품 %d종 구매 후 조립: %d RUB" % [wb_missing_preset_parts.size(), wb_missing_preset_cost]
+			if UiIconManager:
+				UiIconManager.set_button(wb_preset_buy_btn, "cart", buy_txt, 15)
+			else:
+				wb_preset_buy_btn.text = buy_txt
 			wb_preset_buy_btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 			
 	if SoundManager: SoundManager.play("menu_select")
@@ -1219,14 +1303,14 @@ func _apply_workbench_preset(preset_dict: Dictionary) -> void:
 func _buy_and_assemble_preset() -> void:
 	if wb_current_preset_parts.is_empty():
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 먼저 적용할 프리셋을 선택해주세요.")
+			EventBus.event_logged.emit("[icon:warn] 먼저 적용할 프리셋을 선택해주세요.")
 		return
 
 	var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
 	if wb_missing_preset_cost > 0:
 		if cur_rubles < wb_missing_preset_cost:
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("❌ 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [wb_missing_preset_cost, cur_rubles])
+				EventBus.event_logged.emit("[icon:error] 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [wb_missing_preset_cost, cur_rubles])
 			if SoundManager: SoundManager.play("hit_melee")
 			return
 		var part_names: Array[String] = []
@@ -1236,7 +1320,7 @@ func _buy_and_assemble_preset() -> void:
 		var extra_cnt := wb_missing_preset_parts.size() - part_names.size()
 		var list_txt := ", ".join(part_names) + (" 외 %d종" % extra_cnt if extra_cnt > 0 else "")
 		_show_confirm_dialog(
-			"🛒 부족 부품 구매 후 조립 확인",
+			"[icon:cart] 부족 부품 구매 후 조립 확인",
 			"미보유 부품 %d종(%s)을 시장가 %d RUB에 즉시 구매하여 조립하시겠습니까?\n(현재 보유 자금: %d RUB → 결제 후: %d RUB)" % [
 				wb_missing_preset_parts.size(), list_txt, wb_missing_preset_cost, cur_rubles, cur_rubles - wb_missing_preset_cost
 			],
@@ -1285,14 +1369,14 @@ func _execute_buy_and_assemble_preset() -> void:
 	var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
 	if recalc_cost > 0 and cur_rubles < recalc_cost:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("❌ 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [recalc_cost, cur_rubles])
+			EventBus.event_logged.emit("[icon:error] 자금이 부족합니다! (필요: %d RUB / 보유: %d RUB)" % [recalc_cost, cur_rubles])
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 
 	# 기존 장착 잉여 부품 먼저 창고/배낭 반환 (공간 부족 시 거래 중단)
 	if not surplus_parts.is_empty() and not _return_parts_to_storage(surplus_parts):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 기존 장착 부품을 반환할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 창고와 배낭 공간이 부족하여 기존 장착 부품을 반환할 수 없습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 
@@ -1303,10 +1387,10 @@ func _execute_buy_and_assemble_preset() -> void:
 			GameManager.current_world_data["player"]["rubles"] = cur_rubles
 		money_spent.emit(recalc_cost)
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("💰 %d RUB로 부족한 부품 %d종을 시장에서 즉시 구매하여 조립했습니다!" % [recalc_cost, missing_buy_parts.size()])
+			EventBus.event_logged.emit("[icon:money] %d RUB로 부족한 부품 %d종을 시장에서 즉시 구매하여 조립했습니다!" % [recalc_cost, missing_buy_parts.size()])
 	else:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("✅ 보유 중인 부품으로 프리셋 조립을 완료했습니다.")
+			EventBus.event_logged.emit("[icon:ok] 보유 중인 부품으로 프리셋 조립을 완료했습니다.")
 
 	# 보유 중이던 신규 부품만 인벤토리에서 차감
 	for cid in inv_consume_parts:
@@ -1325,7 +1409,10 @@ func _execute_buy_and_assemble_preset() -> void:
 	wb_missing_preset_cost = 0
 	wb_missing_preset_parts.clear()
 	if wb_preset_buy_btn:
-		wb_preset_buy_btn.text = "✅ 프리셋 조립 완료"
+		if UiIconManager:
+			UiIconManager.set_button(wb_preset_buy_btn, "ok", "프리셋 조립 완료", 15)
+		else:
+			wb_preset_buy_btn.text = "프리셋 조립 완료"
 		wb_preset_buy_btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.5))
 		
 	if SoundManager: SoundManager.play("menu_select")
@@ -1350,7 +1437,7 @@ func _save_workbench_weapon() -> void:
 	if wb_selected_weapon.is_empty(): return
 	if wb_preset_pending_assembly or not wb_missing_preset_parts.is_empty():
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 프리셋 미리보기 상태입니다. 먼저 [구매 후 조립] 버튼으로 조립을 완료하세요.")
+			EventBus.event_logged.emit("[icon:warn] 프리셋 미리보기 상태입니다. 먼저 [구매 후 조립] 버튼으로 조립을 완료하세요.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	
@@ -1363,7 +1450,7 @@ func _save_workbench_weapon() -> void:
 					
 	weapon_saved.emit(wb_selected_weapon, wb_weapon_source)
 	if EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("💾 [%s] 총기 모딩이 성공적으로 저장/장착되었습니다!" % wb_selected_weapon["name"])
+		EventBus.event_logged.emit("[icon:save] [%s] 총기 모딩이 성공적으로 저장/장착되었습니다!" % wb_selected_weapon["name"])
 	if SoundManager: SoundManager.play("menu_select")
 	_populate_workbench_weapon_list()
 

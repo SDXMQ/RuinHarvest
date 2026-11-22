@@ -38,7 +38,7 @@ extends Control
 # 결과 팝업
 @onready var result_dialog: Panel = $ResultDialog
 @onready var result_title: Label = $ResultDialog/VBox/Title
-@onready var result_desc: Label = $ResultDialog/VBox/Desc
+@onready var result_desc: RichTextLabel = $ResultDialog/VBox/Desc
 @onready var result_close_btn: Button = $ResultDialog/VBox/CloseBtn
 
 const TooltipScene = preload("res://scenes/ui/item_tooltip.tscn")
@@ -89,7 +89,7 @@ var trader_loyalty_label: Label = null
 var trader_loyalty_bar: ProgressBar = null
 var sell_grid_header_lbl: Label = null
 var sell_receipt_list_vbox: VBoxContainer = null
-var sell_receipt_summary_lbl: Label = null
+var sell_receipt_summary_lbl: RichTextLabel = null
 var sell_bulk_btn: Button = null
 var trader_mode_tabs: TabContainer = null
 var sell_grids_scroll: ScrollContainer = null
@@ -163,25 +163,34 @@ func _ready() -> void:
 		if GameManager and GameManager.is_sandbox_mode():
 			var tool_btn = Button.new()
 			tool_btn.name = "SandboxToolBtn"
-			tool_btn.text = "🛠️ 샌드박스/치트 도구 (F1)"
+			if UiIconManager:
+				UiIconManager.set_button(tool_btn, "sandbox", "샌드박스/치트 도구 (F1)", 15)
+			else:
+				tool_btn.text = "샌드박스/치트 도구 (F1)"
 			tool_btn.custom_minimum_size = Vector2(0, 32)
 			tool_btn.pressed.connect(_open_item_spawner)
 			top_tools.add_child(tool_btn)
 		
 		var range_btn = Button.new()
-		range_btn.text = "🎯 사격장 (F2)"
+		if UiIconManager:
+			UiIconManager.set_button(range_btn, "target", "사격장 (F2)", 15)
+		else:
+			range_btn.text = "사격장 (F2)"
 		range_btn.custom_minimum_size = Vector2(0, 32)
 		range_btn.pressed.connect(_open_shooting_range)
 		top_tools.add_child(range_btn)
 
 		var settings_btn = Button.new()
 		settings_btn.name = "SettingsBtn"
-		settings_btn.text = "⚙️ 설정 (F11)"
+		if UiIconManager:
+			UiIconManager.set_button(settings_btn, "settings", "설정 (F11)", 15)
+		else:
+			settings_btn.text = "설정 (F11)"
 		settings_btn.custom_minimum_size = Vector2(0, 32)
 		settings_btn.pressed.connect(_open_settings_window)
 		top_tools.add_child(settings_btn)
 	
-	# 상인 버튼 연결
+	# 상인 버튼 연결 및 정적 씬 UI 아이콘 바인딩
 	var prapor_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/PraporBtn
 	var therapist_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/TherapistBtn
 	var fence_btn: Button = $CenterArea/TabContainer/TradersTab/VBox/TraderButtons/FenceBtn
@@ -189,6 +198,25 @@ func _ready() -> void:
 	prapor_btn.pressed.connect(func(): _select_trader("prapor"))
 	therapist_btn.pressed.connect(func(): _select_trader("therapist"))
 	fence_btn.pressed.connect(func(): _select_trader("fence"))
+
+	if UiIconManager:
+		UiIconManager.set_tab_icon(tab_container, 0, "stash")
+		UiIconManager.set_tab_icon(tab_container, 1, "shop")
+		UiIconManager.set_tab_icon(tab_container, 2, "chart_up")
+		UiIconManager.set_tab_icon(tab_container, 3, "wrench")
+		UiIconManager.apply_button_icon(prapor_btn, "gun", "", 16)
+		UiIconManager.apply_button_icon(therapist_btn, "syringe", "", 16)
+		UiIconManager.apply_button_icon(fence_btn, "bolt", "", 16)
+		var p_title := get_node_or_null("CenterArea/TabContainer/StashTab/HBox/PlayerPanel/VBox/Title") as Label
+		if p_title: UiIconManager.set_label_icon(p_title, "backpack", "", 16, 6)
+		var e_title := get_node_or_null("CenterArea/TabContainer/StashTab/HBox/EquipPanel/VBox/Title") as Label
+		if e_title: UiIconManager.set_label_icon(e_title, "person", "", 16, 6)
+		var s_title := get_node_or_null("CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox/Title") as Label
+		if s_title: UiIconManager.set_label_icon(s_title, "stash", "", 16, 6)
+		var sell_title := get_node_or_null("CenterArea/TabContainer/TradersTab/VBox/SellArea/SellTitle") as Label
+		if sell_title: UiIconManager.set_label_icon(sell_title, "money", "", 14, 5)
+		var reg_title := get_node_or_null("CenterArea/TabContainer/MarketTab/VBox/RegisterArea/RegisterTitle") as Label
+		if reg_title: UiIconManager.set_label_icon(reg_title, "money", "", 14, 5)
 	
 	# 2D 인벤토리 매니저 인스턴스화
 	player_grid_mgr = InventoryGrid.new()
@@ -219,7 +247,10 @@ func _ready() -> void:
 		var p_btn_row = HBoxContainer.new()
 		p_btn_row.add_theme_constant_override("separation", 6)
 		var p_sort_btn = Button.new()
-		p_sort_btn.text = "🔄 배낭 정렬"
+		if UiIconManager:
+			UiIconManager.set_button(p_sort_btn, "refresh", "배낭 정렬", 14)
+		else:
+			p_sort_btn.text = "배낭 정렬"
 		p_sort_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		p_sort_btn.add_theme_font_size_override("font_size", 11)
 		p_sort_btn.pressed.connect(func():
@@ -229,7 +260,10 @@ func _ready() -> void:
 		p_btn_row.add_child(p_sort_btn)
 		
 		var deposit_all_btn = Button.new()
-		deposit_all_btn.text = "⏩ 창고로 모두 보관"
+		if UiIconManager:
+			UiIconManager.set_button(deposit_all_btn, "deposit_all", "창고로 모두 보관", 14)
+		else:
+			deposit_all_btn.text = "창고로 모두 보관"
 		deposit_all_btn.tooltip_text = "배낭의 전리품을 창고로 일괄 보관합니다. (2x2 안전 파우치 내 열쇠/키카드/귀중품은 안전하게 보호됩니다)"
 		deposit_all_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		deposit_all_btn.add_theme_font_size_override("font_size", 11)
@@ -266,7 +300,10 @@ func _ready() -> void:
 	var stash_vbox = get_node_or_null("CenterArea/TabContainer/StashTab/HBox/StashPanel/VBox")
 	if stash_vbox:
 		var s_sort_btn = Button.new()
-		s_sort_btn.text = "🔄 창고 자동 정렬 & 스택 병합  (Ctrl+클릭 / 우클릭: 빠른 이동)"
+		if UiIconManager:
+			UiIconManager.set_button(s_sort_btn, "refresh", "창고 자동 정렬 & 스택 병합  (Ctrl+클릭 / 우클릭: 빠른 이동)", 14)
+		else:
+			s_sort_btn.text = "창고 자동 정렬 & 스택 병합  (Ctrl+클릭 / 우클릭: 빠른 이동)"
 		s_sort_btn.add_theme_font_size_override("font_size", 11)
 		s_sort_btn.pressed.connect(func():
 			stash_grid_mgr.sort_items()
@@ -575,11 +612,17 @@ func _update_insurance_ui() -> void:
 		return
 	var is_insured = GameManager.current_world_data.get("player", {}).get("insured", false)
 	if is_insured:
-		insurance_btn.text = "🛡️ 장비 보험 적용됨 (사망 시 장착 장비 보존)"
+		if UiIconManager:
+			UiIconManager.set_button(insurance_btn, "shield_green", "장비 보험 적용됨 (사망 시 장착 장비 보존)", 15)
+		else:
+			insurance_btn.text = "장비 보험 적용됨 (사망 시 장착 장비 보존)"
 		insurance_btn.add_theme_color_override("font_color", Color(0.4, 1.0, 0.55))
 		insurance_btn.disabled = true
 	else:
-		insurance_btn.text = "🛡️ 장비 보험 가입 (1,500 RUB)"
+		if UiIconManager:
+			UiIconManager.set_button(insurance_btn, "shield", "장비 보험 가입 (1,500 RUB)", 15)
+		else:
+			insurance_btn.text = "장비 보험 가입 (1,500 RUB)"
 		insurance_btn.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 		var rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0))
 		insurance_btn.disabled = (rubles < 1500)
@@ -645,7 +688,7 @@ func _apply_backpack_grid_size() -> void:
 				overflow_it["amount"] = rem
 				var rem_p = player_grid_mgr.auto_add_item(overflow_it.get("id", ""), rem, overflow_it)
 				if rem_p > 0 and EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 창고 공간이 부족하여 일부 아이템(%s)을 보관하지 못했습니다!" % overflow_it.get("name", overflow_it.get("id", "")))
+					EventBus.event_logged.emit("[icon:warn] 창고 공간이 부족하여 일부 아이템(%s)을 보관하지 못했습니다!" % overflow_it.get("name", overflow_it.get("id", "")))
 			
 	if player_grid_control:
 		var p_scroll := player_grid_control.get_parent() as ScrollContainer
@@ -765,7 +808,7 @@ func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool, allow_
 			var inner_arr = item.get("inner_items", [])
 			if inner_arr is Array and not inner_arr.is_empty():
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+					EventBus.event_logged.emit("[icon:warn] 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
 				if SoundManager: SoundManager.play("hit_melee")
 				return
 		src_grid.remove_item_by_uid(item.get("uid", ""))
@@ -1041,13 +1084,13 @@ func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: in
 		elif dest_grid.has_secure_container and cell_x < 2 and cell_y < 2:
 			if not dest_grid.is_allowed_in_secure_container(item.get("id", "")):
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🔒 [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
+					EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
 			elif cell_x + place_w > 2 or cell_y + place_h > 2:
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("🔒 [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
+					EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
 			else:
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 해당 슬롯에 이미 다른 아이템이 있습니다.")
+					EventBus.event_logged.emit("[icon:warn] 해당 슬롯에 이미 다른 아이템이 있습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		
 	_end_drag()
@@ -1118,7 +1161,7 @@ func _try_equip_hideout_item(slot_name: String) -> void:
 	
 	if not _is_slot_compatible(item_id, slot_name):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
+			EventBus.event_logged.emit("[icon:warn] [%s] 슬롯에 장착할 수 없는 아이템입니다." % slot_name)
 		_end_drag()
 		return
 
@@ -1126,7 +1169,7 @@ func _try_equip_hideout_item(slot_name: String) -> void:
 		var inner_arr = item.get("inner_items", [])
 		if inner_arr is Array and not inner_arr.is_empty():
 			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("⚠️ 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
+				EventBus.event_logged.emit("[icon:warn] 내부에 아이템이 들어있는 가방은 비운 후 장착할 수 있습니다.")
 			if SoundManager: SoundManager.play("hit_melee")
 			_end_drag()
 			return
@@ -1172,7 +1215,7 @@ func _try_equip_hideout_item(slot_name: String) -> void:
 				if restore_rem > 0:
 					player_grid_mgr.auto_add_item(item.get("id", ""), restore_rem, item)
 				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("⚠️ 창고와 가방 공간이 부족하여 장비를 교체할 수 없습니다.")
+					EventBus.event_logged.emit("[icon:warn] 창고와 가방 공간이 부족하여 장비를 교체할 수 없습니다.")
 				_update_equipment_ui()
 				_end_drag()
 				return
@@ -1185,15 +1228,15 @@ func _is_slot_compatible(item_id: String, slot_name: String) -> bool:
 	return InventoryUIHelper.is_slot_compatible(item_id, slot_name)
 
 func _update_equipment_ui() -> void:
-	_render_equip_slot_button(helmet_slot, "helmet", "🪖 헬멧")
-	_render_equip_slot_button(vest_slot, "vest", "🦺 방탄복")
-	_render_equip_slot_button(backpack_slot, "backpack", "🎒 배낭 (용량 결정)")
-	_render_equip_slot_button(bottom_slot, "bottom", "👟 하의/신발")
+	_render_equip_slot_button(helmet_slot, "helmet", "헬멧")
+	_render_equip_slot_button(vest_slot, "vest", "방탄복")
+	_render_equip_slot_button(backpack_slot, "backpack", "배낭 (용량 결정)")
+	_render_equip_slot_button(bottom_slot, "bottom", "하의/신발")
 	
-	_render_equip_slot_button(primary1_slot, "primary1", "🔫 주무기 1")
-	_render_equip_slot_button(primary2_slot, "primary2", "🔫 주무기 2")
-	_render_equip_slot_button(sidearm_slot, "sidearm", "🗡️ 보조 무기")
-	_render_equip_slot_button(throwable_slot, "throwable", "💣 투척 무기")
+	_render_equip_slot_button(primary1_slot, "primary1", "주무기 1")
+	_render_equip_slot_button(primary2_slot, "primary2", "주무기 2")
+	_render_equip_slot_button(sidearm_slot, "sidearm", "보조 무기")
+	_render_equip_slot_button(throwable_slot, "throwable", "투척 무기")
 	if is_instance_valid(character_paperdoll_preview):
 		character_paperdoll_preview.update_equipment(equipment_data)
 
@@ -1230,6 +1273,8 @@ func _setup_traders_bulk_ui() -> void:
 	trader_loyalty_label.add_theme_font_size_override("font_size", 12)
 	trader_loyalty_label.add_theme_color_override("font_color", Color(0.95, 0.85, 0.38))
 	l_hbox.add_child(trader_loyalty_label)
+	if UiIconManager:
+		UiIconManager.set_label_icon(trader_loyalty_label, "star", "", 14, 5)
 
 	trader_loyalty_bar = ProgressBar.new()
 	trader_loyalty_bar.custom_minimum_size = Vector2(210, 16)
@@ -1254,17 +1299,21 @@ func _setup_traders_bulk_ui() -> void:
 
 	# [서브 탭 0] 상인 공급 품목 구매
 	var buy_tab := VBoxContainer.new()
-	buy_tab.name = "🛒 물품 구매"
+	buy_tab.name = "물품 구매"
 	buy_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	buy_tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	buy_tab.add_theme_constant_override("separation", 6)
 	trader_mode_tabs.add_child(buy_tab)
+	if UiIconManager:
+		UiIconManager.set_tab_icon_by_control(trader_mode_tabs, buy_tab, "cart")
 
 	var shop_hdr := Label.new()
-	shop_hdr.text = "🛒 상인 공급 품목 (안정 공급 · 등급별 해금)"
+	shop_hdr.text = "상인 공급 품목 (안정 공급 · 등급별 해금)"
 	shop_hdr.add_theme_font_size_override("font_size", 12)
 	shop_hdr.add_theme_color_override("font_color", Color(0.75, 0.88, 1.0))
 	buy_tab.add_child(shop_hdr)
+	if UiIconManager:
+		UiIconManager.set_label_icon(shop_hdr, "cart", "", 14, 5)
 
 	if old_shop_scroll:
 		t_vbox.remove_child(old_shop_scroll)
@@ -1278,11 +1327,13 @@ func _setup_traders_bulk_ui() -> void:
 
 	# [서브 탭 1] 아이템 일괄 판매 (2D 다중 선택 + 영수증 정산)
 	var sell_tab := HBoxContainer.new()
-	sell_tab.name = "💰 아이템 판매"
+	sell_tab.name = "아이템 판매"
 	sell_tab.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	sell_tab.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	sell_tab.add_theme_constant_override("separation", 12)
 	trader_mode_tabs.add_child(sell_tab)
+	if UiIconManager:
+		UiIconManager.set_tab_icon_by_control(trader_mode_tabs, sell_tab, "money")
 
 	# [판매 좌측 컬럼] 자동 담기 토글 + 배낭/창고 2D 다중 선택 & Marquee 드래그 영역
 	var center_col := VBoxContainer.new()
@@ -1300,7 +1351,10 @@ func _setup_traders_bulk_ui() -> void:
 
 	trader_btn_valuables = Button.new()
 	trader_btn_valuables.theme_type_variation = &"SmallButton"
-	trader_btn_valuables.text = "🧹 환금템 모두 담기"
+	if UiIconManager:
+		UiIconManager.set_button(trader_btn_valuables, "broom", "환금템 모두 담기", 14)
+	else:
+		trader_btn_valuables.text = "환금템 모두 담기"
 	trader_btn_valuables.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	trader_btn_valuables.add_theme_font_size_override("font_size", 11)
 	trader_btn_valuables.pressed.connect(func(): _auto_select_bulk_sell("valuables"))
@@ -1308,7 +1362,10 @@ func _setup_traders_bulk_ui() -> void:
 
 	trader_btn_non_gear = Button.new()
 	trader_btn_non_gear.theme_type_variation = &"SmallButton"
-	trader_btn_non_gear.text = "📦 장비/무기 제외 모두 담기"
+	if UiIconManager:
+		UiIconManager.set_button(trader_btn_non_gear, "box", "장비/무기 제외 모두 담기", 14)
+	else:
+		trader_btn_non_gear.text = "장비/무기 제외 모두 담기"
 	trader_btn_non_gear.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	trader_btn_non_gear.add_theme_font_size_override("font_size", 11)
 	trader_btn_non_gear.pressed.connect(func(): _auto_select_bulk_sell("non_gear"))
@@ -1316,8 +1373,11 @@ func _setup_traders_bulk_ui() -> void:
 
 	var btn_clear := Button.new()
 	btn_clear.theme_type_variation = &"DangerButton"
-	btn_clear.text = "✖ 해제"
-	btn_clear.custom_minimum_size = Vector2(64, 0)
+	if UiIconManager:
+		UiIconManager.set_button(btn_clear, "close", "해제", 13)
+	else:
+		btn_clear.text = "해제"
+	btn_clear.custom_minimum_size = Vector2(72, 0)
 	btn_clear.add_theme_font_size_override("font_size", 11)
 	btn_clear.pressed.connect(func():
 		selected_sell_uids.clear()
@@ -1326,10 +1386,12 @@ func _setup_traders_bulk_ui() -> void:
 	btn_bar.add_child(btn_clear)
 
 	sell_grid_header_lbl = Label.new()
-	sell_grid_header_lbl.text = "💡 Alt+좌클릭 / 우클릭: 담기 토글 | 빈 공간 드래그: 범위(Marquee) 선택 | [L]: 잠금"
+	sell_grid_header_lbl.text = "Alt+좌클릭 / 우클릭: 담기 토글 | 빈 공간 드래그: 범위(Marquee) 선택 | [L]: 잠금"
 	sell_grid_header_lbl.add_theme_font_size_override("font_size", 10)
 	sell_grid_header_lbl.add_theme_color_override("font_color", Color(0.76, 0.84, 0.92))
 	center_col.add_child(sell_grid_header_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(sell_grid_header_lbl, "tip", "", 13, 5)
 
 	sell_grids_scroll = ScrollContainer.new()
 	sell_grids_scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1344,10 +1406,12 @@ func _setup_traders_bulk_ui() -> void:
 	sell_grids_scroll.add_child(grids_vbox)
 
 	var p_hdr := Label.new()
-	p_hdr.text = "🎒 내 배낭 (좌상단 2x2 SECURE & 🔒잠금 자동 보호)"
+	p_hdr.text = "내 배낭 (좌상단 2x2 SECURE & 잠금 자동 보호)"
 	p_hdr.add_theme_font_size_override("font_size", 11)
 	p_hdr.add_theme_color_override("font_color", Color(0.95, 0.80, 0.35))
 	grids_vbox.add_child(p_hdr)
+	if UiIconManager:
+		UiIconManager.set_label_icon(p_hdr, "backpack", "", 14, 5)
 
 	var p_panel := PanelContainer.new()
 	p_panel.theme_type_variation = &"GridSurfacePanel"
@@ -1371,10 +1435,12 @@ func _setup_traders_bulk_ui() -> void:
 	p_panel.add_child(sell_player_grid_ctrl)
 
 	var s_hdr := Label.new()
-	s_hdr.text = "📦 은신처 창고 (🔒잠금 아이템 제외)"
+	s_hdr.text = "은신처 창고 (잠금 아이템 제외)"
 	s_hdr.add_theme_font_size_override("font_size", 11)
 	s_hdr.add_theme_color_override("font_color", Color(0.55, 0.90, 1.0))
 	grids_vbox.add_child(s_hdr)
+	if UiIconManager:
+		UiIconManager.set_label_icon(s_hdr, "stash", "", 14, 5)
 
 	var s_panel := PanelContainer.new()
 	s_panel.theme_type_variation = &"GridSurfacePanel"
@@ -1415,12 +1481,14 @@ func _setup_traders_bulk_ui() -> void:
 	right_panel.add_child(r_vbox)
 
 	var r_title := Label.new()
-	r_title.text = "🧾 일괄 판매 정산 영수증"
+	r_title.text = "일괄 판매 정산 영수증"
 	if PixelAssetManager:
 		r_title.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
 	r_title.add_theme_font_size_override("font_size", 12)
 	r_title.add_theme_color_override("font_color", Color(0.38, 0.98, 0.72))
 	r_vbox.add_child(r_title)
+	if UiIconManager:
+		UiIconManager.set_label_icon(r_title, "receipt", "", 14, 5)
 
 	var r_scroll := ScrollContainer.new()
 	r_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -1431,16 +1499,22 @@ func _setup_traders_bulk_ui() -> void:
 	sell_receipt_list_vbox.add_theme_constant_override("separation", 4)
 	r_scroll.add_child(sell_receipt_list_vbox)
 
-	sell_receipt_summary_lbl = Label.new()
+	sell_receipt_summary_lbl = RichTextLabel.new()
+	sell_receipt_summary_lbl.bbcode_enabled = true
+	sell_receipt_summary_lbl.fit_content = true
+	sell_receipt_summary_lbl.scroll_active = false
 	sell_receipt_summary_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	sell_receipt_summary_lbl.add_theme_font_size_override("font_size", 12)
-	sell_receipt_summary_lbl.add_theme_color_override("font_color", Color(0.92, 0.95, 0.98))
+	sell_receipt_summary_lbl.add_theme_font_size_override("normal_font_size", 12)
+	sell_receipt_summary_lbl.add_theme_color_override("default_color", Color(0.92, 0.95, 0.98))
 	r_vbox.add_child(sell_receipt_summary_lbl)
 
 	sell_bulk_btn = Button.new()
 	sell_bulk_btn.theme_type_variation = &"PrimaryButton"
 	sell_bulk_btn.custom_minimum_size = Vector2(0, 38)
-	sell_bulk_btn.text = "💰 일괄 판매 정산 (Space)"
+	if UiIconManager:
+		UiIconManager.set_button(sell_bulk_btn, "money", "일괄 판매 정산 (Space)", 15)
+	else:
+		sell_bulk_btn.text = "일괄 판매 정산 (Space)"
 	sell_bulk_btn.pressed.connect(_execute_bulk_sell)
 	r_vbox.add_child(sell_bulk_btn)
 
@@ -1471,10 +1545,12 @@ func _setup_market_controls() -> void:
 	market_main_hbox.add_child(listings_col)
 
 	var listings_hdr := Label.new()
-	listings_hdr.text = "🏪 오늘의 2.5x 긴급 수배 & 암시장 매물"
+	listings_hdr.text = "오늘의 2.5x 긴급 수배 & 암시장 매물"
 	listings_hdr.add_theme_font_size_override("font_size", 12)
 	listings_hdr.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	listings_col.add_child(listings_hdr)
+	if UiIconManager:
+		UiIconManager.set_label_icon(listings_hdr, "shop", "", 14, 5)
 
 	if old_market_scroll:
 		m_vbox.remove_child(old_market_scroll)
@@ -1502,6 +1578,8 @@ func _setup_market_controls() -> void:
 	market_slot_label.add_theme_font_size_override("font_size", 12)
 	market_slot_label.add_theme_color_override("font_color", Color(0.45, 0.90, 1.0))
 	reg_col.add_child(market_slot_label)
+	if UiIconManager:
+		UiIconManager.set_label_icon(market_slot_label, "money", "", 14, 5)
 
 	var guide_panel := PanelContainer.new()
 	guide_panel.name = "MarketGuidePanel"
@@ -1516,11 +1594,13 @@ func _setup_market_controls() -> void:
 	guide_sb.content_margin_bottom = 5
 	guide_panel.add_theme_stylebox_override("panel", guide_sb)
 	var guide_lbl := Label.new()
-	guide_lbl.text = "📘 위탁 판매 안내: 아이템 선택 → 희망 배율(x0.9~x2.0) 설정 → 등록 시 선불 수수료(5~35%) 차감\n레이드 귀환(출격 1회) 후 자동 판매·정산되며, 미판매/만료 품목은 은신처 창고로 자동 반환됩니다."
+	guide_lbl.text = "위탁 판매 안내: 아이템 선택 → 희망 배율(x0.9~x2.0) 설정 → 등록 시 선불 수수료(5~35%) 차감\n레이드 귀환(출격 1회) 후 자동 판매·정산되며, 미판매/만료 품목은 은신처 창고로 자동 반환됩니다."
 	guide_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	guide_lbl.add_theme_font_size_override("font_size", 10)
 	guide_lbl.add_theme_color_override("font_color", Color(0.76, 0.88, 0.96))
 	guide_panel.add_child(guide_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(guide_lbl, "book", "", 14, 6)
 	reg_col.add_child(guide_panel)
 
 	# 1. 이름 검색창 + 초기화 + 매칭 개수 표시
@@ -1528,10 +1608,13 @@ func _setup_market_controls() -> void:
 	search_row.add_theme_constant_override("separation", 6)
 	reg_col.add_child(search_row)
 
+	if UiIconManager:
+		search_row.add_child(UiIconManager.create_icon_rect("search", 15))
+
 	market_search_input = LineEdit.new()
 	market_search_input.name = "MarketSearchInput"
 	market_search_input.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	market_search_input.placeholder_text = "🔍 아이템 이름 검색 (예: 그래픽카드, 열쇠, SSD...)"
+	market_search_input.placeholder_text = "아이템 이름 검색 (예: 그래픽카드, 열쇠, SSD...)"
 	market_search_input.clear_button_enabled = true
 	market_search_input.text_changed.connect(func(new_txt: String):
 		market_search_text = new_txt.strip_edges()
@@ -1628,10 +1711,12 @@ func _setup_market_controls() -> void:
 	market_grids_scroll.add_child(grids_vbox)
 
 	var mp_hdr := Label.new()
-	mp_hdr.text = "🎒 내 배낭 (클릭: 선택 | 더블클릭·Ctrl+클릭: 즉시 등록 | [L]: 잠금)"
+	mp_hdr.text = "내 배낭 (클릭: 선택 | 더블클릭·Ctrl+클릭: 즉시 등록 | [L]: 잠금)"
 	mp_hdr.add_theme_font_size_override("font_size", 11)
 	mp_hdr.add_theme_color_override("font_color", Color(0.95, 0.82, 0.36))
 	grids_vbox.add_child(mp_hdr)
+	if UiIconManager:
+		UiIconManager.set_label_icon(mp_hdr, "backpack", "", 14, 5)
 
 	var mp_panel := PanelContainer.new()
 	mp_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1656,10 +1741,12 @@ func _setup_market_controls() -> void:
 	mp_panel.add_child(market_player_grid_ctrl)
 
 	var ms_hdr := Label.new()
-	ms_hdr.text = "📦 은신처 창고 (검색/필터 미일치 및 등록 불가 품목은 어둡게 표시됨)"
+	ms_hdr.text = "은신처 창고 (검색/필터 미일치 및 등록 불가 품목은 어둡게 표시됨)"
 	ms_hdr.add_theme_font_size_override("font_size", 11)
 	ms_hdr.add_theme_color_override("font_color", Color(0.55, 0.90, 1.0))
 	grids_vbox.add_child(ms_hdr)
+	if UiIconManager:
+		UiIconManager.set_label_icon(ms_hdr, "stash", "", 14, 5)
 
 	var ms_panel := PanelContainer.new()
 	ms_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -1700,13 +1787,18 @@ func _setup_market_controls() -> void:
 	market_preview_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	market_preview_lbl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	market_preview_lbl.add_theme_font_size_override("font_size", 11)
-	market_preview_lbl.text = "💡 2D 그리드에서 암시장에 등록할 아이템을 클릭하세요."
+	market_preview_lbl.text = "2D 그리드에서 암시장에 등록할 아이템을 클릭하세요."
 	c_hbox.add_child(market_preview_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(market_preview_lbl, "tip", "", 14, 6)
 
 	market_confirm_btn = Button.new()
 	market_confirm_btn.theme_type_variation = &"PrimaryButton"
 	market_confirm_btn.custom_minimum_size = Vector2(148, 36)
-	market_confirm_btn.text = "📈 암시장 등록"
+	if UiIconManager:
+		UiIconManager.set_button(market_confirm_btn, "chart_up", "암시장 등록", 15)
+	else:
+		market_confirm_btn.text = "암시장 등록"
 	market_confirm_btn.disabled = true
 	market_confirm_btn.focus_mode = Control.FOCUS_NONE
 	market_confirm_btn.pressed.connect(_try_register_selected_market_item)
@@ -1734,13 +1826,13 @@ func _refresh_trader_ui() -> void:
 		elif current_trader_id == "prapor":
 			spec_hint = "특화 매입: 무기·탄약·장비·부품 70% (기타 48%)"
 		if cur_lv >= 4:
-			trader_loyalty_label.text = "⭐ 우호도 Lv.4 (최고 등급)  |  완료 의뢰 %d건  |  누적 거래 %d RUB  |  %s" % [q_cnt, spent, spec_hint]
+			trader_loyalty_label.text = "우호도 Lv.4 (최고 등급)  |  완료 의뢰 %d건  |  누적 거래 %d RUB  |  %s" % [q_cnt, spent, spec_hint]
 			trader_loyalty_bar.max_value = 100.0
 			trader_loyalty_bar.value = 100.0
 		else:
 			var nq := int(l_info.get("next_quests", 1))
 			var ns := maxi(1, int(l_info.get("next_spent", 15000)))
-			trader_loyalty_label.text = "⭐ 우호도 Lv.%d ➔ 다음 Lv.%d (의뢰 %d/%d건 · 누적 거래 %d/%d RUB)  |  %s" % [cur_lv, cur_lv + 1, q_cnt, nq, spent, ns, spec_hint]
+			trader_loyalty_label.text = "우호도 Lv.%d → 다음 Lv.%d (의뢰 %d/%d건 · 누적 거래 %d/%d RUB)  |  %s" % [cur_lv, cur_lv + 1, q_cnt, nq, spent, ns, spec_hint]
 			trader_loyalty_bar.max_value = float(ns)
 			trader_loyalty_bar.value = float(mini(spent, ns))
 		trader_loyalty_label.tooltip_text = trader_loyalty_label.text
@@ -1799,8 +1891,17 @@ func _refresh_trader_ui() -> void:
 		
 		var buy_btn = Button.new()
 		buy_btn.theme_type_variation = &"SmallButton"
-		buy_btn.text = ("구매" if is_unlocked else "🔒 Lv.%d" % req_lv)
-		buy_btn.custom_minimum_size = Vector2(68, 30)
+		if is_unlocked:
+			if UiIconManager:
+				UiIconManager.set_button(buy_btn, "", "구매", 13)
+			else:
+				buy_btn.text = "구매"
+		else:
+			if UiIconManager:
+				UiIconManager.set_button(buy_btn, "lock", "Lv.%d" % req_lv, 13)
+			else:
+				buy_btn.text = "Lv.%d" % req_lv
+		buy_btn.custom_minimum_size = Vector2(76, 30)
 		buy_btn.disabled = (not is_unlocked) or (user_rubles < price)
 		if not is_unlocked:
 			buy_btn.tooltip_text = "우호도 Lv.%d 달성 시 해금됩니다." % req_lv
@@ -1854,12 +1955,18 @@ func _update_bulk_sell_toggle_buttons() -> void:
 	if trader_btn_valuables:
 		var v_cands := HideoutProgression.collect_bulk_sell_candidates("valuables", player_grid_mgr, stash_grid_mgr)
 		var v_all := _are_all_bulk_candidates_selected(v_cands)
-		trader_btn_valuables.text = "✓ 환금템 모두 해제" if v_all else "🧹 환금템 모두 담기"
+		if UiIconManager:
+			UiIconManager.set_button(trader_btn_valuables, "check" if v_all else "broom", "환금템 모두 해제" if v_all else "환금템 모두 담기", 14)
+		else:
+			trader_btn_valuables.text = "환금템 모두 해제" if v_all else "환금템 모두 담기"
 		trader_btn_valuables.add_theme_color_override("font_color", Color(0.45, 1.0, 0.72) if v_all else Color(0.92, 0.94, 0.96))
 	if trader_btn_non_gear:
 		var ng_cands := HideoutProgression.collect_bulk_sell_candidates("non_gear", player_grid_mgr, stash_grid_mgr)
 		var ng_all := _are_all_bulk_candidates_selected(ng_cands)
-		trader_btn_non_gear.text = "✓ 장비/무기 제외 해제" if ng_all else "📦 장비/무기 제외 모두 담기"
+		if UiIconManager:
+			UiIconManager.set_button(trader_btn_non_gear, "check" if ng_all else "box", "장비/무기 제외 해제" if ng_all else "장비/무기 제외 모두 담기", 14)
+		else:
+			trader_btn_non_gear.text = "장비/무기 제외 해제" if ng_all else "장비/무기 제외 모두 담기"
 		trader_btn_non_gear.add_theme_color_override("font_color", Color(0.45, 1.0, 0.72) if ng_all else Color(0.92, 0.94, 0.96))
 
 func _refresh_sell_receipt_panel() -> void:
@@ -1911,14 +2018,17 @@ func _refresh_sell_receipt_panel() -> void:
 	var loss_rubles := int(preview.get("elasticity_loss_rubles", 0))
 	var loss_pct := float(preview.get("elasticity_loss_pct", 0.0))
 
+	var ic_box := (UiIconManager.bbcode_icon("box", 13) + " ") if UiIconManager else ""
+	var ic_down := (UiIconManager.bbcode_icon("chart_down", 13) + " ") if UiIconManager else ""
+	var ic_money := (UiIconManager.bbcode_icon("money_green", 13) + " ") if UiIconManager else ""
 	var sum_lines: Array[String] = []
 	sum_lines.append("──────────────────────────")
-	sum_lines.append("📦 선택 품목: %d슬롯 (총 %d개)" % [valid_cnt, total_units])
+	sum_lines.append("%s선택 품목: %d슬롯 (총 %d개)" % [ic_box, valid_cnt, total_units])
 	if loss_rubles > 0:
-		sum_lines.append("📉 대량 매각 시세 하락: -%d RUB (-%.1f%%)" % [loss_rubles, loss_pct])
-	sum_lines.append("💵 예상 정산 금액: %d RUB" % final_rubles)
+		sum_lines.append("%s대량 매각 시세 하락: -%d RUB (-%.1f%%)" % [ic_down, loss_rubles, loss_pct])
+	sum_lines.append("%s예상 정산 금액: %d RUB" % [ic_money, final_rubles])
 	sell_receipt_summary_lbl.text = "\n".join(sum_lines)
-	sell_receipt_summary_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35) if loss_rubles > 0 else Color(0.88, 0.96, 0.92))
+	sell_receipt_summary_lbl.add_theme_color_override("default_color", Color(1.0, 0.85, 0.35) if loss_rubles > 0 else Color(0.88, 0.96, 0.92))
 	sell_bulk_btn.disabled = (valid_cnt <= 0)
 
 func _toggle_sell_selection(item: Dictionary, mgr: InventoryGrid, is_stash: bool) -> void:
@@ -1934,18 +2044,18 @@ func _toggle_sell_selection(item: Dictionary, mgr: InventoryGrid, is_stash: bool
 		return
 	if bool(item.get("locked", false)):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🔒 잠금된 아이템은 판매 트레이에 담을 수 없습니다. ([L] 키로 해제)")
+			EventBus.event_logged.emit("[icon:lock] 잠금된 아이템은 판매 트레이에 담을 수 없습니다. ([L] 키로 해제)")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	if mgr.is_item_in_secure_zone(item):
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("🔒 2x2 안전 컨테이너 내 아이템은 일괄 판매에서 보호됩니다.")
+			EventBus.event_logged.emit("[icon:lock] 2x2 안전 컨테이너 내 아이템은 일괄 판매에서 보호됩니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	var inner = item.get("inner_items", [])
 	if inner is Array and not inner.is_empty():
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 내부에 아이템이 든 컨테이너는 먼저 비워 주세요.")
+			EventBus.event_logged.emit("[icon:warn] 내부에 아이템이 든 컨테이너는 먼저 비워 주세요.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	selected_sell_uids[uid] = {
@@ -2093,7 +2203,7 @@ func _buy_item(item_id: String, amount: int, price: int) -> void:
 	var added := amount - remaining
 	if added <= 0:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 배낭과 창고 공간이 모두 부족하여 구매할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 배낭과 창고 공간이 모두 부족하여 구매할 수 없습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 
@@ -2104,7 +2214,7 @@ func _buy_item(item_id: String, amount: int, price: int) -> void:
 	if FleaMarket:
 		FleaMarket.record_player_purchase(item_id, added)
 	if remaining > 0 and EventBus.has_signal("event_logged"):
-		EventBus.event_logged.emit("⚠️ 공간이 부족하여 %d/%d개만 구매했습니다. (%d RUB 결제)" % [added, amount, actual_cost])
+		EventBus.event_logged.emit("[icon:warn] 공간이 부족하여 %d/%d개만 구매했습니다. (%d RUB 결제)" % [added, amount, actual_cost])
 	_update_money_label()
 		
 	if SoundManager: SoundManager.play("menu_select")
@@ -2156,7 +2266,7 @@ func _refresh_market_ui() -> void:
 		bounty_panel.add_child(b_vbox)
 		
 		var b_title = Label.new()
-		b_title.text = "[🔥 오늘의 2.5x 긴급 수배] 암시장 특수 상인 고가 매입 품목"
+		b_title.text = "[오늘의 2.5x 긴급 수배] 암시장 특수 상인 고가 매입 품목"
 		b_title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		b_title.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		if PixelAssetManager:
@@ -2164,6 +2274,8 @@ func _refresh_market_ui() -> void:
 		b_title.add_theme_font_size_override("font_size", 12)
 		b_title.add_theme_color_override("font_color", Color(1.0, 0.88, 0.28))
 		b_vbox.add_child(b_title)
+		if UiIconManager:
+			UiIconManager.set_label_icon(b_title, "fire", "", 15, 5)
 		
 		for b_entry in bounties:
 			var b_id = String(b_entry.get("item_id", ""))
@@ -2189,15 +2301,17 @@ func _refresh_market_ui() -> void:
 			b_info_vbox.add_theme_constant_override("separation", 2)
 
 			var b_name_lbl := Label.new()
-			b_name_lbl.text = "★ %s  (보유: %d개)" % [b_name, owned_cnt]
+			b_name_lbl.text = "%s  (보유: %d개)" % [b_name, owned_cnt]
 			b_name_lbl.clip_text = true
 			b_name_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			b_name_lbl.add_theme_font_size_override("font_size", 12)
 			b_name_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55) if owned_cnt > 0 else Color(0.92, 0.88, 0.76))
 			b_info_vbox.add_child(b_name_lbl)
+			if UiIconManager:
+				UiIconManager.set_label_icon(b_name_lbl, "star", "", 13, 4)
 
 			var b_price_lbl := Label.new()
-			b_price_lbl.text = "시세 %d ➔ 수배 매입가 %d RUB (x2.5)" % [m_price, b_price]
+			b_price_lbl.text = "시세 %d → 수배 매입가 %d RUB (x2.5)" % [m_price, b_price]
 			b_price_lbl.clip_text = true
 			b_price_lbl.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 			b_price_lbl.add_theme_font_size_override("font_size", 10)
@@ -2207,8 +2321,11 @@ func _refresh_market_ui() -> void:
 			
 			var sell_b_btn = Button.new()
 			sell_b_btn.theme_type_variation = &"SmallButton"
-			sell_b_btn.text = "🔥 납품"
-			sell_b_btn.custom_minimum_size = Vector2(76, 30)
+			if UiIconManager:
+				UiIconManager.set_button(sell_b_btn, "fire", "납품", 14)
+			else:
+				sell_b_btn.text = "납품"
+			sell_b_btn.custom_minimum_size = Vector2(82, 30)
 			sell_b_btn.tooltip_text = "즉시 납품 (+%d RUB)" % b_price
 			sell_b_btn.disabled = (owned_cnt <= 0)
 			var cap_id = b_id
@@ -2286,13 +2403,13 @@ func _is_market_item_registerable(item: Dictionary) -> Dictionary:
 	if item.is_empty():
 		return {"ok": false, "reason": "아이템을 선택하세요."}
 	if bool(item.get("locked", false)):
-		return {"ok": false, "reason": "🔒 잠금된 아이템은 등록할 수 없습니다. ([L] 키로 해제)"}
+		return {"ok": false, "reason": "[icon:lock] 잠금된 아이템은 등록할 수 없습니다. ([L] 키로 해제)"}
 	var inner = item.get("inner_items", [])
 	if inner is Array and not inner.is_empty():
-		return {"ok": false, "reason": "⚠️ 내부에 아이템이 든 컨테이너는 비운 뒤 등록할 수 있습니다."}
+		return {"ok": false, "reason": "[icon:warn] 내부에 아이템이 든 컨테이너는 비운 뒤 등록할 수 있습니다."}
 	var item_id := str(item.get("id", ""))
 	if item_id in ["Scav 식별줄(Dogtag)", "Scav 인식표"]:
-		return {"ok": false, "reason": "⚠️ Scav 인식표는 암시장에 등록할 수 없습니다."}
+		return {"ok": false, "reason": "[icon:warn] Scav 인식표는 암시장에 등록할 수 없습니다."}
 	return {"ok": true, "reason": ""}
 
 func _does_market_item_match_filter(item: Dictionary) -> bool:
@@ -2345,7 +2462,7 @@ func _refresh_market_register_ui() -> void:
 	var max_slots := FleaMarket.MAX_PLAYER_LISTINGS if FleaMarket else 3
 	var can_reg := FleaMarket.can_register_more_listings() if FleaMarket else false
 	if market_slot_label:
-		market_slot_label.text = "💰 암시장 위탁 판매 등록  |  보유 슬롯: %d / %d  |  누진 수수료 5%%~35%%" % [used_slots, max_slots]
+		market_slot_label.text = "암시장 위탁 판매 등록  |  보유 슬롯: %d / %d  |  누진 수수료 5%%~35%%" % [used_slots, max_slots]
 		market_slot_label.add_theme_color_override("font_color", Color(1.0, 0.45, 0.45) if not can_reg else Color(0.45, 0.90, 1.0))
 
 	# 필터 및 배율 버튼 강조 갱신
@@ -2424,7 +2541,11 @@ func _refresh_market_selection_preview() -> void:
 	var mgr: InventoryGrid = stash_grid_mgr if market_selected_is_stash else player_grid_mgr
 	var item: Dictionary = mgr.get_item_by_uid(market_selected_uid) if (mgr and market_selected_uid != "") else {}
 	if item.is_empty():
-		market_preview_lbl.text = "💡 2D 그리드에서 암시장에 등록할 아이템을 클릭하세요. (검색/카테고리 필터 지원 · 더블클릭 시 즉시 등록)"
+		var empty_txt := "2D 그리드에서 암시장에 등록할 아이템을 클릭하세요. (검색/카테고리 필터 지원 · 더블클릭 시 즉시 등록)"
+		if UiIconManager:
+			UiIconManager.set_label_icon(market_preview_lbl, "tip", empty_txt, 14, 6, true)
+		else:
+			market_preview_lbl.text = empty_txt
 		market_preview_lbl.add_theme_color_override("font_color", Color(0.75, 0.82, 0.90))
 		market_confirm_btn.disabled = true
 		return
@@ -2435,7 +2556,15 @@ func _refresh_market_selection_preview() -> void:
 	var disp_name := str(data.get("name", item_id))
 	var reg_chk := _is_market_item_registerable(item)
 	if not bool(reg_chk["ok"]):
-		market_preview_lbl.text = "[%s x%d]  %s" % [disp_name, amt, str(reg_chk["reason"])]
+		var reason_raw := str(reg_chk["reason"])
+		var parsed: Dictionary = UiIconManager.parse_tagged_message(reason_raw) if UiIconManager else {"icon_key": "warn", "clean_text": reason_raw}
+		var err_icon := String(parsed.get("icon_key", ""))
+		if err_icon == "": err_icon = "warn"
+		var err_txt := "[%s x%d]  %s" % [disp_name, amt, String(parsed.get("clean_text", reason_raw))]
+		if UiIconManager:
+			UiIconManager.set_label_icon(market_preview_lbl, err_icon, err_txt, 14, 6, true)
+		else:
+			market_preview_lbl.text = err_txt
 		market_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
 		market_confirm_btn.disabled = true
 		return
@@ -2447,20 +2576,33 @@ func _refresh_market_selection_preview() -> void:
 	var fee_pct := int(round((FleaMarket.calculate_listing_fee_rate(item_id, ask_unit) if FleaMarket else 0.05) * 100.0))
 	var user_rubles := int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
 	var can_reg := FleaMarket.can_register_more_listings() if FleaMarket else false
-	var src_tag := "📦창고" if market_selected_is_stash else "🎒배낭"
+	var src_tag := "창고" if market_selected_is_stash else "배낭"
+	var src_icon := "stash" if market_selected_is_stash else "backpack"
 
 	if not can_reg:
-		market_preview_lbl.text = "[%s] %s x%d  |  ⚠️ 판매 슬롯(3/3)이 가득 찼습니다." % [src_tag, disp_name, amt]
+		var full_txt := "[%s] %s x%d  |  판매 슬롯(3/3)이 가득 찼습니다." % [src_tag, disp_name, amt]
+		if UiIconManager:
+			UiIconManager.set_label_icon(market_preview_lbl, "warn", full_txt, 14, 6, true)
+		else:
+			market_preview_lbl.text = full_txt
 		market_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.48, 0.48))
 		market_confirm_btn.disabled = true
 	elif user_rubles < fee:
-		market_preview_lbl.text = "[%s] %s x%d  |  희망가: %d RUB (x%.1f)  |  ⚠️ 수수료 %d RUB 부족" % [src_tag, disp_name, amt, total_ask, market_price_ratio, fee]
+		var fee_txt := "[%s] %s x%d  |  희망가: %d RUB (x%.1f)  |  수수료 %d RUB 부족" % [src_tag, disp_name, amt, total_ask, market_price_ratio, fee]
+		if UiIconManager:
+			UiIconManager.set_label_icon(market_preview_lbl, "warn", fee_txt, 14, 6, true)
+		else:
+			market_preview_lbl.text = fee_txt
 		market_preview_lbl.add_theme_color_override("font_color", Color(1.0, 0.55, 0.45))
 		market_confirm_btn.disabled = true
 	else:
-		market_preview_lbl.text = "[%s] %s x%d\n희망 판매가: %d RUB (시세 x%.1f)  |  선불 수수료: %d RUB (%d%%)  |  판매 순이익: +%d RUB" % [
+		var ok_txt := "[%s] %s x%d\n희망 판매가: %d RUB (시세 x%.1f)  |  선불 수수료: %d RUB (%d%%)  |  판매 순이익: +%d RUB" % [
 			src_tag, disp_name, amt, total_ask, market_price_ratio, fee, fee_pct, total_ask - fee
 		]
+		if UiIconManager:
+			UiIconManager.set_label_icon(market_preview_lbl, src_icon, ok_txt, 14, 6, true)
+		else:
+			market_preview_lbl.text = ok_txt
 		market_preview_lbl.add_theme_color_override("font_color", Color(0.45, 0.98, 0.72))
 		market_confirm_btn.disabled = false
 
@@ -2529,7 +2671,7 @@ func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 	var can_fit_s := stash_grid_mgr != null and stash_grid_mgr.can_fit_item(preview_item, preview_amt, preview_cd)
 	if not can_fit_p and not can_fit_s:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 배낭과 창고 공간이 모두 부족하여 플리마켓 물품을 구매할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 배낭과 창고 공간이 모두 부족하여 플리마켓 물품을 구매할 수 없습니다.")
 		if SoundManager: SoundManager.play("hit_melee")
 		return
 	var res := FleaMarket.purchase_listing(listing, 1)
@@ -2554,14 +2696,14 @@ func _buy_market_item(listing: Dictionary, total_price: int) -> void:
 func _register_market_item(uid: String, is_stash: bool, item_id: String, amount: int, ask_unit_price: int) -> void:
 	if not FleaMarket or not FleaMarket.can_register_more_listings():
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 암시장 동시 판매 슬롯(최대 %d개)이 가득 찼습니다." % (FleaMarket.MAX_PLAYER_LISTINGS if FleaMarket else 3))
+			EventBus.event_logged.emit("[icon:warn] 암시장 동시 판매 슬롯(최대 %d개)이 가득 찼습니다." % (FleaMarket.MAX_PLAYER_LISTINGS if FleaMarket else 3))
 		return
 	var fee := FleaMarket.calculate_listing_fee(item_id, amount, ask_unit_price)
 	var user_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0))
 	
 	if user_rubles < fee:
 		if EventBus.has_signal("event_logged"):
-			EventBus.event_logged.emit("⚠️ 등록 수수료(%d RUB)가 부족합니다." % fee)
+			EventBus.event_logged.emit("[icon:warn] 등록 수수료(%d RUB)가 부족합니다." % fee)
 		return
 		
 	var src_mgr: InventoryGrid = stash_grid_mgr if is_stash else player_grid_mgr
@@ -2742,13 +2884,13 @@ func _log_container_reject_reason(reason: String) -> void:
 		return
 	match reason:
 		"self_drop":
-			EventBus.event_logged.emit("⚠️ 자기 자신의 내부에는 수납할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 자기 자신의 내부에는 수납할 수 없습니다.")
 		"max_depth_exceeded":
-			EventBus.event_logged.emit("⚠️ 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
+			EventBus.event_logged.emit("[icon:warn] 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
 		"filter_mismatch":
-			EventBus.event_logged.emit("🔒 해당 보관함 전용 카테고리 아이템만 넣을 수 있습니다.")
+			EventBus.event_logged.emit("[icon:lock] 해당 보관함 전용 카테고리 아이템만 넣을 수 있습니다.")
 		_:
-			EventBus.event_logged.emit("⚠️ 해당 위치에 보관할 수 없습니다.")
+			EventBus.event_logged.emit("[icon:warn] 해당 위치에 보관할 수 없습니다.")
 
 func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -> void:
 	if not is_dragging or not popup or not popup.inner_grid:
@@ -2910,42 +3052,45 @@ func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String 
 	vbox.add_child(HSeparator.new())
 
 	if InventoryGrid.is_container_item(item) and (source_type in ["player_grid", "stash_grid"] or (source_type == "equipment" and slot_ref == "vest")):
-		_add_context_menu_btn(vbox, "📂 포켓 열기" if source_type == "equipment" else "📂 컨테이너 열기", func():
+		_add_context_menu_btn(vbox, "포켓 열기" if source_type == "equipment" else "컨테이너 열기", func():
 			_close_context_menu()
 			open_container_popup(item, source_grid if source_type in ["player_grid", "stash_grid"] else null)
-		)
+		, "folder")
 
 	if source_type in ["player_grid", "stash_grid", "popup_grid"] and source_grid:
 		var is_locked := bool(item.get("locked", false))
-		_add_context_menu_btn(vbox, "🔓 잠금 해제 (L)" if is_locked else "🔒 아이템 잠금 (L)", func():
+		_add_context_menu_btn(vbox, "잠금 해제 (L)" if is_locked else "아이템 잠금 (L)", func():
 			_close_context_menu()
 			source_grid.toggle_item_lock(str(item.get("uid", "")))
 			if SoundManager: SoundManager.play("menu_select")
-		)
+		, "unlock" if is_locked else "lock")
 
 	if source_type in ["player_grid", "stash_grid"]:
-		_add_context_menu_btn(vbox, "📤 빠른 이동 / 장착", func():
+		_add_context_menu_btn(vbox, "빠른 이동 / 장착", func():
 			_close_context_menu()
 			_handle_hideout_quick_action(item, source_type == "player_grid")
-		)
+		, "export_out")
 	elif source_type == "popup_grid" and source_grid:
 		var pop_ref: ContainerPopupWindow = open_container_popups.get(source_grid.owner_container_uid, null) as ContainerPopupWindow
 		if pop_ref:
-			_add_context_menu_btn(vbox, "📤 밖으로 꺼내기", func():
+			_add_context_menu_btn(vbox, "밖으로 꺼내기", func():
 				_close_context_menu()
 				_handle_popup_quick_action(pop_ref, item, true)
-			)
+			, "export_out")
 
 	add_child(context_menu_panel)
 	var mpos := get_global_mouse_position() - global_position
 	context_menu_panel.position = InventoryUIHelper.clamp_popup_position(context_menu_panel, mpos, size, 8.0)
 
-func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, cb: Callable) -> void:
+func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, cb: Callable, icon_key: String = "") -> void:
 	var btn := Button.new()
 	btn.theme_type_variation = &"SmallButton"
-	btn.text = text_str
+	if UiIconManager and icon_key != "":
+		UiIconManager.set_button(btn, icon_key, text_str, 15)
+	else:
+		btn.text = text_str
 	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.custom_minimum_size = Vector2(142, 26)
+	btn.custom_minimum_size = Vector2(156, 26)
 	btn.focus_mode = Control.FOCUS_NONE
 	btn.pressed.connect(cb)
 	vbox.add_child(btn)
@@ -2957,37 +3102,50 @@ func _check_last_raid_result() -> void:
 	if GameManager and not GameManager.last_raid_result.is_empty():
 		var res = GameManager.last_raid_result
 		result_dialog.visible = true
+		var desc_lines: Array[String] = []
 		if res["result"] == "survived":
-			result_title.text = "🎉 탈출 성공! (SURVIVED)"
+			if UiIconManager:
+				UiIconManager.set_label_icon(result_title, "celebrate", "탈출 성공! (SURVIVED)", 22, 8, true)
+			else:
+				result_title.text = "탈출 성공! (SURVIVED)"
 			result_title.add_theme_color_override("font_color", Color.GREEN)
-			result_desc.text = "안전하게 은신처로 복귀했습니다.\n획득한 전리품이 배낭에 보존되었습니다."
+			desc_lines.append("안전하게 은신처로 복귀했습니다.\n획득한 전리품이 배낭에 보존되었습니다.")
 		elif res["result"] == "kia":
-			result_title.text = "💀 작전 중 사망 (KIA)"
+			if UiIconManager:
+				UiIconManager.set_label_icon(result_title, "skull", "작전 중 사망 (KIA)", 22, 8, true)
+			else:
+				result_title.text = "작전 중 사망 (KIA)"
 			result_title.add_theme_color_override("font_color", Color.RED)
-			result_desc.text = "레이드 도중 사망했습니다.\n2x2 안전 파우치 외의 일반 배낭 아이템을 잃었습니다."
+			desc_lines.append("레이드 도중 사망했습니다.\n2x2 안전 파우치 외의 일반 배낭 아이템을 잃었습니다.")
 		elif res["result"] == "mia":
-			result_title.text = "⏳ 작전 시간 초과 (MIA)"
+			if UiIconManager:
+				UiIconManager.set_label_icon(result_title, "hourglass", "작전 시간 초과 (MIA)", 22, 8, true)
+			else:
+				result_title.text = "작전 시간 초과 (MIA)"
 			result_title.add_theme_color_override("font_color", Color.ORANGE)
-			result_desc.text = "제한 시간 내에 탈출하지 못해 실종되었습니다."
+			desc_lines.append("제한 시간 내에 탈출하지 못해 실종되었습니다.")
 			
+		var ic := func(k: String) -> String:
+			return (UiIconManager.bbcode_icon(k, 14) + " ") if UiIconManager else ""
 		var kills_cnt = int(res.get("kills", 0))
 		var t_spent = int(res.get("time_spent", 0.0))
-		result_desc.text += "\n\n⚔️ 이번 레이드 처치: %d명  |  ⏱️ 작전 시간: %d분 %d초" % [kills_cnt, int(float(t_spent) / 60.0), t_spent % 60]
+		desc_lines.append("")
+		desc_lines.append("%s이번 레이드 처치: %d명  |  %s작전 시간: %d분 %d초" % [ic.call("swords"), kills_cnt, ic.call("stopwatch"), int(float(t_spent) / 60.0), t_spent % 60])
 		
 		if res.get("insurance_claimed", false):
-			result_desc.text += "\n🛡️ 장비 보험 적용 완료: 장착 중이던 무기 및 방어구가 안전하게 회수되었습니다."
+			desc_lines.append("%s장비 보험 적용 완료: 장착 중이던 무기 및 방어구가 안전하게 회수되었습니다." % ic.call("shield_green"))
 		var pouch_cnt = int(res.get("pouch_saved_count", 0))
 		if pouch_cnt > 0:
-			result_desc.text += "\n🔒 2x2 안전 파우치 보호: 귀중품 %d종이 분실되지 않고 보존되었습니다." % pouch_cnt
+			desc_lines.append("%s2x2 안전 파우치 보호: 귀중품 %d종이 분실되지 않고 보존되었습니다." % [ic.call("lock_gold"), pouch_cnt])
 		
 		var passive_inc = int(res.get("passive_income", 0))
 		var landmark_bon = int(res.get("landmark_bonus", 0))
 		if landmark_bon > 0:
-			result_desc.text += "\n📡 랜드마크 현장 단말기 작전 보너스: +%d RUB" % landmark_bon
+			desc_lines.append("%s랜드마크 현장 단말기 작전 보너스: +%d RUB" % [ic.call("signal"), landmark_bon])
 			_update_money_label()
 			
 		if passive_inc > 0:
-			result_desc.text += "\n⚡ 발전기/채굴 서버 패시브 수익: +%d RUB" % passive_inc
+			desc_lines.append("%s발전기/채굴 서버 패시브 수익: +%d RUB" % [ic.call("power"), passive_inc])
 			_update_money_label()
 			
 		var sales_report = res.get("sales_report", {})
@@ -2996,12 +3154,14 @@ func _check_last_raid_result() -> void:
 			var total_earned = 0
 			for s in completed_sales:
 				total_earned += int(s.get("earned", 0))
-			result_desc.text += "\n\n📈 플리마켓 정산: 등록 물품 %d건 판매 완료 (+%d RUB)" % [completed_sales.size(), total_earned]
+			desc_lines.append("")
+			desc_lines.append("%s플리마켓 정산: 등록 물품 %d건 판매 완료 (+%d RUB)" % [ic.call("chart_up"), completed_sales.size(), total_earned])
 			_update_money_label()
 		var returned_sales = sales_report.get("returned_items", [])
 		if returned_sales is Array and not returned_sales.is_empty():
-			result_desc.text += "\n📦 플리마켓 기간 만료 물품 %d건이 은신처 창고로 반송되었습니다." % returned_sales.size()
-			
+			desc_lines.append("%s플리마켓 기간 만료 물품 %d건이 은신처 창고로 반송되었습니다." % [ic.call("box"), returned_sales.size()])
+		
+		result_desc.text = "[center]%s[/center]" % "\n".join(desc_lines)
 		GameManager.last_raid_result.clear()
 		_update_insurance_ui()
 	else:

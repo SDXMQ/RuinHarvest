@@ -6,7 +6,8 @@ extends RefCounted
 
 const FACILITIES: Dictionary = {
 	"stash_expansion": {
-		"name": "📦 보관함 확장 설비",
+		"name": "보관함 확장 설비",
+		"icon": "stash",
 		"desc": "창고 그리드 세로 공간을 레벨당 +4줄 확장합니다. (기본 10x12 -> 최대 10x24)",
 		"max_level": 3,
 		"levels": [
@@ -16,7 +17,8 @@ const FACILITIES: Dictionary = {
 		]
 	},
 	"med_station": {
-		"name": "🏥 응급 의료 스테이션",
+		"name": "응급 의료 스테이션",
+		"icon": "hospital",
 		"desc": "출격 시 최대 체력(Max HP) 보너스를 부여하고 복귀 시 부상을 완화합니다.",
 		"max_level": 3,
 		"levels": [
@@ -26,7 +28,8 @@ const FACILITIES: Dictionary = {
 		]
 	},
 	"bitcoin_farm": {
-		"name": "⚡ 발전기 & 채굴 서버렉",
+		"name": "발전기 & 채굴 서버렉",
+		"icon": "power",
 		"desc": "레이드에서 생존 복귀할 때마다 고정 패시브 수익(RUB)을 창출합니다.",
 		"max_level": 3,
 		"levels": [
@@ -36,7 +39,8 @@ const FACILITIES: Dictionary = {
 		]
 	},
 	"intel_center": {
-		"name": "📡 통신 & 거래소 인텔 센터",
+		"name": "통신 & 거래소 인텔 센터",
+		"icon": "signal",
 		"desc": "상인 구매 가격을 할인받고 아이템 매각 단가 비율을 높입니다.",
 		"max_level": 3,
 		"levels": [
@@ -514,9 +518,11 @@ static func consume_total_item(item_id: String, amount: int, player_grid: Invent
 
 static func setup_progression_tab(_hideout: Control, tab_container: TabContainer) -> Control:
 	var tab_root = HBoxContainer.new()
-	tab_root.name = " 🏗️ 시설 & 의뢰 "
+	tab_root.name = " 시설 & 의뢰 "
 	tab_root.add_theme_constant_override("separation", 18)
 	tab_container.add_child(tab_root)
+	if UiIconManager:
+		UiIconManager.set_tab_icon_by_control(tab_container, tab_root, "facility")
 	
 	# 좌측: 은신처 시설 업그레이드
 	var fac_panel = PanelContainer.new()
@@ -527,10 +533,12 @@ static func setup_progression_tab(_hideout: Control, tab_container: TabContainer
 	fac_panel.add_child(fac_vbox_outer)
 	
 	var fac_title = Label.new()
-	fac_title.text = "🏗️ 은신처 핵심 시설 업그레이드 (Facilities)"
+	fac_title.text = "은신처 핵심 시설 업그레이드 (Facilities)"
 	fac_title.add_theme_font_size_override("font_size", 16)
 	fac_title.add_theme_color_override("font_color", Color(0.4, 0.85, 1.0))
 	fac_vbox_outer.add_child(fac_title)
+	if UiIconManager:
+		UiIconManager.set_label_icon(fac_title, "facility", "", 18, 6)
 	
 	var fac_scroll = ScrollContainer.new()
 	fac_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -551,10 +559,12 @@ static func setup_progression_tab(_hideout: Control, tab_container: TabContainer
 	q_panel.add_child(q_vbox_outer)
 	
 	var q_title = Label.new()
-	q_title.text = "📋 상인 계약 의뢰 & 임무 (Trader Quests)"
+	q_title.text = "상인 계약 의뢰 & 임무 (Trader Quests)"
 	q_title.add_theme_font_size_override("font_size", 16)
 	q_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	q_vbox_outer.add_child(q_title)
+	if UiIconManager:
+		UiIconManager.set_label_icon(q_title, "clipboard", "", 18, 6)
 	
 	var q_scroll = ScrollContainer.new()
 	q_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -603,6 +613,8 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 		header.add_theme_font_size_override("font_size", 14)
 		header.add_theme_color_override("font_color", Color(0.5, 0.95, 0.6) if cur_lv > 0 else Color(0.9, 0.9, 0.95))
 		vbox.add_child(header)
+		if UiIconManager:
+			UiIconManager.set_label_icon(header, String(f_data.get("icon", "facility")), "", 16, 6)
 		
 		var desc = Label.new()
 		desc.text = f_data["desc"]
@@ -630,7 +642,10 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			vbox.add_child(req_lbl)
 			
 			var up_btn = Button.new()
-			up_btn.text = "⬆️ Lv.%d 업그레이드 시공" % (cur_lv + 1)
+			if UiIconManager:
+				UiIconManager.set_button(up_btn, "upgrade", "Lv.%d 업그레이드 시공" % (cur_lv + 1), 15)
+			else:
+				up_btn.text = "Lv.%d 업그레이드 시공" % (cur_lv + 1)
 			up_btn.disabled = not can_upgrade
 			var fid_cap = fac_id
 			up_btn.pressed.connect(func():
@@ -650,9 +665,11 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			vbox.add_child(up_btn)
 		else:
 			var max_lbl = Label.new()
-			max_lbl.text = "★ 최고 단계 업그레이드 완료 (MAX)"
+			max_lbl.text = "최고 단계 업그레이드 완료 (MAX)"
 			max_lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
 			vbox.add_child(max_lbl)
+			if UiIconManager:
+				UiIconManager.set_label_icon(max_lbl, "star", "", 15, 5)
 			
 		fac_list.add_child(card)
 		
@@ -671,10 +688,12 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 		card.add_child(vbox)
 		
 		var header = Label.new()
-		header.text = "[%s] %s %s" % [q["trader"], q["title"], "✅(완료)" if is_done else ""]
+		header.text = "[%s] %s%s" % [q["trader"], q["title"], " (완료)" if is_done else ""]
 		header.add_theme_font_size_override("font_size", 14)
 		header.add_theme_color_override("font_color", Color(0.5, 0.9, 0.5) if is_done else Color(1.0, 0.88, 0.4))
 		vbox.add_child(header)
+		if UiIconManager:
+			UiIconManager.set_label_icon(header, "ok" if is_done else "clipboard", "", 15, 5)
 		
 		var desc = Label.new()
 		desc.text = q["desc"]
@@ -719,7 +738,10 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			vbox.add_child(prog_lbl)
 			
 			var comp_btn = Button.new()
-			comp_btn.text = "🎁 의뢰 완수 및 보상 수령"
+			if UiIconManager:
+				UiIconManager.set_button(comp_btn, "gift", "의뢰 완수 및 보상 수령", 15)
+			else:
+				comp_btn.text = "의뢰 완수 및 보상 수령"
 			comp_btn.disabled = not can_complete
 			var q_cap = q
 			comp_btn.pressed.connect(func():
@@ -742,7 +764,7 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 					if p_grid:
 						p_grid.load_items(p_backup)
 					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("⚠️ 창고와 배낭 공간이 부족하여 의뢰 보상을 수령할 수 없습니다.")
+						EventBus.event_logged.emit("[icon:warn] 창고와 배낭 공간이 부족하여 의뢰 보상을 수령할 수 없습니다.")
 					if SoundManager: SoundManager.play("hit_melee")
 					return
 				w_data["player"]["rubles"] = int(w_data["player"].get("rubles", 0)) + int(q_cap["reward_rubles"])
@@ -853,11 +875,11 @@ static func record_weapon_kill(world_data: Dictionary, weapon_id: String, count:
 		var w_data := ItemDatabase.get_item_data(norm_id) if ItemDatabase else {}
 		var w_name := String(w_data.get("name", norm_id))
 		if prev_cnt < WEAPON_MASTERY_LV3_KILLS and next_cnt >= WEAPON_MASTERY_LV3_KILLS:
-			EventBus.event_logged.emit("★ 🏆 [총기 숙련도 Lv.3 Мастер] %s 70킬 달성! 기능고장 확률 50%% 감소 및 황금 테두리가 해금되었습니다!" % w_name)
+			EventBus.event_logged.emit("[icon:trophy] [총기 숙련도 Lv.3 Мастер] %s 70킬 달성! 기능고장 확률 50%% 감소 및 황금 테두리가 해금되었습니다!" % w_name)
 		elif prev_cnt < WEAPON_MASTERY_LV2_KILLS and next_cnt >= WEAPON_MASTERY_LV2_KILLS:
-			EventBus.event_logged.emit("★ 🎖️ [총기 숙련도 Lv.2] %s 35킬 달성! 반동 제어 +5%% 보너스가 해금되었습니다!" % w_name)
+			EventBus.event_logged.emit("[icon:medal] [총기 숙련도 Lv.2] %s 35킬 달성! 반동 제어 +5%% 보너스가 해금되었습니다!" % w_name)
 		elif prev_cnt < WEAPON_MASTERY_LV1_KILLS and next_cnt >= WEAPON_MASTERY_LV1_KILLS:
-			EventBus.event_logged.emit("★ 🎖️ [총기 숙련도 Lv.1] %s 15킬 달성! 재장전 속도 +3%% 보너스가 해금되었습니다!" % w_name)
+			EventBus.event_logged.emit("[icon:medal] [총기 숙련도 Lv.1] %s 15킬 달성! 재장전 속도 +3%% 보너스가 해금되었습니다!" % w_name)
 	return next_cnt
 
 static func get_weapon_kill_count(world_data: Dictionary, weapon_id: String) -> int:
@@ -937,9 +959,11 @@ static func get_service_record_data(world_data: Dictionary, player_grid: Invento
 
 static func setup_service_record_tab(_hideout: Control, tab_container: TabContainer) -> Control:
 	var tab_root := HBoxContainer.new()
-	tab_root.name = " 🎖️ 전술 기록실 "
+	tab_root.name = " 전술 기록실 "
 	tab_root.add_theme_constant_override("separation", 18)
 	tab_container.add_child(tab_root)
+	if UiIconManager:
+		UiIconManager.set_tab_icon_by_control(tab_container, tab_root, "medal")
 
 	# 좌측: 레이드 전적 아카이브 & 인식표 휘장
 	var rec_panel := PanelContainer.new()
@@ -960,10 +984,12 @@ static func setup_service_record_tab(_hideout: Control, tab_container: TabContai
 	mas_panel.add_child(mas_vbox_outer)
 
 	var mas_title := Label.new()
-	mas_title.text = "🔫 총기 숙련도 3단계 (Lv.1 15킬 · Lv.2 35킬 · Lv.3 70킬 Мастер)"
+	mas_title.text = "총기 숙련도 3단계 (Lv.1 15킬 · Lv.2 35킬 · Lv.3 70킬 Мастер)"
 	mas_title.add_theme_font_size_override("font_size", 16)
 	mas_title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.35))
 	mas_vbox_outer.add_child(mas_title)
+	if UiIconManager:
+		UiIconManager.set_label_icon(mas_title, "gun_gold", "", 18, 6)
 
 	var mas_scroll := ScrollContainer.new()
 	mas_scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -995,42 +1021,49 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 	var summary := get_service_record_data(w_data, p_grid, s_grid)
 
 	var title := Label.new()
-	title.text = "🎖️ 전술 기록실 (Service Record & Dogtag Archive)"
+	title.text = "전술 기록실 (Service Record & Dogtag Archive)"
 	title.add_theme_font_size_override("font_size", 16)
 	title.add_theme_color_override("font_color", Color(0.4, 0.9, 1.0))
 	rec_vbox.add_child(title)
+	if UiIconManager:
+		UiIconManager.set_label_icon(title, "medal", "", 18, 6)
 
 	var stat_lines := [
-		["🚁 누적 레이드 생환 횟수", "%d 회" % int(summary["raids_survived"]), Color(0.45, 1.0, 0.55)],
-		["⚔️ 누적 전체 적 사살 수", "%d 명" % int(summary["kills_total"]), Color(0.92, 0.94, 0.98)],
-		["🎯 무장 세력(Scav/Raider) 사살", "%d 명" % int(summary["human_kills"]), Color(1.0, 0.82, 0.4)],
-		["💀 구역 지휘관(Boss) 사살", "%d 회" % int(summary["boss_kills"]), Color(1.0, 0.45, 0.45)],
-		["🏷️ 보유 중인 Scav 인식표 (Dogtag)", "%d 개" % int(summary["dogtag_count"]), Color(0.4, 0.92, 1.0)],
-		["★ 마스터 달성 총기 수", "%d / %d 종" % [summary["mastered_weapons"].size(), TRACKED_MASTERY_WEAPONS.size()], Color(1.0, 0.88, 0.3)]
+		["extract", "누적 레이드 생환 횟수", "%d 회" % int(summary["raids_survived"]), Color(0.45, 1.0, 0.55)],
+		["swords", "누적 전체 적 사살 수", "%d 명" % int(summary["kills_total"]), Color(0.92, 0.94, 0.98)],
+		["target", "무장 세력(Scav/Raider) 사살", "%d 명" % int(summary["human_kills"]), Color(1.0, 0.82, 0.4)],
+		["skull", "구역 지휘관(Boss) 사살", "%d 회" % int(summary["boss_kills"]), Color(1.0, 0.45, 0.45)],
+		["tag", "보유 중인 Scav 인식표 (Dogtag)", "%d 개" % int(summary["dogtag_count"]), Color(0.4, 0.92, 1.0)],
+		["star", "마스터 달성 총기 수", "%d / %d 종" % [summary["mastered_weapons"].size(), TRACKED_MASTERY_WEAPONS.size()], Color(1.0, 0.88, 0.3)]
 	]
 
 	for row in stat_lines:
 		var card := PanelContainer.new()
 		var hbox := HBoxContainer.new()
+		hbox.add_theme_constant_override("separation", 6)
 		card.add_child(hbox)
+		if UiIconManager:
+			hbox.add_child(UiIconManager.create_icon_rect(String(row[0]), 15))
 		var k_lbl := Label.new()
-		k_lbl.text = String(row[0])
+		k_lbl.text = String(row[1])
 		k_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		k_lbl.add_theme_font_size_override("font_size", 13)
 		hbox.add_child(k_lbl)
 		var v_lbl := Label.new()
-		v_lbl.text = String(row[1])
+		v_lbl.text = String(row[2])
 		v_lbl.add_theme_font_size_override("font_size", 14)
-		v_lbl.add_theme_color_override("font_color", row[2])
+		v_lbl.add_theme_color_override("font_color", row[3])
 		hbox.add_child(v_lbl)
 		rec_vbox.add_child(card)
 
 	# === Scav 인식표 전용 암시장 물물교환소 (Dogtag Barter Shop) ===
 	var barter_header := Label.new()
-	barter_header.text = "🏷️ Scav 인식표 암시장 물물교환소 (보유 인식표: %d개)" % int(summary["dogtag_count"])
+	barter_header.text = "Scav 인식표 암시장 물물교환소 (보유 인식표: %d개)" % int(summary["dogtag_count"])
 	barter_header.add_theme_font_size_override("font_size", 15)
 	barter_header.add_theme_color_override("font_color", Color(1.0, 0.84, 0.28))
 	rec_vbox.add_child(barter_header)
+	if UiIconManager:
+		UiIconManager.set_label_icon(barter_header, "tag", "", 16, 6)
 
 	for b_trade in DOGTAG_BARTER_TRADES:
 		var b_card := PanelContainer.new()
@@ -1071,7 +1104,10 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 		var cost_c := int(b_trade["cost_tags"])
 		var can_barter := int(summary["dogtag_count"]) >= cost_c
 		var b_btn := Button.new()
-		b_btn.text = "🏷️ %d개 교환" % cost_c
+		if UiIconManager:
+			UiIconManager.set_button(b_btn, "tag", "%d개 교환" % cost_c, 14)
+		else:
+			b_btn.text = "%d개 교환" % cost_c
 		b_btn.disabled = not can_barter
 		var cap_tid := String(b_trade["id"])
 		b_btn.pressed.connect(func():
@@ -1127,7 +1163,7 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 			h_row.add_child(icon_frame)
 
 		var header := Label.new()
-		var badge_str := " [🏆 Lv.3 Мастер]" if lv >= 3 else (" [★ Lv.%d]" % lv if lv >= 1 else "")
+		var badge_str := " [Lv.3 Мастер]" if lv >= 3 else (" [Lv.%d]" % lv if lv >= 1 else "")
 		header.text = "%s  —  처치: %d / %d 킬%s" % [
 			w_name,
 			kills,
@@ -1136,6 +1172,8 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 		]
 		header.add_theme_font_size_override("font_size", 13)
 		header.add_theme_color_override("font_color", Color(1.0, 0.86, 0.25) if lv >= 3 else (Color(0.45, 0.95, 0.65) if lv >= 1 else Color(0.88, 0.9, 0.95)))
+		if UiIconManager and lv >= 1:
+			h_row.add_child(UiIconManager.create_icon_rect("trophy" if lv >= 3 else "star", 15))
 		h_row.add_child(header)
 
 		var bar := ProgressBar.new()
@@ -1145,19 +1183,25 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 		vbox.add_child(bar)
 
 		var bonus_lbl := Label.new()
+		var bonus_icon := ""
 		if lv >= 3:
-			bonus_lbl.text = "🏆 Lv.3 Мастер 달성: 재장전 +5% · 반동 제어 +5% · 기능고장(Jam) 확률 -50% · 황금 총기 테두리"
+			bonus_icon = "trophy"
+			bonus_lbl.text = "Lv.3 Мастер 달성: 재장전 +5% · 반동 제어 +5% · 기능고장(Jam) 확률 -50% · 황금 총기 테두리"
 			bonus_lbl.add_theme_color_override("font_color", Color(1.0, 0.86, 0.28))
 		elif lv == 2:
-			bonus_lbl.text = "✅ Lv.2 활성화: 재장전 +3% & 반동 제어 +5%  |  다음 목표: 70킬 (Lv.3 Мастер: 기능고장 -50% & 황금 테두리)"
+			bonus_icon = "ok"
+			bonus_lbl.text = "Lv.2 활성화: 재장전 +3% & 반동 제어 +5%  |  다음 목표: 70킬 (Lv.3 Мастер: 기능고장 -50% & 황금 테두리)"
 			bonus_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.55))
 		elif lv == 1:
-			bonus_lbl.text = "✅ Lv.1 활성화: 재장전 속도 +3%  |  다음 목표: 35킬 (Lv.2: 반동 제어 +5%)"
+			bonus_icon = "ok"
+			bonus_lbl.text = "Lv.1 활성화: 재장전 속도 +3%  |  다음 목표: 35킬 (Lv.2: 반동 제어 +5%)"
 			bonus_lbl.add_theme_color_override("font_color", Color(0.45, 0.92, 1.0))
 		else:
-			bonus_lbl.text = "단계별 보너스: Lv.1(15킬: 재장전+3%) ➔ Lv.2(35킬: 반동+5%) ➔ Lv.3 Мастер(70킬: 잼-50% & 황금 테두리)"
+			bonus_lbl.text = "단계별 보너스: Lv.1(15킬: 재장전+3%) → Lv.2(35킬: 반동+5%) → Lv.3 Мастер(70킬: 잼-50% & 황금 테두리)"
 			bonus_lbl.add_theme_color_override("font_color", Color(0.7, 0.74, 0.82))
 		bonus_lbl.add_theme_font_size_override("font_size", 11)
 		vbox.add_child(bonus_lbl)
+		if UiIconManager and bonus_icon != "":
+			UiIconManager.set_label_icon(bonus_lbl, bonus_icon, "", 14, 5)
 
 		mas_list.add_child(card)

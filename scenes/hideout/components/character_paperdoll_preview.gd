@@ -212,5 +212,23 @@ func _draw() -> void:
 		var g: Vector2i = d.get("backpack_grid", Vector2i(6, 5))
 		bp_str = "%dx%d" % [g.x, g.y]
 	var font := PixelAssetManager.get_pixel_font_micro() if PixelAssetManager else ThemeDB.fallback_font
-	var summary_txt := "🛡️%d  🎒%s" % [total_def, bp_str]
-	draw_string(font, Vector2(4.0, size.y - 8.0), summary_txt, HORIZONTAL_ALIGNMENT_CENTER, size.x - 8.0, 10, Color(0.75, 0.88, 0.98))
+	var def_str := "%d" % total_def
+	var shield_tex: Texture2D = UiIconManager.get_icon("shield") if UiIconManager else null
+	var bp_tex: Texture2D = UiIconManager.get_icon("backpack") if UiIconManager else null
+	var icon_sz := 12.0
+	var def_w := font.get_string_size(def_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	var bp_w := font.get_string_size(bp_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 10).x
+	var gap := 10.0
+	var total_w := (icon_sz + 3.0 if shield_tex else 0.0) + def_w + gap + (icon_sz + 3.0 if bp_tex else 0.0) + bp_w
+	var cursor_x := floorf((size.x - total_w) * 0.5)
+	var text_y := size.y - 8.0
+	var icon_y := size.y - 19.0
+	if shield_tex:
+		draw_texture_rect(shield_tex, Rect2(cursor_x, icon_y, icon_sz, icon_sz), false)
+		cursor_x += icon_sz + 3.0
+	draw_string(font, Vector2(cursor_x, text_y), def_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.75, 0.88, 0.98))
+	cursor_x += def_w + gap
+	if bp_tex:
+		draw_texture_rect(bp_tex, Rect2(cursor_x, icon_y, icon_sz, icon_sz), false)
+		cursor_x += icon_sz + 3.0
+	draw_string(font, Vector2(cursor_x, text_y), bp_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(0.75, 0.88, 0.98))
