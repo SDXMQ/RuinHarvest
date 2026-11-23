@@ -60,8 +60,18 @@ static func _casts_oval_shadow(coords: Vector2i) -> bool:
 	return coords == TileManager.OBJ_TREE or TileManager.casts_oval_shadow(coords)
 
 func _ready() -> void:
-	# WorldGenerator 초기화
-	generator = WorldGenerator.new(randi())
+	# WorldGenerator 초기화 (세이브 데이터의 world_seed를 우선 사용하여 청크 델타와 지형 일관성 유지)
+	var world_seed: int = randi()
+	if GameManager and GameManager.current_world_data is Dictionary:
+		var ws_raw = GameManager.current_world_data.get("world_settings", {})
+		var ws: Dictionary = ws_raw if ws_raw is Dictionary else {}
+		if int(GameManager.current_world_data.get("world_seed", 0)) != 0:
+			world_seed = int(GameManager.current_world_data.get("world_seed", 0))
+		elif int(ws.get("seed", 0)) != 0:
+			world_seed = int(ws.get("seed", 0))
+		else:
+			GameManager.current_world_data["world_seed"] = world_seed
+	generator = WorldGenerator.new(world_seed)
 	if GameManager and GameManager.current_world_data.has("chunk_deltas"):
 		chunk_deltas = GameManager.current_world_data["chunk_deltas"].duplicate()
 

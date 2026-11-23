@@ -139,6 +139,16 @@ const DIFFICULTY_PRESETS: Dictionary = {
 		"permadeath": false,
 		"desc": "적의 수와 피해량이 적고, 자원이 넉넉합니다. 초보자에게 권장합니다."
 	},
+	"casual": {
+		"name": "캐주얼",
+		"enemy_spawn_mult": 0.5,
+		"resource_mult": 2.0,
+		"damage_taken_mult": 0.7,
+		"metabolism_mult": 0.75,
+		"night_raid_chance": 0.15,
+		"permadeath": false,
+		"desc": "적의 수와 피해량이 적고, 자원이 넉넉합니다. 초보자에게 권장합니다."
+	},
 	"normal": {
 		"name": "보통",
 		"enemy_spawn_mult": 1.0,
@@ -178,6 +188,16 @@ const DIFFICULTY_PRESETS: Dictionary = {
 		"night_raid_chance": 0.9,
 		"permadeath": true,
 		"desc": "생존이 거의 불가능에 가깝습니다. 가장 숙련된 생존자만을 위한 난이도입니다."
+	},
+	"custom": {
+		"name": "커스텀 모딩",
+		"enemy_spawn_mult": 1.0,
+		"resource_mult": 1.0,
+		"damage_taken_mult": 1.0,
+		"metabolism_mult": 1.0,
+		"night_raid_chance": 0.35,
+		"permadeath": false,
+		"desc": "사용자 지정 규칙이 적용된 커스텀 난이도입니다."
 	}
 }
 
@@ -380,7 +400,8 @@ func setup_default_input_map() -> void:
 			var ev = InputEventKey.new()
 			ev.physical_keycode = key
 			ev.keycode = key
-			InputMap.action_add_event(action, ev)
+			if not InputMap.action_has_event(action, ev):
+				InputMap.action_add_event(action, ev)
 	
 	# 마우스 액션 등록
 	if not InputMap.has_action("attack"):

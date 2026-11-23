@@ -129,6 +129,8 @@ static func is_vault_intel_unlocked() -> bool:
 	var w_data: Dictionary = GameManager.current_world_data
 	if bool(w_data.get("raid_radio_scanned", false)):
 		return true
+	if HideoutProgression.get_facility_level(w_data, "intel_center") >= 1:
+		return true
 	var hideout_fac: Dictionary = w_data.get("hideout", {}).get("facilities", {})
 	if int(hideout_fac.get("intel_center", 0)) >= 1:
 		return true

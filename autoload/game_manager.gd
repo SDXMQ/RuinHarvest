@@ -179,10 +179,14 @@ func toggle_pause() -> void:
 func start_new_game(world_settings: Dictionary = {}) -> void:
 	current_save_slot = "save_" + str(Time.get_unix_time_from_system())
 	raid_duration_minutes = float(world_settings.get("raid_duration_minutes", 30.0))
+	var initial_seed: int = int(world_settings.get("seed", 0))
+	if initial_seed == 0:
+		initial_seed = randi()
 	
 	# 기본 초기 데이터 세팅
 	current_world_data = {
 		"world_name": world_settings.get("world_name", "New World"),
+		"world_seed": initial_seed,
 		"difficulty": world_settings.get("difficulty", "normal"),
 		"current_day": 1,
 		"playtime": 0.0,
