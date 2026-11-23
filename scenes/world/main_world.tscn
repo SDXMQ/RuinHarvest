@@ -46,129 +46,169 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="Panel" type="PanelContainer" parent="UI/HUD"]
-custom_minimum_size = Vector2(300, 0)
+custom_minimum_size = Vector2(200, 0)
 layout_mode = 0
 offset_left = 20.0
 offset_top = 20.0
-offset_right = 320.0
-offset_bottom = 120.0
+offset_right = 230.0
+offset_bottom = 220.0
+mouse_filter = 2
 
 [node name="VBox" type="VBoxContainer" parent="UI/HUD/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 4
-
-[node name="HPBar" type="ProgressBar" parent="UI/HUD/Panel/VBox"]
-custom_minimum_size = Vector2(0, 16)
-layout_mode = 2
-value = 100.0
-show_percentage = false
-
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/HPBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 12
-text = "HP: 100/100"
-horizontal_alignment = 1
-
-[node name="StaminaBar" type="ProgressBar" parent="UI/HUD/Panel/VBox"]
-custom_minimum_size = Vector2(0, 16)
-layout_mode = 2
-value = 100.0
-show_percentage = false
-
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StaminaBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 12
-text = "STAMINA: 100/100"
-horizontal_alignment = 1
-
-[node name="HBox" type="HBoxContainer" parent="UI/HUD/Panel/VBox"]
-layout_mode = 2
-
-[node name="HungerBar" type="ProgressBar" parent="UI/HUD/Panel/VBox/HBox"]
-custom_minimum_size = Vector2(0, 16)
-layout_mode = 2
-size_flags_horizontal = 3
-value = 100.0
-show_percentage = false
-
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/HBox/HungerBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 12
-text = "HUNGER"
-horizontal_alignment = 1
-
-[node name="ThirstBar" type="ProgressBar" parent="UI/HUD/Panel/VBox/HBox"]
-custom_minimum_size = Vector2(0, 16)
-layout_mode = 2
-size_flags_horizontal = 3
-value = 100.0
-show_percentage = false
-
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/HBox/ThirstBar"]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_font_sizes/font_size = 12
-text = "THIRST"
-horizontal_alignment = 1
+mouse_filter = 2
+theme_override_constants/separation = 6
 
 [node name="StatusLabel" type="Label" parent="UI/HUD/Panel/VBox"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
-theme_override_font_sizes/font_size = 12
-text = "상태이상: 없음"
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.68, 0.74, 0.78, 0.8)
+theme_override_font_sizes/font_size = 11
+text = "상태: 정상"
 
-[node name="StatusBadgesContainer" type="HBoxContainer" parent="UI/HUD/Panel/VBox"]
+[node name="StatusBadgesContainer" type="VBoxContainer" parent="UI/HUD/Panel/VBox"]
 layout_mode = 2
-theme_override_constants/separation = 4
+mouse_filter = 2
+theme_override_constants/separation = 6
 
 [node name="BleedBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
 visible = false
+custom_minimum_size = Vector2(182, 32)
 layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.25, 0.25, 1)
-theme_override_font_sizes/font_size = 11
-text = "BLEED"
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
+theme_override_font_sizes/font_size = 12
+text = "출혈 (BLEED)"
 
 [node name="FractureBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
 visible = false
+custom_minimum_size = Vector2(182, 32)
 layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge"]
 layout_mode = 2
-theme_override_colors/font_color = Color(1, 0.6, 0.15, 1)
-theme_override_font_sizes/font_size = 11
-text = "FRACTURE"
+mouse_filter = 2
+theme_override_colors/font_color = Color(1, 0.65, 0.2, 1)
+theme_override_font_sizes/font_size = 12
+text = "골절 (FRACTURE)"
 
 [node name="BiohazardBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
 visible = false
+custom_minimum_size = Vector2(182, 32)
 layout_mode = 2
 
 [node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge"]
 layout_mode = 2
-theme_override_colors/font_color = Color(0.25, 1, 0.35, 1)
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.3, 1, 0.42, 1)
+theme_override_font_sizes/font_size = 12
+text = "생체 감염 (INFECTED)"
+
+[node name="VitalsPanel" type="PanelContainer" parent="UI/HUD"]
+layout_mode = 1
+anchors_preset = 7
+anchor_left = 0.5
+anchor_top = 1.0
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -225.0
+offset_top = -66.0
+offset_right = 225.0
+offset_bottom = -10.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="VBox" type="VBoxContainer" parent="UI/HUD/VitalsPanel"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 3
+
+[node name="HPBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox"]
+custom_minimum_size = Vector2(0, 17)
+layout_mode = 2
+mouse_filter = 2
+value = 100.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HPBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 theme_override_font_sizes/font_size = 11
-text = "BIO-HAZARD"
+text = "HP: 100/100"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StaminaBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+mouse_filter = 2
+value = 100.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/StaminaBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 9
+text = "STAMINA: 100/100"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBox" type="HBoxContainer" parent="UI/HUD/VitalsPanel/VBox"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 6
+
+[node name="HungerBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox/HBox"]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+value = 100.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HBox/HungerBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 10
+text = "허기 100%"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="ThirstBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox/HBox"]
+custom_minimum_size = Vector2(0, 14)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+value = 100.0
+show_percentage = false
+
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HBox/ThirstBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_font_sizes/font_size = 10
+text = "갈증 100%"
+horizontal_alignment = 1
+vertical_alignment = 1
 
 [node name="WeaponPanel" type="Panel" parent="UI/HUD"]
 layout_mode = 1
@@ -377,9 +417,9 @@ anchor_top = 1.0
 anchor_right = 0.5
 anchor_bottom = 1.0
 offset_left = -290.0
-offset_top = -64.0
+offset_top = -128.0
 offset_right = 290.0
-offset_bottom = -16.0
+offset_bottom = -72.0
 grow_horizontal = 2
 grow_vertical = 0
 

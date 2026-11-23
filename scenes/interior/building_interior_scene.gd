@@ -12,17 +12,17 @@ extends Node2D
 @onready var resume_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ResumeBtn
 @onready var exit_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ExitBtn
 @onready var interact_prompt: Label = $UI/HUD/InteractPrompt
-@onready var hp_bar: ProgressBar = $UI/HUD/Panel/VBox/HPBar
-@onready var stamina_bar: ProgressBar = $UI/HUD/Panel/VBox/StaminaBar
-@onready var hunger_bar: ProgressBar = $UI/HUD/Panel/VBox/HungerBar
-@onready var thirst_bar: ProgressBar = $UI/HUD/Panel/VBox/ThirstBar
+@onready var hp_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/HPBar
+@onready var stamina_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/StaminaBar
+@onready var hunger_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/HBox/HungerBar
+@onready var thirst_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/HBox/ThirstBar
 @onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
 @onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
 @onready var building_title_label: Label = $UI/HUD/BuildingTitle
 @onready var event_log_vbox: VBoxContainer = $UI/HUD/EventLog
 
 # 통합 전술 HUD 위젯 참조
-var status_badges_container: HBoxContainer = null
+var status_badges_container: VBoxContainer = null
 var badge_bleed: PanelContainer = null
 var badge_fracture: PanelContainer = null
 var badge_biohazard: PanelContainer = null
@@ -172,19 +172,21 @@ func _ready() -> void:
 
 func _ensure_tactical_hud_widgets() -> void:
 	HudTacticalHelper.style_hud_bars(hp_bar, stamina_bar, hunger_bar, thirst_bar)
+	HudTacticalHelper.style_vitals_and_status_containers(get_node_or_null("UI/HUD/Panel"), get_node_or_null("UI/HUD/VitalsPanel"))
 	var hud = $UI/HUD
 	var vbox = get_node_or_null("UI/HUD/Panel/VBox")
 	if vbox:
-		status_badges_container = vbox.get_node_or_null("StatusBadgesContainer")
+		status_badges_container = vbox.get_node_or_null("StatusBadgesContainer") as VBoxContainer
 		if not status_badges_container:
-			status_badges_container = HBoxContainer.new()
+			status_badges_container = VBoxContainer.new()
 			status_badges_container.name = "StatusBadgesContainer"
-			status_badges_container.add_theme_constant_override("separation", 4)
+			status_badges_container.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			status_badges_container.add_theme_constant_override("separation", 6)
 			vbox.add_child(status_badges_container)
 			
-			badge_bleed = _create_status_badge("BleedBadge", "BLEED", Color(1, 0.25, 0.25))
-			badge_fracture = _create_status_badge("FractureBadge", "FRACTURE", Color(1, 0.6, 0.15))
-			badge_biohazard = _create_status_badge("BiohazardBadge", "BIO-HAZARD", Color(0.25, 1, 0.35))
+			badge_bleed = _create_status_badge("BleedBadge", "출혈 (BLEED)", Color(1, 0.30, 0.30))
+			badge_fracture = _create_status_badge("FractureBadge", "골절 (FRACTURE)", Color(1, 0.65, 0.20))
+			badge_biohazard = _create_status_badge("BiohazardBadge", "생체 감염 (INFECTED)", Color(0.30, 1, 0.42))
 			status_badges_container.add_child(badge_bleed)
 			status_badges_container.add_child(badge_fracture)
 			status_badges_container.add_child(badge_biohazard)
@@ -272,9 +274,9 @@ func _ensure_tactical_hud_widgets() -> void:
 		quickslot_bar.name = "QuickslotBar"
 		quickslot_bar.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
 		quickslot_bar.offset_left = -290.0
-		quickslot_bar.offset_top = -68.0
+		quickslot_bar.offset_top = -128.0
 		quickslot_bar.offset_right = 290.0
-		quickslot_bar.offset_bottom = -12.0
+		quickslot_bar.offset_bottom = -72.0
 		quickslot_hbox = HBoxContainer.new()
 		quickslot_hbox.name = "HBox"
 		quickslot_hbox.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -294,13 +296,14 @@ func _create_status_badge(node_name: String, text_str: String, col: Color) -> Pa
 	var pc = PanelContainer.new()
 	pc.name = node_name
 	pc.visible = false
-	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.mouse_filter = Control.MOUSE_FILTER_STOP
 	pc.focus_mode = Control.FOCUS_NONE
+	pc.custom_minimum_size = Vector2(182, 32)
 	var lbl = Label.new()
 	lbl.name = "Label"
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	lbl.text = text_str
-	lbl.add_theme_font_size_override("font_size", 11)
+	lbl.add_theme_font_size_override("font_size", 12)
 	lbl.add_theme_color_override("font_color", col)
 	pc.add_child(lbl)
 	return pc

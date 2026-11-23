@@ -8,10 +8,10 @@ extends Node2D
 @onready var exit_btn: Button = $UI/PauseMenu/CenterPanel/VBoxContainer/ExitBtn
 @onready var debug_label: Label = $UI/HUD/DebugLabel
 @onready var interact_prompt: Label = $UI/HUD/InteractPrompt
-@onready var hp_bar: ProgressBar = $UI/HUD/Panel/VBox/HPBar
-@onready var stamina_bar: ProgressBar = $UI/HUD/Panel/VBox/StaminaBar
-@onready var hunger_bar: ProgressBar = $UI/HUD/Panel/VBox/HBox/HungerBar
-@onready var thirst_bar: ProgressBar = $UI/HUD/Panel/VBox/HBox/ThirstBar
+@onready var hp_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/HPBar
+@onready var stamina_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/StaminaBar
+@onready var hunger_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/HBox/HungerBar
+@onready var thirst_bar: ProgressBar = $UI/HUD/VitalsPanel/VBox/HBox/ThirstBar
 @onready var status_label: Label = $UI/HUD/Panel/VBox/StatusLabel
 @onready var raid_timer_label: Label = $UI/HUD/RaidTimerPanel/RaidTimerLabel
 @onready var extract_bar: ProgressBar = $UI/HUD/ExtractProgressBar
@@ -20,7 +20,7 @@ extends Node2D
 @onready var event_log_vbox: VBoxContainer = $UI/HUD/EventLog
 
 # 상태이상 배지
-@onready var status_badges_container: HBoxContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer")
+@onready var status_badges_container: VBoxContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer")
 @onready var badge_bleed: PanelContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge")
 @onready var badge_fracture: PanelContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge")
 @onready var badge_biohazard: PanelContainer = get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge")
@@ -393,6 +393,7 @@ func _ready() -> void:
 	# 초기 청크 로드
 	chunk_manager.update_chunks(player.global_position)
 	HudTacticalHelper.style_hud_bars(hp_bar, stamina_bar, hunger_bar, thirst_bar)
+	HudTacticalHelper.style_vitals_and_status_containers(get_node_or_null("UI/HUD/Panel"), get_node_or_null("UI/HUD/VitalsPanel"))
 	_on_player_stats_changed()
 	
 	# 시작 시 주변에 초기 좀비 스폰 (설정된 밀도 반영)

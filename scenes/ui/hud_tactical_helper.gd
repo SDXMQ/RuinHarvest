@@ -328,24 +328,81 @@ static func style_hud_bars(hp_bar: ProgressBar, stamina_bar: ProgressBar, hunger
 		if bg_sb != null: thirst_bar.add_theme_stylebox_override("background", bg_sb)
 		InventoryUIHelper.apply_dynamic_tint(thirst_bar, "fill", Color(0.22, 0.80, 0.72, 0.98))
 
-static func style_status_badges(badges: Array) -> void:
-	var badge_sb: StyleBox = PixelAssetManager.get_pixel_stylebox("toast", 6.0, 3.0, 6.0, 3.0, 3) if PixelAssetManager else null
-	var badge_icon_map := {
-		"BleedBadge": {"key": "bleed", "text": "BLEED"},
-		"FractureBadge": {"key": "fracture", "text": "FRACTURE"},
-		"BiohazardBadge": {"key": "biohazard", "text": "BIO-HAZARD"},
+const STATUS_BADGE_META: Dictionary = {
+	"BleedBadge": {
+		"key": "bleed",
+		"text": "출혈 (BLEED)",
+		"color": Color(1.0, 0.30, 0.30),
+		"tooltip": "출혈: 지속적으로 체력이 감소합니다.\n해결: [5] 붕대 또는 지혈제를 사용하세요."
+	},
+	"FractureBadge": {
+		"key": "fracture",
+		"text": "골절 (FRACTURE)",
+		"color": Color(1.0, 0.65, 0.20),
+		"tooltip": "골절: 이동 속도가 크게 저하됩니다.\n해결: [6] 부목, 구급상자 또는 수술 키트를 사용하세요."
+	},
+	"BiohazardBadge": {
+		"key": "biohazard",
+		"text": "생체 감염 (INFECTED)",
+		"color": Color(0.30, 1.0, 0.42),
+		"tooltip": "생체 감염: 최대 스태미나가 감소하고 지속 피해를 입습니다.\n해결: 항생제 또는 고급 치료킷을 사용하세요."
+	},
+	"PainkillerBadge": {
+		"key": "pill",
+		"text": "진통제",
+		"color": Color(0.45, 1.0, 0.85),
+		"tooltip": "진통제 효과: 지속 시간 동안 받는 피해가 25% 감소합니다.\n해결: 지속 시간이 끝나면 자동 해제됩니다."
 	}
+}
+
+static func style_vitals_and_status_containers(status_panel: Control, vitals_panel: Control) -> void:
+	if is_instance_valid(status_panel):
+		status_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		status_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+	if is_instance_valid(vitals_panel):
+		vitals_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.05, 0.06, 0.09, 0.82)
+		sb.set_border_width_all(1)
+		sb.border_color = Color(0.22, 0.27, 0.34, 0.88)
+		sb.set_corner_radius_all(4)
+		sb.content_margin_left = 8
+		sb.content_margin_right = 8
+		sb.content_margin_top = 5
+		sb.content_margin_bottom = 5
+		vitals_panel.add_theme_stylebox_override("panel", sb)
+
+static func style_status_badges(badges: Array) -> void:
 	for b in badges:
 		if is_instance_valid(b) and b is Control:
-			b.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			b.mouse_filter = Control.MOUSE_FILTER_STOP
 			b.focus_mode = Control.FOCUS_NONE
-			if badge_sb != null:
-				b.add_theme_stylebox_override("panel", badge_sb)
-			if UiIconManager and badge_icon_map.has(b.name):
-				var cfg: Dictionary = badge_icon_map[b.name]
+			b.custom_minimum_size = Vector2(182, 32)
+			var cfg: Dictionary = STATUS_BADGE_META.get(b.name, {})
+			var accent: Color = cfg.get("color", Color(0.95, 0.4, 0.4))
+			var sb := StyleBoxFlat.new()
+			sb.bg_color = Color(0.06, 0.08, 0.11, 0.90)
+			sb.set_border_width_all(2)
+			sb.border_color = Color(accent.r, accent.g, accent.b, 0.92)
+			sb.set_corner_radius_all(4)
+			sb.content_margin_left = 10
+			sb.content_margin_right = 10
+			sb.content_margin_top = 5
+			sb.content_margin_bottom = 5
+			b.add_theme_stylebox_override("panel", sb)
+			if cfg.has("tooltip"):
+				b.tooltip_text = String(cfg["tooltip"])
+			if not cfg.is_empty():
 				var lbl: Label = b.get_node_or_null("Label") as Label
 				if lbl:
-					UiIconManager.set_label_icon(lbl, String(cfg["key"]), String(cfg["text"]), 13, 4, true)
+					lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					lbl.add_theme_font_size_override("font_size", 12)
+					lbl.add_theme_color_override("font_color", accent)
+					if UiIconManager:
+						UiIconManager.set_label_icon(lbl, String(cfg["key"]), String(cfg["text"]), 16, 6, true)
+						var icon_row := lbl.get_parent() as Control
+						if icon_row and icon_row != b:
+							icon_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
 static func make_event_toast_stylebox(accent_col: Color = Color(1.0, 0.8, 0.2)) -> StyleBox:
 	if PixelAssetManager:
@@ -450,8 +507,14 @@ static func update_player_hud(
 			st_lbl.text = "STAMINA: %d/%d" % [int(player.stamina), int(player.max_stamina)]
 	if hunger_bar:
 		hunger_bar.value = player.hunger
+		var h_lbl := hunger_bar.get_node_or_null("Label") as Label
+		if h_lbl:
+			h_lbl.text = "허기 %d%%" % int(round(player.hunger))
 	if thirst_bar:
 		thirst_bar.value = player.thirst
+		var t_lbl := thirst_bar.get_node_or_null("Label") as Label
+		if t_lbl:
+			t_lbl.text = "갈증 %d%%" % int(round(player.thirst))
 
 	var pk_timer: float = float(player.get("painkiller_timer")) if player.get("painkiller_timer") != null else 0.0
 	var pk_red: float = float(player.get("painkiller_damage_reduction")) if player.get("painkiller_damage_reduction") != null else 0.0
@@ -467,27 +530,39 @@ static func update_player_hud(
 	if badges_parent:
 		var pk_badge := badges_parent.get_node_or_null("PainkillerBadge") as PanelContainer
 		if pk_timer > 0.0:
+			var pk_cfg: Dictionary = STATUS_BADGE_META.get("PainkillerBadge", {})
+			var pk_col: Color = pk_cfg.get("color", Color(0.45, 1.0, 0.85))
 			if not pk_badge:
 				pk_badge = PanelContainer.new()
 				pk_badge.name = "PainkillerBadge"
+				pk_badge.mouse_filter = Control.MOUSE_FILTER_STOP
+				pk_badge.focus_mode = Control.FOCUS_NONE
+				pk_badge.custom_minimum_size = Vector2(182, 32)
+				pk_badge.tooltip_text = String(pk_cfg.get("tooltip", ""))
 				var sb := StyleBoxFlat.new()
-				sb.bg_color = Color(0.08, 0.22, 0.24, 0.92)
-				sb.set_border_width_all(1)
-				sb.border_color = Color(0.28, 0.90, 0.78, 0.90)
-				sb.set_corner_radius_all(3)
-				sb.content_margin_left = 6
-				sb.content_margin_right = 6
-				sb.content_margin_top = 2
-				sb.content_margin_bottom = 2
+				sb.bg_color = Color(0.06, 0.14, 0.16, 0.90)
+				sb.set_border_width_all(2)
+				sb.border_color = Color(pk_col.r, pk_col.g, pk_col.b, 0.92)
+				sb.set_corner_radius_all(4)
+				sb.content_margin_left = 10
+				sb.content_margin_right = 10
+				sb.content_margin_top = 5
+				sb.content_margin_bottom = 5
 				pk_badge.add_theme_stylebox_override("panel", sb)
-				var pk_row: HBoxContainer = UiIconManager.create_icon_label("pill", "", 10, Color(0.45, 1.0, 0.85), 13, 4) if UiIconManager else HBoxContainer.new()
+				var pk_row: HBoxContainer = UiIconManager.create_icon_label("pill", "", 12, pk_col, 16, 6) if UiIconManager else HBoxContainer.new()
 				pk_row.name = "Row"
+				pk_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				if not pk_row.has_node("Label"):
 					var pk_lbl := Label.new()
 					pk_lbl.name = "Label"
-					pk_lbl.add_theme_font_size_override("font_size", 10)
-					pk_lbl.add_theme_color_override("font_color", Color(0.45, 1.0, 0.85))
+					pk_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					pk_lbl.add_theme_font_size_override("font_size", 12)
+					pk_lbl.add_theme_color_override("font_color", pk_col)
 					pk_row.add_child(pk_lbl)
+				else:
+					var existing_pk_lbl := pk_row.get_node("Label") as Control
+					if existing_pk_lbl:
+						existing_pk_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				pk_badge.add_child(pk_row)
 				badges_parent.add_child(pk_badge)
 			pk_badge.visible = true
@@ -503,7 +578,7 @@ static func update_player_hud(
 		if player.is_fractured: statuses.append("골절")
 		if player.is_infected: statuses.append("감염")
 		if pk_timer > 0.0: statuses.append("진통제(%ds)" % ceili(pk_timer))
-		status_label.text = "상태이상: " + (", ".join(statuses) if statuses.size() > 0 else "없음")
+		status_label.text = "상태: 정상" if statuses.is_empty() else ("상태이상: " + ", ".join(statuses))
 		status_label.visible = not has_status
 
 	if weapon_panel:
