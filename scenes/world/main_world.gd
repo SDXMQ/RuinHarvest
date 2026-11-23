@@ -1656,12 +1656,20 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 							table_name = "locked_armory"
 							loot_title = "[icon:key] 특수 무기고 보관함"
 							slots = 12
-		var inv: Inventory
+		var inv: Inventory = null
 		if container_inventories.has(tile_pos):
 			inv = container_inventories[tile_pos]
 			if inv.has_meta("custom_title"):
 				loot_title = String(inv.get_meta("custom_title"))
-		else:
+		elif type == Vector2i(9, 2) and get_tree():
+			for cb in get_tree().get_nodes_in_group("corpse_boxes"):
+				if is_instance_valid(cb) and cb.get("corpse_tile_pos") == tile_pos and cb.get("loot_inventory") != null:
+					inv = cb.get("loot_inventory")
+					if cb.get("box_title") != null and String(cb.get("box_title")) != "":
+						loot_title = String(cb.get("box_title"))
+					container_inventories[tile_pos] = inv
+					break
+		if inv == null:
 			inv = Inventory.new()
 			inv.max_slots = slots
 			inv.clear()

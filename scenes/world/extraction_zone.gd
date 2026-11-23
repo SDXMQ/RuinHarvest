@@ -138,9 +138,7 @@ func _on_body_entered(body: Node2D) -> void:
 		player_ref = body
 		
 		if extraction_type == ExtractionType.VEHICLE:
-			var rubles = 0
-			if GameManager and GameManager.current_world_data.has("player"):
-				rubles = int(GameManager.current_world_data["player"].get("rubles", 0))
+			var rubles: int = GameManager.get_player_rubles() if GameManager else 0
 			if rubles < required_rubles:
 				if player_ref.has_method("show_floating_text"):
 					player_ref.show_floating_text("[%d RUB 필요]" % required_rubles, Color(1.0, 0.8, 0.2))
@@ -149,14 +147,7 @@ func _on_body_entered(body: Node2D) -> void:
 				if SoundManager: SoundManager.play("hit_melee")
 				return
 		elif extraction_type == ExtractionType.BUNKER:
-			var obj_done = false
-			if GameManager:
-				if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
-					obj_done = true
-				elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
-					obj_done = true
-				elif GameManager.current_world_data.has("player") and GameManager.current_world_data["player"].get("field_objectives_completed", 0) >= 1:
-					obj_done = true
+			var obj_done: bool = GameManager.is_bunker_extraction_unlocked() if GameManager else false
 			if not obj_done:
 				if player_ref.has_method("show_floating_text"):
 					player_ref.show_floating_text("[벙커 격벽 폐쇄: 필드 목표 완료 필요]", Color(0.2, 0.85, 1.0))
@@ -180,7 +171,7 @@ func _on_body_exited(body: Node2D) -> void:
 func _trigger_extraction() -> void:
 	if extraction_type == ExtractionType.VEHICLE:
 		if GameManager and GameManager.current_world_data.has("player"):
-			var cur_rub = int(GameManager.current_world_data["player"].get("rubles", 0))
+			var cur_rub: int = GameManager.get_player_rubles()
 			if cur_rub < required_rubles:
 				if EventBus.has_signal("event_logged"):
 					EventBus.event_logged.emit("[icon:vehicle] 탈출 차량 이용 불가: 탑승 비용 %d RUB가 부족합니다! (현재: %d RUB)" % [required_rubles, cur_rub])
@@ -190,14 +181,7 @@ func _trigger_extraction() -> void:
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("[icon:vehicle] 탈출 차량 탑승료 %d RUB 결제 완료." % required_rubles)
 	elif extraction_type == ExtractionType.BUNKER:
-		var obj_done = false
-		if GameManager:
-			if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
-				obj_done = true
-			elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
-				obj_done = true
-			elif GameManager.current_world_data.has("player") and GameManager.current_world_data["player"].get("field_objectives_completed", 0) >= 1:
-				obj_done = true
+		var obj_done: bool = GameManager.is_bunker_extraction_unlocked() if GameManager else false
 		if not obj_done:
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("[icon:lock] 지하 벙커 탈출구 폐쇄됨: 필드 목표 단말기 1개 이상 가동/해킹 필요!")
@@ -207,7 +191,7 @@ func _trigger_extraction() -> void:
 	EventBus.extraction_started.emit(zone_name, extract_time)
 	if GameManager:
 		var items_to_keep = []
-		var main_world = get_node_or_null("/root/MainWorld")
+		var main_world = get_tree().current_scene if (get_tree() and get_tree().current_scene) else get_node_or_null("/root/MainWorld")
 		if main_world:
 			if main_world.has_method("get_backpack_items"):
 				items_to_keep = main_world.get_backpack_items()

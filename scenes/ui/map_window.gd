@@ -100,25 +100,11 @@ func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_nod
 
 static func get_extraction_lock_info(z_type: int, objectives: Array = []) -> Dictionary:
 	if z_type == 1:
-		var rubles = 0
-		if GameManager and GameManager.current_world_data:
-			var p_data = GameManager.current_world_data.get("player", {})
-			rubles = int(p_data.get("rubles", GameManager.current_world_data.get("rubles", 0)))
+		var rubles: int = GameManager.get_player_rubles() if GameManager else 0
 		if rubles < 3000:
 			return {"locked": true, "reason": "잠김: 3,000R 필요"}
 	elif z_type == 2:
-		var obj_done = false
-		if GameManager:
-			if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
-				obj_done = true
-			elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
-				obj_done = true
-			elif int(GameManager.current_world_data.get("player", {}).get("field_objectives_completed", 0)) >= 1:
-				obj_done = true
-		for obj in objectives:
-			if is_instance_valid(obj) and bool(obj.get("is_completed")):
-				obj_done = true
-				break
+		var obj_done: bool = GameManager.is_bunker_extraction_unlocked(objectives) if GameManager else false
 		if not obj_done:
 			return {"locked": true, "reason": "잠김: 단말기 미해킹"}
 	return {"locked": false, "reason": ""}

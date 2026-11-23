@@ -130,6 +130,28 @@ func is_sandbox_mode() -> bool:
 	var ws: Dictionary = ws_raw if ws_raw is Dictionary else {}
 	return String(ws.get("mode", "")) == "sandbox" or bool(ws.get("sandbox_mode", false)) or String(current_world_data.get("difficulty", "")) == "sandbox"
 
+func get_player_rubles() -> int:
+	if not (current_world_data is Dictionary):
+		return 0
+	var p_data = current_world_data.get("player", {})
+	if p_data is Dictionary and p_data.has("rubles"):
+		return int(p_data.get("rubles", 0))
+	return int(current_world_data.get("rubles", 0))
+
+func is_bunker_extraction_unlocked(objectives: Array = []) -> bool:
+	if raid_landmark_completed or raid_power_restored:
+		return true
+	if current_world_data is Dictionary:
+		if bool(current_world_data.get("raid_power_restored", false)):
+			return true
+		var p_data = current_world_data.get("player", {})
+		if p_data is Dictionary and int(p_data.get("field_objectives_completed", 0)) >= 1:
+			return true
+	for obj in objectives:
+		if is_instance_valid(obj) and bool(obj.get("is_completed")):
+			return true
+	return false
+
 func _process(delta: float) -> void:
 	if current_state == GameState.IN_GAME and not is_paused and not (get_tree() and get_tree().paused):
 		time_elapsed_in_raid += delta
