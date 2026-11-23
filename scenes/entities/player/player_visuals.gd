@@ -33,6 +33,7 @@ var _hud_overlay: Node2D
 
 var _laser_active: bool = false
 var _laser_start: Vector2 = Vector2.ZERO
+var _laser_end: Vector2 = Vector2.ZERO
 var _nvg_glow_active: bool = false
 var _is_dead_visual: bool = false
 
@@ -123,7 +124,7 @@ func _ready() -> void:
 	if material is ShaderMaterial:
 		material = material.duplicate()
 	reset_visual_state()
-	if EventBus.has_signal("player_damaged"):
+	if EventBus.has_signal("player_damaged") and not (player and player.has_method("_on_player_damaged")):
 		EventBus.player_damaged.connect(_on_player_damaged)
 	_sync_pixel_layers()
 
@@ -434,6 +435,7 @@ func _sync_pixel_layers() -> void:
 		if bool(stats.get("laser_sight", false)):
 			_laser_active = true
 			_laser_start = Vector2(tip_x, mount_y)
+			_laser_end = _compute_laser_end(_laser_start)
 
 	# 5. 머리 & 헬멧 / 방독면 / 야간투시경
 	var helmet_id := String(equip_dict.get("helmet", {}).get("id", ""))
@@ -456,6 +458,17 @@ func _sync_pixel_layers() -> void:
 	if nvg_on:
 		_nvg_spr.region_rect = _cell_rect(4, 2)
 
+func _compute_laser_end(start_pos: Vector2) -> Vector2:
+	var end_pos := start_pos + Vector2(350.0, 0.0)
+	if is_inside_tree() and player:
+		var world_2d: World2D = player.get_world_2d()
+		if world_2d != null and world_2d.direct_space_state:
+			var q := PhysicsRayQueryParameters2D.create(to_global(start_pos), to_global(end_pos), 1, [player])
+			var hit: Dictionary = world_2d.direct_space_state.intersect_ray(q)
+			if not hit.is_empty():
+				end_pos = to_local(hit["position"])
+	return end_pos
+
 func _on_glow_overlay_draw() -> void:
 	if not _glow_overlay:
 		return
@@ -463,16 +476,7 @@ func _on_glow_overlay_draw() -> void:
 		_glow_overlay.draw_rect(Rect2(9.0, -4.0, 3.0, 2.0), Color(0.35, 2.2, 0.55, 0.98))
 		_glow_overlay.draw_rect(Rect2(9.0, 2.0, 3.0, 2.0), Color(0.35, 2.2, 0.55, 0.98))
 	if _laser_active:
-		var laser_end := _laser_start + Vector2(350.0, 0.0)
-		if is_inside_tree() and player:
-			var world_2d: World2D = player.get_world_2d()
-			if world_2d != null:
-				var space_state: PhysicsDirectSpaceState2D = world_2d.direct_space_state
-				if space_state:
-					var q := PhysicsRayQueryParameters2D.create(to_global(_laser_start), to_global(laser_end), 1, [player])
-					var hit: Dictionary = space_state.intersect_ray(q)
-					if not hit.is_empty():
-						laser_end = to_local(hit["position"])
+		var laser_end := _laser_end if _laser_end != Vector2.ZERO else (_laser_start + Vector2(350.0, 0.0))
 		_glow_overlay.draw_line(_laser_start, laser_end, Color(2.1, 0.22, 0.22, 0.62), 1.0)
 		_glow_overlay.draw_rect(Rect2(laser_end - Vector2(1.5, 1.5), Vector2(3.0, 3.0)), Color(2.6, 0.35, 0.35, 0.95))
 

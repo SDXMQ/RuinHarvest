@@ -661,6 +661,25 @@ func _sync_enemy_pixel_layers(visuals: Node2D) -> void:
 		else:
 			visuals.material.set_shader_parameter("stealth_dissolve", 0.0)
 
+	_update_cached_laser_end()
+
+var _cached_laser_end: Vector2 = Vector2(145.0, 1.0)
+
+func _update_cached_laser_end() -> void:
+	if not is_ranged_human or not (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) or current_state != State.CHASE or reload_timer > 0:
+		return
+	var is_boss_lockon := (enemy_type == EnemyType.BOSS and boss_telegraph_timer > 0.0)
+	var muzzle_start := Vector2(28.0, 1.0)
+	var laser_end := Vector2(attack_radius if is_boss_lockon else 145.0, 1.0)
+	if is_inside_tree():
+		var world_2d: World2D = get_world_2d()
+		if world_2d != null and world_2d.direct_space_state:
+			var q := PhysicsRayQueryParameters2D.create(to_global(muzzle_start), to_global(laser_end), 1, [self])
+			var hit: Dictionary = world_2d.direct_space_state.intersect_ray(q)
+			if not hit.is_empty():
+				laser_end = to_local(hit["position"])
+	_cached_laser_end = laser_end
+
 func _on_glow_overlay_draw() -> void:
 	if not _glow_overlay:
 		return
@@ -691,19 +710,12 @@ func _on_glow_overlay_draw() -> void:
 			var laser_col := Color(2.2, 1.5, 0.22, 0.62) if enemy_type == EnemyType.BOSS else Color(2.2, 0.24, 0.24, 0.52)
 			var laser_w := 1.2
 			var muzzle_start := Vector2(28.0, 1.0)
-			var laser_end := Vector2(attack_radius if is_boss_lockon else 145.0, 1.0)
+			var laser_end := _cached_laser_end
 			if is_boss_lockon:
 				var pulse := 0.55 + 0.45 * sin(float(Time.get_ticks_msec()) * 0.025)
 				laser_col = Color(2.6, 0.32 + 0.9 * pulse, 0.18, 0.94)
 				laser_w = 2.6
 				_glow_overlay.draw_arc(Vector2.ZERO, 26.0 + 4.0 * pulse, 0.0, TAU, 24, Color(2.4, 0.28, 0.18, 0.25 + 0.72 * pulse), 2.0)
-			if is_inside_tree():
-				var world_2d: World2D = get_world_2d()
-				if world_2d != null:
-					var q := PhysicsRayQueryParameters2D.create(to_global(muzzle_start), to_global(laser_end), 1, [self])
-					var hit: Dictionary = world_2d.direct_space_state.intersect_ray(q)
-					if not hit.is_empty():
-						laser_end = to_local(hit["position"])
 			_glow_overlay.draw_line(muzzle_start, laser_end, laser_col, laser_w)
 	else:
 		if enemy_type == EnemyType.NIGHT_STALKER:
@@ -849,14 +861,12 @@ func _try_attack(victim: Node2D = null) -> void:
 	else:
 		attack_timer = attack_cooldown
 		if target_node == target_player:
-			EventBus.player_damaged.emit(damage, "night_stalker" if enemy_type == EnemyType.NIGHT_STALKER else "zombie")
-			if enemy_type == EnemyType.NIGHT_STALKER and "is_infected" in target_player:
-				if not bool(target_player.is_infected):
-					target_player.is_infected = true
-					if target_player.has_signal("stats_changed"):
-						target_player.stats_changed.emit()
-					if EventBus.has_signal("event_logged"):
-						EventBus.event_logged.emit("[icon:biohazard] [경고] 야간 추격자의 발톱에 긁혀 변이 감염(Infection) 상태가 되었습니다!")
+			var dmg_source := "night_stalker" if enemy_type == EnemyType.NIGHT_STALKER else "zombie"
+			EventBus.player_damaged.emit(damage, dmg_source)
+			if not target_player.is_node_ready() and target_player.has_method("take_damage"):
+				target_player.take_damage(damage, dmg_source)
+			elif enemy_type == EnemyType.NIGHT_STALKER and "is_infected" in target_player and not bool(target_player.is_infected):
+				target_player.is_infected = true
 			if EventBus.has_signal("player_hit_direction"):
 				EventBus.player_hit_direction.emit(global_position)
 		elif target_node.has_method("take_damage"):

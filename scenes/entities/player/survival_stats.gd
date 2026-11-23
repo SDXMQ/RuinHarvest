@@ -153,12 +153,17 @@ func take_damage(amount: float, source: String) -> void:
 					if EventBus.has_signal("event_logged"):
 						EventBus.event_logged.emit("[icon:shield_red] [%s] 내구도가 0이 되어 방어력을 상실했습니다!" % d.get("name", eq.get("id", slot)))
 				
-	if source == "zombie" and randf() < 0.28:
+	if source == "night_stalker":
+		if not is_infected:
+			is_infected = true
+			if EventBus and EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("[icon:biohazard] [경고] 야간 추격자의 발톱에 긁혀 변이 감염(Infection) 상태가 되었습니다!")
+	elif source == "zombie" and randf() < 0.28:
 		is_infected = true
 	elif source in ["gunfire", "gunshot", "explosion"] and randf() < 0.38:
 		is_bleeding = true
 	if hp <= 0:
 		EventBus.player_died.emit()
 	stats_changed.emit()
-	if player and player.has_signal("stats_changed"):
+	if player and player.has_signal("stats_changed") and not player.is_node_ready():
 		player.stats_changed.emit()
