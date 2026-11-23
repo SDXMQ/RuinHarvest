@@ -1648,20 +1648,22 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 				var bonus_weapons = ["M4_리시버", "AK_리시버", "SV98_리시버"]
 				var bonus_gear = ["3레벨_방탄복", "3레벨_헬멧", "3레벨_가방", "고급 치료킷", "구급상자", "장거리 무전기", "금시계"]
 				var rec_id = bonus_weapons[randi() % bonus_weapons.size()]
-				var w_dict = WeaponPartsDatabase.create_default_weapon(rec_id)
+				var w_dict = WeaponPartsDatabase.create_loot_weapon(rec_id, 0.14)
 				inv.add_item(rec_id, 1, w_dict)
 				inv.add_item(bonus_gear[randi() % bonus_gear.size()], 1)
 				inv.add_item("수류탄", 2)
 			elif in_locked_vault_kind == "armory" and type == Vector2i(3, 1):
 				var vault_weapons = ["M4_리시버", "AK_리시버", "SV98_리시버"]
 				var v_rec = vault_weapons[randi() % vault_weapons.size()]
-				inv.add_item(v_rec, 1, WeaponPartsDatabase.create_default_weapon(v_rec))
+				inv.add_item(v_rec, 1, WeaponPartsDatabase.create_loot_weapon(v_rec, 0.14))
 			elif in_locked_vault_kind == "medical" and type == Vector2i(3, 1):
 				inv.add_item("고급 치료킷", 1)
 				inv.add_item("암호화된 SSD", 1)
 			var loot_items = ItemDatabase.generate_loot(table_name)
 			for item in loot_items:
-				inv.add_item(item["id"], item["amount"])
+				var it_id := String(item.get("id", ""))
+				var w_custom: Dictionary = WeaponPartsDatabase.create_loot_weapon(it_id, 0.06) if WeaponPartsDatabase.is_modifiable_weapon({"id": it_id}) else {}
+				inv.add_item(it_id, item["amount"], w_custom)
 			container_inventories[tile_pos] = inv
 			
 		_open_loot_window(inv, loot_title)

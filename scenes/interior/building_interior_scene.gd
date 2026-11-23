@@ -574,7 +574,9 @@ func _spawn_entities() -> void:
 		inv.max_slots = 8
 		add_child(inv)
 		for it in f_info.get("loot", []):
-			inv.add_item(it["id"], it["amount"])
+			var it_id := String(it.get("id", ""))
+			var w_custom: Dictionary = WeaponPartsDatabase.create_loot_weapon(it_id, 0.06) if WeaponPartsDatabase.is_modifiable_weapon({"id": it_id}) else {}
+			inv.add_item(it_id, it["amount"], w_custom)
 		container_inventories[f_pos] = inv
 		container_titles[f_pos] = String(f_info.get("type", "수납함"))
 
@@ -584,7 +586,9 @@ func _spawn_entities() -> void:
 		inv.max_slots = 8
 		add_child(inv)
 		for it in c_info.get("items", []):
-			inv.add_item(it["id"], it["amount"])
+			var it_id := String(it.get("id", ""))
+			var w_custom: Dictionary = WeaponPartsDatabase.create_loot_weapon(it_id, 0.06) if WeaponPartsDatabase.is_modifiable_weapon({"id": it_id}) else {}
+			inv.add_item(it_id, it["amount"], w_custom)
 		container_inventories[c_pos] = inv
 
 func _process(delta: float) -> void:

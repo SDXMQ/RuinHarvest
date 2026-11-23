@@ -986,14 +986,16 @@ func _spawn_loot_drop() -> void:
 				{"id": "12게이지_벅샷", "amount": randi_range(6, 12)}
 			]
 			drops.append(ammo_pool.pick_random())
+			if randf() < 0.60:
+				var scav_guns = ["M9_리시버", "레밍턴_리시버", "MP5_리시버"]
+				var g_id: String = scav_guns.pick_random()
+				drops.append({"id": g_id, "amount": 1, "custom_data": WeaponPartsDatabase.create_loot_weapon(g_id, 0.05)})
 			if randf() < 0.75:
 				var gear_pool = [
 					{"id": "붕대", "amount": 1},
 					{"id": "진통제", "amount": 1},
 					{"id": "생수", "amount": 1},
 					{"id": "식량통조림", "amount": 1},
-					{"id": "M9_리시버", "amount": 1},
-					{"id": "레밍턴_리시버", "amount": 1},
 					{"id": "레드닷_사이트", "amount": 1},
 					{"id": "수직_포어그립", "amount": 1}
 				]
@@ -1006,12 +1008,14 @@ func _spawn_loot_drop() -> void:
 				{"id": "12게이지_슬러그", "amount": randi_range(8, 14)}
 			]
 			drops.append(ammo_pool.pick_random())
+			if randf() < 0.80:
+				var raider_guns = ["AK_리시버", "M4_리시버", "MP5_리시버", "레버액션_리시버"]
+				var r_id: String = raider_guns.pick_random()
+				drops.append({"id": r_id, "amount": 1, "custom_data": WeaponPartsDatabase.create_loot_weapon(r_id, 0.10)})
 			var high_pool = [
 				{"id": "구급상자", "amount": 1},
 				{"id": "고급 치료킷", "amount": 1},
 				{"id": "수류탄", "amount": 1},
-				{"id": "AK_리시버", "amount": 1},
-				{"id": "M4_리시버", "amount": 1},
 				{"id": "2레벨_방탄복", "amount": 1},
 				{"id": "2레벨_헬멧", "amount": 1},
 				{"id": "2배율_조준경", "amount": 1},
@@ -1128,7 +1132,7 @@ func _spawn_corpse_loot_box(drops: Array) -> void:
 		var amt := int(d.get("amount", 1))
 		var c_data: Dictionary = d.get("custom_data", {})
 		if c_data.is_empty() and WeaponPartsDatabase.RECEIVERS.has(item_id):
-			c_data = WeaponPartsDatabase.create_default_weapon(item_id)
+			c_data = WeaponPartsDatabase.create_loot_weapon(item_id, 0.06)
 		inv.add_item(item_id, amt, c_data)
 
 	if scene and "container_inventories" in scene:

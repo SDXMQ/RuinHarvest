@@ -14,11 +14,13 @@ const FURNITURE_LOOT_TABLES = {
 		{"id": "구급상자", "chance": 0.25}, {"id": "고급 치료킷", "chance": 0.1}
 	],
 	"무기함": [
-		{"id": "권총", "chance": 0.3}, {"id": "9mm", "chance": 0.55, "amount": 20},
+		{"id": "M9_리시버", "chance": 0.32}, {"id": "권총", "chance": 0.25}, {"id": "9mm", "chance": 0.55, "amount": 20},
 		{"id": ".45ACP", "chance": 0.35, "amount": 16}, {"id": "5.56mm", "chance": 0.32, "amount": 20},
 		{"id": "7.62mm", "chance": 0.28, "amount": 18}, {"id": "12게이지_벅샷", "chance": 0.28, "amount": 10},
 		{"id": "12게이지_슬러그", "chance": 0.16, "amount": 8},
-		{"id": "레버액션 소총", "chance": 0.15}, {"id": "MP5_리시버", "chance": 0.16}, {"id": "방탄조끼", "chance": 0.22},
+		{"id": "레버액션 소총", "chance": 0.20}, {"id": "MP5_리시버", "chance": 0.24},
+		{"id": "레밍턴_리시버", "chance": 0.24}, {"id": "AK_리시버", "chance": 0.18}, {"id": "M4_리시버", "chance": 0.16},
+		{"id": "방탄조끼", "chance": 0.22},
 		{"id": "레드닷_사이트", "chance": 0.20}, {"id": "2배율_조준경", "chance": 0.15},
 		{"id": "소음기", "chance": 0.12}, {"id": "대용량_확장_탄창", "chance": 0.18},
 		{"id": "수직_포어그립", "chance": 0.16}, {"id": "컴펜세이터", "chance": 0.14}
@@ -26,8 +28,9 @@ const FURNITURE_LOOT_TABLES = {
 	"선반": [
 		{"id": "고철", "chance": 0.4}, {"id": "못", "chance": 0.5},
 		{"id": "천", "chance": 0.4}, {"id": "손전등", "chance": 0.2},
-		{"id": "9mm", "chance": 0.22, "amount": 15}, {"id": "경량_접이식_스톡", "chance": 0.10},
-		{"id": "전술_손전등", "chance": 0.10}
+		{"id": "9mm", "chance": 0.22, "amount": 15},
+		{"id": "M9_리시버", "chance": 0.12}, {"id": "레밍턴_리시버", "chance": 0.08},
+		{"id": "경량_접이식_스톡", "chance": 0.10}, {"id": "전술_손전등", "chance": 0.10}
 	],
 	"금고": [
 		{"id": "금시계", "chance": 0.4}, {"id": "은반지", "chance": 0.5},

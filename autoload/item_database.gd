@@ -272,7 +272,8 @@ var loot_tables: Dictionary = {
 		{"id": "붕대", "chance": 0.25}, {"id": "9mm", "chance": 0.32, "amount": 20},
 		{"id": ".45ACP", "chance": 0.22, "amount": 15}, {"id": "12게이지_벅샷", "chance": 0.20, "amount": 8},
 		{"id": "5.56mm", "chance": 0.16, "amount": 18}, {"id": "7.62mm", "chance": 0.14, "amount": 15},
-		{"id": "권총", "chance": 0.08}, {"id": "손전등", "chance": 0.12},
+		{"id": "M9_리시버", "chance": 0.16}, {"id": "레밍턴_리시버", "chance": 0.12},
+		{"id": "MP5_리시버", "chance": 0.08}, {"id": "권총", "chance": 0.08}, {"id": "손전등", "chance": 0.12},
 		{"id": "레드닷_사이트", "chance": 0.12}, {"id": "수직_포어그립", "chance": 0.10},
 		{"id": "플래시_소염기", "chance": 0.10}, {"id": "경량_접이식_스톡", "chance": 0.09}
 	],
@@ -286,6 +287,7 @@ var loot_tables: Dictionary = {
 		{"id": "군용 나침반", "chance": 0.12}, {"id": "금시계", "chance": 0.06},
 		{"id": "지도", "chance": 0.12}, {"id": "9mm", "chance": 0.24, "amount": 18},
 		{"id": ".45ACP", "chance": 0.18, "amount": 15}, {"id": "12게이지_벅샷", "chance": 0.16, "amount": 8},
+		{"id": "M9_리시버", "chance": 0.14}, {"id": "레밍턴_리시버", "chance": 0.08},
 		{"id": "전술_손전등", "chance": 0.10}, {"id": "짧은_총열", "chance": 0.08}
 	],
 	"fridge": [
@@ -307,6 +309,7 @@ var loot_tables: Dictionary = {
 		{"id": "5.56mm", "chance": 0.16, "amount": 18}, {"id": "CPU", "chance": 0.15},
 		{"id": "금시계", "chance": 0.12}, {"id": "장거리 무전기", "chance": 0.08},
 		{"id": "무기고 열쇠", "chance": 0.10}, {"id": "보안 키카드", "chance": 0.06},
+		{"id": "M9_리시버", "chance": 0.14}, {"id": "MP5_리시버", "chance": 0.08},
 		{"id": "레드닷_사이트", "chance": 0.12}, {"id": "적색_레이저_표적지시기", "chance": 0.10},
 		{"id": "대용량_확장_탄창", "chance": 0.10}
 	],
@@ -314,7 +317,8 @@ var loot_tables: Dictionary = {
 		{"id": "식량통조림", "chance": 0.35}, {"id": "생수", "chance": 0.35},
 		{"id": "고철", "chance": 0.35}, {"id": "못", "chance": 0.3},
 		{"id": "손전등", "chance": 0.2}, {"id": "비상용 배터리", "chance": 0.2},
-		{"id": "12게이지_벅샷", "chance": 0.20, "amount": 8}, {"id": "컴펜세이터", "chance": 0.10},
+		{"id": "12게이지_벅샷", "chance": 0.20, "amount": 8}, {"id": "레밍턴_리시버", "chance": 0.12},
+		{"id": "레버액션 소총", "chance": 0.08}, {"id": "컴펜세이터", "chance": 0.10},
 		{"id": "수직_포어그립", "chance": 0.10}
 	],
 	"house": [
@@ -323,6 +327,7 @@ var loot_tables: Dictionary = {
 		{"id": "천", "chance": 0.2}, {"id": "붕대", "chance": 0.18},
 		{"id": "9mm", "chance": 0.25, "amount": 18}, {"id": ".45ACP", "chance": 0.18, "amount": 14},
 		{"id": "12게이지_벅샷", "chance": 0.15, "amount": 8},
+		{"id": "M9_리시버", "chance": 0.12}, {"id": "레밍턴_리시버", "chance": 0.08},
 		{"id": "은반지", "chance": 0.15}, {"id": "금시계", "chance": 0.05}
 	],
 	"hospital": [
@@ -334,9 +339,11 @@ var loot_tables: Dictionary = {
 		{"id": "9mm", "chance": 0.38, "amount": 25}, {"id": "5.56mm", "chance": 0.38, "amount": 25},
 		{"id": "7.62mm", "chance": 0.34, "amount": 20}, {"id": ".45ACP", "chance": 0.28, "amount": 20},
 		{"id": "12게이지_벅샷", "chance": 0.26, "amount": 10}, {"id": "12게이지_슬러그", "chance": 0.20, "amount": 8},
-		{"id": "권총", "chance": 0.12}, {"id": "MP5_리시버", "chance": 0.10}, {"id": "레버액션 소총", "chance": 0.08},
-		{"id": "방탄조끼", "chance": 0.15}, {"id": "구급상자", "chance": 0.22},
-		{"id": "수류탄", "chance": 0.15}, {"id": "암호화된 SSD", "chance": 0.06},
+		{"id": "권총", "chance": 0.12}, {"id": "MP5_리시버", "chance": 0.22},
+		{"id": "AK_리시버", "chance": 0.20}, {"id": "M4_리시버", "chance": 0.18},
+		{"id": "레밍턴_리시버", "chance": 0.15}, {"id": "레버액션 소총", "chance": 0.12},
+		{"id": "SV98_리시버", "chance": 0.10}, {"id": "방탄조끼", "chance": 0.15},
+		{"id": "구급상자", "chance": 0.22}, {"id": "수류탄", "chance": 0.15}, {"id": "암호화된 SSD", "chance": 0.06},
 		{"id": "2배율_조준경", "chance": 0.16}, {"id": "4배율_ACOG", "chance": 0.12},
 		{"id": "소음기", "chance": 0.12}, {"id": "대용량_확장_탄창", "chance": 0.16},
 		{"id": "컴펜세이터", "chance": 0.14}, {"id": "RK-1_인체공학_그립", "chance": 0.12},
@@ -345,6 +352,8 @@ var loot_tables: Dictionary = {
 	"locked_armory": [
 		{"id": "5.56mm", "chance": 0.65, "amount": 30}, {"id": "7.62mm", "chance": 0.65, "amount": 30},
 		{"id": "9mm", "chance": 0.50, "amount": 30}, {"id": "12게이지_슬러그", "chance": 0.45, "amount": 12},
+		{"id": "M4_리시버", "chance": 0.28}, {"id": "AK_리시버", "chance": 0.28},
+		{"id": "MP5_리시버", "chance": 0.22}, {"id": "SV98_리시버", "chance": 0.18},
 		{"id": "3레벨_방탄복", "chance": 0.35}, {"id": "3레벨_헬멧", "chance": 0.35},
 		{"id": "수류탄", "chance": 0.45}, {"id": "소음기", "chance": 0.35},
 		{"id": "4배율_ACOG", "chance": 0.30}, {"id": "8배율_스나이퍼_스코프", "chance": 0.22},

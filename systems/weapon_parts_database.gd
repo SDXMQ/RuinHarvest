@@ -592,3 +592,68 @@ static func create_default_weapon(receiver_id: String) -> Dictionary:
 		"computed_stats": stats,
 		"durability": 100
 	}
+
+static func create_stock_weapon(receiver_id: String) -> Dictionary:
+	var resolved_id: String = resolve_receiver_id(receiver_id)
+	var receiver: Dictionary = RECEIVERS.get(resolved_id, RECEIVERS["M9_리시버"])
+	var parts: Dictionary = {}
+	var def_ammo: String = String(receiver.get("default_ammo", "9mm"))
+	var stats: Dictionary = compute_weapon_stats(resolved_id, parts, def_ammo)
+	return {
+		"id": resolved_id,
+		"type": "assembled_weapon",
+		"name": String(receiver.get("name", resolved_id)),
+		"receiver": resolved_id,
+		"loaded_ammo": def_ammo,
+		"current_magazine_ammo": int(stats.get("magazine_size", 10)),
+		"parts": parts,
+		"attachments": {},
+		"computed_stats": stats,
+		"durability": randi_range(70, 100),
+		"max_durability": 100.0
+	}
+
+static func create_loot_weapon(receiver_id: String, modded_chance: float = 0.08) -> Dictionary:
+	var w: Dictionary = create_stock_weapon(receiver_id)
+	if randf() >= clampf(modded_chance, 0.0, 1.0):
+		return w
+	var res_id: String = String(w["receiver"])
+	var receiver: Dictionary = RECEIVERS.get(res_id, {})
+	var rec_cat: String = String(receiver.get("category", "rifle"))
+	var rec_slots: Dictionary = receiver.get("slots", {})
+	var candidates_by_slot: Dictionary = {}
+	for part_id in PARTS.keys():
+		var p_data: Dictionary = PARTS[part_id]
+		var slot_key: String = String(p_data.get("slot", ""))
+		if not rec_slots.has(slot_key):
+			continue
+		var compat: Array = p_data.get("compatible_categories", [])
+		if not ("all" in compat) and not (rec_cat in compat):
+			continue
+		var p_tier: String = String(p_data.get("tier", "cheap"))
+		var copies: int = 3 if p_tier == "cheap" else (2 if p_tier == "mid" else 1)
+		if not candidates_by_slot.has(slot_key):
+			candidates_by_slot[slot_key] = []
+		for _c in range(copies):
+			candidates_by_slot[slot_key].append(part_id)
+	if candidates_by_slot.is_empty():
+		return w
+	var slot_keys: Array = candidates_by_slot.keys()
+	slot_keys.shuffle()
+	var parts: Dictionary = {}
+	var attach_count: int = mini(randi_range(1, 2), slot_keys.size())
+	for i in range(attach_count):
+		var sk: String = String(slot_keys[i])
+		var pool: Array = candidates_by_slot[sk]
+		var picked: String = String(pool[randi() % pool.size()])
+		if sk == "rail":
+			parts["rail"] = [picked]
+		else:
+			parts[sk] = picked
+	var def_ammo: String = String(w["loaded_ammo"])
+	var stats: Dictionary = compute_weapon_stats(res_id, parts, def_ammo)
+	w["parts"] = parts
+	w["attachments"] = parts
+	w["computed_stats"] = stats
+	w["current_magazine_ammo"] = int(stats.get("magazine_size", 10))
+	return w
