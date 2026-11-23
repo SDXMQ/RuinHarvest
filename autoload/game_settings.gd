@@ -324,6 +324,7 @@ var show_fps: bool = false
 var screen_shake: bool = true
 var particles_quality: int = 2 # 0: 끄기, 1: 30%, 2: 70%, 3: 100%
 var max_event_logs: int = 3 # 왼쪽 HUD 이벤트 로그 최대 표시 개수
+var movement_mode: int = 0 # 0: 기본 이동 (화면 상하좌우 WASD), 1: 시선 기준 이동 (마우스 방향 WASD)
 
 # 셰이더 설정
 var enable_post_process: bool = true
@@ -455,6 +456,7 @@ func save_settings() -> void:
 		"screen_shake": screen_shake,
 		"particles_quality": particles_quality,
 		"max_event_logs": max_event_logs,
+		"movement_mode": movement_mode,
 		"enable_post_process": enable_post_process,
 		"vignette_intensity": vignette_intensity,
 		"bloom_intensity": bloom_intensity,
@@ -487,6 +489,7 @@ func load_settings() -> void:
 			screen_shake = d.get("screen_shake", screen_shake)
 			particles_quality = d.get("particles_quality", particles_quality)
 			max_event_logs = d.get("max_event_logs", max_event_logs)
+			movement_mode = clampi(int(d.get("movement_mode", movement_mode)), 0, 1)
 			enable_post_process = d.get("enable_post_process", enable_post_process)
 			vignette_intensity = d.get("vignette_intensity", vignette_intensity)
 			bloom_intensity = d.get("bloom_intensity", bloom_intensity)

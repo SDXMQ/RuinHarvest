@@ -12,6 +12,7 @@ extends Control
 
 @onready var log_label: Label = $Panel/VBox/TabContainer/게임플레이/VBox/LogLabel
 @onready var log_count_slider: HSlider = $Panel/VBox/TabContainer/게임플레이/VBox/LogCountSlider
+@onready var movement_mode_opt: OptionButton = $Panel/VBox/TabContainer/게임플레이/VBox/MovementModeOpt
 
 signal window_closed
 
@@ -67,6 +68,11 @@ func _ready() -> void:
 		bgm_vol.value = GameSettings.bgm_volume
 		sfx_vol.value = GameSettings.sfx_volume
 	_update_audio_labels()
+	if movement_mode_opt:
+		movement_mode_opt.clear()
+		movement_mode_opt.add_item("기본 이동 (화면 상하좌우 WASD)")
+		movement_mode_opt.add_item("시선 기준 이동 (W: 마우스 방향으로 전진)")
+		movement_mode_opt.selected = clampi(GameSettings.movement_mode, 0, 1) if GameSettings else 0
 			
 	# 시그널 연결
 	fullscreen_btn.toggled.connect(_on_fullscreen_toggled)
@@ -77,10 +83,17 @@ func _ready() -> void:
 	sfx_vol.value_changed.connect(func(v: float): _on_volume_changed("SFX", v))
 	
 	log_count_slider.value_changed.connect(_on_log_count_changed)
+	if movement_mode_opt:
+		movement_mode_opt.item_selected.connect(_on_movement_mode_selected)
 	
 	var close_btn = $Panel/VBox/Header/CloseBtn
 	if close_btn:
 		close_btn.pressed.connect(_on_close_pressed)
+
+func _on_movement_mode_selected(index: int) -> void:
+	if GameSettings:
+		GameSettings.movement_mode = clampi(index, 0, 1)
+		GameSettings.save_settings()
 
 func _on_log_count_changed(value: float) -> void:
 	var count = int(value)

@@ -571,13 +571,23 @@ func get_total_weight() -> float:
 			total += InventoryGrid.get_item_total_weight(eq)
 	return total
 
+static func compute_movement_direction(raw_input: Vector2, facing_rotation: float, mode: int = 0) -> Vector2:
+	if raw_input.length_squared() <= 0.0001:
+		return Vector2.ZERO
+	if mode == 1:
+		var forward := Vector2.RIGHT.rotated(facing_rotation)
+		var right := Vector2.DOWN.rotated(facing_rotation)
+		return (forward * (-raw_input.y) + right * raw_input.x).normalized()
+	return raw_input.normalized()
+
 func _handle_movement(delta: float) -> void:
 	var input_vector = Vector2.ZERO
 	input_vector.x = Input.get_axis("move_left", "move_right")
 	if input_vector.x == 0: input_vector.x = int(Input.is_physical_key_pressed(KEY_D)) - int(Input.is_physical_key_pressed(KEY_A))
 	input_vector.y = Input.get_axis("move_up", "move_down")
 	if input_vector.y == 0: input_vector.y = int(Input.is_physical_key_pressed(KEY_S)) - int(Input.is_physical_key_pressed(KEY_W))
-	input_vector = input_vector.normalized()
+	var move_mode: int = GameSettings.movement_mode if GameSettings else 0
+	input_vector = compute_movement_direction(input_vector, rotation, move_mode)
 	
 	is_crouching = Input.is_action_pressed("crouch") or Input.is_physical_key_pressed(KEY_CTRL)
 	is_sprinting = Input.is_action_pressed("sprint") or Input.is_physical_key_pressed(KEY_SHIFT)
