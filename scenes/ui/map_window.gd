@@ -26,7 +26,12 @@ signal window_closed
 
 func get_or_bake_chunk_texture(cpos: Vector2i, c_data: Dictionary) -> ImageTexture:
 	if chunk_minimap_textures.has(cpos):
-		return chunk_minimap_textures[cpos]
+		return chunk_minimap_textures[cpos] as ImageTexture
+	if GameManager and GameManager.raid_map_chunk_cache.has(cpos):
+		var cached_tex: ImageTexture = GameManager.raid_map_chunk_cache[cpos] as ImageTexture
+		if cached_tex:
+			chunk_minimap_textures[cpos] = cached_tex
+			return cached_tex
 	var img: Image = Image.create(16, 16, false, Image.FORMAT_RGBA8)
 	var base_col := Color(0.13, 0.17, 0.12, 0.5)
 	var wall_col := Color(0.38, 0.44, 0.52, 0.9)
@@ -49,7 +54,18 @@ func get_or_bake_chunk_texture(cpos: Vector2i, c_data: Dictionary) -> ImageTextu
 			img.set_pixel(lx, ly, px_col)
 	var tex: ImageTexture = ImageTexture.create_from_image(img)
 	chunk_minimap_textures[cpos] = tex
+	if GameManager:
+		GameManager.raid_map_chunk_cache[cpos] = tex
 	return tex
+
+func is_point_in_live_sight(world_pos: Vector2) -> bool:
+	var reveal_r: float = GameManager.MAP_REVEAL_RADIUS if GameManager else 420.0
+	return player_pos.distance_to(world_pos) <= reveal_r
+
+func is_point_revealed(world_pos: Vector2) -> bool:
+	if is_point_in_live_sight(world_pos):
+		return true
+	return GameManager != null and GameManager.is_world_pos_explored(world_pos)
 
 func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_node: Node2D = null, airdrops: Array = [], objectives: Array = [], loaded_chunks_dict: Dictionary = {}, p_player_ref: Node2D = null, p_chunk_manager: Node = null) -> void:
 	player_pos = pos
@@ -63,14 +79,22 @@ func setup(pos: Vector2, rot: float, extract_pts: Array, biome: String, boss_nod
 	loaded_chunks = loaded_chunks_dict
 	player_ref = p_player_ref
 	chunk_manager_ref = p_chunk_manager
+	if GameManager:
+		GameManager.reveal_map_fog_at(player_pos)
 	chunk_minimap_textures.clear()
+	if GameManager:
+		for cached_cpos in GameManager.raid_map_chunk_cache.keys():
+			var c_tex: ImageTexture = GameManager.raid_map_chunk_cache[cached_cpos] as ImageTexture
+			if c_tex:
+				chunk_minimap_textures[cached_cpos] = c_tex
 	for cpos in loaded_chunks.keys():
 		var c_data = loaded_chunks[cpos]
 		if c_data is Dictionary:
 			get_or_bake_chunk_texture(cpos, c_data)
 	
 	if info_label:
-		info_label.text = "현재 위치: (%.1f, %.1f) | 작전 구역: %s | 로드 청크: %d개" % [player_pos.x, player_pos.y, current_biome, loaded_chunks.size()]
+		var explored_cnt: int = GameManager.raid_explored_cells.size() if GameManager else 0
+		info_label.text = "현재 위치: (%.1f, %.1f) | 작전 구역: %s | 탐색 구역: %d셀" % [player_pos.x, player_pos.y, current_biome, explored_cnt]
 	if map_canvas:
 		map_canvas.queue_redraw()
 
@@ -173,13 +197,18 @@ func _process(_delta: float) -> void:
 		if player_pos != player_ref.global_position or absf(player_rot - player_ref.rotation) > 0.001:
 			player_pos = player_ref.global_position
 			player_rot = player_ref.rotation
+			if GameManager:
+				GameManager.reveal_map_fog_at(player_pos)
 			dirty = true
 	if is_instance_valid(chunk_manager_ref):
 		if "loaded_chunks" in chunk_manager_ref:
 			loaded_chunks = chunk_manager_ref.loaded_chunks
 			dirty = true
+	if visible and not extraction_points.is_empty():
+		dirty = true
 	if info_label and is_instance_valid(player_ref):
-		info_label.text = "현재 위치: (%.1f, %.1f) | 작전 구역: %s | 로드 청크: %d개" % [player_pos.x, player_pos.y, current_biome, loaded_chunks.size()]
+		var explored_cnt: int = GameManager.raid_explored_cells.size() if GameManager else 0
+		info_label.text = "현재 위치: (%.1f, %.1f) | 작전 구역: %s | 탐색 구역: %d셀" % [player_pos.x, player_pos.y, current_biome, explored_cnt]
 	if dirty and map_canvas:
 		map_canvas.queue_redraw()
 
@@ -225,38 +254,60 @@ func _on_map_draw() -> void:
 	var h: float = map_canvas.size.y
 	var center: Vector2 = Vector2(w / 2.0, h / 2.0)
 	
-	# 1. 지도 배경 및 전술 격자선
-	map_canvas.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.09, 0.12, 0.10, 0.96))
+	# 1. 전장의 안개(Fog of War) 다크 배경 및 전술 격자선
+	map_canvas.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.035, 0.048, 0.042, 0.98))
 	
 	var grid_size = 32.0
 	for x in range(0, int(w), int(grid_size)):
-		map_canvas.draw_line(Vector2(x, 0), Vector2(x, h), Color(0.18, 0.26, 0.18, 0.35))
+		map_canvas.draw_line(Vector2(x, 0), Vector2(x, h), Color(0.11, 0.17, 0.13, 0.32))
 	for y in range(0, int(h), int(grid_size)):
-		map_canvas.draw_line(Vector2(0, y), Vector2(w, y), Color(0.18, 0.26, 0.18, 0.35))
+		map_canvas.draw_line(Vector2(0, y), Vector2(w, y), Color(0.11, 0.17, 0.13, 0.32))
 		
 	var map_origin: Vector2 = center + map_pan_offset - view_center_world * scale_factor
+	var fog_cell_size: float = GameManager.MAP_FOG_CELL_SIZE if GameManager else 128.0
+	var reveal_r: float = GameManager.MAP_REVEAL_RADIUS if GameManager else 420.0
 
-	# 2. 로드된 청크 지형/도로/건물 개요 렌더링
-	var chunk_px_size = 16.0 * 32.0 * scale_factor # 512 * 0.085 = 43.52px
-	for cpos in loaded_chunks.keys():
-		var c_data = loaded_chunks[cpos]
-		var c_wx = cpos.x * 512.0
-		var c_wy = cpos.y * 512.0
-		var c_scr = map_origin + Vector2(c_wx, c_wy) * scale_factor
+	# 2. 누적 탐색(Fog of War) 기반 지형/도로/건물 개요 렌더링
+	for loaded_cpos in loaded_chunks.keys():
+		var loaded_data = loaded_chunks[loaded_cpos]
+		if loaded_data is Dictionary:
+			get_or_bake_chunk_texture(loaded_cpos, loaded_data)
+
+	var chunk_px_size: float = 16.0 * 32.0 * scale_factor # 512 * 0.085 = 43.52px
+	var sub_px: float = chunk_px_size * 0.25
+	for cpos_key in chunk_minimap_textures.keys():
+		var cpos: Vector2i = cpos_key
+		var c_wx := float(cpos.x) * 512.0
+		var c_wy := float(cpos.y) * 512.0
+		var c_scr := map_origin + Vector2(c_wx, c_wy) * scale_factor
 		
 		# 캔버스 뷰포트 내에 포함되는지 간이 컬링
 		if c_scr.x + chunk_px_size < 0 or c_scr.x > w or c_scr.y + chunk_px_size < 0 or c_scr.y > h:
 			continue
 			
-		# 16x16 캐싱된 미니맵 텍스처 1회 드로우 (256 타일 개별 draw_rect 루프 대체)
-		var chunk_rect := Rect2(c_scr, Vector2(chunk_px_size, chunk_px_size))
-		if c_data is Dictionary:
-			var chunk_tex: ImageTexture = get_or_bake_chunk_texture(cpos, c_data)
-			if chunk_tex:
-				map_canvas.draw_texture_rect(chunk_tex, chunk_rect, false)
-		map_canvas.draw_rect(chunk_rect, Color(0.22, 0.32, 0.22, 0.2), false, 1.0)
+		var chunk_tex: ImageTexture = chunk_minimap_textures[cpos] as ImageTexture
+		if not chunk_tex:
+			continue
+		var any_sub_explored := false
+		for fy in range(4):
+			for fx in range(4):
+				var fog_cell := Vector2i(cpos.x * 4 + fx, cpos.y * 4 + fy)
+				var cell_center := Vector2((float(fog_cell.x) + 0.5) * fog_cell_size, (float(fog_cell.y) + 0.5) * fog_cell_size)
+				var in_sight: bool = player_pos.distance_to(cell_center) <= reveal_r
+				var is_explored: bool = in_sight or (GameManager != null and GameManager.raid_explored_cells.has(fog_cell))
+				if not is_explored:
+					continue
+				any_sub_explored = true
+				var sub_rect := Rect2(c_scr.x + float(fx) * sub_px, c_scr.y + float(fy) * sub_px, sub_px, sub_px)
+				var src_rect := Rect2(float(fx * 4), float(fy * 4), 4.0, 4.0)
+				var tint := Color(1.0, 1.0, 1.0, 1.0) if in_sight else Color(0.52, 0.58, 0.54, 0.85)
+				map_canvas.draw_texture_rect_region(chunk_tex, sub_rect, src_rect, tint, false)
+		if any_sub_explored:
+			map_canvas.draw_rect(Rect2(c_scr, Vector2(chunk_px_size, chunk_px_size)), Color(0.22, 0.32, 0.22, 0.16), false, 1.0)
 	
 	var ui_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
+	var player_screen: Vector2 = map_origin + player_pos * scale_factor
+	map_canvas.draw_arc(player_screen, reveal_r * scale_factor, 0.0, TAU, 48, Color(0.45, 0.85, 0.55, 0.28), 1.2)
 
 	# 3. 은신처(0,0) 및 동심원 거리계
 	map_canvas.draw_circle(map_origin, 4.0, Color(0.85, 0.85, 0.2))
@@ -265,9 +316,11 @@ func _on_map_draw() -> void:
 	map_canvas.draw_arc(map_origin, 1000.0 * scale_factor, 0, TAU, 36, Color(0.35, 0.45, 0.35, 0.25), 1.0)
 	map_canvas.draw_arc(map_origin, 2000.0 * scale_factor, 0, TAU, 48, Color(0.35, 0.45, 0.35, 0.25), 1.0)
 	
-	# 4. 필드 목표 단말기 (퀘스트 오브젝트)
+	# 4. 필드 목표 단말기 (미완료 목표는 탐색 구역 내에서만 표기)
 	for obj in field_objectives_list:
 		if is_instance_valid(obj):
+			if not bool(obj.is_completed) and not is_point_revealed(obj.global_position):
+				continue
 			var o_pos = map_origin + obj.global_position * scale_factor
 			if o_pos.x >= -40 and o_pos.x <= w + 40 and o_pos.y >= -40 and o_pos.y <= h + 40:
 				var dist = player_pos.distance_to(obj.global_position)
@@ -305,8 +358,8 @@ func _on_map_draw() -> void:
 				map_canvas.draw_arc(v_pos, 8.5, 0, TAU, 14, Color(1.0, 0.9, 0.35), 1.4)
 				_draw_map_icon_and_text(ui_font, v_pos + Vector2(10, 4), String(vm.get("icon", "lock_gold")), "%s (%.0fm)" % [vm["label"], v_dist], 10, Color(1.0, 0.88, 0.32))
 
-	# 6. 랜드마크 보스 마커
-	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
+	# 6. 랜드마크 보스 마커 (탐색된 구역/시야 내에서만 노출)
+	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0 and is_point_revealed(boss_entity.global_position):
 		var b_pos = map_origin + boss_entity.global_position * scale_factor
 		if b_pos.x >= -40 and b_pos.x <= w + 40 and b_pos.y >= -40 and b_pos.y <= h + 40:
 			var dist = player_pos.distance_to(boss_entity.global_position)
@@ -321,7 +374,8 @@ func _on_map_draw() -> void:
 						break
 			_draw_map_icon_and_text(ui_font, b_pos + b_label_offset, "skull", "랜드마크 보스 (%.0fm)" % dist, 11, Color(1.0, 0.35, 0.35))
 
-	# 7. 조건부 탈출구 3종 마커 (일반 / 차량 / 벙커 + 조건 충족 여부 실시간 시각화)
+	# 7. 조건부 탈출구 3종 마커 (전장의 안개와 무관하게 상시 펄스 핑 표시)
+	var ping_phase := fmod(float(Time.get_ticks_msec()) * 0.0014, 1.0)
 	for pt in extraction_points:
 		var pt_pos = map_origin + pt["pos"] * scale_factor
 		if pt_pos.x >= -60 and pt_pos.x <= w + 60 and pt_pos.y >= -60 and pt_pos.y <= h + 60:
@@ -330,15 +384,20 @@ func _on_map_draw() -> void:
 			var is_locked: bool = lock_info["locked"]
 			var lock_reason: String = lock_info["reason"]
 			var z_col = Color(0.2, 1.0, 0.3)
+			var ping_base := Color(0.25, 1.0, 0.45)
 			var z_tag = "일반"
 			if z_type == 1:
 				z_col = Color(0.55, 0.55, 0.58, 0.52) if is_locked else Color(1.0, 0.82, 0.15)
+				ping_base = Color(1.0, 0.82, 0.20)
 				z_tag = "차량"
 			elif z_type == 2:
 				z_col = Color(0.55, 0.55, 0.58, 0.52) if is_locked else Color(0.2, 0.85, 1.0)
+				ping_base = Color(0.25, 0.88, 1.0)
 				z_tag = "벙커"
 				
 			var dist = player_pos.distance_to(pt["pos"])
+			var ping_col := Color(ping_base.r, ping_base.g, ping_base.b, (1.0 - ping_phase) * 0.72)
+			map_canvas.draw_arc(pt_pos, 11.0 + 16.0 * ping_phase, 0.0, TAU, 20, ping_col, 1.6)
 			if z_type == 1:
 				var pts = PackedVector2Array([pt_pos + Vector2(0, -7), pt_pos + Vector2(7, 0), pt_pos + Vector2(0, 7), pt_pos + Vector2(-7, 0)])
 				map_canvas.draw_colored_polygon(pts, z_col)
@@ -360,7 +419,6 @@ func _on_map_draw() -> void:
 				map_canvas.draw_string(ui_font, pt_pos + Vector2(17.0 + base_w, 4), "[%s]" % lock_reason, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1.0, 0.38, 0.38, 0.85))
 			
 	# 8. 플레이어 위치 (드래그 팬 및 실시간 이동이 반영된 실제 월드->화면 좌표)
-	var player_screen: Vector2 = map_origin + player_pos * scale_factor
 	map_canvas.draw_circle(player_screen, 6.0, Color.RED)
 	var forward = Vector2.RIGHT.rotated(player_rot) * 16.0
 	map_canvas.draw_line(player_screen, player_screen + forward, Color.YELLOW, 2.5)

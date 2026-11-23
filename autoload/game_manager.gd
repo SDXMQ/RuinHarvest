@@ -31,6 +31,37 @@ var raid_landmark_completed: bool = false
 var raid_power_restored: bool = false
 const LANDMARK_EXTRACTION_BONUS: int = 15000
 
+const MAP_FOG_CELL_SIZE: float = 128.0
+const MAP_REVEAL_RADIUS: float = 420.0
+var raid_explored_cells: Dictionary = {} # Vector2i -> true
+var raid_map_chunk_cache: Dictionary = {} # Vector2i -> ImageTexture
+
+func reset_raid_map_fog() -> void:
+	raid_explored_cells.clear()
+	raid_map_chunk_cache.clear()
+
+func world_to_fog_cell(world_pos: Vector2) -> Vector2i:
+	return Vector2i(int(floor(world_pos.x / MAP_FOG_CELL_SIZE)), int(floor(world_pos.y / MAP_FOG_CELL_SIZE)))
+
+func reveal_map_fog_at(world_pos: Vector2, radius: float = MAP_REVEAL_RADIUS) -> int:
+	var min_cx := int(floor((world_pos.x - radius) / MAP_FOG_CELL_SIZE))
+	var max_cx := int(floor((world_pos.x + radius) / MAP_FOG_CELL_SIZE))
+	var min_cy := int(floor((world_pos.y - radius) / MAP_FOG_CELL_SIZE))
+	var max_cy := int(floor((world_pos.y + radius) / MAP_FOG_CELL_SIZE))
+	var added := 0
+	for cy in range(min_cy, max_cy + 1):
+		for cx in range(min_cx, max_cx + 1):
+			var center := Vector2((float(cx) + 0.5) * MAP_FOG_CELL_SIZE, (float(cy) + 0.5) * MAP_FOG_CELL_SIZE)
+			if world_pos.distance_to(center) <= radius:
+				var cell := Vector2i(cx, cy)
+				if not raid_explored_cells.has(cell):
+					raid_explored_cells[cell] = true
+					added += 1
+	return added
+
+func is_world_pos_explored(world_pos: Vector2) -> bool:
+	return raid_explored_cells.has(world_to_fog_cell(world_pos))
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS # 일시정지 중에도 동작
 	if EventBus.has_signal("enemy_killed"):
@@ -209,6 +240,7 @@ func start_raid() -> void:
 	raid_kills_count = 0
 	raid_landmark_completed = false
 	raid_power_restored = false
+	reset_raid_map_fog()
 	if current_world_data is Dictionary:
 		current_world_data["raid_power_restored"] = false
 		var ws_raw = current_world_data.get("world_settings", {})
@@ -223,6 +255,7 @@ func start_raid() -> void:
 var last_raid_result: Dictionary = {}
 
 func end_raid(result: String, looted_items: Array = []) -> void:
+	reset_raid_map_fog()
 	if looted_items.is_empty():
 		var cur_scene = get_tree().current_scene if get_tree() else null
 		if cur_scene and cur_scene.has_method("get_backpack_items"):

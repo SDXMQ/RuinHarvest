@@ -81,6 +81,7 @@ var storm_lightning_active: bool = false
 var storm_lightning_duration: float = 0.0
 var storm_thunder_delay: float = -1.0
 var last_fulton_balloon: Node2D = null
+var _last_fog_reveal_pos: Vector2 = Vector2(INF, INF)
 
 func spawn_fulton_balloon_effect(start_pos: Vector2, item_name: String = "") -> Node2D:
 	var balloon := Node2D.new()
@@ -396,6 +397,9 @@ func _ready() -> void:
 	
 	# 초기 청크 로드
 	chunk_manager.update_chunks(player.global_position)
+	if GameManager:
+		GameManager.reveal_map_fog_at(player.global_position)
+	_last_fog_reveal_pos = player.global_position
 	HudTacticalHelper.style_hud_bars(hp_bar, stamina_bar, hunger_bar, thirst_bar)
 	HudTacticalHelper.style_vitals_and_status_containers(get_node_or_null("UI/HUD/Panel"), get_node_or_null("UI/HUD/VitalsPanel"))
 	boss_hud_widgets = HudTacticalHelper.ensure_boss_hud_widgets(get_node_or_null("UI/HUD"))
@@ -1160,6 +1164,10 @@ func _process(delta: float) -> void:
 	if player:
 		player.ui_input_blocked = _has_open_modal_window()
 		chunk_manager.update_chunks(player.global_position)
+		if player.global_position.distance_to(_last_fog_reveal_pos) >= 24.0:
+			if GameManager:
+				GameManager.reveal_map_fog_at(player.global_position)
+			_last_fog_reveal_pos = player.global_position
 		if compass_bar:
 			compass_bar.queue_redraw()
 		var boss_hud_state := HudTacticalHelper.update_boss_hud(boss_hud_widgets, boss_entity, player.global_position, BOSS_WARNING_RADIUS, BOSS_DANGER_RADIUS)
