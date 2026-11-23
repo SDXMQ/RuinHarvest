@@ -1,8 +1,7 @@
-[gd_scene load_steps=5 format=3 uid="uid://world00000"]
+[gd_scene load_steps=4 format=3 uid="uid://world00000"]
 
 [ext_resource type="Script" path="res://scenes/world/main_world.gd" id="1_wrld"]
 [ext_resource type="Script" path="res://scenes/world/chunk_manager.gd" id="2_cmgr"]
-[ext_resource type="Script" path="res://scenes/world/world_renderer.gd" id="3_wren"]
 
 [sub_resource type="Environment" id="Environment_tactical"]
 background_mode = 3
