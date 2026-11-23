@@ -275,7 +275,7 @@ func _has_line_of_sight(target_pos: Vector2) -> bool:
 func _scan_hostile_target() -> Node2D:
 	var best_target: Node2D = null
 	var best_dist: float = detection_radius
-	if is_instance_valid(target_player):
+	if is_instance_valid(target_player) and (target_player.get("hp") == null or float(target_player.get("hp")) > 0.0) and not bool(target_player.get("_is_dying")):
 		var p_dist = global_position.distance_to(target_player.global_position)
 		if p_dist <= detection_radius:
 			best_target = target_player
@@ -373,6 +373,9 @@ func _physics_process(delta: float) -> void:
 		target_entity = _scan_hostile_target()
 		
 	var active_target: Node2D = target_entity if is_instance_valid(target_entity) else target_player
+	if active_target == target_player and is_instance_valid(target_player):
+		if (target_player.get("hp") != null and float(target_player.get("hp")) <= 0.0) or bool(target_player.get("_is_dying")):
+			active_target = null
 	if is_instance_valid(active_target):
 		var dist = global_position.distance_to(active_target.global_position)
 		
@@ -785,6 +788,8 @@ func _try_attack(victim: Node2D = null) -> void:
 		return
 	var target_node: Node2D = victim if is_instance_valid(victim) else target_player
 	if not is_instance_valid(target_node):
+		return
+	if target_node == target_player and ((target_player.get("hp") != null and float(target_player.get("hp")) <= 0.0) or bool(target_player.get("_is_dying"))):
 		return
 		
 	if is_ranged_human:

@@ -199,6 +199,9 @@ var flashlight_enabled: bool:
 
 func _ready() -> void:
 	add_to_group("player")
+	_is_dying = false
+	if player_visuals and player_visuals.has_method("reset_visual_state"):
+		player_visuals.reset_visual_state()
 	if not has_node("InventoryGrid"):
 		inventory_grid = InventoryGrid.new()
 		inventory_grid.name = "InventoryGrid"
@@ -221,7 +224,7 @@ func _ready() -> void:
 	EventBus.player_died.connect(_on_death)
 
 func _process(_delta: float) -> void:
-	if ui_input_blocked:
+	if hp <= 0 or _is_dying or ui_input_blocked:
 		return
 	look_at(get_global_mouse_position())
 
@@ -716,10 +719,11 @@ func apply_damage(amount: float, source: String = "unknown") -> void:
 func take_damage(amount: float, source: String = "unknown") -> void:
 	_on_player_damaged(amount, source)
 
-var _hit_flash_tween: Tween = null
 var _is_dying: bool = false
 
 func _on_player_damaged(amount: float, source: String) -> void:
+	if _is_dying or hp <= 0.0:
+		return
 	if is_channeling:
 		cancel_channeling()
 	if survival_stats:
@@ -727,22 +731,27 @@ func _on_player_damaged(amount: float, source: String) -> void:
 	if source != "status_effect":
 		if SoundManager:
 			SoundManager.play("hit_melee")
-		if player_visuals and player_visuals.material:
-			if _hit_flash_tween:
-				_hit_flash_tween.kill()
-			_hit_flash_tween = create_tween()
-			player_visuals.material.set_shader_parameter("flash_color", Color(1.0, 0.25, 0.25, 1.0))
-			player_visuals.material.set_shader_parameter("flash_modifier", 0.85)
-			_hit_flash_tween.tween_property(player_visuals.material, "shader_parameter/flash_modifier", 0.0, 0.18)
+		if hp > 0.0 and player_visuals and player_visuals.has_method("trigger_hit_flash"):
+			player_visuals.trigger_hit_flash()
 
 func _on_death() -> void:
-	if _is_dying: return
+	if _is_dying:
+		return
 	_is_dying = true
+	if is_channeling:
+		cancel_channeling()
 	velocity = Vector2.ZERO
-	if SoundManager: SoundManager.play("player_death")
+	if player_visuals and player_visuals.has_method("show_death_visual"):
+		player_visuals.show_death_visual()
+	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem") if (get_tree() and get_tree().current_scene) else null
+	if ps:
+		ps.emit("blood", global_position.x, global_position.y, 12)
+	show_floating_text("KIA - 사망", Color(1.0, 0.22, 0.22), 1.6)
+	if SoundManager:
+		SoundManager.play("player_death")
 	EventBus.event_logged.emit("[icon:death] 플레이어가 사망했습니다. (작전 실패)")
 	var cur_items: Array = inventory_grid.items.duplicate(true) if inventory_grid else []
-	var timer = get_tree().create_timer(1.2, true, false, true)
+	var timer = get_tree().create_timer(1.5, true, false, true)
 	timer.timeout.connect(func():
 		get_tree().paused = false
 		if GameManager:

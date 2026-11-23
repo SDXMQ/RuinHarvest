@@ -34,6 +34,7 @@ var _hud_overlay: Node2D
 var _laser_active: bool = false
 var _laser_start: Vector2 = Vector2.ZERO
 var _nvg_glow_active: bool = false
+var _is_dead_visual: bool = false
 
 static func _cell_rect(col: int, row: int, sz: int = 32) -> Rect2:
 	return Rect2(float(col * sz), float(row * sz), float(sz), float(sz))
@@ -119,9 +120,49 @@ func _ensure_pixel_layers() -> void:
 
 func _ready() -> void:
 	_ensure_pixel_layers()
+	if material is ShaderMaterial:
+		material = material.duplicate()
+	reset_visual_state()
 	if EventBus.has_signal("player_damaged"):
 		EventBus.player_damaged.connect(_on_player_damaged)
 	_sync_pixel_layers()
+
+func reset_visual_state() -> void:
+	if hit_flash_tween and is_instance_valid(hit_flash_tween):
+		hit_flash_tween.kill()
+	hit_flash_tween = null
+	_is_dead_visual = false
+	modulate = Color.WHITE
+	scale = Vector2.ONE
+	rotation = 0.0
+	if material:
+		material.set_shader_parameter("flash_color", Color.WHITE)
+		material.set_shader_parameter("flash_modifier", 0.0)
+
+func trigger_hit_flash() -> void:
+	if _is_dead_visual or not player or player.hp <= 0 or bool(player.get("_is_dying")):
+		return
+	if hit_flash_tween and is_instance_valid(hit_flash_tween):
+		hit_flash_tween.kill()
+	hit_flash_tween = create_tween()
+	if material:
+		material.set_shader_parameter("flash_color", Color(1.0, 0.15, 0.15, 1.0))
+		material.set_shader_parameter("flash_modifier", 0.9)
+		hit_flash_tween.tween_property(material, "shader_parameter/flash_modifier", 0.0, 0.18)
+	if player and player.has_node("PlayerCamera"):
+		player.get_node("PlayerCamera").request_shake(8.0, 0.3)
+
+func show_death_visual() -> void:
+	if hit_flash_tween and is_instance_valid(hit_flash_tween):
+		hit_flash_tween.kill()
+	hit_flash_tween = null
+	_is_dead_visual = true
+	if material:
+		material.set_shader_parameter("flash_color", Color.WHITE)
+		material.set_shader_parameter("flash_modifier", 0.0)
+	position = Vector2.ZERO
+	rotation = PI * 0.48
+	modulate = Color(0.62, 0.55, 0.55, 0.92)
 
 func show_floating_text(text: String, color: Color = Color(1.0, 0.9, 0.4), duration: float = 0.8) -> void:
 	# 동일 텍스트가 최근에 떠있다면 타이머 갱신
@@ -152,15 +193,10 @@ func _process(delta: float) -> void:
 		_hud_overlay.queue_redraw()
 	queue_redraw()
 
-func _on_player_damaged(_amount: float, _source: String) -> void:
-	if hit_flash_tween: hit_flash_tween.kill()
-	hit_flash_tween = create_tween()
-	if material:
-		material.set_shader_parameter("flash_color", Color(1, 0, 0, 1))
-		material.set_shader_parameter("flash_modifier", 1.0)
-		hit_flash_tween.tween_property(material, "shader_parameter/flash_modifier", 0.0, 0.2)
-	if player and player.has_node("PlayerCamera"):
-		player.get_node("PlayerCamera").request_shake(8.0, 0.3)
+func _on_player_damaged(_amount: float, source: String) -> void:
+	if source == "status_effect":
+		return
+	trigger_hit_flash()
 
 func _sync_pixel_layers() -> void:
 	_ensure_pixel_layers()
@@ -171,7 +207,7 @@ func _sync_pixel_layers() -> void:
 	var bob_y := 0.0
 	var bob_rot := 0.0
 	var is_moving := false
-	if "velocity" in player and player.velocity.length() > 10.0:
+	if not _is_dead_visual and "velocity" in player and player.velocity.length() > 10.0:
 		is_moving = true
 
 	var recoil_offset := 0.0
@@ -196,9 +232,14 @@ func _sync_pixel_layers() -> void:
 		muzzle_flash_timer = float(pl.muzzle_flash_timer)
 		nvg_on = bool(pl.nvg_enabled)
 
-	position = Vector2(0.0, bob_y)
-	rotation = bob_rot
-	_contact_shadow.position = Vector2(1.0, 2.0 - bob_y)
+	if _is_dead_visual:
+		position = Vector2.ZERO
+		rotation = PI * 0.48
+		_contact_shadow.position = Vector2(1.0, 2.0)
+	else:
+		position = Vector2(0.0, bob_y)
+		rotation = bob_rot
+		_contact_shadow.position = Vector2(1.0, 2.0 - bob_y)
 
 	# 1. 양발 교차 보행 애니메이션
 	var stride := sin(walk_bob) * 4.5 if is_moving else 0.0

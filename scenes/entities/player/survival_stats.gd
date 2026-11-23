@@ -42,10 +42,12 @@ var armor_defense: float:
 	set(v):
 		base_armor_defense = v
 var _ui_sync_timer: float = 0.0
+var _death_emitted: bool = false
 
 @onready var player = get_parent()
 
 func _ready() -> void:
+	_death_emitted = false
 	if GameManager and not GameManager.current_world_data.is_empty():
 		var bonus_hp = HideoutProgression.get_bonus_max_hp(GameManager.current_world_data)
 		max_hp = 100.0 + bonus_hp
@@ -92,8 +94,10 @@ func _process(delta: float) -> void:
 	stamina = clamp(stamina, 0.0, get_effective_max_stamina())
 	
 	if hp <= 0:
-		stats_changed.emit()
-		EventBus.player_died.emit()
+		if not _death_emitted:
+			_death_emitted = true
+			stats_changed.emit()
+			EventBus.player_died.emit()
 		return
 
 	if painkiller_timer > 0.0:
@@ -121,7 +125,7 @@ func consume_stamina(amount: float) -> void:
 		is_exhausted = true
 
 func take_damage(amount: float, source: String) -> void:
-	if is_god_mode: return
+	if is_god_mode or hp <= 0.0: return
 	var def = get_total_armor_defense()
 	var dmg_reduction = def / (def + 80.0)
 	var mitigated: float = amount * (1.0 - dmg_reduction)

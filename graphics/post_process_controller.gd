@@ -10,7 +10,17 @@ var lightning_timer: float = 14.0
 var lightning_flash_val: float = 0.0
 var chromatic_aberration_val: float = 0.0
 var current_rain_intensity: float = 0.0
+var current_death_desat: float = 0.0
 var _ca_tween: Tween = null
+
+static func compute_low_hp_effect_strength(hp_ratio: float, pulse_time: float = 0.0) -> float:
+	if hp_ratio > 0.40:
+		return 0.0
+	if hp_ratio <= 0.0:
+		return 0.95
+	var severity := clampf(1.0 - (hp_ratio / 0.40), 0.0, 1.0)
+	var wave := sin(pulse_time) * 0.5 + 0.5
+	return clampf(severity * 0.50 + wave * severity * 0.50, 0.0, 1.0)
 
 static func compute_infection_vignette_strength(infected: bool, pulse_time: float = 0.0) -> float:
 	if not infected:
@@ -30,10 +40,17 @@ func _ready() -> void:
 		_on_weather_changed(WeatherSystem.get_weather_name(WeatherSystem.current_weather))
 		current_tint = target_tint
 		current_rain_intensity = _get_target_rain_intensity()
-	if material:
+	if material is ShaderMaterial:
+		material = material.duplicate()
 		material.set_shader_parameter("tint_color", current_tint)
 		material.set_shader_parameter("rain_intensity", current_rain_intensity)
 		material.set_shader_parameter("chromatic_aberration", chromatic_aberration_val)
+		material.set_shader_parameter("low_hp_pulse", 0.0)
+		material.set_shader_parameter("infection_pulse", 0.0)
+		material.set_shader_parameter("nvg_active", 0.0)
+		material.set_shader_parameter("lightning_flash", 0.0)
+		material.set_shader_parameter("death_desat", 0.0)
+		material.set_shader_parameter("vignette_intensity", 0.0)
 
 func _get_target_rain_intensity() -> float:
 	var current_scene = get_tree().current_scene if get_tree() else null
@@ -103,16 +120,26 @@ func _process(delta: float) -> void:
 		material.set_shader_parameter("nvg_active", 1.0 if nvg_on else 0.0)
 
 	if player and "hp" in player and "max_hp" in player:
-		var hp_ratio = float(player.hp) / float(player.max_hp)
-		if hp_ratio <= 0.35: # 체력 35% 이하일 때 점멸
-			hp_pulse_time += delta * 4.0 # 심장 박동 속도
-			var pulse = (sin(hp_pulse_time) * 0.5 + 0.5) * (1.0 - (hp_ratio / 0.35))
-			if material:
-				material.set_shader_parameter("low_hp_pulse", pulse)
+		var hp_ratio = float(player.hp) / maxf(float(player.max_hp), 1.0)
+		if hp_ratio <= 0.40:
+			var sev := clampf(1.0 - (hp_ratio / 0.40), 0.0, 1.0)
+			hp_pulse_time += delta * lerpf(4.0, 7.5, sev)
 		else:
 			hp_pulse_time = 0.0
-			if material:
-				material.set_shader_parameter("low_hp_pulse", 0.0)
+		var low_hp_val := compute_low_hp_effect_strength(hp_ratio, hp_pulse_time)
+		if float(player.hp) <= 0.0:
+			current_death_desat = minf(1.0, current_death_desat + delta * 2.8)
+		else:
+			current_death_desat = maxf(0.0, current_death_desat - delta * 4.0)
+		if material:
+			material.set_shader_parameter("low_hp_pulse", low_hp_val)
+			material.set_shader_parameter("death_desat", current_death_desat)
+	else:
+		hp_pulse_time = 0.0
+		current_death_desat = 0.0
+		if material:
+			material.set_shader_parameter("low_hp_pulse", 0.0)
+			material.set_shader_parameter("death_desat", 0.0)
 
 	if player and "is_infected" in player and bool(player.is_infected):
 		infection_pulse_time += delta * 3.0

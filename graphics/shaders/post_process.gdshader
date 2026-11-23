@@ -8,6 +8,7 @@ uniform float vignette_intensity : hint_range(0.0, 1.0) = 0.0;
 uniform vec4 tint_color : source_color = vec4(1.0, 1.0, 1.0, 1.0);
 uniform float low_hp_pulse : hint_range(0.0, 1.0) = 0.0;
 uniform float infection_pulse : hint_range(0.0, 1.0) = 0.0;
+uniform float death_desat : hint_range(0.0, 1.0) = 0.0;
 uniform float grain_strength : hint_range(0.0, 0.5) = 0.03;
 uniform float nvg_active : hint_range(0.0, 1.0) = 0.0;
 uniform float lightning_flash : hint_range(0.0, 1.0) = 0.0;
@@ -125,16 +126,26 @@ void fragment() {
 		color = mix(color, color * vignette, vignette_intensity);
 	}
 
-	// 4. 저체력 펄스 (Low HP Pulse) - 체력 위험 시 가장자리 붉은색 점멸
-	if (low_hp_pulse > 0.0) {
-		float pulse = smoothstep(0.4, 0.8, distance(uv, vec2(0.5, 0.5))) * low_hp_pulse;
-		color = mix(color, vec3(0.8, 0.0, 0.0), pulse * 0.7);
+	// 4. 저체력 펄스 (Low HP Pulse) - 체력 위험 시 가장자리 붉은색 점멸 + 주변 채도 저하
+	if (low_hp_pulse > 0.001) {
+		float pulse = smoothstep(0.28, 0.78, distance(uv, vec2(0.5, 0.5))) * low_hp_pulse;
+		float hp_lum = dot(color, vec3(0.299, 0.587, 0.114));
+		color = mix(color, vec3(hp_lum), pulse * 0.45);
+		color = mix(color, vec3(0.75, 0.02, 0.02), clamp(pulse * 0.78, 0.0, 0.85));
 	}
 
 	// 4-B. 생체 감염 비네팅 (Infection Biohazard Vignette) - 감염 시 가장자리 독성 녹색 맥동
 	if (infection_pulse > 0.001) {
 		float inf_v = smoothstep(0.38, 0.82, distance(uv, vec2(0.5, 0.5))) * infection_pulse;
 		color = mix(color, vec3(0.12, 0.75, 0.22), inf_v * 0.65);
+	}
+
+	// 4-C. 사망 화면 탈색 및 적흑색 비네팅 (Death Desaturation)
+	if (death_desat > 0.001) {
+		float d_lum = dot(color, vec3(0.299, 0.587, 0.114));
+		float d_vig = smoothstep(0.15, 0.82, distance(uv, vec2(0.5, 0.5)));
+		vec3 dead_tint = mix(vec3(d_lum * 0.45, d_lum * 0.12, d_lum * 0.12), vec3(0.18, 0.02, 0.02), d_vig * 0.65);
+		color = mix(color, dead_tint, death_desat * 0.85);
 	}
 
 	// 5. 필름 그레인 (Film Grain - NVG 가동 시 증폭)

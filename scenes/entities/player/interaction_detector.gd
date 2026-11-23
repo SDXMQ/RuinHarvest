@@ -30,7 +30,7 @@ func _on_player_damaged_interrupt(_amount: float, _source: String) -> void:
 func _process(delta: float) -> void:
 	if interact_cooldown > 0:
 		interact_cooldown -= delta
-	if player and player.get("ui_input_blocked"):
+	if not player or player.hp <= 0 or bool(player.get("_is_dying")) or player.get("ui_input_blocked"):
 		interact_prompt.emit(false, "")
 		return
 	_update_interaction(delta)

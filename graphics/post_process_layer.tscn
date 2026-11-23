@@ -4,11 +4,13 @@
 [ext_resource type="Script" path="res://graphics/post_process_controller.gd" id="2_ppc"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_pp"]
+resource_local_to_scene = true
 shader = ExtResource("1_shdr")
 shader_parameter/vignette_intensity = 0.2
 shader_parameter/tint_color = Color(1, 1, 1, 1)
 shader_parameter/low_hp_pulse = 0.0
 shader_parameter/infection_pulse = 0.0
+shader_parameter/death_desat = 0.0
 shader_parameter/grain_strength = 0.03
 shader_parameter/nvg_active = 0.0
 shader_parameter/lightning_flash = 0.0

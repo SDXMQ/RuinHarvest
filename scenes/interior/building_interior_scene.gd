@@ -548,8 +548,8 @@ func _spawn_entities() -> void:
 			player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
 		if player.weapon_handler.has_signal("ammo_changed"):
 			player.weapon_handler.ammo_changed.connect(_update_quickslot_bar)
-	if EventBus.has_signal("player_died") and not EventBus.player_died.is_connected(_close_non_pausing_modals):
-		EventBus.player_died.connect(_close_non_pausing_modals)
+	if EventBus.has_signal("player_died") and not EventBus.player_died.is_connected(_on_player_died_ui):
+		EventBus.player_died.connect(_on_player_died_ui)
 	_setup_quickslot_bar()
 	_on_player_stats_changed()
 	
@@ -768,6 +768,12 @@ func _open_inventory_window(target_inv: Inventory = null, title: String = "") ->
 			player.ui_input_blocked = _has_open_modal_window()
 		_on_player_stats_changed()
 	)
+
+func _on_player_died_ui() -> void:
+	_close_non_pausing_modals()
+	var hud: Control = get_node_or_null("UI/HUD") as Control
+	if hud:
+		HudTacticalHelper.show_death_overlay(hud)
 
 func _close_non_pausing_modals() -> void:
 	if is_instance_valid(current_inventory_window):

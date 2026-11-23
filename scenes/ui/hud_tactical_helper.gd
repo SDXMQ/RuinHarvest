@@ -628,3 +628,84 @@ static func draw_pixel_crosshair(ctrl: Control, m_pos: Vector2, spread: float, i
 		var jam_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
 		ctrl.draw_string(jam_font, jam_pos + Vector2(1, 1), "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0, 0.9))
 		ctrl.draw_string(jam_font, jam_pos, "[JAM - Press R]", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1.0, 0.2, 0.2, 1.0))
+
+static func show_death_overlay(hud: Control) -> Control:
+	if not is_instance_valid(hud):
+		return null
+	var existing: Control = hud.get_node_or_null("DeathOverlay") as Control
+	if existing:
+		existing.visible = true
+		return existing
+
+	var overlay := Control.new()
+	overlay.name = "DeathOverlay"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.z_index = 180
+	overlay.modulate.a = 0.0
+
+	var dim := ColorRect.new()
+	dim.name = "Backdrop"
+	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+	dim.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dim.color = Color(0.14, 0.01, 0.02, 0.56)
+	overlay.add_child(dim)
+
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	overlay.add_child(center)
+
+	var banner := PanelContainer.new()
+	banner.name = "DeathBanner"
+	banner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	banner.custom_minimum_size = Vector2(440, 120)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.08, 0.02, 0.03, 0.92)
+	sb.set_border_width_all(2)
+	sb.border_color = Color(0.95, 0.20, 0.20, 0.95)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 24
+	sb.content_margin_right = 24
+	sb.content_margin_top = 18
+	sb.content_margin_bottom = 18
+	banner.add_theme_stylebox_override("panel", sb)
+	center.add_child(banner)
+
+	var vbox := VBoxContainer.new()
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_theme_constant_override("separation", 8)
+	banner.add_child(vbox)
+
+	var title_lbl := Label.new()
+	title_lbl.name = "DeathTitle"
+	title_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	title_lbl.text = "작전 중 사망 (KIA)"
+	title_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if PixelAssetManager:
+		title_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+	title_lbl.add_theme_font_size_override("font_size", 30)
+	title_lbl.add_theme_color_override("font_color", Color(1.0, 0.26, 0.26, 1.0))
+	if UiIconManager:
+		UiIconManager.set_label_icon(title_lbl, "skull", "작전 중 사망 (KIA)", 26, 8, true)
+	vbox.add_child(title_lbl)
+
+	var sub_lbl := Label.new()
+	sub_lbl.name = "DeathSubtitle"
+	sub_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	sub_lbl.text = "생명 신호가 소실되었습니다. 잠시 후 은신처로 복귀합니다..."
+	sub_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if PixelAssetManager:
+		sub_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_regular())
+	sub_lbl.add_theme_font_size_override("font_size", 14)
+	sub_lbl.add_theme_color_override("font_color", Color(0.92, 0.85, 0.85, 0.95))
+	vbox.add_child(sub_lbl)
+
+	hud.add_child(overlay)
+	if hud.is_inside_tree():
+		var tw := hud.create_tween()
+		tw.tween_property(overlay, "modulate:a", 1.0, 0.18)
+	else:
+		overlay.modulate.a = 1.0
+	return overlay

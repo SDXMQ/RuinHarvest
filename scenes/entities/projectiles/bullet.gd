@@ -60,6 +60,9 @@ func _on_body_entered(body: Node2D) -> void:
 			return
 		
 	if shooter_group == "enemies" and body.is_in_group("player"):
+		if (body.get("hp") != null and float(body.get("hp")) <= 0.0) or bool(body.get("_is_dying")):
+			queue_free()
+			return
 		hit_targets.append(body)
 		var eff_dmg = _get_effective_damage()
 		EventBus.player_damaged.emit(eff_dmg, "gunshot")

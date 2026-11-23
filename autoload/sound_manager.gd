@@ -141,7 +141,7 @@ func _create_sound(s_name: String) -> AudioStreamWAV:
 		return _generate_tone(65.0, 0.45, 0.22, "noise")
 	elif s_name == "reload":
 		return _generate_tone(320.0, 0.12, 0.15, "square")
-	elif s_name == "game_over":
+	elif s_name == "game_over" or s_name == "player_death":
 		return _generate_tone(150.0, 0.75, 0.18, "sawtooth")
 	elif s_name == "day_start":
 		return _generate_tone(440.0, 0.28, 0.13, "sine")
