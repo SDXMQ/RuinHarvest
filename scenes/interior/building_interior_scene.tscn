@@ -1,29 +1,25 @@
-[gd_scene load_steps=3 format=3 uid="uid://interior0000"]
+[gd_scene format=3 uid="uid://interior0000"]
 
-[ext_resource type="Script" path="res://scenes/interior/building_interior_scene.gd" id="1_intr"]
+[ext_resource type="Script" uid="uid://dbvnaxtai5b0w" path="res://scenes/interior/building_interior_scene.gd" id="1_intr"]
 
 [sub_resource type="Environment" id="Environment_interior"]
 background_mode = 3
-tonemap_mode = 0
-tonemap_exposure = 1.0
 glow_enabled = true
-glow_normalized = false
 glow_intensity = 0.65
 glow_strength = 0.85
 glow_bloom = 0.08
-glow_blend_mode = 1
 glow_hdr_threshold = 1.02
 glow_hdr_scale = 1.4
 glow_hdr_luminance_cap = 6.0
 
-[node name="BuildingInteriorScene" type="Node2D"]
+[node name="BuildingInteriorScene" type="Node2D" unique_id=1829595365]
 process_mode = 3
 script = ExtResource("1_intr")
 
-[node name="VoidBackdropLayer" type="CanvasLayer" parent="."]
+[node name="VoidBackdropLayer" type="CanvasLayer" parent="." unique_id=282847281]
 layer = -10
 
-[node name="VoidRect" type="ColorRect" parent="VoidBackdropLayer"]
+[node name="VoidRect" type="ColorRect" parent="VoidBackdropLayer" unique_id=608191415]
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -32,32 +28,32 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.015, 0.018, 0.025, 1)
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1416378702]
 environment = SubResource("Environment_interior")
 
-[node name="DayNightModulate" type="CanvasModulate" parent="."]
+[node name="DayNightModulate" type="CanvasModulate" parent="." unique_id=673077064]
 color = Color(0.32, 0.32, 0.38, 1)
 
-[node name="TileMapLayer" type="TileMapLayer" parent="."]
+[node name="TileMapLayer" type="TileMapLayer" parent="." unique_id=603235398]
 z_index = -10
 
-[node name="ShadowLayer" type="TileMapLayer" parent="."]
+[node name="ShadowLayer" type="TileMapLayer" parent="." unique_id=851927940]
 z_index = -5
-collision_enabled = false
 occlusion_enabled = false
+collision_enabled = false
 
-[node name="ObjectsLayer" type="TileMapLayer" parent="."]
+[node name="ObjectsLayer" type="TileMapLayer" parent="." unique_id=1515601656]
 y_sort_enabled = true
 
-[node name="EmergencyLights" type="Node2D" parent="."]
+[node name="EmergencyLights" type="Node2D" parent="." unique_id=1546033753]
 z_index = 2
 
-[node name="Entities" type="Node2D" parent="."]
+[node name="Entities" type="Node2D" parent="." unique_id=644318952]
 y_sort_enabled = true
 
-[node name="UI" type="CanvasLayer" parent="."]
+[node name="UI" type="CanvasLayer" parent="." unique_id=281465362]
 
-[node name="HUD" type="Control" parent="UI"]
+[node name="HUD" type="Control" parent="UI" unique_id=1736766447]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -66,7 +62,7 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Panel" type="PanelContainer" parent="UI/HUD"]
+[node name="Panel" type="PanelContainer" parent="UI/HUD" unique_id=1593226261]
 custom_minimum_size = Vector2(200, 0)
 layout_mode = 0
 offset_left = 20.0
@@ -75,60 +71,56 @@ offset_right = 230.0
 offset_bottom = 220.0
 mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="UI/HUD/Panel"]
+[node name="VBox" type="VBoxContainer" parent="UI/HUD/Panel" unique_id=140135112]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="StatusLabel" type="Label" parent="UI/HUD/Panel/VBox"]
+[node name="StatusLabel" type="Label" parent="UI/HUD/Panel/VBox" unique_id=1087708048]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.68, 0.74, 0.78, 0.8)
 theme_override_font_sizes/font_size = 11
 text = "상태: 정상"
 
-[node name="StatusBadgesContainer" type="VBoxContainer" parent="UI/HUD/Panel/VBox"]
+[node name="StatusBadgesContainer" type="VBoxContainer" parent="UI/HUD/Panel/VBox" unique_id=2010042605]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="BleedBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
+[node name="BleedBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer" unique_id=69389142]
 visible = false
 custom_minimum_size = Vector2(182, 32)
 layout_mode = 2
 
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge"]
+[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge" unique_id=113982557]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 0.3, 0.3, 1)
 theme_override_font_sizes/font_size = 12
 text = "출혈 (BLEED)"
 
-[node name="FractureBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
+[node name="FractureBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer" unique_id=901412160]
 visible = false
 custom_minimum_size = Vector2(182, 32)
 layout_mode = 2
 
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge"]
+[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge" unique_id=194551929]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(1, 0.65, 0.2, 1)
 theme_override_font_sizes/font_size = 12
 text = "골절 (FRACTURE)"
 
-[node name="BiohazardBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer"]
+[node name="BiohazardBadge" type="PanelContainer" parent="UI/HUD/Panel/VBox/StatusBadgesContainer" unique_id=973361538]
 visible = false
 custom_minimum_size = Vector2(182, 32)
 layout_mode = 2
 
-[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge"]
+[node name="Label" type="Label" parent="UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge" unique_id=29036004]
 layout_mode = 2
-mouse_filter = 2
 theme_override_colors/font_color = Color(0.3, 1, 0.42, 1)
 theme_override_font_sizes/font_size = 12
 text = "생체 감염 (INFECTED)"
 
-[node name="VitalsPanel" type="PanelContainer" parent="UI/HUD"]
+[node name="VitalsPanel" type="PanelContainer" parent="UI/HUD" unique_id=1955022324]
 layout_mode = 1
 anchors_preset = 7
 anchor_left = 0.5
@@ -143,20 +135,19 @@ grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
 
-[node name="VBox" type="VBoxContainer" parent="UI/HUD/VitalsPanel"]
+[node name="VBox" type="VBoxContainer" parent="UI/HUD/VitalsPanel" unique_id=1278992208]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 3
 
-[node name="HPBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox"]
+[node name="HPBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox" unique_id=1311654934]
 custom_minimum_size = Vector2(0, 17)
 layout_mode = 2
 mouse_filter = 2
-max_value = 100.0
 value = 100.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HPBar"]
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HPBar" unique_id=1681048228]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -168,15 +159,14 @@ text = "HP: 100/100"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="StaminaBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox"]
+[node name="StaminaBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox" unique_id=448284533]
 custom_minimum_size = Vector2(0, 10)
 layout_mode = 2
 mouse_filter = 2
-max_value = 100.0
 value = 100.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/StaminaBar"]
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/StaminaBar" unique_id=1260901949]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -188,21 +178,20 @@ text = "STAMINA: 100/100"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="HBox" type="HBoxContainer" parent="UI/HUD/VitalsPanel/VBox"]
+[node name="HBox" type="HBoxContainer" parent="UI/HUD/VitalsPanel/VBox" unique_id=1987849100]
 layout_mode = 2
 mouse_filter = 2
 theme_override_constants/separation = 6
 
-[node name="HungerBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox/HBox"]
+[node name="HungerBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox/HBox" unique_id=1004259655]
 custom_minimum_size = Vector2(0, 14)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-max_value = 100.0
 value = 100.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HBox/HungerBar"]
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HBox/HungerBar" unique_id=742683470]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -214,16 +203,15 @@ text = "허기 100%"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="ThirstBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox/HBox"]
+[node name="ThirstBar" type="ProgressBar" parent="UI/HUD/VitalsPanel/VBox/HBox" unique_id=1199446742]
 custom_minimum_size = Vector2(0, 14)
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
-max_value = 100.0
 value = 100.0
 show_percentage = false
 
-[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HBox/ThirstBar"]
+[node name="Label" type="Label" parent="UI/HUD/VitalsPanel/VBox/HBox/ThirstBar" unique_id=1265886590]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -235,7 +223,7 @@ text = "갈증 100%"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="RaidTimerPanel" type="Panel" parent="UI/HUD"]
+[node name="RaidTimerPanel" type="Panel" parent="UI/HUD" unique_id=1021502919]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -246,7 +234,7 @@ offset_right = 80.0
 offset_bottom = 55.0
 grow_horizontal = 2
 
-[node name="RaidTimerLabel" type="Label" parent="UI/HUD/RaidTimerPanel"]
+[node name="RaidTimerLabel" type="Label" parent="UI/HUD/RaidTimerPanel" unique_id=383100807]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -259,7 +247,7 @@ text = "탈출 시간: 05:00"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="BuildingTitle" type="Label" parent="UI/HUD"]
+[node name="BuildingTitle" type="Label" parent="UI/HUD" unique_id=244954970]
 layout_mode = 1
 anchors_preset = 5
 anchor_left = 0.5
@@ -274,7 +262,7 @@ theme_override_font_sizes/font_size = 16
 text = "버려진 건물 내부"
 horizontal_alignment = 1
 
-[node name="InteractPrompt" type="Label" parent="UI/HUD"]
+[node name="InteractPrompt" type="Label" parent="UI/HUD" unique_id=1823037499]
 visible = false
 layout_mode = 1
 anchors_preset = 8
@@ -295,7 +283,7 @@ theme_override_font_sizes/font_size = 18
 text = "[E] 상호작용"
 horizontal_alignment = 1
 
-[node name="EventLog" type="VBoxContainer" parent="UI/HUD"]
+[node name="EventLog" type="VBoxContainer" parent="UI/HUD" unique_id=230874912]
 layout_mode = 1
 anchors_preset = 4
 anchor_top = 0.5
@@ -307,7 +295,7 @@ offset_bottom = 250.0
 grow_vertical = 2
 theme_override_constants/separation = 8
 
-[node name="PauseMenu" type="Control" parent="UI"]
+[node name="PauseMenu" type="Control" parent="UI" unique_id=1248217780]
 process_mode = 2
 visible = false
 layout_mode = 3
@@ -317,7 +305,7 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="Dim" type="ColorRect" parent="UI/PauseMenu"]
+[node name="Dim" type="ColorRect" parent="UI/PauseMenu" unique_id=1705843802]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -326,7 +314,7 @@ grow_horizontal = 2
 grow_vertical = 2
 color = Color(0, 0, 0, 0.55)
 
-[node name="CenterPanel" type="Panel" parent="UI/PauseMenu"]
+[node name="CenterPanel" type="Panel" parent="UI/PauseMenu" unique_id=1548085697]
 custom_minimum_size = Vector2(320, 320)
 layout_mode = 1
 anchors_preset = 8
@@ -341,7 +329,7 @@ offset_bottom = 160.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="VBoxContainer" type="VBoxContainer" parent="UI/PauseMenu/CenterPanel"]
+[node name="VBoxContainer" type="VBoxContainer" parent="UI/PauseMenu/CenterPanel" unique_id=279279359]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -354,19 +342,19 @@ grow_horizontal = 2
 grow_vertical = 2
 theme_override_constants/separation = 16
 
-[node name="Title" type="Label" parent="UI/PauseMenu/CenterPanel/VBoxContainer"]
+[node name="Title" type="Label" parent="UI/PauseMenu/CenterPanel/VBoxContainer" unique_id=1215998119]
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
 text = "일시 정지"
 horizontal_alignment = 1
 
-[node name="ResumeBtn" type="Button" parent="UI/PauseMenu/CenterPanel/VBoxContainer"]
+[node name="ResumeBtn" type="Button" parent="UI/PauseMenu/CenterPanel/VBoxContainer" unique_id=2085373393]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16
 text = "계속하기 (Resume)"
 
-[node name="ExitBtn" type="Button" parent="UI/PauseMenu/CenterPanel/VBoxContainer"]
+[node name="ExitBtn" type="Button" parent="UI/PauseMenu/CenterPanel/VBoxContainer" unique_id=464612290]
 custom_minimum_size = Vector2(0, 44)
 layout_mode = 2
 theme_override_font_sizes/font_size = 16

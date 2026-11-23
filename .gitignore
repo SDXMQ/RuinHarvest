@@ -40,3 +40,4 @@ tmp/
 export_presets.cfg
 *.cfg
 project.godot
+autoload/ui_icon_manager.gd.uid

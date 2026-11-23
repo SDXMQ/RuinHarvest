@@ -1,4 +1,4 @@
-[gd_resource type="Theme" load_steps=34 format=3 uid="uid://c4ne6cow3b2ew"]
+[gd_resource type="Theme" format=3 uid="uid://c4ne6cow3b2ew"]
 
 [ext_resource type="Texture2D" uid="uid://px0857dfa5ca" path="res://assets/pixel/ui/ui_theme_atlas_d.png" id="1_atlas_d"]
 [ext_resource type="FontFile" uid="uid://dlpicktyg3w3v" path="res://assets/fonts/Galmuri11.ttf" id="2_font_reg"]
@@ -58,54 +58,6 @@ texture_margin_top = 4.0
 texture_margin_right = 4.0
 texture_margin_bottom = 4.0
 region_rect = Rect2(48, 24, 24, 24)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_normal"]
-content_margin_left = 6.0
-content_margin_top = 2.0
-content_margin_right = 6.0
-content_margin_bottom = 2.0
-texture = SubResource("CanvasTexture_ui_atlas")
-texture_margin_left = 3.0
-texture_margin_top = 3.0
-texture_margin_right = 3.0
-texture_margin_bottom = 3.0
-region_rect = Rect2(0, 24, 24, 24)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_hover"]
-content_margin_left = 6.0
-content_margin_top = 2.0
-content_margin_right = 6.0
-content_margin_bottom = 2.0
-texture = SubResource("CanvasTexture_ui_atlas")
-texture_margin_left = 3.0
-texture_margin_top = 3.0
-texture_margin_right = 3.0
-texture_margin_bottom = 3.0
-region_rect = Rect2(24, 24, 24, 24)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_pressed"]
-content_margin_left = 6.0
-content_margin_top = 3.0
-content_margin_right = 6.0
-content_margin_bottom = 1.0
-texture = SubResource("CanvasTexture_ui_atlas")
-texture_margin_left = 3.0
-texture_margin_top = 3.0
-texture_margin_right = 3.0
-texture_margin_bottom = 3.0
-region_rect = Rect2(48, 24, 24, 24)
-
-[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_disabled"]
-content_margin_left = 6.0
-content_margin_top = 2.0
-content_margin_right = 6.0
-content_margin_bottom = 2.0
-texture = SubResource("CanvasTexture_ui_atlas")
-texture_margin_left = 3.0
-texture_margin_top = 3.0
-texture_margin_right = 3.0
-texture_margin_bottom = 3.0
-region_rect = Rect2(72, 24, 24, 24)
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_danger_hover"]
 content_margin_left = 10.0
@@ -302,6 +254,54 @@ texture_margin_top = 2.0
 texture_margin_right = 2.0
 texture_margin_bottom = 2.0
 region_rect = Rect2(24, 72, 24, 24)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_disabled"]
+content_margin_left = 6.0
+content_margin_top = 2.0
+content_margin_right = 6.0
+content_margin_bottom = 2.0
+texture = SubResource("CanvasTexture_ui_atlas")
+texture_margin_left = 3.0
+texture_margin_top = 3.0
+texture_margin_right = 3.0
+texture_margin_bottom = 3.0
+region_rect = Rect2(72, 24, 24, 24)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_hover"]
+content_margin_left = 6.0
+content_margin_top = 2.0
+content_margin_right = 6.0
+content_margin_bottom = 2.0
+texture = SubResource("CanvasTexture_ui_atlas")
+texture_margin_left = 3.0
+texture_margin_top = 3.0
+texture_margin_right = 3.0
+texture_margin_bottom = 3.0
+region_rect = Rect2(24, 24, 24, 24)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_normal"]
+content_margin_left = 6.0
+content_margin_top = 2.0
+content_margin_right = 6.0
+content_margin_bottom = 2.0
+texture = SubResource("CanvasTexture_ui_atlas")
+texture_margin_left = 3.0
+texture_margin_top = 3.0
+texture_margin_right = 3.0
+texture_margin_bottom = 3.0
+region_rect = Rect2(0, 24, 24, 24)
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_small_btn_pressed"]
+content_margin_left = 6.0
+content_margin_top = 3.0
+content_margin_right = 6.0
+content_margin_bottom = 1.0
+texture = SubResource("CanvasTexture_ui_atlas")
+texture_margin_left = 3.0
+texture_margin_top = 3.0
+texture_margin_right = 3.0
+texture_margin_bottom = 3.0
+region_rect = Rect2(48, 24, 24, 24)
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_tab_selected"]
 content_margin_left = 12.0
