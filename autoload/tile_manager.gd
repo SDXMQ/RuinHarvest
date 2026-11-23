@@ -468,8 +468,8 @@ func _draw_door_open(img: Image, x: int, y: int) -> void:
 	_fill_rect_noisy(img, x, y, TILE_SIZE, TILE_SIZE, Color(0.6, 0.45, 0.3)) # 통로 바닥
 	# 문틀 가장자리
 	for iy in range(TILE_SIZE):
-		img.set_pixel(x, iy, Color(0.25, 0.15, 0.08))
-		img.set_pixel(x + TILE_SIZE - 1, iy, Color(0.25, 0.15, 0.08))
+		img.set_pixel(x, y + iy, Color(0.25, 0.15, 0.08))
+		img.set_pixel(x + TILE_SIZE - 1, y + iy, Color(0.25, 0.15, 0.08))
 	# 젖혀진 문짝 (좌측에 수직으로 붙어있음)
 	for iy in range(4, TILE_SIZE - 4):
 		for ix in range(1, 5):

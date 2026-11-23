@@ -960,9 +960,12 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		return
 
 	if TileManager.is_door_closed(type) or TileManager.is_door_open(type):
+		var was_closed := TileManager.is_door_closed(type)
 		object_layer.set_cell(tile_pos, 0, TileManager.get_toggled_door_tile(type))
 		EventBus.noise_created.emit(world_pos, 100.0, "door")
-		if SoundManager: SoundManager.play("menu_select")
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("문 열림" if was_closed else "문 닫힘", Color(0.45, 0.95, 0.65) if was_closed else Color(0.95, 0.78, 0.35), 0.75)
+		if SoundManager: SoundManager.play("door_open")
 		return
 
 	if container_inventories.has(tile_pos):

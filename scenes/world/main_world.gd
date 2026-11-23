@@ -1584,7 +1584,9 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, true)
 		EventBus.event_logged.emit("[icon:door] 문을 열었습니다.")
-		if SoundManager: SoundManager.play("menu_select")
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("문 열림", Color(0.45, 0.95, 0.65), 0.75)
+		if SoundManager: SoundManager.play("door_open")
 		return
 	elif TileManager.is_door_open(type): # OBJ_DOOR_OPEN / _V
 		# 열린 문 닫기 -> 닫힌 문(방향 유지)으로 교체
@@ -1593,7 +1595,9 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		EventBus.noise_created.emit(world_pos, 120.0, "door")
 		EventBus.door_toggled.emit(tile_pos, false)
 		EventBus.event_logged.emit("[icon:door] 문을 닫았습니다.")
-		if SoundManager: SoundManager.play("menu_select")
+		if player and player.has_method("show_floating_text"):
+			player.show_floating_text("문 닫힘", Color(0.95, 0.78, 0.35), 0.75)
+		if SoundManager: SoundManager.play("door_open")
 		return
 	elif TileManager.is_window(type): # OBJ_WINDOW / _V
 		# 창문 깨기 -> 깨진 창문(방향 유지)으로 타일 교체 및 큰 소음 발생

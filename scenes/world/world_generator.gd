@@ -405,13 +405,17 @@ func generate_chunk(chunk_pos: Vector2i) -> Dictionary:
 				var rel_y = wy - b_y
 				var pt = Vector2i(rel_x, rel_y)
 				
+				var is_ext_wall: bool = _is_building_ext_wall_rel(b, rel_x, rel_y)
+				var is_ext_door: bool = is_ext_wall and (pt in ext_doors)
+				var is_south_facade: bool = is_ext_wall and (rel_y == bh - 1)
 				inside_building[idx] = 1
 				protected_zone[idx] = 1
 				tiles[idx] = floor_tile
-				roofs[idx] = TileManager.TILE_ROOF
+				if not is_ext_door and not is_south_facade:
+					roofs[idx] = TileManager.TILE_ROOF
 				objects[idx] = Vector2i(-1, -1)
 				
-				if _is_building_ext_wall_rel(b, rel_x, rel_y):
+				if is_ext_wall:
 					if pt in ext_doors:
 						objects[idx] = TileManager.get_door_closed_tile(_is_building_opening_vertical(b, wx, wy))
 					elif pt in ext_windows:

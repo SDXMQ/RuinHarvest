@@ -25,6 +25,8 @@ var foliage_fx_layer: TileMapLayer
 var roof_layer: TileMapLayer
 var roof_fade_out_layer: TileMapLayer
 var roof_fade_in_layer: TileMapLayer
+var door_indicator_overlay: Node2D
+var _door_tiles: Dictionary = {} # tile_pos (Vector2i) -> atlas_coords (Vector2i)
 
 var _water_mat: ShaderMaterial
 var _foliage_mat: ShaderMaterial
@@ -161,6 +163,12 @@ func _ready() -> void:
 	if EventBus.has_signal("window_broken"):
 		EventBus.window_broken.connect(_on_window_broken)
 
+	door_indicator_overlay = Node2D.new()
+	door_indicator_overlay.name = "DoorIndicatorOverlay"
+	door_indicator_overlay.z_index = 12
+	door_indicator_overlay.draw.connect(_on_door_indicator_draw)
+	add_child(door_indicator_overlay)
+
 func _exit_tree() -> void:
 	if EventBus:
 		if EventBus.door_toggled.is_connected(_on_door_toggled):
@@ -172,11 +180,62 @@ func _on_door_toggled(tile_pos: Vector2i, is_open: bool) -> void:
 	var cur_atlas = object_layer.get_cell_atlas_coords(tile_pos) if object_layer else Vector2i(-1, -1)
 	if TileManager.is_window_broken(cur_atlas) or TileManager.is_window(cur_atlas):
 		chunk_deltas[tile_pos] = TileManager.get_window_broken_tile(cur_atlas)
+		_door_tiles.erase(tile_pos)
 	else:
 		var is_v := TileManager.is_vertical_variant(cur_atlas)
-		chunk_deltas[tile_pos] = TileManager.get_door_open_tile(is_v) if is_open else TileManager.get_door_closed_tile(is_v)
+		var next_atlas := TileManager.get_door_open_tile(is_v) if is_open else TileManager.get_door_closed_tile(is_v)
+		chunk_deltas[tile_pos] = next_atlas
+		_door_tiles[tile_pos] = next_atlas
+		if deco_shadow_layer:
+			var south_pos := tile_pos + Vector2i(0, 1)
+			if is_open:
+				if deco_shadow_layer.get_cell_atlas_coords(south_pos) == TileManager.SHADOW_SOUTH:
+					deco_shadow_layer.erase_cell(south_pos)
+			elif ground_layer and ground_layer.get_cell_source_id(south_pos) != -1:
+				var south_obj := object_layer.get_cell_atlas_coords(south_pos) if object_layer else Vector2i(-1, -1)
+				if not _is_structure_wall(south_obj):
+					deco_shadow_layer.set_cell(south_pos, 0, TileManager.SHADOW_SOUTH)
 	if GameManager:
 		GameManager.current_world_data["chunk_deltas"] = chunk_deltas
+	if door_indicator_overlay:
+		door_indicator_overlay.queue_redraw()
+
+func _on_door_indicator_draw() -> void:
+	if not door_indicator_overlay or _door_tiles.is_empty():
+		return
+	var has_p := _last_player_tile.x < 900000
+	var p_world := Vector2(_last_player_tile) * float(TILE_SIZE)
+	for t_pos in _door_tiles.keys():
+		if roof_layer and roof_layer.get_cell_source_id(t_pos) != -1:
+			continue
+		var px: float = float(t_pos.x * TILE_SIZE)
+		var py: float = float(t_pos.y * TILE_SIZE)
+		if has_p and Vector2(px, py).distance_squared_to(p_world) > 560.0 * 560.0:
+			continue
+		var atlas: Vector2i = object_layer.get_cell_atlas_coords(t_pos) if object_layer else _door_tiles[t_pos]
+		var is_v := TileManager.is_vertical_variant(atlas)
+		if TileManager.is_door_locked(atlas):
+			var lock_col := Color(1.0, 0.35, 0.25, 0.88)
+			door_indicator_overlay.draw_rect(Rect2(px + 3.0, py + 3.0, 26.0, 26.0), lock_col, false, 1.0)
+			door_indicator_overlay.draw_rect(Rect2(px + 13.0, py + 13.0, 6.0, 6.0), Color(1.0, 0.82, 0.25, 0.95), true)
+		elif TileManager.is_door_open(atlas):
+			var open_col := Color(0.32, 0.94, 0.56, 0.85)
+			if is_v:
+				door_indicator_overlay.draw_rect(Rect2(px + 2.0, py + 4.0, 4.0, 2.0), open_col, true)
+				door_indicator_overlay.draw_rect(Rect2(px + 2.0, py + 26.0, 4.0, 2.0), open_col, true)
+				door_indicator_overlay.draw_rect(Rect2(px + 14.0, py + 4.0, 3.0, 24.0), Color(0.32, 0.94, 0.56, 0.32), true)
+			else:
+				door_indicator_overlay.draw_rect(Rect2(px + 4.0, py + 26.0, 2.0, 4.0), open_col, true)
+				door_indicator_overlay.draw_rect(Rect2(px + 26.0, py + 26.0, 2.0, 4.0), open_col, true)
+				door_indicator_overlay.draw_rect(Rect2(px + 4.0, py + 13.0, 24.0, 3.0), Color(0.32, 0.94, 0.56, 0.32), true)
+		elif TileManager.is_door_closed(atlas):
+			var closed_col := Color(0.96, 0.72, 0.25, 0.88)
+			if is_v:
+				door_indicator_overlay.draw_rect(Rect2(px + 2.0, py + 6.0, 3.0, 20.0), closed_col, true)
+				door_indicator_overlay.draw_rect(Rect2(px + 22.0, py + 14.0, 4.0, 4.0), Color(1.0, 0.92, 0.45, 0.95), true)
+			else:
+				door_indicator_overlay.draw_rect(Rect2(px + 6.0, py + 27.0, 20.0, 3.0), closed_col, true)
+				door_indicator_overlay.draw_rect(Rect2(px + 21.0, py + 14.0, 4.0, 4.0), Color(1.0, 0.92, 0.45, 0.95), true)
 
 func _on_window_broken(tile_pos: Vector2i) -> void:
 	var cur_atlas = object_layer.get_cell_atlas_coords(tile_pos) if object_layer else Vector2i(-1, -1)
@@ -230,6 +289,8 @@ func update_chunks(player_pos: Vector2, force: bool = false) -> void:
 	if force or cur_tile != _last_player_tile:
 		_last_player_tile = cur_tile
 		_update_roof_visibility(player_tile_x, player_tile_y)
+		if door_indicator_overlay:
+			door_indicator_overlay.queue_redraw()
 
 	var center_chunk_x: int = int(floor(player_pos.x / (CHUNK_SIZE * TILE_SIZE)))
 	var center_chunk_y: int = int(floor(player_pos.y / (CHUNK_SIZE * TILE_SIZE)))
@@ -417,6 +478,8 @@ func load_chunk(chunk_pos: Vector2i) -> void:
 					foliage_fx_layer.set_cell(tile_pos, 0, TileManager.OBJ_TREE, 0)
 				else:
 					object_layer.set_cell(tile_pos, 0, obj_type)
+					if TileManager.is_door_closed(obj_type) or TileManager.is_door_open(obj_type) or TileManager.is_door_locked(obj_type):
+						_door_tiles[tile_pos] = obj_type
 
 				if object_shadow_layer and _casts_oval_shadow(obj_type):
 					object_shadow_layer.set_cell(tile_pos, 0, TileManager.SHADOW_OVAL)
@@ -476,6 +539,8 @@ func load_chunk(chunk_pos: Vector2i) -> void:
 				object_layer.add_child(car)
 				chunk_entities[chunk_pos].append(car)
 
+	if door_indicator_overlay:
+		door_indicator_overlay.queue_redraw()
 	chunk_loaded.emit(chunk_pos, chunk_data)
 
 func unload_chunk(chunk_pos: Vector2i) -> void:
@@ -493,6 +558,7 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 				if object_shadow_layer:
 					object_shadow_layer.erase_cell(pos)
 				object_layer.erase_cell(pos)
+				_door_tiles.erase(pos)
 				if foliage_fx_layer:
 					foliage_fx_layer.erase_cell(pos)
 				roof_layer.erase_cell(pos)
@@ -519,6 +585,8 @@ func unload_chunk(chunk_pos: Vector2i) -> void:
 			chunk_entities.erase(chunk_pos)
 
 		loaded_chunks.erase(chunk_pos)
+		if door_indicator_overlay:
+			door_indicator_overlay.queue_redraw()
 		chunk_unloaded.emit(chunk_pos)
 
 func _clear_orphan_border_shadow(pos: Vector2i) -> void:
