@@ -649,18 +649,10 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			up_btn.disabled = not can_upgrade
 			var fid_cap = fac_id
 			up_btn.pressed.connect(func():
-				w_data["player"]["rubles"] = int(w_data["player"].get("rubles", 0)) - req_rub
-				for it_id in req_items.keys():
-					consume_total_item(it_id, int(req_items[it_id]), p_grid, s_grid)
-				w_data["hideout"]["upgrades"][fid_cap] = cur_lv + 1
-				if SoundManager: SoundManager.play("menu_select")
-				if hideout.has_method("_apply_stash_upgrade_size"):
-					hideout._apply_stash_upgrade_size()
-				if hideout.has_method("_update_money_label"):
-					hideout._update_money_label()
-				if hideout.has_method("_on_grid_changed"):
-					hideout._on_grid_changed()
-				refresh_progression_tab(hideout, tab_root)
+				if try_upgrade_facility(fid_cap, w_data, p_grid, s_grid):
+					if SoundManager: SoundManager.play("menu_select")
+					_notify_hideout_state_changed(hideout, true)
+					refresh_progression_tab(hideout, tab_root)
 			)
 			vbox.add_child(up_btn)
 		else:
@@ -745,40 +737,98 @@ static func refresh_progression_tab(hideout: Control, tab_root: Control) -> void
 			comp_btn.disabled = not can_complete
 			var q_cap = q
 			comp_btn.pressed.connect(func():
-				var s_backup: Array = s_grid.items.duplicate(true) if s_grid else []
-				var p_backup: Array = p_grid.items.duplicate(true) if p_grid else []
-				for it_id in req_items.keys():
-					consume_total_item(it_id, int(req_items[it_id]), p_grid, s_grid)
-				var all_rewards_fit := true
-				for r_it in q_cap.get("reward_items", []):
-					var r_amt := int(r_it["amount"])
-					var rem := s_grid.auto_add_item(r_it["id"], r_amt) if s_grid else r_amt
-					if rem > 0 and p_grid:
-						rem = p_grid.auto_add_item(r_it["id"], rem)
-					if rem > 0:
-						all_rewards_fit = false
-						break
-				if not all_rewards_fit:
-					if s_grid:
-						s_grid.load_items(s_backup)
-					if p_grid:
-						p_grid.load_items(p_backup)
+				if not try_complete_quest(q_cap, w_data, p_grid, s_grid):
 					if EventBus.has_signal("event_logged"):
 						EventBus.event_logged.emit("[icon:warn] 창고와 배낭 공간이 부족하여 의뢰 보상을 수령할 수 없습니다.")
 					if SoundManager: SoundManager.play("hit_melee")
 					return
-				w_data["player"]["rubles"] = int(w_data["player"].get("rubles", 0)) + int(q_cap["reward_rubles"])
-				completed_list.append(q_cap["id"])
 				if SoundManager: SoundManager.play("level_up")
-				if hideout.has_method("_update_money_label"):
-					hideout._update_money_label()
-				if hideout.has_method("_on_grid_changed"):
-					hideout._on_grid_changed()
+				_notify_hideout_state_changed(hideout, false)
 				refresh_progression_tab(hideout, tab_root)
 			)
 			vbox.add_child(comp_btn)
 			
 		q_list.add_child(card)
+
+static func _notify_hideout_state_changed(hideout: Node, stash_resized: bool = false) -> void:
+	if not hideout:
+		return
+	if hideout.has_method("on_progression_state_changed"):
+		hideout.on_progression_state_changed(stash_resized)
+		return
+	if stash_resized and hideout.has_method("_apply_stash_upgrade_size"):
+		hideout._apply_stash_upgrade_size()
+	if hideout.has_method("_refresh_stash_ui"):
+		hideout._refresh_stash_ui()
+	if hideout.has_method("_update_money_label"):
+		hideout._update_money_label()
+	if hideout.has_method("_on_grid_changed"):
+		hideout._on_grid_changed()
+	elif hideout.has_method("_sync_save_data"):
+		hideout._sync_save_data()
+
+static func try_upgrade_facility(fac_id: String, w_data: Dictionary, p_grid: InventoryGrid, s_grid: InventoryGrid) -> bool:
+	if not FACILITIES.has(fac_id):
+		return false
+	var f_data: Dictionary = FACILITIES[fac_id]
+	var cur_lv: int = get_facility_level(w_data, fac_id)
+	var max_lv: int = int(f_data.get("max_level", 0))
+	if cur_lv >= max_lv:
+		return false
+	var next_req: Dictionary = f_data["levels"][cur_lv]
+	var req_rub: int = int(next_req.get("rubles", 0))
+	if not w_data.has("player") or not (w_data["player"] is Dictionary):
+		w_data["player"] = {}
+	var cur_rub: int = int(w_data["player"].get("rubles", 0))
+	if cur_rub < req_rub:
+		return false
+	var req_items: Dictionary = next_req.get("items", {})
+	for it_id in req_items.keys():
+		if count_total_item(it_id, p_grid, s_grid) < int(req_items[it_id]):
+			return false
+	w_data["player"]["rubles"] = cur_rub - req_rub
+	for it_id in req_items.keys():
+		consume_total_item(it_id, int(req_items[it_id]), p_grid, s_grid)
+	if not w_data.has("hideout") or not (w_data["hideout"] is Dictionary):
+		w_data["hideout"] = {}
+	if not w_data["hideout"].has("upgrades") or not (w_data["hideout"]["upgrades"] is Dictionary):
+		w_data["hideout"]["upgrades"] = {}
+	w_data["hideout"]["upgrades"][fac_id] = cur_lv + 1
+	return true
+
+static func try_complete_quest(q_cap: Dictionary, w_data: Dictionary, p_grid: InventoryGrid, s_grid: InventoryGrid) -> bool:
+	var req_items: Dictionary = q_cap.get("req_items", {})
+	var s_backup: Array = s_grid.items.duplicate(true) if s_grid else []
+	var p_backup: Array = p_grid.items.duplicate(true) if p_grid else []
+	for it_id in req_items.keys():
+		consume_total_item(it_id, int(req_items[it_id]), p_grid, s_grid)
+	var all_rewards_fit := true
+	for r_it in q_cap.get("reward_items", []):
+		var r_amt := int(r_it["amount"])
+		var rem := s_grid.auto_add_item(r_it["id"], r_amt) if s_grid else r_amt
+		if rem > 0 and p_grid:
+			rem = p_grid.auto_add_item(r_it["id"], rem)
+		if rem > 0:
+			all_rewards_fit = false
+			break
+	if not all_rewards_fit:
+		if s_grid:
+			s_grid.load_items(s_backup)
+		if p_grid:
+			p_grid.load_items(p_backup)
+		return false
+	if not w_data.has("player") or not (w_data["player"] is Dictionary):
+		w_data["player"] = {}
+	w_data["player"]["rubles"] = int(w_data["player"].get("rubles", 0)) + int(q_cap.get("reward_rubles", 0))
+	if not w_data.has("hideout") or not (w_data["hideout"] is Dictionary):
+		w_data["hideout"] = {}
+	if not w_data["hideout"].has("completed_quests") or not (w_data["hideout"]["completed_quests"] is Array):
+		w_data["hideout"]["completed_quests"] = []
+	var completed_list: Array = w_data["hideout"]["completed_quests"]
+	var q_id := String(q_cap.get("id", ""))
+	if q_id != "" and not (q_id in completed_list):
+		completed_list.append(q_id)
+	return true
 
 const WEAPON_MASTERY_LV1_KILLS: int = 15
 const WEAPON_MASTERY_LV2_KILLS: int = 35
@@ -1115,10 +1165,7 @@ static func refresh_service_record_tab(hideout: Control, tab_root: Control) -> v
 			if bool(res.get("success", false)):
 				if SoundManager:
 					SoundManager.play("level_up")
-				if hideout.has_method("_refresh_stash_ui"):
-					hideout._refresh_stash_ui()
-				if hideout.has_method("_sync_save_data"):
-					hideout._sync_save_data()
+				_notify_hideout_state_changed(hideout, false)
 				refresh_service_record_tab(hideout, tab_root)
 		)
 		b_hbox.add_child(b_btn)

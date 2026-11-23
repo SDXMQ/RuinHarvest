@@ -590,6 +590,13 @@ func _on_tab_changed(tab: int) -> void:
 	elif tab == 5 and service_record_tab:
 		HideoutProgression.refresh_service_record_tab(self, service_record_tab)
 
+func on_progression_state_changed(stash_resized: bool = false) -> void:
+	if stash_resized:
+		_apply_stash_upgrade_size()
+	_refresh_stash_ui()
+	_update_money_label()
+	_on_grid_changed()
+
 func _on_grid_changed() -> void:
 	_prune_stale_popups()
 	if player_grid_control: player_grid_control.queue_redraw()
