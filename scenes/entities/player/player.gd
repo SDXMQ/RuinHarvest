@@ -681,17 +681,26 @@ func cycle_weapon(direction: int) -> void:
 	if w:
 		w.cycle_weapon(direction)
 
-func _get_available_ammo_count() -> int:
+func get_available_ammo_count() -> int:
 	var w = _weapons()
 	return w.get_available_ammo_count() if w else 0
 
-func _get_compatible_ammo_types() -> Array:
+func _get_available_ammo_count() -> int:
+	return get_available_ammo_count()
+
+func get_compatible_ammo_types() -> Array:
 	var w = _weapons()
 	return w.get_compatible_ammo_types() if w else ["9mm"]
 
-func _get_slot_display_name(slot_name: String) -> String:
+func _get_compatible_ammo_types() -> Array:
+	return get_compatible_ammo_types()
+
+func get_slot_display_name(slot_name: String) -> String:
 	var w = _weapons()
 	return w.get_slot_display_name(slot_name) if w else slot_name
+
+func _get_slot_display_name(slot_name: String) -> String:
+	return get_slot_display_name(slot_name)
 
 func apply_backpack_grid_size() -> void:
 	if not inventory_grid: return

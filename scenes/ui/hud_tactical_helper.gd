@@ -599,7 +599,7 @@ static func update_player_hud(
 
 		var eq_wep: String = str(player.equipped_weapon)
 		var wep_data: Dictionary = ItemDatabase.get_item_data(str(player.equipped_weapon_data.get("id", eq_wep)))
-		var slot_disp: String = player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else ""
+		var slot_disp: String = player.get_slot_display_name(player.active_weapon_slot) if player.has_method("get_slot_display_name") else (player._get_slot_display_name(player.active_weapon_slot) if player.has_method("_get_slot_display_name") else "")
 		var disp_name: String = str(player.equipped_weapon_data.get("name", eq_wep))
 		if weapon_name_label:
 			weapon_name_label.text = "[%s] %s" % [slot_disp, disp_name]
@@ -630,8 +630,8 @@ static func update_player_hud(
 				var cur_mag: int = int(player.equipped_weapon_data.get("current_magazine_ammo", 0))
 				var stats: Dictionary = player.equipped_weapon_data.get("computed_stats", {})
 				var mag_size: int = int(stats.get("magazine_size", 15))
-				var reserve_ammo: int = player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0
-				var compat_list: Array = player._get_compatible_ammo_types() if player.has_method("_get_compatible_ammo_types") else []
+				var reserve_ammo: int = player.get_available_ammo_count() if player.has_method("get_available_ammo_count") else (player._get_available_ammo_count() if player.has_method("_get_available_ammo_count") else 0)
+				var compat_list: Array = player.get_compatible_ammo_types() if player.has_method("get_compatible_ammo_types") else (player._get_compatible_ammo_types() if player.has_method("_get_compatible_ammo_types") else [])
 				var cal: String = str(compat_list[0]) if compat_list.size() > 0 else "9mm"
 				var cal_disp: String = "9mm 탄약" if cal in ["9mm", "탄약"] else cal.replace("_", " ")
 				var ammo_txt := "%d / %d  [%s: %d]" % [cur_mag, mag_size, cal_disp, reserve_ammo]

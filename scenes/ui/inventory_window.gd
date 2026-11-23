@@ -588,7 +588,7 @@ func perform_item_repair(item: Dictionary, slot_ref: String = "") -> bool:
 		return false
 
 	var is_field_repair: bool = (GameManager != null and GameManager.current_state == GameManager.GameState.IN_GAME)
-	var cost_mult: float = 15.0 if is_field_repair else 10.0
+	var cost_mult: float = HideoutWorkbench.FIELD_REPAIR_RATE_RUBLES if is_field_repair else HideoutWorkbench.QUICK_REPAIR_RATE_RUBLES
 	var repair_cost: int = int(ceil(missing_dur * cost_mult))
 	if not _deduct_player_rubles(repair_cost):
 		return false

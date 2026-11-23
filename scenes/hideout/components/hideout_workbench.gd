@@ -933,15 +933,35 @@ func _open_shooting_range_test() -> void:
 		add_child(win)
 	win.setup(wb_selected_weapon)
 
-static func calculate_repair_cost_rubles(cur_dur: float, max_dur: float = 100.0) -> int:
+const WORKBENCH_REPAIR_RATE_RUBLES: float = 35.0
+const FIELD_REPAIR_RATE_RUBLES: float = 15.0
+const QUICK_REPAIR_RATE_RUBLES: float = 10.0
+
+static func calculate_repair_cost_rubles(cur_dur: float, max_dur: float = 100.0, rate_per_point: float = WORKBENCH_REPAIR_RATE_RUBLES) -> int:
 	var missing = max(0.0, max_dur - cur_dur)
-	return int(round(missing * 35.0))
+	return int(round(missing * rate_per_point))
 
 static func calculate_repair_cost_scrap(cur_dur: float, max_dur: float = 100.0) -> int:
 	var missing = max(0.0, max_dur - cur_dur)
 	if missing <= 0.001:
 		return 0
 	return int(ceil(missing / 20.0))
+
+func _try_pay_repair_cost(cur_dur: float, max_dur: float, use_scrap: bool) -> bool:
+	if use_scrap:
+		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
+		if _get_total_scrap_count() < scrap_cost:
+			return false
+		_consume_scrap(scrap_cost)
+		return true
+	var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
+	var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
+	if cur_rubles < rub_cost:
+		return false
+	if GameManager and GameManager.current_world_data.has("player"):
+		GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
+	money_spent.emit(rub_cost)
+	return true
 
 func _get_total_scrap_count() -> int:
 	var count = 0
@@ -1102,20 +1122,8 @@ func _execute_repair_selected_weapon(use_scrap: bool) -> void:
 	var cur_dur = float(wb_selected_weapon.get("durability", max_dur))
 	if max_dur - cur_dur <= 0.1:
 		return
-
-	if use_scrap:
-		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
-		if _get_total_scrap_count() < scrap_cost:
-			return
-		_consume_scrap(scrap_cost)
-	else:
-		var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
-		var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
-		if cur_rubles < rub_cost:
-			return
-		if GameManager and GameManager.current_world_data.has("player"):
-			GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
-		money_spent.emit(rub_cost)
+	if not _try_pay_repair_cost(cur_dur, max_dur, use_scrap):
+		return
 
 	wb_selected_weapon["durability"] = max_dur
 	_save_workbench_weapon()
@@ -1165,20 +1173,8 @@ func _execute_repair_equipped_armor(slot_key: String, use_scrap: bool) -> void:
 	var cur_dur = float(armor_dict.get("durability", max_dur))
 	if max_dur - cur_dur <= 0.1:
 		return
-
-	if use_scrap:
-		var scrap_cost = calculate_repair_cost_scrap(cur_dur, max_dur)
-		if _get_total_scrap_count() < scrap_cost:
-			return
-		_consume_scrap(scrap_cost)
-	else:
-		var rub_cost = calculate_repair_cost_rubles(cur_dur, max_dur)
-		var cur_rubles = int(GameManager.current_world_data.get("player", {}).get("rubles", 0)) if GameManager else 0
-		if cur_rubles < rub_cost:
-			return
-		if GameManager and GameManager.current_world_data.has("player"):
-			GameManager.current_world_data["player"]["rubles"] = cur_rubles - rub_cost
-		money_spent.emit(rub_cost)
+	if not _try_pay_repair_cost(cur_dur, max_dur, use_scrap):
+		return
 
 	armor_dict["durability"] = max_dur
 	equipment_data[slot_key] = armor_dict
