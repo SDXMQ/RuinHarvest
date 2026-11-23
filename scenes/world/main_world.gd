@@ -297,21 +297,6 @@ func _ready() -> void:
 	entities_layer.add_child(player)
 		
 	# 복귀 시 스탯 및 타이머 복원 (add_child 이후에 적용해야 SurvivalStats._ready()에 덮어써지지 않음)
-	if GameManager and GameManager.current_world_data.has("player_stats"):
-		var s = GameManager.current_world_data["player_stats"]
-		player.hp = s.get("hp", player.max_hp)
-		player.stamina = s.get("stamina", player.max_stamina)
-		player.hunger = s.get("hunger", player.max_hunger)
-		player.thirst = s.get("thirst", player.max_thirst)
-		player.is_bleeding = s.get("is_bleeding", false)
-		player.is_fractured = s.get("is_fractured", false)
-		player.is_infected = s.get("is_infected", false)
-		player.painkiller_timer = float(s.get("painkiller_timer", 0.0))
-		player.painkiller_damage_reduction = float(s.get("painkiller_damage_reduction", 0.0))
-		player.set_flashlight(s.get("flashlight_enabled", true))
-		GameManager.current_world_data.erase("player_stats")
-		
-	# 커스텀/샌드박스 설정 반영
 	if GameManager and GameManager.current_world_data.has("world_settings"):
 		var ws = GameManager.current_world_data["world_settings"]
 		if ws.has("raid_duration_minutes"):
@@ -326,69 +311,15 @@ func _ready() -> void:
 	if GameManager and GameManager.current_world_data.has("raid_time_remaining"):
 		raid_time_remaining = GameManager.current_world_data["raid_time_remaining"]
 		GameManager.current_world_data.erase("raid_time_remaining")
-	
-	# 세이브 데이터의 인벤토리 및 장비 복원
-	if GameManager and not GameManager.current_world_data.is_empty():
-		var p_data = GameManager.current_world_data.get("player", {})
-		var saved_items = p_data.get("inventory", [])
-		if p_data.has("equipment") and not p_data["equipment"].is_empty():
-			player.equipment = p_data["equipment"].duplicate(true)
-		if player.has_method("apply_backpack_grid_size"):
-			player.apply_backpack_grid_size()
-		if player.inventory_grid:
-			if player.inventory_grid.has_method("load_items"):
-				player.inventory_grid.load_items(saved_items)
-			else:
-				for s_item in saved_items:
-					if s_item and not s_item.is_empty():
-						player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
-	
-	if player.has_method("refresh_equipped_weapon"):
-		player.refresh_equipped_weapon(true)
-	
-	player.stats_changed.connect(_on_player_stats_changed)
-	player.interact_prompt.connect(_on_interact_prompt)
-	player.object_interacted.connect(_on_object_interacted)
-	if player.has_signal("channel_started"):
-		player.channel_started.connect(_on_player_channel_started)
-	if player.has_signal("channel_progress"):
-		player.channel_progress.connect(_on_player_channel_progress)
-	if player.has_signal("channel_completed"):
-		player.channel_completed.connect(_on_player_channel_finished)
-	if player.has_signal("channel_cancelled"):
-		player.channel_cancelled.connect(_on_player_channel_finished)
-	if player.inventory_grid:
-		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
-		player.inventory_grid.grid_changed.connect(_update_quickslot_bar)
-	if player.weapon_handler:
-		if player.weapon_handler.has_signal("weapon_changed"):
-			player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
-		if player.weapon_handler.has_signal("ammo_changed"):
-			player.weapon_handler.ammo_changed.connect(_update_quickslot_bar)
+
+	RaidSceneHelper.restore_player_from_world_data(player, true)
+	RaidSceneHelper.connect_player_raid_signals(self, player)
 	_setup_quickslot_bar()
 	
 	# 일시정지 메뉴 버튼 시그널 연결
 	resume_btn.pressed.connect(_on_resume_pressed)
 	exit_btn.pressed.connect(_on_exit_pressed)
-	if pause_menu:
-		var pause_center := pause_menu.get_node_or_null("CenterPanel") as Control
-		var pause_vbox := pause_menu.get_node_or_null("CenterPanel/VBoxContainer") as VBoxContainer
-		if pause_center:
-			pause_center.offset_top = -170.0
-			pause_center.offset_bottom = 170.0
-		if pause_vbox and not pause_vbox.has_node("SettingsBtn"):
-			var p_sett_btn := Button.new()
-			p_sett_btn.name = "SettingsBtn"
-			p_sett_btn.custom_minimum_size = Vector2(0, 44)
-			p_sett_btn.add_theme_font_size_override("font_size", 16)
-			if UiIconManager:
-				UiIconManager.set_button(p_sett_btn, "settings", "설정 (Settings)", 16)
-			else:
-				p_sett_btn.text = "설정 (Settings)"
-			p_sett_btn.pressed.connect(_open_settings_window)
-			pause_vbox.add_child(p_sett_btn)
-			if exit_btn and exit_btn.get_parent() == pause_vbox:
-				pause_vbox.move_child(p_sett_btn, exit_btn.get_index())
+	RaidSceneHelper.ensure_pause_settings_button(pause_menu, exit_btn, _open_settings_window, 170.0)
 	pause_menu.visible = false
 
 	# 청크 매니저 시그널 연결
@@ -679,14 +610,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 
 func player_has_radio() -> bool:
-	if not player or not player.inventory_grid:
-		return false
-	if player.inventory_grid.has_item("장거리 무전기", 1) or player.inventory_grid.has_item("군용 무전기", 1) or player.inventory_grid.has_item("무전기", 1):
-		return true
-	var match_res: Dictionary = player.inventory_grid.find_item_recursive_by_predicate(func(it: Dictionary) -> bool:
-		return String(it.get("id", "")).contains("무전기")
-	)
-	return bool(match_res.get("found", false))
+	return RaidSceneHelper.player_has_radio(player)
 
 func open_radio_window() -> Control:
 	if current_radio_window != null:
@@ -877,168 +801,7 @@ func _open_map_window() -> void:
 	)
 
 func _on_compass_draw() -> void:
-	if not player: return
-	var w = compass_bar.size.x
-	var h = compass_bar.size.y
-	var center_x = floorf(w / 2.0)
-	
-	# 다크 택티컬 픽셀 프레임 배경 + 4모서리 코너 브래킷
-	compass_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.04, 0.05, 0.075, 0.88), true)
-	compass_bar.draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), Color(0.24, 0.30, 0.38, 0.92), false, 1.0)
-	InventoryUIHelper._draw_pixel_corner_brackets(compass_bar, Rect2(1, 1, w - 2, h - 2), Color(0.92, 0.65, 0.22, 0.85), 5.0, 1.0)
-	
-	# 플레이어 시선 각도 (도)
-	var player_deg = rad_to_deg(player.rotation)
-	if player_deg < 0: player_deg += 360.0
-	
-	# 시야각 FOV (160도)
-	var fov = 160.0
-	var pixels_per_deg = w / fov
-	
-	# 15도 단위 픽셀 눈금 틱
-	for step_deg in range(0, 360, 15):
-		if step_deg % 90 == 0:
-			continue
-		var s_diff = float(step_deg) - player_deg
-		while s_diff < -180.0: s_diff += 360.0
-		while s_diff > 180.0: s_diff -= 360.0
-		if abs(s_diff) <= fov / 2.0:
-			var sx := floorf(center_x + s_diff * pixels_per_deg)
-			var tick_h := 4.0 if (step_deg % 45 == 0) else 2.0
-			compass_bar.draw_rect(Rect2(sx, h - 1.0 - tick_h, 1.0, tick_h), Color(0.42, 0.48, 0.58, 0.75), true)
-	
-	# N, E, S, W 방위각 눈금
-	var compass_font: Font = PixelAssetManager.get_pixel_font_regular() if PixelAssetManager else ThemeDB.fallback_font
-	var cardinal_dirs = {
-		0.0: "E",
-		90.0: "S",
-		180.0: "W",
-		270.0: "N"
-	}
-	
-	for deg in cardinal_dirs.keys():
-		var diff = deg - player_deg
-		while diff < -180.0: diff += 360.0
-		while diff > 180.0: diff -= 360.0
-		
-		if abs(diff) <= fov / 2.0:
-			var x = floorf(center_x + diff * pixels_per_deg)
-			compass_bar.draw_rect(Rect2(x - 1.0, h - 7.0, 2.0, 6.0), Color(0.92, 0.68, 0.22, 0.95), true)
-			compass_bar.draw_string(compass_font, Vector2(x - 4, h - 9), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
-			
-	# 탈출구 마커 (초록색 다이아몬드)
-	for pt in extraction_points_data:
-		var dir_to_pt = player.global_position.direction_to(pt["pos"])
-		var pt_deg = rad_to_deg(dir_to_pt.angle())
-		if pt_deg < 0: pt_deg += 360.0
-		
-		var diff = pt_deg - player_deg
-		while diff < -180.0: diff += 360.0
-		while diff > 180.0: diff -= 360.0
-		
-		if abs(diff) <= fov / 2.0:
-			var x = floorf(center_x + diff * pixels_per_deg)
-			var dist = player.global_position.distance_to(pt["pos"])
-			var diamond = PackedVector2Array([
-				Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)
-			])
-			var pt_type = int(pt.get("type", 0))
-			var pt_col = Color(0.2, 1.0, 0.3)
-			var txt_col = Color(0.3, 1.0, 0.4)
-			var lock_suffix = ""
-			if pt_type == 1:
-				var cur_rub = int(GameManager.current_world_data.get("player", {}).get("rubles", GameManager.current_world_data.get("rubles", 0))) if GameManager else 0
-				if cur_rub < 3000:
-					pt_col = Color(0.55, 0.55, 0.58, 0.55)
-					txt_col = Color(0.95, 0.42, 0.42, 0.78)
-					lock_suffix = " [잠김: 3,000R 필요]"
-				else:
-					pt_col = Color(1.0, 0.82, 0.15)
-					txt_col = Color(1.0, 0.9, 0.3)
-			elif pt_type == 2:
-				var bunker_unlocked = raid_power_restored
-				if GameManager:
-					if GameManager.raid_landmark_completed or GameManager.raid_power_restored:
-						bunker_unlocked = true
-					elif bool(GameManager.current_world_data.get("raid_power_restored", false)):
-						bunker_unlocked = true
-					elif int(GameManager.current_world_data.get("player", {}).get("field_objectives_completed", 0)) >= 1:
-						bunker_unlocked = true
-				for f_obj in field_objectives:
-					if is_instance_valid(f_obj) and bool(f_obj.get("is_completed")):
-						bunker_unlocked = true
-						break
-				if not bunker_unlocked:
-					pt_col = Color(0.55, 0.55, 0.58, 0.55)
-					txt_col = Color(0.95, 0.42, 0.42, 0.78)
-					lock_suffix = " [잠김: 단말기 미해킹]"
-				else:
-					pt_col = Color(0.2, 0.85, 1.0)
-					txt_col = Color(0.4, 0.9, 1.0)
-			compass_bar.draw_colored_polygon(diamond, pt_col)
-			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
-
-	# 항공 보급품 마커 (SVG 아이콘 + 거리)
-	for ad in airdrop_points_data:
-		var dir_to_ad = player.global_position.direction_to(ad["pos"])
-		var ad_deg = rad_to_deg(dir_to_ad.angle())
-		if ad_deg < 0: ad_deg += 360.0
-		var diff = ad_deg - player_deg
-		while diff < -180.0: diff += 360.0
-		while diff > 180.0: diff -= 360.0
-		if abs(diff) <= fov / 2.0:
-			var x = floorf(center_x + diff * pixels_per_deg)
-			var dist = player.global_position.distance_to(ad["pos"])
-			var ad_tex: Texture2D = UiIconManager.get_icon("airdrop") if UiIconManager else null
-			if ad_tex:
-				compass_bar.draw_texture_rect(ad_tex, Rect2(x - 5.0, 3.0, 10.0, 10.0), false)
-			else:
-				compass_bar.draw_rect(Rect2(x - 4.0, 5.0, 8.0, 8.0), Color(1.0, 0.45, 0.15), true)
-			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
-			
-	# 랜드마크 보스 마커 (SVG 해골 + 거리)
-	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
-		var dir_to_boss = player.global_position.direction_to(boss_entity.global_position)
-		var boss_deg = rad_to_deg(dir_to_boss.angle())
-		if boss_deg < 0: boss_deg += 360.0
-		var b_diff = boss_deg - player_deg
-		while b_diff < -180.0: b_diff += 360.0
-		while b_diff > 180.0: b_diff -= 360.0
-		if abs(b_diff) <= fov / 2.0:
-			var bx = floorf(center_x + b_diff * pixels_per_deg)
-			var b_dist = player.global_position.distance_to(boss_entity.global_position)
-			var boss_tex: Texture2D = UiIconManager.get_icon("skull") if UiIconManager else null
-			if boss_tex:
-				compass_bar.draw_texture_rect(boss_tex, Rect2(bx - 5.0, 3.0, 10.0, 10.0), false)
-			else:
-				compass_bar.draw_rect(Rect2(bx - 4.0, 5.0, 8.0, 8.0), Color(0.95, 0.15, 0.2), true)
-			compass_bar.draw_string(compass_font, Vector2(bx - 12, 22), "%.0fm" % b_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.35, 0.35))
-			
-	# 랜드마크 현장 단말기 마커 (다중 현장 임무 3종 SVG 아이콘 + 거리)
-	var objs_to_draw = field_objectives if field_objectives.size() > 0 else ([landmark_objective] if is_instance_valid(landmark_objective) else [])
-	for obj_ref in objs_to_draw:
-		if is_instance_valid(obj_ref) and not bool(obj_ref.get("is_completed")):
-			var dir_to_obj = player.global_position.direction_to(obj_ref.global_position)
-			var obj_deg = rad_to_deg(dir_to_obj.angle())
-			if obj_deg < 0: obj_deg += 360.0
-			var o_diff = obj_deg - player_deg
-			while o_diff < -180.0: o_diff += 360.0
-			while o_diff > 180.0: o_diff -= 360.0
-			if abs(o_diff) <= fov / 2.0:
-				var ox = floorf(center_x + o_diff * pixels_per_deg)
-				var o_dist = player.global_position.distance_to(obj_ref.global_position)
-				var icon_key: String = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "signal"
-				var obj_tex: Texture2D = UiIconManager.get_icon(icon_key) if UiIconManager else null
-				if obj_tex:
-					compass_bar.draw_texture_rect(obj_tex, Rect2(ox - 5.0, 3.0, 10.0, 10.0), false)
-				else:
-					compass_bar.draw_rect(Rect2(ox - 3.0, 6.0, 6.0, 6.0), Color(0.2, 0.88, 1.0), true)
-				compass_bar.draw_string(compass_font, Vector2(ox - 12, 22), "%.0fm" % o_dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(0.4, 0.92, 1.0))
-
-	# 정중앙 조준 눈금 (픽셀 스텝 역삼각형 포인터)
-	compass_bar.draw_rect(Rect2(center_x - 3.0, 1.0, 6.0, 2.0), Color(1.0, 0.85, 0.2), true)
-	compass_bar.draw_rect(Rect2(center_x - 2.0, 3.0, 4.0, 2.0), Color(1.0, 0.85, 0.2), true)
-	compass_bar.draw_rect(Rect2(center_x - 1.0, 5.0, 2.0, 2.0), Color(1.0, 0.85, 0.2), true)
+	RaidSceneHelper.draw_tactical_compass(compass_bar, player, extraction_points_data, airdrop_points_data, boss_entity, field_objectives, landmark_objective)
 
 func _spawn_landmark_boss() -> void:
 	if not player: return
@@ -1091,19 +854,7 @@ func _on_crosshair_draw() -> void:
 	HudTacticalHelper.draw_pixel_crosshair(crosshair_overlay, m_pos, crosshair_spread, is_ads, is_jammed)
 
 func _on_player_hit_direction(attacker_pos: Vector2) -> void:
-	if not player: return
-	var diff = attacker_pos - player.global_position
-	var dist = diff.length()
-	var angle = diff.angle() if dist > 0.001 else 0.0
-	hit_arcs.append({
-		"angle": angle,
-		"timer": 0.4,
-		"max_time": 0.4
-	})
-	if EventBus.has_signal("camera_shake_requested"):
-		EventBus.camera_shake_requested.emit(4.0, 0.2)
-	if hit_arc_overlay:
-		hit_arc_overlay.queue_redraw()
+	RaidSceneHelper.append_hit_arc(player, attacker_pos, hit_arcs, hit_arc_overlay)
 
 func _on_hit_arc_draw() -> void:
 	HudTacticalHelper.draw_hit_arcs(hit_arc_overlay, hit_arcs)
@@ -1179,37 +930,10 @@ func _process(delta: float) -> void:
 					EventBus.event_logged.emit("[icon:warn] [보스 경보] 전방 %.0fm 지점에 랜드마크 보스 감지! 공격 사거리 밖으로 우회하세요." % b_dist)
 		elif b_dist > BOSS_WARNING_RADIUS + 120.0:
 			_boss_perimeter_warned = false
-		if crosshair_overlay:
-			var w_stats = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
-			var acc = float(w_stats.get("accuracy", 78.0))
-			var base_spread = max(5.0, (100.0 - acc) * 0.45)
-			var move_penalty = player.velocity.length() * 0.075
-			var recoil_pen = (player.weapon_handler.recoil_offset * 1.8) if player.weapon_handler else 0.0
-			var target_spread = base_spread + move_penalty + recoil_pen
-			if player.player_camera and player.player_camera.is_aiming_ads:
-				target_spread *= 0.48
-			elif player.is_crouching:
-				target_spread *= 0.72
-			crosshair_spread = lerp(crosshair_spread, target_spread, clamp(delta * 14.0, 0.0, 1.0))
-			crosshair_overlay.queue_redraw()
-		
-		# 피격 방향 인디케이터(Hit Arc) 타이머 갱신 및 페이드아웃
-		if hit_arcs.size() > 0:
-			for i in range(hit_arcs.size() - 1, -1, -1):
-				hit_arcs[i]["timer"] -= delta
-				if hit_arcs[i]["timer"] <= 0.0:
-					hit_arcs.remove_at(i)
-			if hit_arc_overlay:
-				hit_arc_overlay.queue_redraw()
-		
-		# 상태이상 배지 맥동 점멸 연출 (0.35 ~ 1.0)
-		var pulse_alpha = 0.675 + 0.325 * sin(Time.get_ticks_msec() * 0.008)
-		if badge_bleed and badge_bleed.visible:
-			badge_bleed.modulate.a = pulse_alpha
-		if badge_fracture and badge_fracture.visible:
-			badge_fracture.modulate.a = pulse_alpha
-		if badge_biohazard and badge_biohazard.visible:
-			badge_biohazard.modulate.a = pulse_alpha
+		crosshair_spread = RaidSceneHelper.update_tactical_frame(
+			player, delta, crosshair_overlay, crosshair_spread, hit_arcs, hit_arc_overlay,
+			badge_bleed, badge_fracture, badge_biohazard
+		)
 
 		# 게임이 일시정지된 상태가 아닐 때만 시간 감소 및 갱신 (99999분 이상 설정 시 무제한 표시)
 		var is_unlimited_time: bool = raid_total_time >= 90000.0 * 60.0 or (GameManager and GameManager.raid_duration_minutes >= 90000.0)
@@ -1350,62 +1074,22 @@ func _on_player_stats_changed() -> void:
 	)
 
 func _setup_quickslot_bar() -> void:
-	if not quickslot_hbox or not player: return
-	
-	var slot1 = quickslot_hbox.get_node_or_null("Slot1")
-	var slot2 = quickslot_hbox.get_node_or_null("Slot2")
-	var slot3 = quickslot_hbox.get_node_or_null("Slot3")
-	var slot4 = quickslot_hbox.get_node_or_null("Slot4")
-	var slot5 = quickslot_hbox.get_node_or_null("Slot5")
-	var slot6 = quickslot_hbox.get_node_or_null("Slot6")
-	var slot7 = quickslot_hbox.get_node_or_null("Slot7")
-	var slot8 = quickslot_hbox.get_node_or_null("Slot8")
-	var slotN = quickslot_hbox.get_node_or_null("SlotN")
-	
-	if slot1 and not slot1.pressed.is_connected(_on_quickslot_1_pressed):
-		slot1.pressed.connect(_on_quickslot_1_pressed)
-	if slot2 and not slot2.pressed.is_connected(_on_quickslot_2_pressed):
-		slot2.pressed.connect(_on_quickslot_2_pressed)
-	if slot3 and not slot3.pressed.is_connected(_on_quickslot_3_pressed):
-		slot3.pressed.connect(_on_quickslot_3_pressed)
-	if slot4 and not slot4.pressed.is_connected(_on_quickslot_4_pressed):
-		slot4.pressed.connect(_on_quickslot_4_pressed)
-	if slot5 and not slot5.pressed.is_connected(_on_quickslot_5_pressed):
-		slot5.pressed.connect(_on_quickslot_5_pressed)
-	if slot6 and not slot6.pressed.is_connected(_on_quickslot_6_pressed):
-		slot6.pressed.connect(_on_quickslot_6_pressed)
-	if slot7 and not slot7.pressed.is_connected(_on_quickslot_7_pressed):
-		slot7.pressed.connect(_on_quickslot_7_pressed)
-	if slot8 and not slot8.pressed.is_connected(_on_quickslot_8_pressed):
-		slot8.pressed.connect(_on_quickslot_8_pressed)
-	if slotN and not slotN.pressed.is_connected(_on_quickslot_N_pressed):
-		slotN.pressed.connect(_on_quickslot_N_pressed)
-		
+	if not quickslot_hbox or not player:
+		return
+	RaidSceneHelper.bind_quickslot_buttons(self, quickslot_hbox)
 	_update_quickslot_bar()
 
 func _on_quickslot_1_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("primary1")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "primary1", _update_quickslot_bar)
 
 func _on_quickslot_2_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("primary2")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "primary2", _update_quickslot_bar)
 
 func _on_quickslot_3_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("sidearm")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "sidearm", _update_quickslot_bar)
 
 func _on_quickslot_4_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("throwable")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "throwable", _update_quickslot_bar)
 
 func _on_quickslot_5_pressed() -> void:
 	if player and player.has_method("_use_quickslot_item"):
@@ -1438,60 +1122,19 @@ func _on_quickslot_U_pressed() -> void:
 		_on_event_logged("[icon:warn] 가방에 [장거리 무전기]가 없어 통신망을 열 수 없습니다.")
 
 func _update_quickslot_bar() -> void:
-	if not quickslot_hbox or not player: return
-	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
-	var slot8 = quickslot_hbox.get_node_or_null("Slot8")
-	if slot8 and slot8 is Button and not slot8.pressed.is_connected(_on_quickslot_8_pressed):
-		slot8.pressed.connect(_on_quickslot_8_pressed)
-	var slotU = quickslot_hbox.get_node_or_null("SlotU")
-	if slotU and slotU is Button and not slotU.pressed.is_connected(_on_quickslot_U_pressed):
-		slotU.pressed.connect(_on_quickslot_U_pressed)
+	RaidSceneHelper.refresh_quickslot_bar(self, quickslot_hbox, player)
 
 func _on_player_channel_started(duration: float, item_name: String) -> void:
-	if channeling_bar:
-		channeling_bar.visible = true
-		channeling_bar.max_value = duration
-		channeling_bar.value = 0.0
-		if channeling_label:
-			channeling_label.text = "%s 사용 중... (%.1f초)" % [item_name, duration]
+	RaidSceneHelper.on_channel_started(channeling_bar, channeling_label, duration, item_name)
 
 func _on_player_channel_progress(current: float, total: float) -> void:
-	if channeling_bar:
-		channeling_bar.value = current
-		if channeling_label:
-			var rem = max(0.0, total - current)
-			channeling_label.text = "%s (%.1f초)" % [player.channel_item_name, rem]
-	if quickslot_hbox and player:
-		var ratio = current / max(0.01, total)
-		var item_str = player.channel_item_name
-		var slot_key = "6"
-		if item_str.contains("붕대") or item_str.contains("지혈"): slot_key = "5"
-		elif item_str.contains("구급") or item_str.contains("키트") or item_str.contains("부목"): slot_key = "6"
-		elif item_str.contains("생수") or item_str.contains("물") or item_str.contains("음료") or item_str.contains("커피") or item_str.contains("드링크"): slot_key = "8"
-		elif item_str.contains("식량") or item_str.contains("통조림") or item_str.contains("고기") or item_str.contains("빵") or item_str.contains("에너지바") or item_str.contains("농작물"): slot_key = "7"
-		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, slot_key, ratio)
+	RaidSceneHelper.on_channel_progress(player, channeling_bar, channeling_label, quickslot_hbox, current, total)
 
 func _on_player_channel_finished() -> void:
-	if channeling_bar:
-		channeling_bar.visible = false
-	if quickslot_hbox:
-		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, "clear", 0.0)
-	_update_quickslot_bar()
+	RaidSceneHelper.on_channel_finished(channeling_bar, quickslot_hbox, _update_quickslot_bar)
 		
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
-	if interact_prompt and current_inventory_window == null:
-		if UiIconManager:
-			var parsed := UiIconManager.parse_tagged_message(text)
-			UiIconManager.set_label_icon(interact_prompt, String(parsed["icon_key"]), String(parsed["clean_text"]), 18, 6, true)
-			UiIconManager.sync_label_row_visibility(interact_prompt, can_interact)
-		else:
-			interact_prompt.visible = can_interact
-			interact_prompt.text = text
-	elif interact_prompt:
-		if UiIconManager:
-			UiIconManager.sync_label_row_visibility(interact_prompt, false)
-		else:
-			interact_prompt.visible = false
+	RaidSceneHelper.update_interact_prompt(interact_prompt, current_inventory_window == null, can_interact, text)
 		
 func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_inventory_window != null: return
@@ -1751,12 +1394,7 @@ func _toggle_pause() -> void:
 	get_tree().paused = next_pause_state
 	pause_menu.visible = next_pause_state
 	if next_pause_state and exit_btn:
-		if _can_instant_extract():
-			exit_btn.text = "은신처로 안전 복귀 (전리품 보존)"
-			exit_btn.theme_type_variation = &"PrimaryButton"
-		else:
-			exit_btn.text = "작전 포기 및 탈주 (MIA - 전리품 유실)"
-			exit_btn.theme_type_variation = &"DangerButton"
+		RaidSceneHelper.sync_pause_exit_button(exit_btn)
 	if GameManager:
 		GameManager.is_paused = next_pause_state
 
@@ -1765,23 +1403,7 @@ func _on_resume_pressed() -> void:
 	_toggle_pause()
 
 func get_backpack_items() -> Array:
-	var items_arr = []
-	if player and player.inventory_grid:
-		for item in player.inventory_grid.items:
-			if item and not item.is_empty():
-				items_arr.append(item.duplicate(true))
-	return items_arr
+	return RaidSceneHelper.get_backpack_items(player)
 
 func _on_exit_pressed() -> void:
-	if SoundManager: SoundManager.play("menu_select")
-	get_tree().paused = false
-	if GameManager:
-		GameManager.is_paused = false
-		if player and not player.equipment.is_empty():
-			if not GameManager.current_world_data.has("player"):
-				GameManager.current_world_data["player"] = {}
-			GameManager.current_world_data["player"]["equipment"] = player.equipment.duplicate(true)
-		if _can_instant_extract():
-			GameManager.end_raid("survived", get_backpack_items())
-		else:
-			GameManager.end_raid("mia", get_backpack_items())
+	RaidSceneHelper.execute_pause_exit(self, player)

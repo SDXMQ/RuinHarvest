@@ -71,25 +71,7 @@ func _ready() -> void:
 		
 	resume_btn.pressed.connect(_on_resume_pressed)
 	exit_btn.pressed.connect(_on_exit_pressed)
-	if pause_menu:
-		var pause_center := pause_menu.get_node_or_null("CenterPanel") as Control
-		var pause_vbox := pause_menu.get_node_or_null("CenterPanel/VBoxContainer") as VBoxContainer
-		if pause_center:
-			pause_center.offset_top = -175.0
-			pause_center.offset_bottom = 175.0
-		if pause_vbox and not pause_vbox.has_node("SettingsBtn"):
-			var p_sett_btn := Button.new()
-			p_sett_btn.name = "SettingsBtn"
-			p_sett_btn.custom_minimum_size = Vector2(0, 44)
-			p_sett_btn.add_theme_font_size_override("font_size", 16)
-			if UiIconManager:
-				UiIconManager.set_button(p_sett_btn, "settings", "설정 (Settings)", 16)
-			else:
-				p_sett_btn.text = "설정 (Settings)"
-			p_sett_btn.pressed.connect(_open_settings_window)
-			pause_vbox.add_child(p_sett_btn)
-			if exit_btn and exit_btn.get_parent() == pause_vbox:
-				pause_vbox.move_child(p_sett_btn, exit_btn.get_index())
+	RaidSceneHelper.ensure_pause_settings_button(pause_menu, exit_btn, _open_settings_window, 175.0)
 	
 	# 포스트프로세싱 및 파티클
 	var pp = PostProcessLayerScene.instantiate()
@@ -501,56 +483,8 @@ func _spawn_entities() -> void:
 	entities_layer.add_child(player)
 	
 	# 플레이어 스탯 및 인벤토리/장비 복원 (add_child 이후에 적용)
-	if GameManager and GameManager.current_world_data.has("player_stats"):
-		var s = GameManager.current_world_data["player_stats"]
-		player.hp = s.get("hp", player.max_hp)
-		player.stamina = s.get("stamina", player.max_stamina)
-		player.hunger = s.get("hunger", player.max_hunger)
-		player.thirst = s.get("thirst", player.max_thirst)
-		player.is_bleeding = s.get("is_bleeding", false)
-		player.is_fractured = s.get("is_fractured", false)
-		player.is_infected = s.get("is_infected", false)
-		player.painkiller_timer = float(s.get("painkiller_timer", 0.0))
-		player.painkiller_damage_reduction = float(s.get("painkiller_damage_reduction", 0.0))
-		player.set_flashlight(s.get("flashlight_enabled", true))
-		
-	if GameManager and not GameManager.current_world_data.is_empty():
-		var p_data = GameManager.current_world_data.get("player", {})
-		var saved_items = p_data.get("inventory", [])
-		if p_data.has("equipment") and not p_data["equipment"].is_empty():
-			player.equipment = p_data["equipment"].duplicate(true)
-		if player.has_method("apply_backpack_grid_size"):
-			player.apply_backpack_grid_size()
-		if player.inventory_grid:
-			if player.inventory_grid.has_method("load_items"):
-				player.inventory_grid.load_items(saved_items)
-			else:
-				for s_item in saved_items:
-					if s_item and not s_item.is_empty():
-						player.inventory_grid.auto_add_item(s_item.get("id", ""), s_item.get("amount", 1), s_item)
-					
-	if player.has_method("refresh_equipped_weapon"):
-		player.refresh_equipped_weapon(true)
-		
-	player.stats_changed.connect(_on_player_stats_changed)
-	player.interact_prompt.connect(_on_interact_prompt)
-	player.object_interacted.connect(_on_object_interacted)
-	if player.has_signal("channel_started"):
-		player.channel_started.connect(_on_player_channel_started)
-	if player.has_signal("channel_progress"):
-		player.channel_progress.connect(_on_player_channel_progress)
-	if player.has_signal("channel_completed"):
-		player.channel_completed.connect(_on_player_channel_finished)
-	if player.has_signal("channel_cancelled"):
-		player.channel_cancelled.connect(_on_player_channel_finished)
-	if player.inventory_grid:
-		player.inventory_grid.grid_changed.connect(_on_player_stats_changed)
-		player.inventory_grid.grid_changed.connect(_update_quickslot_bar)
-	if player.weapon_handler:
-		if player.weapon_handler.has_signal("weapon_changed"):
-			player.weapon_handler.weapon_changed.connect(_update_quickslot_bar)
-		if player.weapon_handler.has_signal("ammo_changed"):
-			player.weapon_handler.ammo_changed.connect(_update_quickslot_bar)
+	RaidSceneHelper.restore_player_from_world_data(player, false)
+	RaidSceneHelper.connect_player_raid_signals(self, player)
 	if EventBus.has_signal("player_died") and not EventBus.player_died.is_connected(_on_player_died_ui):
 		EventBus.player_died.connect(_on_player_died_ui)
 	_setup_quickslot_bar()
@@ -616,35 +550,10 @@ func _process(delta: float) -> void:
 
 	if player:
 		player.ui_input_blocked = _has_open_modal_window()
-		if crosshair_overlay:
-			var w_stats = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
-			var acc = float(w_stats.get("accuracy", 78.0))
-			var base_spread = max(5.0, (100.0 - acc) * 0.45)
-			var move_penalty = player.velocity.length() * 0.075
-			var recoil_pen = (player.weapon_handler.recoil_offset * 1.8) if player.weapon_handler else 0.0
-			var target_spread = base_spread + move_penalty + recoil_pen
-			if player.player_camera and player.player_camera.is_aiming_ads:
-				target_spread *= 0.48
-			elif player.is_crouching:
-				target_spread *= 0.72
-			crosshair_spread = lerp(crosshair_spread, target_spread, clamp(delta * 14.0, 0.0, 1.0))
-			crosshair_overlay.queue_redraw()
-			
-		if hit_arcs.size() > 0:
-			for i in range(hit_arcs.size() - 1, -1, -1):
-				hit_arcs[i]["timer"] -= delta
-				if hit_arcs[i]["timer"] <= 0.0:
-					hit_arcs.remove_at(i)
-			if hit_arc_overlay:
-				hit_arc_overlay.queue_redraw()
-				
-		var pulse_alpha = 0.675 + 0.325 * sin(Time.get_ticks_msec() * 0.008)
-		if badge_bleed and badge_bleed.visible:
-			badge_bleed.modulate.a = pulse_alpha
-		if badge_fracture and badge_fracture.visible:
-			badge_fracture.modulate.a = pulse_alpha
-		if badge_biohazard and badge_biohazard.visible:
-			badge_biohazard.modulate.a = pulse_alpha
+		crosshair_spread = RaidSceneHelper.update_tactical_frame(
+			player, delta, crosshair_overlay, crosshair_spread, hit_arcs, hit_arc_overlay,
+			badge_bleed, badge_fracture, badge_biohazard
+		)
 
 	var is_unlimited_time: bool = raid_time_remaining >= 90000.0 * 60.0 or (GameManager and GameManager.raid_duration_minutes >= 90000.0)
 	if is_unlimited_time:
@@ -677,14 +586,7 @@ func _on_crosshair_draw() -> void:
 	HudTacticalHelper.draw_pixel_crosshair(crosshair_overlay, m_pos, crosshair_spread, is_ads, is_jammed)
 
 func _on_player_hit_direction(attacker_pos: Vector2) -> void:
-	if not player: return
-	var diff = attacker_pos - player.global_position
-	var angle = diff.angle() if diff.length() > 0.001 else 0.0
-	hit_arcs.append({"angle": angle, "timer": 0.4, "max_time": 0.4})
-	if EventBus.has_signal("camera_shake_requested"):
-		EventBus.camera_shake_requested.emit(4.0, 0.2)
-	if hit_arc_overlay:
-		hit_arc_overlay.queue_redraw()
+	RaidSceneHelper.append_hit_arc(player, attacker_pos, hit_arcs, hit_arc_overlay)
 
 func _on_hit_arc_draw() -> void:
 	HudTacticalHelper.draw_hit_arcs(hit_arc_overlay, hit_arcs)
@@ -745,7 +647,8 @@ func _open_weapon_modding_window() -> void:
 		$UI.add_child(win)
 		var cur_w = player.equipped_weapon_data if player else {}
 		var inv_target = player.inventory_grid if player else null
-		win.setup(inv_target, null, cur_w)
+		var slot_key: String = player.active_weapon_slot if (player and "active_weapon_slot" in player) else ""
+		win.setup(inv_target, null, cur_w, slot_key)
 		win.window_closed.connect(func():
 			current_modding_window = null
 			_on_player_stats_changed()
@@ -806,12 +709,7 @@ func _open_loot_window(target_inv: Inventory = null, title: String = "") -> void
 	_open_inventory_window(target_inv, title)
 
 func player_has_radio() -> bool:
-	if not player or not player.inventory_grid:
-		return false
-	for it in player.inventory_grid.items:
-		if String(it.get("id", "")).contains("무전기"):
-			return true
-	return false
+	return RaidSceneHelper.player_has_radio(player)
 
 func _on_player_stats_changed() -> void:
 	HudTacticalHelper.update_player_hud(
@@ -833,50 +731,22 @@ func _on_player_stats_changed() -> void:
 	)
 
 func _setup_quickslot_bar() -> void:
-	if not quickslot_hbox or not player: return
-	var slot1 = quickslot_hbox.get_node_or_null("Slot1")
-	var slot2 = quickslot_hbox.get_node_or_null("Slot2")
-	var slot3 = quickslot_hbox.get_node_or_null("Slot3")
-	var slot4 = quickslot_hbox.get_node_or_null("Slot4")
-	var slot5 = quickslot_hbox.get_node_or_null("Slot5")
-	var slot6 = quickslot_hbox.get_node_or_null("Slot6")
-	var slot7 = quickslot_hbox.get_node_or_null("Slot7")
-	var slot8 = quickslot_hbox.get_node_or_null("Slot8")
-	var slotN = quickslot_hbox.get_node_or_null("SlotN")
-	if slot1 and not slot1.pressed.is_connected(_on_quickslot_1_pressed): slot1.pressed.connect(_on_quickslot_1_pressed)
-	if slot2 and not slot2.pressed.is_connected(_on_quickslot_2_pressed): slot2.pressed.connect(_on_quickslot_2_pressed)
-	if slot3 and not slot3.pressed.is_connected(_on_quickslot_3_pressed): slot3.pressed.connect(_on_quickslot_3_pressed)
-	if slot4 and not slot4.pressed.is_connected(_on_quickslot_4_pressed): slot4.pressed.connect(_on_quickslot_4_pressed)
-	if slot5 and not slot5.pressed.is_connected(_on_quickslot_5_pressed): slot5.pressed.connect(_on_quickslot_5_pressed)
-	if slot6 and not slot6.pressed.is_connected(_on_quickslot_6_pressed): slot6.pressed.connect(_on_quickslot_6_pressed)
-	if slot7 and not slot7.pressed.is_connected(_on_quickslot_7_pressed): slot7.pressed.connect(_on_quickslot_7_pressed)
-	if slot8 and not slot8.pressed.is_connected(_on_quickslot_8_pressed): slot8.pressed.connect(_on_quickslot_8_pressed)
-	if slotN and not slotN.pressed.is_connected(_on_quickslot_N_pressed): slotN.pressed.connect(_on_quickslot_N_pressed)
+	if not quickslot_hbox or not player:
+		return
+	RaidSceneHelper.bind_quickslot_buttons(self, quickslot_hbox)
 	_update_quickslot_bar()
 
 func _on_quickslot_1_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("primary1")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "primary1", _update_quickslot_bar)
 
 func _on_quickslot_2_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("primary2")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "primary2", _update_quickslot_bar)
 
 func _on_quickslot_3_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("sidearm")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "sidearm", _update_quickslot_bar)
 
 func _on_quickslot_4_pressed() -> void:
-	if player and player.weapon_handler:
-		if player.is_channeling: player.cancel_channeling()
-		player.weapon_handler.switch_weapon_slot("throwable")
-		_update_quickslot_bar()
+	RaidSceneHelper.switch_quickslot_weapon(player, "throwable", _update_quickslot_bar)
 
 func _on_quickslot_5_pressed() -> void:
 	if player and player.has_method("_use_quickslot_item"): player._use_quickslot_item("bleed")
@@ -900,63 +770,25 @@ func _on_quickslot_U_pressed() -> void:
 	_on_event_logged("[icon:radio] 실내에서는 전파가 차폐되어 야외로 나가야 드론/무전 호출이 가능합니다.")
 
 func _update_quickslot_bar() -> void:
-	if not quickslot_hbox or not player: return
-	HudTacticalHelper.update_quickslot_bar(quickslot_hbox, player)
-	var slot8 = quickslot_hbox.get_node_or_null("Slot8")
-	if slot8 and slot8 is Button and not slot8.pressed.is_connected(_on_quickslot_8_pressed):
-		slot8.pressed.connect(_on_quickslot_8_pressed)
-	var slotU = quickslot_hbox.get_node_or_null("SlotU")
-	if slotU and slotU is Button and not slotU.pressed.is_connected(_on_quickslot_U_pressed):
-		slotU.pressed.connect(_on_quickslot_U_pressed)
+	RaidSceneHelper.refresh_quickslot_bar(self, quickslot_hbox, player)
 
 func _on_player_channel_started(duration: float, item_name: String) -> void:
-	if channeling_bar:
-		channeling_bar.visible = true
-		channeling_bar.max_value = duration
-		channeling_bar.value = 0.0
-		if channeling_label:
-			channeling_label.text = "%s 사용 중... (%.1f초)" % [item_name, duration]
+	RaidSceneHelper.on_channel_started(channeling_bar, channeling_label, duration, item_name)
 
 func _on_player_channel_progress(current: float, total: float) -> void:
-	if channeling_bar:
-		channeling_bar.value = current
-		if channeling_label:
-			var rem = max(0.0, total - current)
-			channeling_label.text = "%s (%.1f초)" % [player.channel_item_name, rem]
-	if quickslot_hbox and player:
-		var ratio = current / max(0.01, total)
-		var item_str = player.channel_item_name
-		var slot_key = "6"
-		if item_str.contains("붕대") or item_str.contains("지혈"): slot_key = "5"
-		elif item_str.contains("구급") or item_str.contains("키트") or item_str.contains("부목"): slot_key = "6"
-		elif item_str.contains("생수") or item_str.contains("물") or item_str.contains("음료") or item_str.contains("커피") or item_str.contains("드링크"): slot_key = "8"
-		elif item_str.contains("식량") or item_str.contains("통조림") or item_str.contains("고기") or item_str.contains("빵") or item_str.contains("에너지바") or item_str.contains("농작물"): slot_key = "7"
-		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, slot_key, ratio)
+	RaidSceneHelper.on_channel_progress(player, channeling_bar, channeling_label, quickslot_hbox, current, total)
 
 func _on_player_channel_finished() -> void:
-	if channeling_bar:
-		channeling_bar.visible = false
-	if quickslot_hbox:
-		HudTacticalHelper.update_channeling_sweep(quickslot_hbox, "clear", 0.0)
-	_update_quickslot_bar()
+	RaidSceneHelper.on_channel_finished(channeling_bar, quickslot_hbox, _update_quickslot_bar)
 
 func _on_interact_prompt(can_interact: bool, text: String) -> void:
-	if interact_prompt and current_inventory_window == null:
+	var final_text := text
+	if interact_prompt and current_inventory_window == null and player and object_layer:
 		var check_pos = player.global_position + Vector2.RIGHT.rotated(player.rotation) * 32.0
 		var t_pos = object_layer.local_to_map(check_pos)
-		var final_text := "[icon:door_exit] [E] 건물 밖으로 나가기" if t_pos == exit_tile_pos else text
-		if UiIconManager:
-			var parsed := UiIconManager.parse_tagged_message(final_text)
-			UiIconManager.set_label_icon(interact_prompt, String(parsed["icon_key"]), String(parsed["clean_text"]), 18, 6, true)
-			UiIconManager.sync_label_row_visibility(interact_prompt, can_interact)
-		else:
-			interact_prompt.visible = can_interact
-			interact_prompt.text = final_text
-	elif interact_prompt:
-		if UiIconManager:
-			UiIconManager.sync_label_row_visibility(interact_prompt, false)
-		else:
-			interact_prompt.visible = false
+		if t_pos == exit_tile_pos:
+			final_text = "[icon:door_exit] [E] 건물 밖으로 나가기"
+	RaidSceneHelper.update_interact_prompt(interact_prompt, current_inventory_window == null, can_interact, final_text)
 
 func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2i) -> void:
 	if current_inventory_window != null: return
@@ -1020,6 +852,8 @@ func _toggle_pause() -> void:
 	var next_pause_state = not get_tree().paused
 	get_tree().paused = next_pause_state
 	pause_menu.visible = next_pause_state
+	if next_pause_state and exit_btn:
+		RaidSceneHelper.sync_pause_exit_button(exit_btn)
 	if GameManager:
 		GameManager.is_paused = next_pause_state
 
@@ -1028,27 +862,10 @@ func _on_resume_pressed() -> void:
 	_toggle_pause()
 
 func get_backpack_items() -> Array:
-	var items_arr = []
-	if player and player.inventory_grid:
-		for item in player.inventory_grid.items:
-			if item and not item.is_empty():
-				items_arr.append(item.duplicate(true))
-	return items_arr
+	return RaidSceneHelper.get_backpack_items(player)
 
 func _on_exit_pressed() -> void:
-	if SoundManager: SoundManager.play("menu_select")
-	get_tree().paused = false
-	if GameManager:
-		GameManager.is_paused = false
-		if player and not player.equipment.is_empty():
-			if not GameManager.current_world_data.has("player"):
-				GameManager.current_world_data["player"] = {}
-			GameManager.current_world_data["player"]["equipment"] = player.equipment.duplicate(true)
-		var is_sandbox: bool = GameManager.is_sandbox_mode()
-		if is_sandbox:
-			GameManager.end_raid("survived", get_backpack_items())
-		else:
-			GameManager.end_raid("mia", get_backpack_items())
+	RaidSceneHelper.execute_pause_exit(self, player)
 
 static func _wall_strength_interior(tiles: Array, w: int, h: int, is_2d: bool, x: int, y: int) -> int:
 	if x < 0 or x >= w or y < 0 or y >= h:
