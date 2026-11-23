@@ -784,3 +784,167 @@ static func show_death_overlay(hud: Control) -> Control:
 	else:
 		overlay.modulate.a = 1.0
 	return overlay
+
+static func ensure_boss_hud_widgets(hud: Control) -> Dictionary:
+	if not is_instance_valid(hud):
+		return {}
+	var existing := hud.get_node_or_null("BossHudContainer") as PanelContainer
+	if existing:
+		return {
+			"container": existing,
+			"name_label": existing.find_child("BossNameLabel", true, false) as Label,
+			"warning_label": existing.find_child("BossWarningLabel", true, false) as Label,
+			"hp_bar": existing.find_child("BossHPBar", true, false) as ProgressBar,
+			"hp_label": existing.find_child("BossHPText", true, false) as Label
+		}
+
+	var panel := PanelContainer.new()
+	panel.name = "BossHudContainer"
+	panel.anchor_left = 0.5
+	panel.anchor_right = 0.5
+	panel.anchor_top = 0.0
+	panel.anchor_bottom = 0.0
+	panel.offset_left = -210.0
+	panel.offset_right = 210.0
+	panel.offset_top = 92.0
+	panel.offset_bottom = 160.0
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.z_index = 40
+	panel.visible = false
+
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.07, 0.03, 0.04, 0.90)
+	sb.set_border_width_all(2)
+	sb.border_color = Color(0.92, 0.25, 0.22, 0.92)
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 10
+	sb.content_margin_right = 10
+	sb.content_margin_top = 6
+	sb.content_margin_bottom = 6
+	panel.add_theme_stylebox_override("panel", sb)
+	panel.set_meta("panel_sb", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	vbox.add_theme_constant_override("separation", 4)
+	panel.add_child(vbox)
+
+	var top_row := HBoxContainer.new()
+	top_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_row.add_theme_constant_override("separation", 6)
+	vbox.add_child(top_row)
+
+	var name_lbl := Label.new()
+	name_lbl.name = "BossNameLabel"
+	name_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	name_lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	name_lbl.text = "랜드마크 보스"
+	name_lbl.add_theme_font_size_override("font_size", 13)
+	name_lbl.add_theme_color_override("font_color", Color(1.0, 0.82, 0.72, 1.0))
+	top_row.add_child(name_lbl)
+	if UiIconManager:
+		UiIconManager.set_label_icon(name_lbl, "skull", "랜드마크 보스", 14, 5, true)
+
+	var warn_lbl := Label.new()
+	warn_lbl.name = "BossWarningLabel"
+	warn_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	warn_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	warn_lbl.text = "경계 구역"
+	warn_lbl.add_theme_font_size_override("font_size", 11)
+	warn_lbl.add_theme_color_override("font_color", Color(1.0, 0.78, 0.24, 1.0))
+	top_row.add_child(warn_lbl)
+
+	var hp_bar := ProgressBar.new()
+	hp_bar.name = "BossHPBar"
+	hp_bar.custom_minimum_size = Vector2(0, 18)
+	hp_bar.show_percentage = false
+	hp_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var bg_sb := StyleBoxFlat.new()
+	bg_sb.bg_color = Color(0.14, 0.05, 0.06, 0.96)
+	bg_sb.set_corner_radius_all(2)
+	var fill_sb := StyleBoxFlat.new()
+	fill_sb.bg_color = Color(0.88, 0.16, 0.18, 0.98)
+	fill_sb.set_corner_radius_all(2)
+	hp_bar.add_theme_stylebox_override("background", bg_sb)
+	hp_bar.add_theme_stylebox_override("fill", fill_sb)
+	vbox.add_child(hp_bar)
+
+	var hp_lbl := Label.new()
+	hp_lbl.name = "BossHPText"
+	hp_lbl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hp_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hp_lbl.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	hp_lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hp_lbl.add_theme_font_size_override("font_size", 11)
+	hp_lbl.add_theme_color_override("font_color", Color(1.0, 0.96, 0.96, 1.0))
+	hp_bar.add_child(hp_lbl)
+
+	hud.add_child(panel)
+	return {
+		"container": panel,
+		"name_label": name_lbl,
+		"warning_label": warn_lbl,
+		"hp_bar": hp_bar,
+		"hp_label": hp_lbl
+	}
+
+static func update_boss_hud(widgets: Dictionary, boss: Node2D, player_pos: Vector2, warning_radius: float = 680.0, danger_radius: float = 360.0) -> Dictionary:
+	var result := {
+		"visible": false,
+		"dist": 99999.0,
+		"in_warning": false,
+		"in_danger": false,
+		"telegraphing": false
+	}
+	var container := widgets.get("container") as Control
+	if not is_instance_valid(container):
+		return result
+	if not is_instance_valid(boss) or boss.get("hp") == null or float(boss.get("hp")) <= 0.0:
+		container.visible = false
+		return result
+	var dist := player_pos.distance_to(boss.global_position)
+	result["dist"] = dist
+	if dist > warning_radius:
+		container.visible = false
+		return result
+
+	var cur_hp := maxf(0.0, float(boss.get("hp")))
+	var max_hp := maxf(1.0, float(boss.get("max_hp") if boss.get("max_hp") != null else cur_hp))
+	var in_danger := dist <= danger_radius
+	var telegraphing := boss.has_method("is_boss_telegraphing") and bool(boss.call("is_boss_telegraphing"))
+
+	container.visible = true
+	result["visible"] = true
+	result["in_warning"] = true
+	result["in_danger"] = in_danger
+	result["telegraphing"] = telegraphing
+
+	var hp_bar := widgets.get("hp_bar") as ProgressBar
+	if is_instance_valid(hp_bar):
+		hp_bar.max_value = max_hp
+		hp_bar.value = cur_hp
+	var hp_lbl := widgets.get("hp_label") as Label
+	if is_instance_valid(hp_lbl):
+		hp_lbl.text = "%d / %d" % [int(ceil(cur_hp)), int(round(max_hp))]
+
+	var warn_lbl := widgets.get("warning_label") as Label
+	var sb := container.get_meta("panel_sb", null) as StyleBoxFlat
+	if telegraphing:
+		if is_instance_valid(warn_lbl):
+			warn_lbl.text = "사격 조준 경보! (%.0fm)" % dist
+			warn_lbl.add_theme_color_override("font_color", Color(1.0, 0.35, 0.20, 1.0))
+		if sb:
+			sb.border_color = Color(1.0, 0.32, 0.18, 0.98)
+	elif in_danger:
+		if is_instance_valid(warn_lbl):
+			warn_lbl.text = "위험 사거리 접근! (%.0fm)" % dist
+			warn_lbl.add_theme_color_override("font_color", Color(1.0, 0.28, 0.28, 1.0))
+		if sb:
+			sb.border_color = Color(0.95, 0.20, 0.22, 0.96)
+	else:
+		if is_instance_valid(warn_lbl):
+			warn_lbl.text = "보스 경계 구역 (%.0fm)" % dist
+			warn_lbl.add_theme_color_override("font_color", Color(1.0, 0.78, 0.24, 1.0))
+		if sb:
+			sb.border_color = Color(0.85, 0.56, 0.18, 0.90)
+	return result

@@ -69,6 +69,10 @@ var crosshair_spread: float = 12.0
 var hit_arc_overlay: Control = null
 var hit_arcs: Array = []
 var boss_entity: Node2D = null
+const BOSS_WARNING_RADIUS: float = 680.0
+const BOSS_DANGER_RADIUS: float = 360.0
+var boss_hud_widgets: Dictionary = {}
+var _boss_perimeter_warned: bool = false
 var landmark_objective: Node2D = null
 var field_objectives: Array = []
 
@@ -394,6 +398,7 @@ func _ready() -> void:
 	chunk_manager.update_chunks(player.global_position)
 	HudTacticalHelper.style_hud_bars(hp_bar, stamina_bar, hunger_bar, thirst_bar)
 	HudTacticalHelper.style_vitals_and_status_containers(get_node_or_null("UI/HUD/Panel"), get_node_or_null("UI/HUD/VitalsPanel"))
+	boss_hud_widgets = HudTacticalHelper.ensure_boss_hud_widgets(get_node_or_null("UI/HUD"))
 	_on_player_stats_changed()
 	
 	# 시작 시 주변에 초기 좀비 스폰 (설정된 밀도 반영)
@@ -1157,6 +1162,15 @@ func _process(delta: float) -> void:
 		chunk_manager.update_chunks(player.global_position)
 		if compass_bar:
 			compass_bar.queue_redraw()
+		var boss_hud_state := HudTacticalHelper.update_boss_hud(boss_hud_widgets, boss_entity, player.global_position, BOSS_WARNING_RADIUS, BOSS_DANGER_RADIUS)
+		var b_dist := float(boss_hud_state.get("dist", 99999.0))
+		if bool(boss_hud_state.get("in_warning", false)):
+			if not _boss_perimeter_warned:
+				_boss_perimeter_warned = true
+				if EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit("[icon:warn] [보스 경보] 전방 %.0fm 지점에 랜드마크 보스 감지! 공격 사거리 밖으로 우회하세요." % b_dist)
+		elif b_dist > BOSS_WARNING_RADIUS + 120.0:
+			_boss_perimeter_warned = false
 		if crosshair_overlay:
 			var w_stats = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
 			var acc = float(w_stats.get("accuracy", 78.0))

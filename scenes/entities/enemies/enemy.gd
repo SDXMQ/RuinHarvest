@@ -37,6 +37,12 @@ var boss_burst_remaining: int = 0
 var boss_burst_timer: float = 0.0
 var boss_grenade_cooldown: float = 4.0
 var active_boss_grenades: Array = []
+const BOSS_TELEGRAPH_DURATION: float = 0.60
+var boss_telegraph_timer: float = 0.0
+var boss_telegraph_ready: bool = false
+
+func is_boss_telegraphing() -> bool:
+	return enemy_type == EnemyType.BOSS and boss_telegraph_timer > 0.0
 
 var wander_dir: Vector2 = Vector2.ZERO
 var wander_timer: float = 0.0
@@ -196,8 +202,8 @@ func _setup_stats_by_type() -> void:
 			speed = 80.0
 			damage = 12.0
 			attack_cooldown = 0.45
-			detection_radius = 340.0
-			attack_radius = 270.0
+			detection_radius = 290.0
+			attack_radius = 225.0
 			max_mag_ammo = 30
 			mag_ammo = 30
 		EnemyType.NIGHT_STALKER:
@@ -376,6 +382,9 @@ func _physics_process(delta: float) -> void:
 	if active_target == target_player and is_instance_valid(target_player):
 		if (target_player.get("hp") != null and float(target_player.get("hp")) <= 0.0) or bool(target_player.get("_is_dying")):
 			active_target = null
+	if not is_instance_valid(active_target) and enemy_type == EnemyType.BOSS:
+		boss_telegraph_timer = 0.0
+		boss_telegraph_ready = false
 	if is_instance_valid(active_target):
 		var dist = global_position.distance_to(active_target.global_position)
 		
@@ -389,6 +398,10 @@ func _physics_process(delta: float) -> void:
 			current_state = State.CHASE
 		elif current_state == State.CHASE and dist > detection_radius * 1.5:
 			current_state = State.IDLE
+
+		if enemy_type == EnemyType.BOSS and (current_state != State.CHASE or dist > attack_radius or not _has_line_of_sight(active_target.global_position)):
+			boss_telegraph_timer = 0.0
+			boss_telegraph_ready = false
 			
 		match current_state:
 			State.IDLE:
@@ -423,7 +436,20 @@ func _physics_process(delta: float) -> void:
 						velocity = (-dir_to_t + dir_to_t.orthogonal() * strafe_sign * 0.5).normalized() * (speed * 0.75)
 					else:
 						velocity = (dir_to_t.orthogonal() * strafe_sign) * (speed * 0.55)
-					_try_attack(active_target)
+					var can_fire := true
+					if enemy_type == EnemyType.BOSS and attack_timer <= 0.0 and reload_timer <= 0.0 and boss_burst_remaining <= 0:
+						if not boss_telegraph_ready:
+							if boss_telegraph_timer <= 0.0:
+								boss_telegraph_timer = BOSS_TELEGRAPH_DURATION
+							boss_telegraph_timer = maxf(0.0, boss_telegraph_timer - delta)
+							if _glow_overlay:
+								_glow_overlay.queue_redraw()
+							if boss_telegraph_timer > 0.0:
+								can_fire = false
+							else:
+								boss_telegraph_ready = true
+					if can_fire:
+						_try_attack(active_target)
 					if has_node("Visuals"):
 						get_node("Visuals").queue_redraw()
 				elif not is_ranged_human and dist <= attack_radius:
@@ -661,9 +687,16 @@ func _on_glow_overlay_draw() -> void:
 			_glow_overlay.draw_rect(Rect2(4.0, 1.0, 3.0, 2.5), Color(0.28, 2.0, 0.50, 0.88))
 
 		if (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) and current_state == State.CHASE and reload_timer <= 0:
+			var is_boss_lockon := (enemy_type == EnemyType.BOSS and boss_telegraph_timer > 0.0)
 			var laser_col := Color(2.2, 1.5, 0.22, 0.62) if enemy_type == EnemyType.BOSS else Color(2.2, 0.24, 0.24, 0.52)
+			var laser_w := 1.2
 			var muzzle_start := Vector2(28.0, 1.0)
-			var laser_end := Vector2(145.0, 1.0)
+			var laser_end := Vector2(attack_radius if is_boss_lockon else 145.0, 1.0)
+			if is_boss_lockon:
+				var pulse := 0.55 + 0.45 * sin(float(Time.get_ticks_msec()) * 0.025)
+				laser_col = Color(2.6, 0.32 + 0.9 * pulse, 0.18, 0.94)
+				laser_w = 2.6
+				_glow_overlay.draw_arc(Vector2.ZERO, 26.0 + 4.0 * pulse, 0.0, TAU, 24, Color(2.4, 0.28, 0.18, 0.25 + 0.72 * pulse), 2.0)
 			if is_inside_tree():
 				var world_2d: World2D = get_world_2d()
 				if world_2d != null:
@@ -671,7 +704,7 @@ func _on_glow_overlay_draw() -> void:
 					var hit: Dictionary = world_2d.direct_space_state.intersect_ray(q)
 					if not hit.is_empty():
 						laser_end = to_local(hit["position"])
-			_glow_overlay.draw_line(muzzle_start, laser_end, laser_col, 1.2)
+			_glow_overlay.draw_line(muzzle_start, laser_end, laser_col, laser_w)
 	else:
 		if enemy_type == EnemyType.NIGHT_STALKER:
 			var ns_alpha := get_night_stalker_body_alpha()
@@ -799,7 +832,8 @@ func _try_attack(victim: Node2D = null) -> void:
 			return
 		if enemy_type == EnemyType.BOSS:
 			var dist_to_v = global_position.distance_to(target_node.global_position)
-			if boss_grenade_cooldown <= 0.0 and dist_to_v >= 110.0 and dist_to_v <= 600.0:
+			boss_telegraph_ready = false
+			if boss_grenade_cooldown <= 0.0 and dist_to_v >= 110.0 and dist_to_v <= 260.0:
 				_throw_boss_grenade(target_node.global_position)
 				boss_grenade_cooldown = 9.5
 				attack_timer = 0.75
@@ -856,7 +890,7 @@ func _fire_ranged_shot(target_node: Node2D) -> void:
 	EventBus.noise_created.emit(global_position, 450.0, "gunshot")
 
 func _throw_boss_grenade(target_pos: Vector2) -> void:
-	if global_position.distance_to(target_pos) > 600.0:
+	if global_position.distance_to(target_pos) > 260.0:
 		return
 	active_boss_grenades.append({
 		"pos": target_pos,
