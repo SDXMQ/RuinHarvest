@@ -81,6 +81,7 @@ func run_all() -> void:
 	await _test_raid_timer_unification_and_unlimited()
 	await _test_sandbox_f1_guard_and_font_fallbacks()
 	await _test_issue4_play_feedback_regressions()
+	await _test_issue5_minor_fixes_regressions()
 	await _test_permadeath_returns_to_main_menu()
 
 	_cleanup_temp_saves()
@@ -839,7 +840,224 @@ func _test_issue4_play_feedback_regressions() -> void:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(GameSettings.SETTINGS_FILE_PATH))
 
 # ------------------------------------------------------------
-# 10. Permadeath Returns to MAIN_MENU (Run Last)
+# 10. Issue #5 (26.11.23 minor fixes) Regression Suite
+# ------------------------------------------------------------
+func _test_issue5_minor_fixes_regressions() -> void:
+	print("-- [P0 Test 10] Issue #5 (26.11.23 minor fixes) Regressions --")
+	var root: Window = get_tree().get_root()
+
+	# 1. Exterior building doors & south facade excluded from roof tiles
+	var wg_script := load("res://scenes/world/world_generator.gd") as GDScript
+	var wg: RefCounted = wg_script.new(12345)
+	var found_ext_door_uncovered := false
+	for cy in range(-4, 5):
+		for cx in range(-4, 5):
+			var cdata: Dictionary = wg.generate_chunk(Vector2i(cx, cy))
+			var objs: Array = cdata.get("objects", [])
+			var roofs: Array = cdata.get("roofs", [])
+			var ins: PackedByteArray = cdata.get("inside_mask", PackedByteArray())
+			for idx in range(objs.size()):
+				var obj_v: Vector2i = objs[idx] if objs[idx] is Vector2i else Vector2i(-1, -1)
+				if idx < ins.size() and int(ins[idx]) == 1 and TileManager.is_door_closed(obj_v):
+					if roofs[idx] != TileManager.TILE_ROOF:
+						found_ext_door_uncovered = true
+					else:
+						found_ext_door_uncovered = false
+						break
+			if found_ext_door_uncovered:
+				break
+		if found_ext_door_uncovered:
+			break
+	_assert(found_ext_door_uncovered, "Issue#5 #1: exterior building doors are not covered by roofs")
+
+	# 2. Immediate DeathOverlay & low-HP vignette strength curve
+	var pp_script := load("res://graphics/post_process_controller.gd") as GDScript
+	var val_full: float = float(pp_script.compute_low_hp_effect_strength(1.0, 0.0))
+	var val_mid: float = float(pp_script.compute_low_hp_effect_strength(0.30, 0.0))
+	var val_crit: float = float(pp_script.compute_low_hp_effect_strength(0.08, 0.0))
+	_assert(is_zero_approx(val_full) and val_mid > 0.0 and val_crit > val_mid, "Issue#5 #2: low-HP perimeter effect scales up as HP drops (mid=%.2f, crit=%.2f)" % [val_mid, val_crit])
+
+	var hud_host := Control.new()
+	root.add_child(hud_host)
+	var d_overlay: Control = HudTacticalHelper.show_death_overlay(hud_host)
+	_assert(d_overlay != null and d_overlay.name == "DeathOverlay" and d_overlay.visible, "Issue#5 #2: HudTacticalHelper.show_death_overlay() creates visible DeathOverlay immediately")
+	hud_host.queue_free()
+	await get_tree().process_frame
+
+	# 3. Player local ShaderMaterial + visual reset + dead-player damage guard
+	var p_scene := load("res://scenes/entities/player/player.tscn") as PackedScene
+	var p: CharacterBody2D = p_scene.instantiate() as CharacterBody2D
+	root.add_child(p)
+	await get_tree().process_frame
+	var p_vis: Node2D = p.get_node_or_null("Visuals") as Node2D
+	var p_mat: ShaderMaterial = p_vis.material as ShaderMaterial if p_vis else null
+	_assert(p_mat != null and p_mat.resource_local_to_scene, "Issue#5 #3: Player Visuals ShaderMaterial has resource_local_to_scene=true")
+	if p_mat and p_vis:
+		p_mat.set_shader_parameter("flash_modifier", 1.0)
+		p_vis.reset_visual_state()
+		var flash_after: float = float(p_mat.get_shader_parameter("flash_modifier"))
+		_assert(is_zero_approx(flash_after), "Issue#5 #3: reset_visual_state() clears stuck red flash_modifier")
+	p.hp = 0.0
+	p._is_dying = true
+	if p_mat:
+		p_mat.set_shader_parameter("flash_modifier", 0.0)
+	p._on_player_damaged(25.0, "test")
+	var flash_dead: float = float(p_mat.get_shader_parameter("flash_modifier")) if p_mat else 0.0
+	_assert(is_zero_approx(flash_dead), "Issue#5 #3: dead player ignores subsequent damage and does not trigger red flash")
+	p.queue_free()
+	await get_tree().process_frame
+
+	# 4 & 5. VitalsPanel below QuickslotBar + vertical StatusBadgesContainer + cure tooltips
+	for scene_path in ["res://scenes/world/main_world.tscn", "res://scenes/interior/building_interior_scene.tscn"]:
+		var packed := load(scene_path) as PackedScene
+		var inst: Node = packed.instantiate()
+		var qbar := inst.get_node_or_null("UI/HUD/QuickslotBar") as Control
+		var vpanel := inst.get_node_or_null("UI/HUD/VitalsPanel") as Control
+		var st_box := inst.get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer") as VBoxContainer
+		var panel := inst.get_node_or_null("UI/HUD/Panel") as PanelContainer
+		var qbar_above_ok: bool = (qbar == null or vpanel.offset_top > qbar.offset_top)
+		_assert(vpanel != null and vpanel.offset_top >= -68.0 and qbar_above_ok and st_box != null, "Issue#5 #4: %s places VitalsPanel below QuickslotBar and uses vertical StatusBadgesContainer" % scene_path.get_file())
+		var bleed := inst.get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/BleedBadge") as PanelContainer
+		var fracture := inst.get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/FractureBadge") as PanelContainer
+		var biohazard := inst.get_node_or_null("UI/HUD/Panel/VBox/StatusBadgesContainer/BiohazardBadge") as PanelContainer
+		HudTacticalHelper.style_vitals_and_status_containers(panel, vpanel)
+		HudTacticalHelper.style_status_badges([bleed, fracture, biohazard])
+		_assert(bleed != null and bleed.mouse_filter == Control.MOUSE_FILTER_STOP and bleed.tooltip_text.contains("해결") and bleed.tooltip_text.contains("붕대") and biohazard != null and biohazard.tooltip_text.contains("치료"), "Issue#5 #5: %s status badges have hover cure tooltips" % scene_path.get_file())
+		inst.free()
+	_assert(HudTacticalHelper.STATUS_BADGE_META.has("BleedBadge") and HudTacticalHelper.STATUS_BADGE_META.has("PainkillerBadge"), "Issue#5 #5: STATUS_BADGE_META registers status effect cure metadata")
+
+	# 6. Stock firearm loot helper vs rare modded guns & preserved default preset
+	var stock_ak: Dictionary = WeaponPartsDatabase.create_stock_weapon("AK_리시버")
+	var loot_stock: Dictionary = WeaponPartsDatabase.create_loot_weapon("AK_리시버", 0.0)
+	var loot_mod: Dictionary = WeaponPartsDatabase.create_loot_weapon("AK_리시버", 1.0)
+	var mp5_def: Dictionary = WeaponPartsDatabase.create_default_weapon("MP5_리시버")
+	var loot_mod_parts: Dictionary = loot_mod.get("parts", {})
+	_assert((stock_ak.get("parts", {}) as Dictionary).is_empty() and (loot_stock.get("parts", {}) as Dictionary).is_empty(), "Issue#5 #6: create_stock_weapon and modded_chance=0.0 produce unmodded stock receivers")
+	_assert(not loot_mod_parts.is_empty() and loot_mod_parts.size() <= 2 and not (mp5_def.get("parts", {}) as Dictionary).is_empty(), "Issue#5 #6: modded_chance=1.0 attaches 1..2 parts while create_default_weapon retains preset parts")
+
+	# 7. Dual movement modes (screen-axis vs aim-relative) & SettingsWindow toggle
+	var dir_screen: Vector2 = Player.compute_movement_direction(Vector2(0.0, -1.0), 0.0, 0)
+	var dir_aim_fwd: Vector2 = Player.compute_movement_direction(Vector2(0.0, -1.0), 0.0, 1)
+	var dir_aim_right: Vector2 = Player.compute_movement_direction(Vector2(1.0, 0.0), 0.0, 1)
+	_assert(dir_screen.is_equal_approx(Vector2(0.0, -1.0)) and dir_aim_fwd.is_equal_approx(Vector2(1.0, 0.0)) and dir_aim_right.is_equal_approx(Vector2(0.0, 1.0)), "Issue#5 #7: compute_movement_direction switches between screen-axis and cursor-relative WASD")
+
+	var prev_move_mode: int = GameSettings.movement_mode
+	var s_existed: bool = FileAccess.file_exists(GameSettings.SETTINGS_FILE_PATH)
+	var s_prev_raw: String = ""
+	if s_existed:
+		var rf := FileAccess.open(GameSettings.SETTINGS_FILE_PATH, FileAccess.READ)
+		if rf:
+			s_prev_raw = rf.get_as_text()
+			rf.close()
+	var sw: Control = (load("res://scenes/ui/settings_window.tscn") as PackedScene).instantiate() as Control
+	root.add_child(sw)
+	await get_tree().process_frame
+	var mm_opt: OptionButton = sw.get("movement_mode_opt") as OptionButton
+	_assert(mm_opt != null and mm_opt.item_count == 2, "Issue#5 #7: SettingsWindow provides 2 movement mode options")
+	if mm_opt:
+		sw._on_movement_mode_selected(1)
+	_assert(GameSettings.movement_mode == 1, "Issue#5 #7: Selecting mode 1 updates GameSettings.movement_mode")
+	sw.queue_free()
+	await get_tree().process_frame
+	GameSettings.movement_mode = prev_move_mode
+	if s_existed:
+		var wf := FileAccess.open(GameSettings.SETTINGS_FILE_PATH, FileAccess.WRITE)
+		if wf:
+			wf.store_string(s_prev_raw)
+			wf.close()
+	elif FileAccess.file_exists(GameSettings.SETTINGS_FILE_PATH):
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(GameSettings.SETTINGS_FILE_PATH))
+
+	# 8. Corpse separate equipment slots + Tarkov progressive backpack search
+	var fake_scene_script := GDScript.new()
+	fake_scene_script.source_code = "extends Node2D\nvar container_inventories: Dictionary = {}\nvar container_titles: Dictionary = {}\n"
+	fake_scene_script.reload()
+	var c_host := Node2D.new()
+	c_host.set_script(fake_scene_script)
+	root.add_child(c_host)
+	var prev_sc: Node = get_tree().current_scene
+	get_tree().current_scene = c_host
+
+	var e_scene := load("res://scenes/entities/enemies/enemy.tscn") as PackedScene
+	var raider: CharacterBody2D = e_scene.instantiate() as CharacterBody2D
+	raider.enemy_type = 4 # EnemyType.RAIDER
+	c_host.add_child(raider)
+	await get_tree().process_frame
+	var test_drops: Array = [
+		{"id": "AK_리시버", "amount": 1},
+		{"id": "2레벨_헬멧", "amount": 1},
+		{"id": "2레벨_방탄복", "amount": 1},
+		{"id": "Scav 인식표", "amount": 1},
+		{"id": "붕대", "amount": 1}
+	]
+	raider._spawn_corpse_loot_box(test_drops)
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+	var corpse_keys: Array = c_host.container_inventories.keys()
+	_assert(corpse_keys.size() == 1, "Issue#5 #8: Raider _spawn_corpse_loot_box registers 1 corpse Inventory")
+	var c_inv: Inventory = c_host.container_inventories[corpse_keys[0]] as Inventory
+	var c_eq_raw = c_inv.get_meta("corpse_equipment", {})
+	var c_eq: Dictionary = c_eq_raw if c_eq_raw is Dictionary else {}
+	var bp_slot: Dictionary = c_eq.get("backpack", {}) if (c_eq.get("backpack") is Dictionary) else {}
+	var bp_inner: Array = bp_slot.get("inner_items", []) if (bp_slot.get("inner_items") is Array) else []
+	_assert(bool(c_inv.get_meta("is_corpse", false)) and str((c_eq.get("primary1", {}) as Dictionary).get("id", "")) == "AK_리시버" and str((c_eq.get("helmet", {}) as Dictionary).get("id", "")) == "2레벨_헬멧" and str((c_eq.get("vest", {}) as Dictionary).get("id", "")) == "2레벨_방탄복", "Issue#5 #8: Corpse separates primary weapon, helmet, and vest from bag")
+	_assert(not bp_slot.is_empty() and bp_inner.size() == 2 and bool((bp_inner[0] as Dictionary).get("unsearched", false)), "Issue#5 #8: Bag items are packed into corpse backpack and marked unsearched=true")
+
+	var popup_win := ContainerPopupWindow.new()
+	root.add_child(popup_win)
+	popup_win.setup(bp_slot, null, null)
+	_assert(popup_win.has_unsearched_items() and popup_win.get_unsearched_items().size() == 2, "Issue#5 #8: ContainerPopupWindow starts with 2 unsearched items")
+	var revealed1: Dictionary = popup_win.reveal_next_unsearched_item()
+	_assert(not revealed1.is_empty() and popup_win.get_unsearched_items().size() == 1, "Issue#5 #8: Progressive reveal reveals strictly 1 item at a time")
+	var revealed2: Dictionary = popup_win.reveal_next_unsearched_item()
+	_assert(not revealed2.is_empty() and not popup_win.has_unsearched_items(), "Issue#5 #8: Second reveal completes backpack search cleanly")
+	var synced_inner: Array = bp_slot.get("inner_items", []) if (bp_slot.get("inner_items") is Array) else []
+	_assert(synced_inner.size() == 2 and not ContainerPopupWindow.is_item_unsearched(synced_inner[0]), "Issue#5 #8: Revealed state syncs back to corpse backpack container_item")
+
+	popup_win.queue_free()
+	get_tree().current_scene = prev_sc if is_instance_valid(prev_sc) else null
+	c_host.queue_free()
+	await get_tree().process_frame
+
+	# 9. Boss range tuning, telegraph & Boss HUD warning bar
+	var boss: CharacterBody2D = e_scene.instantiate() as CharacterBody2D
+	boss.enemy_type = 5 # EnemyType.BOSS
+	root.add_child(boss)
+	await get_tree().process_frame
+	_assert(is_equal_approx(float(boss.detection_radius), 290.0) and is_equal_approx(float(boss.attack_radius), 225.0) and float(boss.BOSS_TELEGRAPH_DURATION) > 0.0, "Issue#5 #9: Boss detection=290, attack=225, and telegraph duration > 0")
+	var bhud_host := Control.new()
+	root.add_child(bhud_host)
+	var b_widgets: Dictionary = HudTacticalHelper.ensure_boss_hud_widgets(bhud_host)
+	boss.global_position = Vector2(900.0, 0.0)
+	var st_far: Dictionary = HudTacticalHelper.update_boss_hud(b_widgets, boss, Vector2.ZERO)
+	boss.global_position = Vector2(520.0, 0.0)
+	var st_warn: Dictionary = HudTacticalHelper.update_boss_hud(b_widgets, boss, Vector2.ZERO)
+	boss.global_position = Vector2(220.0, 0.0)
+	boss.boss_telegraph_timer = 0.4
+	var st_danger: Dictionary = HudTacticalHelper.update_boss_hud(b_widgets, boss, Vector2.ZERO)
+	_assert(not bool(st_far["visible"]) and bool(st_warn["visible"]) and not bool(st_warn["in_danger"]) and bool(st_danger["in_danger"]) and bool(st_danger["telegraphing"]), "Issue#5 #9: Boss HUD shows wide warning (520m), danger (220m), and lock-on telegraph state")
+	bhud_host.queue_free()
+	boss.queue_free()
+	await get_tree().process_frame
+
+	# 10. Cumulative Map Fog of War & reset on end_raid()
+	GameManager.reset_raid_map_fog()
+	GameManager.reveal_map_fog_at(Vector2(0.0, 0.0))
+	_assert(GameManager.is_world_pos_explored(Vector2(100.0, 100.0)) and not GameManager.is_world_pos_explored(Vector2(2000.0, 2000.0)), "Issue#5 #10: Fog of War reveals local radius while keeping distant terrain unexplored")
+	var mw_scene := load("res://scenes/ui/map_window.tscn") as PackedScene
+	var mw: Control = mw_scene.instantiate() as Control
+	root.add_child(mw)
+	mw.setup(Vector2(1500.0, 0.0), 0.0, [], "도심")
+	await get_tree().process_frame
+	_assert(mw.is_point_revealed(Vector2(100.0, 100.0)) and not mw.is_point_in_live_sight(Vector2(100.0, 100.0)), "Issue#5 #10: MapWindow preserves previously visited terrain cumulatively outside live sight radius")
+	mw.queue_free()
+	GameManager.reset_raid_map_fog()
+	_assert(not GameManager.is_world_pos_explored(Vector2(100.0, 100.0)), "Issue#5 #10: reset_raid_map_fog clears explored cells")
+	await get_tree().process_frame
+
+# ------------------------------------------------------------
+# 11. Permadeath Returns to MAIN_MENU (Run Last)
 # ------------------------------------------------------------
 func _test_permadeath_returns_to_main_menu() -> void:
 	print("-- [P0 Test 10] Permadeath Deletes Save & Transitions to MAIN_MENU --")
