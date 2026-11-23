@@ -258,6 +258,23 @@ static func draw_2d_grid(ctrl: Control, grid_mgr: InventoryGrid, hovered_cell: V
 		var cur_w: int = int(item.get("h", 1)) if bool(item.get("rotated", false)) else int(item.get("w", 1))
 		var cur_h: int = int(item.get("w", 1)) if bool(item.get("rotated", false)) else int(item.get("h", 1))
 		var item_rect := Rect2(float(item.get("x", 0)) * cell_size + 2.0, float(item.get("y", 0)) * cell_size + 2.0, float(cur_w) * cell_size - 4.0, float(cur_h) * cell_size - 4.0)
+
+		var cdata_unsearch = item.get("custom_data", {})
+		var is_unsearched := bool(item.get("unsearched", false)) or (cdata_unsearch is Dictionary and bool(cdata_unsearch.get("unsearched", false)))
+		if is_unsearched:
+			var searching_uid := str(grid_mgr.get_meta("searching_item_uid", ""))
+			if searching_uid != "" and item_uid == searching_uid:
+				var progress := clampf(float(grid_mgr.get_meta("search_progress", 0.0)), 0.0, 1.0)
+				ctrl.draw_rect(Rect2(item_rect.position.x - 1.0, item_rect.position.y - 1.0, item_rect.size.x + 2.0, item_rect.size.y + 2.0), Color(0.02, 0.03, 0.04, 0.95), false, 1.0)
+				ctrl.draw_rect(item_rect, Color(0.14, 0.16, 0.21, 0.94), true)
+				ctrl.draw_rect(item_rect, Color(0.95, 0.78, 0.28, 0.92), false, 1.2)
+				ctrl.draw_string(font_micro, Vector2(item_rect.position.x + item_rect.size.x * 0.5 - 4.0, item_rect.position.y + item_rect.size.y * 0.5 + 3.0), "?", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.98, 0.84, 0.36, 1.0))
+				var bar_h := 4.0
+				var bar_y := item_rect.position.y + item_rect.size.y - bar_h - 3.0
+				var bar_w := maxf(8.0, item_rect.size.x - 8.0)
+				ctrl.draw_rect(Rect2(item_rect.position.x + 4.0, bar_y, bar_w, bar_h), Color(0.04, 0.05, 0.07, 0.95), true)
+				ctrl.draw_rect(Rect2(item_rect.position.x + 4.0, bar_y, bar_w * progress, bar_h), Color(0.96, 0.78, 0.26, 1.0), true)
+			continue
 		
 		var item_id_str: String = str(item.get("id", ""))
 		var d: Dictionary = ItemDatabase.get_item_data(item_id_str)

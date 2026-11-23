@@ -14,8 +14,12 @@ signal item_hovered(popup: ContainerPopupWindow, item: Dictionary)
 signal item_unhovered(popup: ContainerPopupWindow)
 
 const POPUP_CELL_SIZE: float = InventoryUIHelper.POPUP_CELL_SIZE
+const SEARCH_DURATION_PER_ITEM: float = 0.65
 
 var container_item: Dictionary = {}
+var _searching_uid: String = ""
+var _search_elapsed: float = 0.0
+var _search_status_label: Label = null
 var container_uid: String = ""
 var source_grid: InventoryGrid = null
 var inner_grid: InventoryGrid = null
@@ -74,6 +78,7 @@ func setup(p_container_item: Dictionary, p_source_grid: InventoryGrid, p_host: C
 
 	_build_ui(item_id, item_data, gw, gh, filter_kind)
 	_refresh_header_text()
+	_advance_search_target()
 
 func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_kind: String) -> void:
 	if PixelAssetManager:
@@ -166,6 +171,13 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 	var grid_px_h := float(gh) * POPUP_CELL_SIZE
 	custom_minimum_size.x = maxf(minf(grid_px_w + 26.0, 316.0), 272.0)
 
+	_search_status_label = Label.new()
+	_search_status_label.name = "SearchStatusLabel"
+	_search_status_label.add_theme_font_size_override("font_size", 11)
+	_search_status_label.add_theme_color_override("font_color", Color(0.96, 0.80, 0.34, 1.0))
+	_search_status_label.visible = false
+	root_vbox.add_child(_search_status_label)
+
 	scroll_container = ScrollContainer.new()
 	scroll_container.custom_minimum_size = Vector2(minf(grid_px_w + 14.0, 290.0), minf(grid_px_h + 14.0, 290.0))
 	scroll_container.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -188,7 +200,121 @@ func _build_ui(item_id: String, item_data: Dictionary, gw: int, gh: int, filter_
 		grid_control.queue_redraw()
 	)
 	grid_panel.add_child(grid_control)
+	_update_search_ui()
 	reset_size()
+
+static func is_item_unsearched(item: Dictionary) -> bool:
+	if item.is_empty():
+		return false
+	if bool(item.get("unsearched", false)):
+		return true
+	var cdata = item.get("custom_data", {})
+	return cdata is Dictionary and bool(cdata.get("unsearched", false))
+
+static func clear_item_unsearched(item: Dictionary) -> void:
+	if item.is_empty():
+		return
+	item.erase("unsearched")
+	var cdata = item.get("custom_data", {})
+	if cdata is Dictionary:
+		cdata.erase("unsearched")
+
+func _find_sort_button() -> Button:
+	var prop_btn = get("sort_btn")
+	if prop_btn is Button:
+		return prop_btn
+	if header_panel and is_instance_valid(header_panel):
+		for ch in header_panel.find_children("*", "Button", true, false):
+			if ch is Button and (ch.name.to_lower().contains("sort") or ch.text.contains("정렬")):
+				return ch
+	return null
+
+func get_unsearched_items() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if inner_grid == null:
+		return out
+	for it in inner_grid.items:
+		if it is Dictionary and not it.is_empty() and is_item_unsearched(it):
+			out.append(it)
+	return out
+
+func has_unsearched_items() -> bool:
+	return not get_unsearched_items().is_empty()
+
+func _update_search_ui() -> void:
+	var rem := get_unsearched_items().size()
+	var s_btn := _find_sort_button()
+	if s_btn and is_instance_valid(s_btn):
+		s_btn.disabled = (rem > 0)
+	if _search_status_label and is_instance_valid(_search_status_label):
+		if rem > 0:
+			_search_status_label.visible = true
+			_search_status_label.text = "가방 수색 중... (남은 물품 %d개)" % rem
+		else:
+			_search_status_label.visible = false
+			_search_status_label.text = ""
+
+func _advance_search_target() -> void:
+	if inner_grid == null:
+		_searching_uid = ""
+		_search_elapsed = 0.0
+		return
+	var unsearched := get_unsearched_items()
+	if unsearched.is_empty():
+		_searching_uid = ""
+		_search_elapsed = 0.0
+	else:
+		var keep_current := false
+		if _searching_uid != "":
+			for it in unsearched:
+				if str(it.get("uid", "")) == _searching_uid:
+					keep_current = true
+					break
+		if not keep_current:
+			_searching_uid = str(unsearched[0].get("uid", ""))
+			_search_elapsed = 0.0
+	inner_grid.set_meta("searching_item_uid", _searching_uid)
+	inner_grid.set_meta("search_progress", clampf(_search_elapsed / SEARCH_DURATION_PER_ITEM, 0.0, 1.0) if _searching_uid != "" else 0.0)
+	_update_search_ui()
+	if grid_control and is_instance_valid(grid_control):
+		grid_control.queue_redraw()
+
+func reveal_next_unsearched_item() -> Dictionary:
+	_advance_search_target()
+	if _searching_uid == "" or inner_grid == null:
+		return {}
+	var revealed: Dictionary = {}
+	for it in inner_grid.items:
+		if it is Dictionary and str(it.get("uid", "")) == _searching_uid and is_item_unsearched(it):
+			clear_item_unsearched(it)
+			revealed = it
+			break
+	if revealed.is_empty():
+		return {}
+	_searching_uid = ""
+	_search_elapsed = 0.0
+	if is_inside_tree() and SoundManager:
+		SoundManager.play("menu_select")
+	_on_inner_grid_changed()
+	return revealed
+
+func _process(delta: float) -> void:
+	if not visible or inner_grid == null:
+		return
+	if not has_unsearched_items():
+		if _searching_uid != "":
+			_advance_search_target()
+		return
+	if _searching_uid == "":
+		_advance_search_target()
+	if _searching_uid == "":
+		return
+	_search_elapsed += delta
+	inner_grid.set_meta("search_progress", clampf(_search_elapsed / SEARCH_DURATION_PER_ITEM, 0.0, 1.0))
+	if _search_elapsed >= SEARCH_DURATION_PER_ITEM:
+		reveal_next_unsearched_item()
+	elif grid_control and is_instance_valid(grid_control):
+		grid_control.queue_redraw()
 
 func _refresh_header_text() -> void:
 	if not title_label or container_item.is_empty() or inner_grid == null:
@@ -205,6 +331,7 @@ func _on_inner_grid_changed() -> void:
 	_syncing_back = true
 	InventoryGrid.sync_container_item_contents(container_item, inner_grid)
 	_refresh_header_text()
+	_advance_search_target()
 	if grid_control:
 		grid_control.queue_redraw()
 	if source_grid and is_instance_valid(source_grid):
@@ -250,7 +377,7 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 		if cell_x >= 0 and cell_x < inner_grid.grid_width and cell_y >= 0 and cell_y < inner_grid.grid_height:
 			hovered_cell = Vector2i(cell_x, cell_y)
 			var h_item := inner_grid.get_item_at(cell_x, cell_y)
-			if not h_item.is_empty():
+			if not h_item.is_empty() and not ContainerPopupWindow.is_item_unsearched(h_item):
 				item_hovered.emit(self, h_item)
 			else:
 				item_unhovered.emit(self)
@@ -261,7 +388,7 @@ func _on_grid_gui_input(event: InputEvent) -> void:
 	elif event is InputEventMouseButton and event.pressed:
 		move_to_front()
 		var item := inner_grid.get_item_at(cell_x, cell_y)
-		if item.is_empty():
+		if item.is_empty() or ContainerPopupWindow.is_item_unsearched(item):
 			return
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if Input.is_key_pressed(KEY_CTRL):
@@ -302,7 +429,8 @@ func get_hovered_item() -> Dictionary:
 	var local_pos := grid_control.get_local_mouse_position()
 	var cx := int(floor(local_pos.x / POPUP_CELL_SIZE))
 	var cy := int(floor(local_pos.y / POPUP_CELL_SIZE))
-	return inner_grid.get_item_at(cx, cy)
+	var h_item := inner_grid.get_item_at(cx, cy)
+	return {} if ContainerPopupWindow.is_item_unsearched(h_item) else h_item
 
 func _input(event: InputEvent) -> void:
 	if _is_dragging_window and event is InputEventMouseButton and not event.pressed and event.button_index == MOUSE_BUTTON_LEFT:

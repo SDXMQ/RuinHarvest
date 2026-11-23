@@ -45,6 +45,14 @@ func _on_inventory_changed() -> void:
 			if it != null and not it.is_empty() and String(it.get("id", "")) != "":
 				has_any = true
 				break
+		if not has_any and loot_inventory.has_meta("corpse_equipment"):
+			var corpse_eq = loot_inventory.get_meta("corpse_equipment", {})
+			if corpse_eq is Dictionary:
+				for slot_key in corpse_eq:
+					var eq_item = corpse_eq[slot_key]
+					if eq_item is Dictionary and not eq_item.is_empty() and String(eq_item.get("id", "")) != "":
+						has_any = true
+						break
 	is_empty_looted = not has_any
 	modulate = Color(0.62, 0.64, 0.68, 0.78) if is_empty_looted else Color(1, 1, 1, 1)
 	queue_redraw()

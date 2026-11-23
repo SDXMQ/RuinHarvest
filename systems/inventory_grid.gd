@@ -18,7 +18,8 @@ static var _uid_counter: int = 0
 const PRESERVED_CUSTOM_KEYS: Array[String] = [
 	"parts", "attachments", "loaded_ammo", "current_magazine_ammo",
 	"computed_stats", "durability", "max_durability", "receiver",
-	"name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"
+	"name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked",
+	"unsearched"
 ]
 
 static func next_uid() -> String:

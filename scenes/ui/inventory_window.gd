@@ -50,6 +50,7 @@ var inventory_grid: InventoryGrid = null
 var hideout_stash_grid: InventoryGrid = null
 var target_inventory: Inventory = null
 var target_title: String = ""
+var corpse_equip_section: VBoxContainer = null
 var tooltip: PanelContainer = null
 var context_menu_panel: PanelContainer = null
 
@@ -130,6 +131,13 @@ func _ready() -> void:
 		loot_all_btn.pressed.connect(_loot_all_from_container)
 		container_section.add_child(loot_all_btn)
 		container_section.move_child(loot_all_btn, 1)
+
+		corpse_equip_section = VBoxContainer.new()
+		corpse_equip_section.name = "CorpseEquipSection"
+		corpse_equip_section.visible = false
+		corpse_equip_section.add_theme_constant_override("separation", 4)
+		container_section.add_child(corpse_equip_section)
+		container_section.move_child(corpse_equip_section, 2)
 	
 	_disable_focus_recursively(self)
 
@@ -493,6 +501,9 @@ func _handle_global_drop() -> void:
 			var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
 			_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 			_update_weapons_ui()
+			_drop_item_to_world(item)
+		elif src == "corpse_equip":
+			_consume_corpse_equip_drag_source()
 			_drop_item_to_world(item)
 		_end_drag()
 		return
@@ -953,6 +964,8 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 						var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
 						_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 						_update_weapons_ui()
+					elif src == "corpse_equip":
+						_consume_corpse_equip_drag_source()
 				else:
 					item["amount"] = rem_amt
 					if src == "grid":
@@ -1030,6 +1043,8 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 					var r_idx = drag_data.get("rail_index", item.get("rail_index", -1))
 					_remove_attachment_from_weapon_slot(str(w_slot), str(a_slot), int(r_idx), str(item.get("id", "")))
 					_update_weapons_ui()
+				elif src == "corpse_equip":
+					_consume_corpse_equip_drag_source()
 					
 				if SoundManager: SoundManager.play("menu_select")
 			else:
@@ -1056,11 +1071,173 @@ func _try_drop_on_grid(cell_x: int, cell_y: int) -> void:
 # ============================================================
 # 2. 수색 대상(Container) & 주변(Vicinity) 탐색 & 월드 드롭/픽업
 # ============================================================
+func _get_corpse_equipment() -> Dictionary:
+	if target_inventory and bool(target_inventory.get_meta("is_corpse", false)):
+		var ceq = target_inventory.get_meta("corpse_equipment", {})
+		if ceq is Dictionary:
+			return ceq
+	return {}
+
+func _close_popup_by_uid(cuid: String) -> void:
+	if cuid == "" or not open_container_popups.has(cuid):
+		return
+	var p = open_container_popups[cuid]
+	open_container_popups.erase(cuid)
+	if is_instance_valid(p):
+		p.queue_free()
+
+func _is_corpse_equipment_popup(popup: ContainerPopupWindow) -> bool:
+	if not popup:
+		return false
+	var p_uid := str(popup.container_item.get("uid", ""))
+	if p_uid == "":
+		return false
+	var corpse_eq := _get_corpse_equipment()
+	for slot_key in corpse_eq.keys():
+		var slot_it = corpse_eq[slot_key]
+		if slot_it is Dictionary and not slot_it.is_empty() and str(slot_it.get("uid", "")) == p_uid:
+			return true
+	return false
+
+func _has_corpse_equipment_items(corpse_eq: Dictionary) -> bool:
+	for k in corpse_eq.keys():
+		var eq_it = corpse_eq[k]
+		if eq_it is Dictionary and not eq_it.is_empty() and str(eq_it.get("id", "")) != "":
+			return true
+	return false
+
+func _consume_corpse_equip_drag_source() -> void:
+	var slot_name := str(drag_data.get("slot_name", ""))
+	var corpse_eq := _get_corpse_equipment()
+	if slot_name != "" and corpse_eq.has(slot_name):
+		var prev_it = corpse_eq[slot_name]
+		if prev_it is Dictionary:
+			_close_popup_by_uid(str(prev_it.get("uid", "")))
+		corpse_eq[slot_name] = {}
+		if target_inventory:
+			target_inventory.inventory_changed.emit()
+	_update_container_list()
+
+func _update_corpse_equipment_ui() -> void:
+	if not is_instance_valid(corpse_equip_section):
+		return
+	for c in corpse_equip_section.get_children():
+		c.queue_free()
+	var corpse_eq := _get_corpse_equipment()
+	if corpse_eq.is_empty():
+		corpse_equip_section.visible = false
+		return
+	corpse_equip_section.visible = true
+
+	var hdr := Label.new()
+	hdr.text = "시체 착용 장비"
+	hdr.add_theme_font_size_override("font_size", 11)
+	hdr.add_theme_color_override("font_color", Color(0.95, 0.78, 0.36, 0.95))
+	corpse_equip_section.add_child(hdr)
+
+	var slot_defs := [["primary1", "주무기"], ["helmet", "헬멧"], ["vest", "방탄복"], ["backpack", "가방"]]
+	for pair in slot_defs:
+		var slot_key: String = pair[0]
+		var slot_label: String = pair[1]
+		var slot_item = corpse_eq.get(slot_key, {})
+
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 4)
+		corpse_equip_section.add_child(row)
+
+		var slot_btn := Button.new()
+		slot_btn.custom_minimum_size = Vector2(0, 34)
+		slot_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		slot_btn.mouse_filter = Control.MOUSE_FILTER_PASS
+		slot_btn.focus_mode = Control.FOCUS_NONE
+		slot_btn.clip_text = true
+		slot_btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+		slot_btn.add_theme_font_size_override("font_size", 11)
+		row.add_child(slot_btn)
+
+		if not (slot_item is Dictionary) or slot_item.is_empty() or str(slot_item.get("id", "")) == "":
+			slot_btn.text = "[%s] (비어 있음)" % slot_label
+			slot_btn.disabled = true
+			slot_btn.modulate = Color(0.58, 0.60, 0.64, 0.68)
+			continue
+
+		if str(slot_item.get("uid", "")) == "":
+			slot_item["uid"] = InventoryGrid.next_uid()
+		var item_id := str(slot_item.get("id", ""))
+		var idata := ItemDatabase.get_item_data(item_id)
+		var disp_name := str(slot_item.get("name", idata.get("name", item_id)))
+		slot_btn.text = "[%s] %s" % [slot_label, disp_name]
+		if ItemIconManager:
+			slot_btn.icon = ItemIconManager.get_icon(item_id)
+			slot_btn.expand_icon = true
+
+		slot_btn.mouse_entered.connect(func():
+			if not is_dragging and tooltip:
+				tooltip.display_item(slot_item, idata)
+				tooltip.update_position(get_global_mouse_position())
+		)
+		slot_btn.mouse_exited.connect(func():
+			if tooltip: tooltip.hide()
+		)
+		slot_btn.gui_input.connect(func(event: InputEvent):
+			if event is InputEventMouseButton and event.pressed:
+				if event.button_index == MOUSE_BUTTON_RIGHT or (event.button_index == MOUSE_BUTTON_LEFT and Input.is_key_pressed(KEY_CTRL)):
+					if not inventory_grid:
+						return
+					var amt := maxi(1, int(slot_item.get("amount", 1)))
+					var rem := inventory_grid.auto_add_item(item_id, amt, slot_item)
+					if rem <= 0:
+						_close_popup_by_uid(str(slot_item.get("uid", "")))
+						corpse_eq[slot_key] = {}
+						if target_inventory:
+							target_inventory.inventory_changed.emit()
+						if SoundManager: SoundManager.play("menu_select")
+						_update_container_list()
+					elif EventBus.has_signal("event_logged"):
+						EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족합니다.")
+				elif event.button_index == MOUSE_BUTTON_LEFT:
+					if event.double_click and InventoryGrid.is_container_item(slot_item):
+						open_container_popup(slot_item, null)
+						return
+					var drag_it: Dictionary = (slot_item as Dictionary).duplicate(true)
+					var bsize := ItemDatabase.get_item_grid_size(item_id)
+					if not drag_it.has("w"): drag_it["w"] = bsize.x
+					if not drag_it.has("h"): drag_it["h"] = bsize.y
+					_start_drag("corpse_equip", drag_it, Vector2i.ZERO, slot_key)
+		)
+
+		if slot_key == "backpack" or (slot_key == "vest" and InventoryGrid.is_container_item(slot_item)):
+			var inner_raw = slot_item.get("inner_items", [])
+			var inner_arr: Array = inner_raw if inner_raw is Array else []
+			var unsearched_cnt := 0
+			for in_it in inner_arr:
+				if in_it is Dictionary and ContainerPopupWindow.is_item_unsearched(in_it):
+					unsearched_cnt += 1
+			var open_btn := Button.new()
+			open_btn.focus_mode = Control.FOCUS_NONE
+			open_btn.custom_minimum_size = Vector2(78, 34)
+			open_btn.add_theme_font_size_override("font_size", 11)
+			if unsearched_cnt > 0:
+				open_btn.text = "탐색 (%d)" % unsearched_cnt
+				open_btn.add_theme_color_override("font_color", Color(1.0, 0.86, 0.35))
+			else:
+				open_btn.text = "열기 (%d)" % inner_arr.size()
+			open_btn.pressed.connect(func():
+				open_container_popup(slot_item, null)
+			)
+			row.add_child(open_btn)
+
+	var sep := HSeparator.new()
+	corpse_equip_section.add_child(sep)
+
 func _update_container_list() -> void:
 	if not is_instance_valid(container_section): return
 	
 	if not target_inventory:
 		container_section.visible = false
+		_update_corpse_equipment_ui()
+		if not open_container_popups.is_empty():
+			_prune_and_rebind_popups()
 		return
 		
 	container_section.visible = true
@@ -1075,6 +1252,8 @@ func _update_container_list() -> void:
 	else:
 		container_title_label.text = "CONTAINER // " + (target_title if target_title != "" else "수색 대상")
 	
+	_update_corpse_equipment_ui()
+
 	if tooltip and tooltip.visible and not is_dragging and container_list.get_global_rect().has_point(get_global_mouse_position()):
 		tooltip.hide()
 
@@ -1089,7 +1268,8 @@ func _update_container_list() -> void:
 			has_items = true
 			_create_container_entry(slot_item, i)
 			
-	container_empty_label.visible = not has_items
+	var corpse_has_gear := _has_corpse_equipment_items(_get_corpse_equipment())
+	container_empty_label.visible = (not has_items) and (not corpse_has_gear)
 
 func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 	var btn = Button.new()
@@ -1144,7 +1324,7 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 		if tooltip: tooltip.hide()
 	)
 	
-	# 드래그 및 우클릭/Ctrl+좌클릭 픽업
+	# 드래그 및 우클릭/Ctrl+좌클릭 픽업 (가방/리그는 더블클릭으로 내부 열기 지원)
 	btn.gui_input.connect(func(event: InputEvent):
 		if event is InputEventMouseButton and event.pressed:
 			if event.button_index == MOUSE_BUTTON_RIGHT or (event.button_index == MOUSE_BUTTON_LEFT and Input.is_key_pressed(KEY_CTRL)):
@@ -1157,6 +1337,9 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 				if rem > 0 and EventBus.has_signal("event_logged"):
 					EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족합니다.")
 			elif event.button_index == MOUSE_BUTTON_LEFT:
+				if event.double_click and InventoryGrid.is_container_item(slot_item):
+					open_container_popup(slot_item, null)
+					return
 				var base_size = ItemDatabase.get_item_grid_size(slot_item.get("id", ""))
 				var clean_slot_cd := InventoryGrid.sanitize_custom_data(slot_item)
 				var item_dict = {
@@ -1166,7 +1349,7 @@ func _create_container_entry(slot_item: Dictionary, index: int) -> void:
 					"h": base_size.y,
 					"custom_data": clean_slot_cd.duplicate(true)
 				}
-				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked", "unsearched"]:
 					if clean_slot_cd.has(k):
 						item_dict[k] = clean_slot_cd[k]
 				_start_drag("container", item_dict, Vector2i(index, 0))
@@ -1180,6 +1363,7 @@ func _loot_all_from_container() -> void:
 		return
 	var moved_any = false
 	var full_warn = false
+	var unsearched_blocked = false
 	for i in range(target_inventory.items.size() - 1, -1, -1):
 		var slot_item = target_inventory.items[i]
 		if slot_item != null and not slot_item.is_empty() and slot_item.get("id", "") != "":
@@ -1191,6 +1375,82 @@ func _loot_all_from_container() -> void:
 				moved_any = true
 			if rem > 0:
 				full_warn = true
+
+	var corpse_eq := _get_corpse_equipment()
+	if not corpse_eq.is_empty():
+		var corpse_changed := false
+		for slot_key in ["primary1", "helmet", "vest"]:
+			var eq_it = corpse_eq.get(slot_key, {})
+			if eq_it is Dictionary and not eq_it.is_empty() and str(eq_it.get("id", "")) != "":
+				var amt := maxi(1, int(eq_it.get("amount", 1)))
+				var rem := inventory_grid.auto_add_item(str(eq_it.get("id", "")), amt, eq_it)
+				if rem <= 0:
+					_close_popup_by_uid(str(eq_it.get("uid", "")))
+					corpse_eq[slot_key] = {}
+					moved_any = true
+					corpse_changed = true
+				else:
+					full_warn = true
+		var bp_slot = corpse_eq.get("backpack", {})
+		if bp_slot is Dictionary and not bp_slot.is_empty() and str(bp_slot.get("id", "")) != "":
+			var bp_uid := str(bp_slot.get("uid", ""))
+			var open_pop: ContainerPopupWindow = open_container_popups.get(bp_uid, null) as ContainerPopupWindow
+			if open_pop and is_instance_valid(open_pop) and open_pop.inner_grid:
+				for bi in range(open_pop.inner_grid.items.size() - 1, -1, -1):
+					var in_it = open_pop.inner_grid.items[bi]
+					if not (in_it is Dictionary) or in_it.is_empty():
+						continue
+					if ContainerPopupWindow.is_item_unsearched(in_it):
+						unsearched_blocked = true
+						continue
+					var in_amt := maxi(1, int(in_it.get("amount", 1)))
+					var rem := inventory_grid.auto_add_item(str(in_it.get("id", "")), in_amt, in_it)
+					var added := in_amt - rem
+					if added > 0:
+						moved_any = true
+						corpse_changed = true
+						if rem <= 0:
+							open_pop.inner_grid.remove_item_by_uid(str(in_it.get("uid", "")))
+						else:
+							in_it["amount"] = rem
+							open_pop.inner_grid.grid_changed.emit()
+					if rem > 0:
+						full_warn = true
+			else:
+				var inner_raw = bp_slot.get("inner_items", [])
+				if inner_raw is Array:
+					for bi in range(inner_raw.size() - 1, -1, -1):
+						var in_it = inner_raw[bi]
+						if not (in_it is Dictionary) or in_it.is_empty():
+							continue
+						if ContainerPopupWindow.is_item_unsearched(in_it):
+							unsearched_blocked = true
+							continue
+						var in_amt := maxi(1, int(in_it.get("amount", 1)))
+						var rem := inventory_grid.auto_add_item(str(in_it.get("id", "")), in_amt, in_it)
+						var added := in_amt - rem
+						if added > 0:
+							moved_any = true
+							corpse_changed = true
+							if rem <= 0:
+								inner_raw.remove_at(bi)
+							else:
+								in_it["amount"] = rem
+						if rem > 0:
+							full_warn = true
+			var bp_inner_left = bp_slot.get("inner_items", [])
+			if bp_inner_left is Array and bp_inner_left.is_empty():
+				var rem_bp := inventory_grid.auto_add_item(str(bp_slot.get("id", "")), 1, bp_slot)
+				if rem_bp <= 0:
+					_close_popup_by_uid(bp_uid)
+					corpse_eq["backpack"] = {}
+					moved_any = true
+					corpse_changed = true
+				else:
+					full_warn = true
+		if corpse_changed and target_inventory:
+			target_inventory.inventory_changed.emit()
+
 	if moved_any:
 		if inventory_grid.has_method("consolidate_stacks"):
 			inventory_grid.consolidate_stacks()
@@ -1198,6 +1458,8 @@ func _loot_all_from_container() -> void:
 		_update_container_list()
 	if full_warn and EventBus.has_signal("event_logged"):
 		EventBus.event_logged.emit("[icon:warn] 가방 공간이 부족하여 일부 아이템만 획득했습니다.")
+	elif unsearched_blocked and EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit("[icon:backpack] 시체 가방 안의 미탐색 물품은 [탐색] 버튼을 눌러 확인한 뒤 회수할 수 있습니다.")
 
 func _quick_transfer_grid_to_container(item: Dictionary) -> void:
 	if not target_inventory or not inventory_grid:
@@ -1225,7 +1487,7 @@ func _try_drop_on_container() -> void:
 		return
 		
 	var src = drag_data.get("source", "")
-	if src == "container":
+	if src == "container" or (src == "corpse_equip" and not _get_corpse_equipment().is_empty()):
 		_end_drag()
 		return
 	var item = drag_data.get("item", {})
@@ -1381,7 +1643,7 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 				"amount": g_item.amount,
 				"custom_data": clean_cd.duplicate(true)
 			}
-			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
+			for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked", "unsearched"]:
 				if clean_cd.has(k):
 					item_dict[k] = clean_cd[k]
 			tooltip.display_item(item_dict, d)
@@ -1416,7 +1678,7 @@ func _create_vicinity_entry(g_item: GroundItem) -> void:
 					"h": base_size.y,
 					"custom_data": clean_cd.duplicate(true)
 				}
-				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
+				for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked", "unsearched"]:
 					if clean_cd.has(k):
 						item_dict[k] = clean_cd[k]
 				_start_drag("vicinity", item_dict, Vector2i.ZERO, "", g_item)
@@ -1560,6 +1822,8 @@ func _try_equip_dragged_item(slot_name: String) -> void:
 			_update_container_list()
 	elif src == "equipment":
 		equipment_data[orig_slot] = {}
+	elif src == "corpse_equip":
+		_consume_corpse_equip_drag_source()
 		
 	var prev_equipped = equipment_data.get(slot_name, {})
 	equipment_data[slot_name] = item
@@ -2088,6 +2352,8 @@ func _try_equip_weapon(slot_key: String) -> void:
 			_update_container_list()
 	elif src == "weapon_slot" or src == "equipment":
 		equipment_data[orig_slot] = {}
+	elif src == "corpse_equip":
+		_consume_corpse_equip_drag_source()
 		
 	var prev = equipment_data.get(slot_key, {})
 	if not item.has("parts"):
@@ -2166,6 +2432,8 @@ func _try_equip_attachment(weapon_slot_key: String, attach_type: String, rail_in
 		if orig_idx != -1 and target_inventory:
 			target_inventory.remove_item_at(orig_idx, 1)
 			_update_container_list()
+	elif src == "corpse_equip":
+		_consume_corpse_equip_drag_source()
 	elif src == "attachment":
 		var old_w_slot = drag_data.get("weapon_slot", item.get("weapon_slot", ""))
 		var old_a_slot = drag_data.get("attach_slot", item.get("attach_slot", item.get("part_slot", "")))
@@ -2640,6 +2908,13 @@ func _prune_and_rebind_popups() -> void:
 	var stale: Array[String] = []
 	var eq_vest: Dictionary = equipment_data.get("vest", {})
 	var eq_vest_uid: String = str(eq_vest.get("uid", ""))
+	var eq_bp: Dictionary = equipment_data.get("backpack", {})
+	var eq_bp_uid: String = str(eq_bp.get("uid", ""))
+	var corpse_eq: Dictionary = _get_corpse_equipment()
+	var corpse_vest: Dictionary = corpse_eq.get("vest", {}) if not corpse_eq.is_empty() else {}
+	var corpse_vest_uid: String = str(corpse_vest.get("uid", ""))
+	var corpse_bp: Dictionary = corpse_eq.get("backpack", {}) if not corpse_eq.is_empty() else {}
+	var corpse_bp_uid: String = str(corpse_bp.get("uid", ""))
 	for cuid in open_container_popups.keys():
 		var p = open_container_popups[cuid]
 		if not is_instance_valid(p):
@@ -2656,6 +2931,15 @@ func _prune_and_rebind_popups() -> void:
 					live_grid = inventory_grid
 			if live_item.is_empty() and not eq_vest.is_empty() and eq_vest_uid == s_uid:
 				live_item = eq_vest
+				live_grid = null
+			if live_item.is_empty() and not eq_bp.is_empty() and eq_bp_uid == s_uid:
+				live_item = eq_bp
+				live_grid = null
+			if live_item.is_empty() and not corpse_vest.is_empty() and corpse_vest_uid == s_uid:
+				live_item = corpse_vest
+				live_grid = null
+			if live_item.is_empty() and not corpse_bp.is_empty() and corpse_bp_uid == s_uid:
+				live_item = corpse_bp
 				live_grid = null
 			if live_item.is_empty():
 				stale.append(str(cuid))
@@ -2696,12 +2980,16 @@ func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = 
 		if inventory_grid:
 			inventory_grid.grid_changed.emit()
 		_update_weight_ui()
+		_update_corpse_equipment_ui()
 	)
 	popup.popup_grid_changed.connect(func(_changed_uid: String):
 		if player:
 			player.set("equipment", equipment_data)
 			if player.has_signal("stats_changed"):
 				player.stats_changed.emit()
+		if target_inventory and bool(target_inventory.get_meta("is_corpse", false)):
+			target_inventory.inventory_changed.emit()
+			_update_corpse_equipment_ui()
 		_update_weight_ui()
 	)
 	popup.item_drag_started.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
@@ -2854,6 +3142,8 @@ func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -
 					elif src == "attachment":
 						_remove_attachment_from_weapon_slot(str(drag_data.get("weapon_slot", "")), str(drag_data.get("attach_slot", "")), int(drag_data.get("rail_index", -1)), item_id)
 						_update_weapons_ui()
+					elif src == "corpse_equip":
+						_consume_corpse_equip_drag_source()
 				else:
 					item["amount"] = rem_amt
 					if src == "grid" and inventory_grid:
@@ -2920,6 +3210,8 @@ func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -
 			elif src == "attachment":
 				_remove_attachment_from_weapon_slot(str(drag_data.get("weapon_slot", "")), str(drag_data.get("attach_slot", "")), int(drag_data.get("rail_index", -1)), item_id)
 				_update_weapons_ui()
+			elif src == "corpse_equip":
+				_consume_corpse_equip_drag_source()
 			if SoundManager: SoundManager.play("menu_select")
 		else:
 			if SoundManager: SoundManager.play("hit_melee")
@@ -2933,7 +3225,7 @@ func _handle_popup_quick_action(popup: ContainerPopupWindow, item: Dictionary, i
 	var item_id := str(item.get("id", ""))
 	var amt := maxi(1, int(item.get("amount", 1)))
 	var uid := str(item.get("uid", ""))
-	if is_ctrl and inventory_grid:
+	if (is_ctrl or _is_corpse_equipment_popup(popup)) and inventory_grid:
 		var rem := inventory_grid.auto_add_item(item_id, amt, item)
 		var added := amt - rem
 		if added > 0:

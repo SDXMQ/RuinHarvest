@@ -1127,13 +1127,103 @@ func _spawn_corpse_loot_box(drops: Array) -> void:
 	else:
 		get_parent().add_child(inv)
 
+	var corpse_equipment := {
+		"primary1": {},
+		"helmet": {},
+		"vest": {},
+		"backpack": {}
+	}
+	var bag_drops: Array = []
 	for d in drops:
+		if not (d is Dictionary):
+			continue
 		var item_id := String(d.get("id", ""))
-		var amt := int(d.get("amount", 1))
-		var c_data: Dictionary = d.get("custom_data", {})
+		if item_id == "":
+			continue
+		var amt := maxi(1, int(d.get("amount", 1)))
+		var c_data: Dictionary = d.get("custom_data", {}).duplicate(true)
 		if c_data.is_empty() and WeaponPartsDatabase.RECEIVERS.has(item_id):
 			c_data = WeaponPartsDatabase.create_loot_weapon(item_id, 0.06)
-		inv.add_item(item_id, amt, c_data)
+		var idata := ItemDatabase.get_item_data(item_id)
+		var sz := ItemDatabase.get_item_grid_size(item_id)
+		var clean_cd := InventoryGrid.sanitize_custom_data(c_data)
+		var item_dict := {
+			"uid": InventoryGrid.next_uid(),
+			"id": item_id,
+			"amount": amt,
+			"w": sz.x,
+			"h": sz.y,
+			"custom_data": clean_cd.duplicate(true)
+		}
+		for pk in InventoryGrid.PRESERVED_CUSTOM_KEYS:
+			if clean_cd.has(pk):
+				item_dict[pk] = clean_cd[pk]
+		InventoryGrid.ensure_container_defaults(item_dict)
+
+		var equip_slot := ItemDatabase.get_item_equip_slot(item_id)
+		if equip_slot in ["primary", "sidearm"] and corpse_equipment["primary1"].is_empty():
+			corpse_equipment["primary1"] = item_dict
+		elif equip_slot == "helmet" and corpse_equipment["helmet"].is_empty():
+			corpse_equipment["helmet"] = item_dict
+		elif equip_slot == "vest" and corpse_equipment["vest"].is_empty():
+			corpse_equipment["vest"] = item_dict
+		elif equip_slot == "backpack" and corpse_equipment["backpack"].is_empty():
+			corpse_equipment["backpack"] = item_dict
+		else:
+			bag_drops.append(item_dict)
+
+	# 인간형 적의 착용 방탄복/가방 보강 (루팅 슬롯 분리)
+	if corpse_equipment["vest"].is_empty():
+		var vest_chance := 0.35 if enemy_type == EnemyType.SCAV else (0.55 if enemy_type == EnemyType.RAIDER else 1.0)
+		if randf() < vest_chance:
+			var vest_id := "1레벨_방탄복" if enemy_type == EnemyType.SCAV else ("2레벨_방탄복" if enemy_type == EnemyType.RAIDER else "3레벨_방탄복")
+			var vsz := ItemDatabase.get_item_grid_size(vest_id)
+			var v_item := {"uid": InventoryGrid.next_uid(), "id": vest_id, "amount": 1, "w": vsz.x, "h": vsz.y, "custom_data": {}}
+			InventoryGrid.ensure_container_defaults(v_item)
+			corpse_equipment["vest"] = v_item
+
+	if corpse_equipment["backpack"].is_empty() and not bag_drops.is_empty():
+		var bp_id := "3레벨_가방" if enemy_type == EnemyType.BOSS else ("2레벨_가방" if enemy_type == EnemyType.RAIDER else "1레벨_가방")
+		var bsz := ItemDatabase.get_item_grid_size(bp_id)
+		var bp_item := {"uid": InventoryGrid.next_uid(), "id": bp_id, "amount": 1, "w": bsz.x, "h": bsz.y, "custom_data": {}}
+		InventoryGrid.ensure_container_defaults(bp_item)
+		corpse_equipment["backpack"] = bp_item
+
+	# 가방 내부 그리드에 전리품 수납 및 미탐색("unsearched") 마킹
+	var overflow_drops: Array = []
+	var bp_slot: Dictionary = corpse_equipment.get("backpack", {})
+	if not bp_slot.is_empty() and not bag_drops.is_empty():
+		var spec := InventoryGrid.get_container_spec(bp_slot)
+		var gw := maxi(1, int(spec.get("grid_w", 4)))
+		var gh := maxi(1, int(spec.get("grid_h", 4)))
+		var tmp_grid := InventoryGrid.new()
+		tmp_grid.grid_width = gw
+		tmp_grid.grid_height = gh
+		tmp_grid._init_grid_map()
+		for bd in bag_drops:
+			var b_id := str(bd.get("id", ""))
+			var b_amt := int(bd.get("amount", 1))
+			var rem := tmp_grid.auto_add_item(b_id, b_amt, bd)
+			if rem > 0:
+				var ov: Dictionary = (bd as Dictionary).duplicate(true)
+				ov["amount"] = rem
+				overflow_drops.append(ov)
+		for git in tmp_grid.items:
+			if git is Dictionary and not git.is_empty():
+				git["unsearched"] = true
+				if not (git.get("custom_data", null) is Dictionary):
+					git["custom_data"] = {}
+				git["custom_data"]["unsearched"] = true
+		InventoryGrid.sync_container_item_contents(bp_slot, tmp_grid)
+		tmp_grid.free()
+	else:
+		overflow_drops = bag_drops
+
+	inv.set_meta("is_corpse", true)
+	inv.set_meta("corpse_equipment", corpse_equipment)
+	for ov_item in overflow_drops:
+		if ov_item is Dictionary:
+			inv.add_item(String(ov_item.get("id", "")), int(ov_item.get("amount", 1)), ov_item)
 
 	if scene and "container_inventories" in scene:
 		scene.container_inventories[chosen_tile] = inv

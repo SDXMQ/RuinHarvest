@@ -44,7 +44,7 @@ func display_item(raw_item: Dictionary, data: Dictionary = {}) -> void:
 	var cdata = item.get("custom_data", {})
 	if cdata is Dictionary and not cdata.is_empty():
 		var clean_cd := InventoryGrid.sanitize_custom_data(cdata)
-		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked"]:
+		for k in ["parts", "attachments", "loaded_ammo", "current_magazine_ammo", "computed_stats", "durability", "max_durability", "receiver", "name", "type", "inner_items", "inner_grid_w", "inner_grid_h", "locked", "unsearched"]:
 			if not item.has(k) and clean_cd.has(k):
 				item[k] = clean_cd[k]
 		
