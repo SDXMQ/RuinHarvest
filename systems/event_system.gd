@@ -85,24 +85,54 @@ class GameEvent:
 	var description: String
 	var effects: Dictionary = {}
 	var display_timer: float = 5.0
-	
+
 	func _init(event_id: String, event_data: Dictionary) -> void:
 		id = event_id
 		data = event_data
-		title = data.get("title", "이벤트")
-		description = data.get("description", "")
+		title = String(data.get("title", "이벤트"))
+		description = String(data.get("description", ""))
 		effects = data.get("effects", {})
-		
+
+	static func apply_effects_to_state(eff: Dictionary, player_data: Variant = null, live_player: Node = null) -> void:
+		if eff.is_empty():
+			return
+		var has_live: bool = is_instance_valid(live_player)
+		if has_live:
+			if eff.has("hp"):
+				live_player.hp = clampf(float(live_player.hp) + float(eff["hp"]), 1.0, float(live_player.max_hp))
+			if eff.has("hunger"):
+				live_player.hunger = clampf(float(live_player.hunger) + float(eff["hunger"]), 0.0, float(live_player.max_hunger))
+			if eff.has("thirst"):
+				live_player.thirst = clampf(float(live_player.thirst) + float(eff["thirst"]), 0.0, float(live_player.max_thirst))
+			if live_player.has_signal("stats_changed"):
+				live_player.stats_changed.emit()
+		if player_data is Dictionary:
+			if eff.has("hp"):
+				if has_live:
+					player_data["hp"] = float(live_player.hp)
+				else:
+					var max_hp: float = float(player_data.get("max_hp", 100.0))
+					player_data["hp"] = clampf(float(player_data.get("hp", 100.0)) + float(eff["hp"]), 1.0, maxf(1.0, max_hp))
+			if eff.has("stress"):
+				player_data["stress"] = clampf(float(player_data.get("stress", 0.0)) + float(eff["stress"]), 0.0, 100.0)
+			if eff.has("hunger"):
+				if has_live:
+					player_data["hunger"] = float(live_player.hunger)
+				else:
+					var max_hu: float = float(player_data.get("max_hunger", 100.0))
+					player_data["hunger"] = clampf(float(player_data.get("hunger", 100.0)) + float(eff["hunger"]), 0.0, maxf(1.0, max_hu))
+			if eff.has("thirst"):
+				if has_live:
+					player_data["thirst"] = float(live_player.thirst)
+				else:
+					var max_th: float = float(player_data.get("max_thirst", 100.0))
+					player_data["thirst"] = clampf(float(player_data.get("thirst", 100.0)) + float(eff["thirst"]), 0.0, maxf(1.0, max_th))
+
 	func apply_effects(player_data: Dictionary) -> void:
-		var eff = data.get("effects", {})
-		if eff.has("hp"):
-			player_data["hp"] += eff["hp"]
-		if eff.has("stress"):
-			player_data["stress"] += eff["stress"]
-		if eff.has("hunger"):
-			player_data["hunger"] += eff["hunger"]
-		if eff.has("thirst"):
-			player_data["thirst"] += eff["thirst"]
+		apply_effects_to_state(effects, player_data, null)
+
+static func apply_effects_to_state(eff: Dictionary, player_data: Variant = null, live_player: Node = null) -> void:
+	GameEvent.apply_effects_to_state(eff, player_data, live_player)
 
 var active_events: Array = []
 var event_log: Array = []
@@ -111,51 +141,36 @@ var check_interval: float = 20.0 # 20초 주기
 
 func _process(delta: float) -> void:
 	# 인게임 레이드 진행 중일 때만 동작
-	if GameManager.current_state != GameManager.GameState.IN_GAME or get_tree().paused:
+	if not GameManager or not get_tree() or GameManager.current_state != GameManager.GameState.IN_GAME or get_tree().paused:
 		return
-		
+
 	check_timer += delta
-	
+
 	for i in range(active_events.size() - 1, -1, -1):
 		active_events[i].display_timer -= delta
 		if active_events[i].display_timer <= 0:
 			active_events.remove_at(i)
-			
+
 	for i in range(event_log.size() - 1, -1, -1):
 		event_log[i]["timer"] -= delta
 		if event_log[i]["timer"] <= 0:
 			event_log.remove_at(i)
-			
+
 	if check_timer >= check_interval:
 		check_timer = 0.0
-		var current_day = GameManager.current_world_data.get("current_day", 1)
+		var current_day: int = int(GameManager.current_world_data.get("current_day", 1))
 		_check_random_events(current_day)
 
 func _apply_effect_dict(eff: Dictionary, p_override: Node = null) -> void:
 	if eff.is_empty():
 		return
-	if GameManager and GameManager.current_world_data.has("player"):
-		var player_data = GameManager.current_world_data["player"]
-		if eff.has("hp"):
-			player_data["hp"] = float(player_data.get("hp", 100.0)) + float(eff["hp"])
-		if eff.has("stress"):
-			player_data["stress"] = float(player_data.get("stress", 0.0)) + float(eff["stress"])
-		if eff.has("hunger"):
-			player_data["hunger"] = float(player_data.get("hunger", 100.0)) + float(eff["hunger"])
-		if eff.has("thirst"):
-			player_data["thirst"] = float(player_data.get("thirst", 100.0)) + float(eff["thirst"])
-	var p = p_override
+	var p_data: Variant = null
+	if GameManager and GameManager.current_world_data.has("player") and GameManager.current_world_data["player"] is Dictionary:
+		p_data = GameManager.current_world_data["player"]
+	var p: Node = p_override
 	if not is_instance_valid(p) and is_inside_tree() and get_tree():
 		p = get_tree().get_first_node_in_group("player")
-	if is_instance_valid(p):
-		if eff.has("hp"):
-			p.hp = clamp(p.hp + float(eff["hp"]), 1.0, p.max_hp)
-		if eff.has("hunger"):
-			p.hunger = clamp(p.hunger + float(eff["hunger"]), 0.0, p.max_hunger)
-		if eff.has("thirst"):
-			p.thirst = clamp(p.thirst + float(eff["thirst"]), 0.0, p.max_thirst)
-		if p.has_signal("stats_changed"):
-			p.stats_changed.emit()
+	GameEvent.apply_effects_to_state(eff, p_data, p)
 
 func _apply_event_to_live_player(event: GameEvent, p_override: Node = null) -> void:
 	var eff: Dictionary = event.data.get("effects", {}) if event and event.data else {}
@@ -244,7 +259,7 @@ func add_log(msg: String, duration: float = 8.0) -> void:
 	if event_log.size() > 8:
 		event_log.resize(8)
 	
-	if EventBus.has_signal("event_logged"):
+	if EventBus and EventBus.has_signal("event_logged"):
 		EventBus.emit_signal("event_logged", msg)
 
 func trigger_event(event_id: String, p_override: Node = null) -> bool:

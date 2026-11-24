@@ -91,11 +91,10 @@ func advance_day(day_num: int = -1) -> void:
 	refresh_listings(current_day)
 	refresh_daily_bounties(current_day)
 
-func refresh_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
-	var target_day := in_game_day if in_game_day > 0 else current_day
+func _build_daily_bounties(target_day: int) -> Array[Dictionary]:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = target_day * 30013 + 777
-	daily_bounties.clear()
+	var built: Array[Dictionary] = []
 	var pool: Array[String] = []
 	for cand in BOUNTY_CANDIDATE_POOL:
 		if ItemDatabase.items.has(cand):
@@ -116,7 +115,7 @@ func refresh_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
 		var market_price: int = get_current_price(item_id)
 		var bounty_price: int = maxi(25, int(round(float(market_price) * BOUNTY_MULTIPLIER)))
 		var data: Dictionary = ItemDatabase.get_item_data(item_id)
-		daily_bounties.append({
+		built.append({
 			"item_id": item_id,
 			"name": String(data.get("name", item_id)),
 			"market_price": market_price,
@@ -124,13 +123,19 @@ func refresh_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
 			"multiplier": BOUNTY_MULTIPLIER,
 			"day": target_day
 		})
+	return built
+
+func refresh_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
+	var target_day := in_game_day if in_game_day > 0 else current_day
+	daily_bounties = _build_daily_bounties(target_day)
 	return daily_bounties
 
 func get_daily_bounties(in_game_day: int = -1) -> Array[Dictionary]:
-	if in_game_day > 0 and (daily_bounties.is_empty() or int(daily_bounties[0].get("day", -1)) != in_game_day):
-		return refresh_daily_bounties(in_game_day)
-	if daily_bounties.is_empty():
-		return refresh_daily_bounties(current_day)
+	if in_game_day > 0 and in_game_day != current_day:
+		return _build_daily_bounties(in_game_day)
+	var target_day := in_game_day if in_game_day > 0 else current_day
+	if daily_bounties.is_empty() or int(daily_bounties[0].get("day", -1)) != target_day:
+		return refresh_daily_bounties(target_day)
 	# 현재 시세와 2.5배 가격 동기화
 	for b in daily_bounties:
 		var m_price: int = get_current_price(String(b.get("item_id", "")))
@@ -328,12 +333,16 @@ func refresh_listings(in_game_day: int) -> void:
 		})
 		next_listing_id += 1
 	
-	# 대기 중인 플레이어 매물 보존
+	_sync_player_listings_to_market()
+
+func _sync_player_listings_to_market() -> void:
+	for i in range(listings.size() - 1, -1, -1):
+		var l = listings[i]
+		if l is Dictionary and bool(l.get("is_player", false)):
+			listings.remove_at(i)
 	for p_sale in player_listings:
 		if p_sale is Dictionary and not bool(p_sale.get("sold_out", false)):
 			listings.append(p_sale.duplicate(true))
-		
-	# 가격 순 오름차순 정렬
 	listings.sort_custom(func(a, b): return int(a.get("price", 0)) < int(b.get("price", 0)))
 
 func purchase_listing(listing_or_id, buy_qty: int = 1) -> Dictionary:
@@ -349,6 +358,8 @@ func purchase_listing(listing_or_id, buy_qty: int = 1) -> Dictionary:
 				break
 	if target.is_empty():
 		return {"success": false, "reason": "not_found"}
+	if bool(target.get("is_player", false)):
+		return {"success": false, "reason": "own_listing"}
 	var rem_stock := int(target.get("stock_remaining", 0))
 	if bool(target.get("sold_out", false)) or rem_stock < qty:
 		return {"success": false, "reason": "sold_out"}
@@ -411,7 +422,10 @@ func process_player_sales(player_data: Dictionary) -> Dictionary:
 		var pr_buy = 0.5
 		if denom > 0:
 			pr_buy = 1.0 - ((p_register - p_min) / denom)
-		pr_buy = clamp(pr_buy, 0.01, 0.99)
+		if p_current > 0 and float(p_register) >= float(p_current) * 3.0:
+			pr_buy = 0.0
+		else:
+			pr_buy = clamp(pr_buy, 0.01, 0.99)
 		
 		if randf() < pr_buy:
 			var earned = p_register * count
@@ -469,8 +483,7 @@ func register_item(item_name: String, count: int, price: int, upfront_fee_paid: 
 	if not sanitized_cd.is_empty():
 		entry["custom_data"] = sanitized_cd
 	player_listings.append(entry)
-	listings.append(entry.duplicate(true))
-	listings.sort_custom(func(a, b): return int(a.get("price", 0)) < int(b.get("price", 0)))
+	_sync_player_listings_to_market()
 	next_player_listing_id += 1
 	record_player_sale(resolved, count)
 	return true
@@ -505,13 +518,16 @@ func load_from_save_dict(data: Dictionary) -> void:
 		trends = data["trends"].duplicate(true)
 	if data.get("supply_pressure") is Dictionary:
 		supply_pressure = data["supply_pressure"].duplicate(true)
+	var max_player_id: int = 0
 	if data.get("player_listings") is Array:
 		player_listings = []
 		for p in data["player_listings"]:
 			if p is Dictionary:
-				player_listings.append(p.duplicate(true))
+				var p_copy: Dictionary = p.duplicate(true)
+				max_player_id = maxi(max_player_id, int(p_copy.get("id", 0)))
+				player_listings.append(p_copy)
 	next_listing_id = maxi(next_listing_id, int(data.get("next_listing_id", next_listing_id)))
-	next_player_listing_id = maxi(next_player_listing_id, int(data.get("next_player_listing_id", next_player_listing_id)))
+	next_player_listing_id = maxi(next_player_listing_id, maxi(int(data.get("next_player_listing_id", next_player_listing_id)), max_player_id + 1))
 	update_market_prices(current_day, not has_saved_trends)
 	refresh_listings(current_day)
 	refresh_daily_bounties(current_day)

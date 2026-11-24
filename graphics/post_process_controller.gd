@@ -52,9 +52,12 @@ func _ready() -> void:
 		material.set_shader_parameter("death_desat", 0.0)
 		material.set_shader_parameter("vignette_intensity", 0.0)
 
+func _is_interior_scene(scene: Node) -> bool:
+	return scene != null and ("Interior" in scene.name or scene.scene_file_path.contains("interior"))
+
 func _get_target_rain_intensity() -> float:
-	var current_scene = get_tree().current_scene if get_tree() else null
-	var is_interior = current_scene != null and "Interior" in current_scene.name
+	var current_scene: Node = get_tree().current_scene if get_tree() else null
+	var is_interior: bool = _is_interior_scene(current_scene)
 	if is_interior or not WeatherSystem:
 		return 0.0
 	match WeatherSystem.current_weather:
@@ -151,23 +154,28 @@ func _process(delta: float) -> void:
 		material.set_shader_parameter("infection_pulse", current_infection_pulse)
 
 	# 3. 낮/밤 환경광 기반 비네팅 자동 제어 (낮에는 0.0, 밤이나 실내에서만 부드럽게 점진적 증가)
-	var current_scene = get_tree().current_scene
-	var day_night = current_scene.get_node_or_null("DayNightModulate") if current_scene else null
-	var target_vignette = 0.0
-	var is_interior = current_scene != null and "Interior" in current_scene.name
+	var current_scene: Node = get_tree().current_scene
+	var day_night: Node = current_scene.get_node_or_null("DayNightModulate") if current_scene else null
+	var target_vignette: float = 0.0
+	var is_interior: bool = _is_interior_scene(current_scene)
 
-	if day_night and day_night is CanvasModulate:
-		var brightness = day_night.color.v
-		# 밝기 0.85 이상(낮)이면 0, 0.25 이하(심야)면 0.28
-		var night_t = clamp((0.85 - brightness) / 0.6, 0.0, 1.0)
-		target_vignette = night_t * 0.28
-	elif is_interior:
+	if is_interior:
 		target_vignette = 0.15 # 실내는 은은하게
+	elif day_night and day_night is CanvasModulate:
+		var brightness: float = day_night.color.v
+		# 밝기 0.85 이상(낮)이면 0, 0.25 이하(심야)면 0.28
+		var night_t: float = clampf((0.85 - brightness) / 0.6, 0.0, 1.0)
+		target_vignette = night_t * 0.28
+
+	if GameSettings and "vignette_intensity" in GameSettings:
+		var vig_scale: float = clampf(float(GameSettings.vignette_intensity) / 0.6, 0.0, 2.0)
+		target_vignette *= vig_scale
 
 	if material:
-		var cur_vignette = material.get_shader_parameter("vignette_intensity")
-		if cur_vignette == null: cur_vignette = 0.0
-		var new_v = lerp(float(cur_vignette), target_vignette, delta * 1.5)
+		var cur_vignette: Variant = material.get_shader_parameter("vignette_intensity")
+		if cur_vignette == null:
+			cur_vignette = 0.0
+		var new_v: float = lerp(float(cur_vignette), target_vignette, delta * 1.5)
 		material.set_shader_parameter("vignette_intensity", new_v)
 
 	# 4. 악천후(STORM) 낙뢰(Lightning Flash) 및 천둥 연출
@@ -191,8 +199,15 @@ func trigger_lightning_flash() -> void:
 	if EventBus.has_signal("camera_shake_requested"):
 		EventBus.camera_shake_requested.emit(3.5, 0.25)
 
-func _on_weather_changed(new_weather: String) -> void:
-	match new_weather:
+static func normalize_weather_type(new_weather: Variant) -> String:
+	if new_weather is int:
+		if WeatherSystem:
+			return WeatherSystem.get_weather_name(int(new_weather))
+		return str(new_weather)
+	return String(new_weather)
+
+func _on_weather_changed(new_weather: Variant) -> void:
+	match normalize_weather_type(new_weather):
 		"맑음": target_tint = Color(1.0, 1.0, 1.0, 1.0)
 		"흐림": target_tint = Color(0.9, 0.9, 0.95, 1.0)
 		"비", "폭우": target_tint = Color(0.8, 0.85, 0.95, 1.0)

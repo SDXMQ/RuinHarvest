@@ -92,9 +92,16 @@ func _paint_icon_by_id(img: Image, item_id: String, size: int) -> void:
 	elif norm_id.contains("무기 부품 상자") or lower_id.contains("parts box"):
 		_draw_storage_case(img, "weapon_part", size)
 		return
-	elif norm_id.contains("인식표 지갑") or lower_id.contains("dogtag"):
-		if norm_id.contains("지갑") or lower_id.contains("wallet") or lower_id.contains("case"):
-			_draw_storage_case(img, "dogtag_key", size)
+	elif norm_id.contains("인식표 지갑") or (lower_id.contains("dogtag") and (norm_id.contains("지갑") or lower_id.contains("wallet") or lower_id.contains("case"))):
+		_draw_storage_case(img, "dogtag_key", size)
+		return
+
+	match norm_id:
+		"농작물":
+			_draw_crop(img, size)
+			return
+		"생수":
+			_draw_bottle(img, Color(0.22, 0.65, 0.95), size)
 			return
 
 	# === 1. 방탄복 / 조끼 ===
@@ -209,6 +216,8 @@ func _paint_icon_by_id(img: Image, item_id: String, size: int) -> void:
 		_draw_pills(img, size)
 
 	# === 10. 식량 / 작물 / 음료 ===
+	elif norm_id.contains("농작물") or lower_id.contains("crop"):
+		_draw_crop(img, size)
 	elif norm_id.contains("생수") or norm_id.contains("물") or lower_id.contains("water"):
 		_draw_bottle(img, Color(0.22, 0.65, 0.95), size)
 	elif norm_id.contains("탄산음료") or lower_id.contains("soda"):
@@ -229,8 +238,6 @@ func _paint_icon_by_id(img: Image, item_id: String, size: int) -> void:
 		_draw_chocolate(img, size)
 	elif norm_id.contains("고기") or lower_id.contains("meat"):
 		_draw_meat(img, size)
-	elif norm_id.contains("농작물") or lower_id.contains("crop"):
-		_draw_crop(img, size)
 
 	# === 11. 도구 / 광학 / 재료 / 고가품 / 특수 퀘스트 ===
 	elif norm_id.contains("망원경") or lower_id.contains("binocular") or lower_id.contains("telescope"):
