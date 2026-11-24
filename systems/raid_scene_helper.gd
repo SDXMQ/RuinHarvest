@@ -111,16 +111,16 @@ static func update_tactical_frame(
 	badge_fracture: Control,
 	badge_biohazard: Control
 ) -> float:
-	var next_spread := current_spread
+	var next_spread: float = current_spread
 	if not player:
 		return next_spread
 	if crosshair_overlay:
 		var w_stats: Dictionary = player.equipped_weapon_data.get("computed_stats", {}) if not player.equipped_weapon_data.is_empty() else {}
-		var acc := float(w_stats.get("accuracy", 78.0))
-		var base_spread := maxf(5.0, (100.0 - acc) * 0.45)
-		var move_penalty := player.velocity.length() * 0.075
-		var recoil_pen := (player.weapon_handler.recoil_offset * 1.8) if player.weapon_handler else 0.0
-		var target_spread := base_spread + move_penalty + recoil_pen
+		var acc: float = float(w_stats.get("accuracy", 78.0))
+		var base_spread: float = maxf(5.0, (100.0 - acc) * 0.45)
+		var move_penalty: float = float(player.velocity.length()) * 0.075
+		var recoil_pen: float = float(player.weapon_handler.recoil_offset) * 1.8 if player.weapon_handler else 0.0
+		var target_spread: float = base_spread + move_penalty + recoil_pen
 		if player.player_camera and player.player_camera.is_aiming_ads:
 			target_spread *= 0.48
 		elif player.is_crouching:
@@ -348,22 +348,22 @@ static func draw_tactical_compass(
 			compass_bar.draw_string(compass_font, Vector2(x - 4, h - 9), cardinal_dirs[deg], HORIZONTAL_ALIGNMENT_LEFT, -1, 10, Color(1, 0.9, 0.3))
 
 	for pt in extraction_points_data:
-		var dir_to_pt := player.global_position.direction_to(pt["pos"])
-		var pt_deg := rad_to_deg(dir_to_pt.angle())
+		var dir_to_pt: Vector2 = player.global_position.direction_to(pt["pos"])
+		var pt_deg: float = rad_to_deg(dir_to_pt.angle())
 		if pt_deg < 0: pt_deg += 360.0
-		var diff := pt_deg - player_deg
+		var diff: float = pt_deg - player_deg
 		while diff < -180.0: diff += 360.0
 		while diff > 180.0: diff -= 360.0
 		if absf(diff) <= fov / 2.0:
-			var x := floorf(center_x + diff * pixels_per_deg)
-			var dist := player.global_position.distance_to(pt["pos"])
-			var diamond := PackedVector2Array([Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)])
-			var pt_type := int(pt.get("type", 0))
-			var pt_col := Color(0.2, 1.0, 0.3)
-			var txt_col := Color(0.3, 1.0, 0.4)
-			var lock_suffix := ""
+			var x: float = floorf(center_x + diff * pixels_per_deg)
+			var dist: float = player.global_position.distance_to(pt["pos"])
+			var diamond: PackedVector2Array = PackedVector2Array([Vector2(x, 4), Vector2(x + 4, 9), Vector2(x, 14), Vector2(x - 4, 9)])
+			var pt_type: int = int(pt.get("type", 0))
+			var pt_col: Color = Color(0.2, 1.0, 0.3)
+			var txt_col: Color = Color(0.3, 1.0, 0.4)
+			var lock_suffix: String = ""
 			if pt_type == 1:
-				var cur_rub := GameManager.get_player_rubles() if GameManager else 0
+				var cur_rub: int = GameManager.get_player_rubles() if GameManager else 0
 				if cur_rub < 3000:
 					pt_col = Color(0.55, 0.55, 0.58, 0.55)
 					txt_col = Color(0.95, 0.42, 0.42, 0.78)
@@ -372,7 +372,7 @@ static func draw_tactical_compass(
 					pt_col = Color(1.0, 0.82, 0.15)
 					txt_col = Color(1.0, 0.9, 0.3)
 			elif pt_type == 2:
-				var bunker_unlocked := GameManager.is_bunker_extraction_unlocked(field_objectives) if GameManager else false
+				var bunker_unlocked: bool = GameManager.is_bunker_extraction_unlocked(field_objectives) if GameManager else false
 				if not bunker_unlocked:
 					pt_col = Color(0.55, 0.55, 0.58, 0.55)
 					txt_col = Color(0.95, 0.42, 0.42, 0.78)
@@ -384,15 +384,15 @@ static func draw_tactical_compass(
 			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm%s" % [dist, lock_suffix], HORIZONTAL_ALIGNMENT_LEFT, -1, 8, txt_col)
 
 	for ad in airdrop_points_data:
-		var dir_to_ad := player.global_position.direction_to(ad["pos"])
-		var ad_deg := rad_to_deg(dir_to_ad.angle())
+		var dir_to_ad: Vector2 = player.global_position.direction_to(ad["pos"])
+		var ad_deg: float = rad_to_deg(dir_to_ad.angle())
 		if ad_deg < 0: ad_deg += 360.0
-		var diff := ad_deg - player_deg
+		var diff: float = ad_deg - player_deg
 		while diff < -180.0: diff += 360.0
 		while diff > 180.0: diff -= 360.0
 		if absf(diff) <= fov / 2.0:
-			var x := floorf(center_x + diff * pixels_per_deg)
-			var dist := player.global_position.distance_to(ad["pos"])
+			var x: float = floorf(center_x + diff * pixels_per_deg)
+			var dist: float = player.global_position.distance_to(ad["pos"])
 			var ad_tex: Texture2D = UiIconManager.get_icon("airdrop") if UiIconManager else null
 			if ad_tex:
 				compass_bar.draw_texture_rect(ad_tex, Rect2(x - 5.0, 3.0, 10.0, 10.0), false)
@@ -400,16 +400,16 @@ static func draw_tactical_compass(
 				compass_bar.draw_rect(Rect2(x - 4.0, 5.0, 8.0, 8.0), Color(1.0, 0.45, 0.15), true)
 			compass_bar.draw_string(compass_font, Vector2(x - 12, 22), "%.0fm" % dist, HORIZONTAL_ALIGNMENT_LEFT, -1, 8, Color(1.0, 0.65, 0.25))
 
-	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and boss_entity.hp > 0:
-		var dir_to_boss := player.global_position.direction_to(boss_entity.global_position)
-		var boss_deg := rad_to_deg(dir_to_boss.angle())
+	if is_instance_valid(boss_entity) and boss_entity.get("hp") != null and float(boss_entity.hp) > 0.0:
+		var dir_to_boss: Vector2 = player.global_position.direction_to(boss_entity.global_position)
+		var boss_deg: float = rad_to_deg(dir_to_boss.angle())
 		if boss_deg < 0: boss_deg += 360.0
-		var b_diff := boss_deg - player_deg
+		var b_diff: float = boss_deg - player_deg
 		while b_diff < -180.0: b_diff += 360.0
 		while b_diff > 180.0: b_diff -= 360.0
 		if absf(b_diff) <= fov / 2.0:
-			var bx := floorf(center_x + b_diff * pixels_per_deg)
-			var b_dist := player.global_position.distance_to(boss_entity.global_position)
+			var bx: float = floorf(center_x + b_diff * pixels_per_deg)
+			var b_dist: float = player.global_position.distance_to(boss_entity.global_position)
 			var boss_tex: Texture2D = UiIconManager.get_icon("skull") if UiIconManager else null
 			if boss_tex:
 				compass_bar.draw_texture_rect(boss_tex, Rect2(bx - 5.0, 3.0, 10.0, 10.0), false)
@@ -420,15 +420,15 @@ static func draw_tactical_compass(
 	var objs_to_draw: Array = field_objectives if field_objectives.size() > 0 else ([landmark_objective] if is_instance_valid(landmark_objective) else [])
 	for obj_ref in objs_to_draw:
 		if is_instance_valid(obj_ref) and not bool(obj_ref.get("is_completed")):
-			var dir_to_obj := player.global_position.direction_to(obj_ref.global_position)
-			var obj_deg := rad_to_deg(dir_to_obj.angle())
+			var dir_to_obj: Vector2 = player.global_position.direction_to(obj_ref.global_position)
+			var obj_deg: float = rad_to_deg(dir_to_obj.angle())
 			if obj_deg < 0: obj_deg += 360.0
-			var o_diff := obj_deg - player_deg
+			var o_diff: float = obj_deg - player_deg
 			while o_diff < -180.0: o_diff += 360.0
 			while o_diff > 180.0: o_diff -= 360.0
 			if absf(o_diff) <= fov / 2.0:
-				var ox := floorf(center_x + o_diff * pixels_per_deg)
-				var o_dist := player.global_position.distance_to(obj_ref.global_position)
+				var ox: float = floorf(center_x + o_diff * pixels_per_deg)
+				var o_dist: float = player.global_position.distance_to(obj_ref.global_position)
 				var icon_key: String = obj_ref.get_compass_icon() if obj_ref.has_method("get_compass_icon") else "signal"
 				var obj_tex: Texture2D = UiIconManager.get_icon(icon_key) if UiIconManager else null
 				if obj_tex:
