@@ -101,15 +101,7 @@ func _on_body_entered(body: Node2D) -> void:
 	elif body is TileMapLayer:
 		var layer = body as TileMapLayer
 		var hit_tile_pos = layer.local_to_map(global_position + direction * 4.0)
-		var coords = layer.get_cell_atlas_coords(hit_tile_pos)
-		if TileManager.is_window(coords):
-			layer.set_cell(hit_tile_pos, 0, TileManager.get_window_broken_tile(coords))
-			EventBus.noise_created.emit(global_position, 400.0, "break")
-			EventBus.window_broken.emit(hit_tile_pos)
-			EventBus.event_logged.emit("[icon:explosion] 총격으로 창문이 깨졌습니다!")
-			if SoundManager: SoundManager.play("hit_melee")
-			var ps = get_tree().current_scene.get_node_or_null("ParticleSystem") if get_tree() and get_tree().current_scene else null
-			if ps: ps.emit("spark", global_position.x, global_position.y, 6)
+		if TileManager.break_window_at(layer, hit_tile_pos, global_position, "[icon:explosion] 총격으로 창문이 깨졌습니다!", 400.0, 6, false):
 			if penetration < 8:
 				queue_free()
 		else:

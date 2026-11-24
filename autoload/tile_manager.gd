@@ -81,6 +81,12 @@ const TILE_CROSSWALK = Vector2i(5, 3)    # 교차로 횡단보도 아스팔트
 const WALL_BRICK = OBJ_WALL
 const OBJ_FURNITURE = OBJ_DESK
 
+# 월드 상호작용 엔티티 표준 타입 코드
+const INTERACT_CAR = Vector2i(5, 1)
+const INTERACT_AIRDROP = Vector2i(7, 2)
+const INTERACT_OBJECTIVE = Vector2i(8, 2)
+const INTERACT_CORPSE_BOX = Vector2i(9, 2)
+
 # 비트마스크 방향 & 가구 회전 상수
 const DIR_N: int = 1
 const DIR_E: int = 2
@@ -805,6 +811,36 @@ func get_toggled_door_tile(coords: Vector2i) -> Vector2i:
 
 func get_unlocked_door_tile(coords: Vector2i) -> Vector2i:
 	return OBJ_DOOR_OPEN_V if coords == OBJ_DOOR_LOCKED_V else OBJ_DOOR_OPEN
+
+func break_window_at(
+	layer: TileMapLayer,
+	tile_pos: Vector2i,
+	world_pos: Vector2,
+	log_msg: String = "[icon:explosion] 창문이 깨졌습니다! (큰 소음 발생)",
+	noise_radius: float = 400.0,
+	spark_count: int = 8,
+	emit_door_toggle: bool = false
+) -> bool:
+	if not layer:
+		return false
+	var coords: Vector2i = layer.get_cell_atlas_coords(tile_pos)
+	if not is_window(coords):
+		return false
+	layer.set_cell(tile_pos, 0, get_window_broken_tile(coords))
+	if EventBus:
+		EventBus.noise_created.emit(world_pos, noise_radius, "break")
+		if emit_door_toggle:
+			EventBus.door_toggled.emit(tile_pos, true)
+		EventBus.window_broken.emit(tile_pos)
+		if log_msg != "":
+			EventBus.event_logged.emit(log_msg)
+	if SoundManager:
+		SoundManager.play("hit_melee")
+	var cur_scene: Node = layer.get_tree().current_scene if (layer.is_inside_tree() and layer.get_tree()) else null
+	var ps = cur_scene.get_node_or_null("ParticleSystem") if cur_scene else null
+	if ps and spark_count > 0:
+		ps.emit("spark", world_pos.x, world_pos.y, spark_count)
+	return true
 
 func get_furniture_variant(base_coords: Vector2i, facing: int) -> Vector2i:
 	if facing == FACE_S:

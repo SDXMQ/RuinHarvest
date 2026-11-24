@@ -143,14 +143,7 @@ func _craft_item(result_id: String, recipe: Dictionary) -> void:
 
 	if overflow_rem > 0:
 		var p_node = get_tree().get_first_node_in_group("player") if (is_inside_tree() and get_tree()) else null
-		var cur_scene = get_tree().current_scene if (is_inside_tree() and get_tree()) else null
-		if p_node != null and cur_scene != null:
-			var GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
-			var g_item = GroundItemScene.instantiate()
-			g_item.global_position = p_node.global_position + Vector2(randf_range(-16.0, 16.0), randf_range(-16.0, 16.0))
-			var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
-			parent_target.add_child(g_item)
-			g_item.setup(result_id, overflow_rem, {})
+		if p_node != null and GroundItem.spawn_at_scene(self, p_node.global_position, result_id, overflow_rem, {}, 16.0) != null:
 			if EventBus.has_signal("event_logged"):
 				EventBus.event_logged.emit("[icon:box] 가방 공간이 부족하여 제작품 [%s] x%d을(를) 바닥에 내려놓았습니다." % [result_id, overflow_rem])
 		else:

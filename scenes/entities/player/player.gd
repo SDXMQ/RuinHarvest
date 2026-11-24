@@ -719,16 +719,10 @@ func apply_backpack_grid_size() -> void:
 	elif inventory_grid.has_method("resize"):
 		inventory_grid.resize(new_w, new_h)
 	if not dropped_items.is_empty() and is_inside_tree() and get_tree() and get_tree().current_scene:
-		var cur_scene = get_tree().current_scene
-		var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
-		var GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
 		for it in dropped_items:
 			if not (it is Dictionary) or it.is_empty():
 				continue
-			var g_item = GroundItemScene.instantiate()
-			g_item.global_position = global_position + Vector2(randf_range(-20.0, 20.0), randf_range(-20.0, 20.0))
-			parent_target.add_child(g_item)
-			g_item.setup(String(it.get("id", "")), maxi(1, int(it.get("amount", 1))), InventoryGrid.sanitize_custom_data(it))
+			GroundItem.spawn_at_scene(self, global_position, String(it.get("id", "")), maxi(1, int(it.get("amount", 1))), InventoryGrid.sanitize_custom_data(it), 20.0)
 		if EventBus and EventBus.has_signal("event_logged"):
 			EventBus.event_logged.emit("[icon:box] 가방 축소로 넘친 아이템 %d종을 바닥에 내려놓았습니다." % dropped_items.size())
 

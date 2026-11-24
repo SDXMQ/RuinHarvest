@@ -276,12 +276,7 @@ func _melee_punch(aim_dir: Vector2, spawn_pos: Vector2, melee_dmg: float = 18.0)
 	var obj_layer: TileMapLayer = chunk_mgr.object_layer if chunk_mgr and chunk_mgr.object_layer else get_tree().current_scene.get_node_or_null("ObjectsLayer")
 	if obj_layer:
 		var check_tile = obj_layer.local_to_map(spawn_pos + dir_norm * 28.0)
-		var w_coords: Vector2i = obj_layer.get_cell_atlas_coords(check_tile)
-		if TileManager.is_window(w_coords):
-			obj_layer.set_cell(check_tile, 0, TileManager.get_window_broken_tile(w_coords))
-			EventBus.noise_created.emit(spawn_pos, 350.0, "break")
-			EventBus.window_broken.emit(check_tile)
-			EventBus.event_logged.emit("[icon:explosion] 근접 타격으로 창문을 깼습니다!")
+		if TileManager.break_window_at(obj_layer, check_tile, spawn_pos, "[icon:explosion] 근접 타격으로 창문을 깼습니다!", 350.0, 0, false):
 			hit_any = true
 			
 	var ps = get_tree().current_scene.get_node_or_null("ParticleSystem")
@@ -440,17 +435,8 @@ func cycle_ammo_type() -> void:
 			return_cal = String(compat_types[0]) if compat_types.size() > 0 else "9mm"
 		return_cal = ItemDatabase.resolve_item_id(return_cal)
 		var rem: int = inv_grid.auto_add_item(return_cal, cur_mag)
-		if rem > 0:
-			var cur_scene: Node = get_tree().current_scene if get_tree() else null
-			if cur_scene == null and player:
-				cur_scene = player.get_parent()
-			if cur_scene != null and player:
-				var GroundItemScene: PackedScene = preload("res://scenes/entities/items/ground_item.tscn")
-				var g_item = GroundItemScene.instantiate()
-				g_item.global_position = player.global_position + Vector2(randf_range(-16.0, 16.0), randf_range(-16.0, 16.0))
-				var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
-				parent_target.add_child(g_item)
-				g_item.setup(return_cal, rem, {})
+		if rem > 0 and player:
+			GroundItem.spawn_at_scene(player, player.global_position, return_cal, rem, {}, 16.0)
 		equipped_weapon_data["current_magazine_ammo"] = 0
 		if equipment.has(active_weapon_slot) and not equipment[active_weapon_slot].is_empty():
 			equipment[active_weapon_slot]["current_magazine_ammo"] = 0

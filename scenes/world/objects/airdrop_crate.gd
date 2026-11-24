@@ -129,12 +129,15 @@ func _process(delta: float) -> void:
 				if col:
 					col.disabled = false
 				collision_layer = 1
-				interactable_type = Vector2i(7, 2)
+				interactable_type = TileManager.INTERACT_AIRDROP
 		DropState.LOOTABLE:
 			pass
 
 	_sync_pixel_sprites()
 	queue_redraw()
+
+func get_prompt_text() -> String:
+	return "[icon:airdrop] [E] 항공 보급품 상자 열기"
 
 func _sync_pixel_sprites() -> void:
 	if _flare_light:

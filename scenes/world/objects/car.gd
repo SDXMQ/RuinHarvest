@@ -4,7 +4,10 @@ var body_color: Color
 var rotation_angle: float = 0.0
 var car_variant: int = -1
 
-var interactable_type: Vector2i = Vector2i(5, 1) # 기존 OBJ_CAR(폐차)와 동일한 타입 코드
+var interactable_type: Vector2i = TileManager.INTERACT_CAR # 기존 OBJ_CAR(폐차)와 동일한 타입 코드
+
+func get_prompt_text() -> String:
+	return "[E] 폐차 트렁크 열기"
 
 var _car_spr: Sprite2D = null
 

@@ -58,6 +58,31 @@ func setup(p_id: String, p_amount: int = 1, p_custom: Dictionary = {}) -> void:
 	custom_data = p_custom
 	update_visuals()
 
+static func spawn_at_scene(
+	context_node: Node,
+	origin_pos: Vector2,
+	p_id: String,
+	p_amount: int = 1,
+	p_custom: Dictionary = {},
+	scatter_radius: float = 18.0
+) -> Node:
+	if not context_node or p_id == "" or p_amount <= 0:
+		return null
+	var cur_scene: Node = context_node.get_tree().current_scene if (context_node.is_inside_tree() and context_node.get_tree()) else null
+	if cur_scene == null:
+		cur_scene = context_node.get_parent()
+	if cur_scene == null:
+		return null
+	var scene_res: PackedScene = load("res://scenes/entities/items/ground_item.tscn")
+	if scene_res == null:
+		return null
+	var g_item = scene_res.instantiate()
+	g_item.global_position = origin_pos + Vector2(randf_range(-scatter_radius, scatter_radius), randf_range(-scatter_radius, scatter_radius))
+	var parent_target: Node = cur_scene.get_node_or_null("Entities") if cur_scene.has_node("Entities") else cur_scene
+	parent_target.add_child(g_item)
+	g_item.setup(p_id, maxi(1, p_amount), p_custom)
+	return g_item
+
 func _get_or_create_wishlist_badge() -> Sprite2D:
 	var badge: Sprite2D = get_node_or_null("WishlistBadge") as Sprite2D
 	if badge == null:

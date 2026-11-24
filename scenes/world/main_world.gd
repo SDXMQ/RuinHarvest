@@ -1266,16 +1266,8 @@ func _on_object_interacted(world_pos: Vector2, tile_pos: Vector2i, type: Vector2
 		if SoundManager: SoundManager.play("door_open")
 		return
 	elif TileManager.is_window(type): # OBJ_WINDOW / _V
-		# 창문 깨기 -> 깨진 창문(방향 유지)으로 타일 교체 및 큰 소음 발생
 		if chunk_manager and chunk_manager.object_layer:
-			chunk_manager.object_layer.set_cell(tile_pos, 0, TileManager.get_window_broken_tile(type))
-		EventBus.noise_created.emit(world_pos, 400.0, "break")
-		EventBus.door_toggled.emit(tile_pos, true)
-		EventBus.window_broken.emit(tile_pos)
-		EventBus.event_logged.emit("[icon:explosion] 창문이 깨졌습니다! (큰 소음 발생)")
-		if SoundManager: SoundManager.play("hit_melee")
-		var ps = get_node_or_null("ParticleSystem")
-		if ps: ps.emit("spark", world_pos.x, world_pos.y, 10)
+			TileManager.break_window_at(chunk_manager.object_layer, tile_pos, world_pos, "[icon:explosion] 창문이 깨졌습니다! (큰 소음 발생)", 400.0, 10, true)
 		return
 		
 	if table_name != "":

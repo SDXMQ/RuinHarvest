@@ -132,21 +132,24 @@ func _update_interaction(delta: float) -> void:
 		var collider = res["collider"]
 		if collider and collider.get("interactable_type") != null:
 			var i_type = collider.get("interactable_type")
-			if typeof(i_type) == TYPE_VECTOR2I and (i_type == Vector2i(5, 1) or i_type == Vector2i(7, 2) or i_type == Vector2i(8, 2) or i_type == Vector2i(9, 2)):
+			if typeof(i_type) == TYPE_VECTOR2I and i_type in [TileManager.INTERACT_CAR, TileManager.INTERACT_AIRDROP, TileManager.INTERACT_OBJECTIVE, TileManager.INTERACT_CORPSE_BOX]:
 				can_interact = true
-				if i_type == Vector2i(5, 1):
+				if collider.has_method("get_prompt_text"):
+					prompt_text = collider.get_prompt_text()
+				elif i_type == TileManager.INTERACT_CAR:
 					prompt_text = "[E] 폐차 트렁크 열기"
-				elif i_type == Vector2i(7, 2):
+				elif i_type == TileManager.INTERACT_AIRDROP:
 					prompt_text = "[icon:airdrop] [E] 항공 보급품 상자 열기"
-				elif i_type == Vector2i(9, 2):
-					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[icon:backpack] [E] 용병 시체 가방 수색하기"
-					if collider.get("corpse_tile_pos") != null:
-						interactable_tile_pos = collider.get("corpse_tile_pos")
-						interactable_type = i_type
-						found_entity = true
-						break
+				elif i_type == TileManager.INTERACT_CORPSE_BOX:
+					prompt_text = "[icon:backpack] [E] 용병 시체 가방 수색하기"
 				else:
-					prompt_text = collider.get_prompt_text() if collider.has_method("get_prompt_text") else "[icon:signal] [E 3초 홀드] 랜드마크 기밀 단말기 해킹"
+					prompt_text = "[icon:signal] [E 3초 홀드] 랜드마크 기밀 단말기 해킹"
+				if i_type == TileManager.INTERACT_CORPSE_BOX and collider.get("corpse_tile_pos") != null:
+					interactable_tile_pos = collider.get("corpse_tile_pos")
+					interactable_type = i_type
+					found_entity = true
+					break
+				if i_type == TileManager.INTERACT_OBJECTIVE:
 					active_objective_node = collider
 				interactable_type = i_type
 				if object_layer:
