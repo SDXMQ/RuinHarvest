@@ -7,6 +7,8 @@ enum State { IDLE, WANDER, CHASE, ATTACK, INVESTIGATE, HURT, DEAD }
 const BulletScene = preload("res://scenes/entities/projectiles/bullet.tscn")
 const GroundItemScene = preload("res://scenes/entities/items/ground_item.tscn")
 const CorpseBoxScript = preload("res://scenes/world/objects/corpse_box.gd")
+const EnemyData = preload("res://scenes/entities/enemies/enemy_data.gd")
+const EnemyVisualHelper = preload("res://scenes/entities/enemies/enemy_visual_helper.gd")
 
 @export var enemy_type: EnemyType = EnemyType.ZOMBIE
 
@@ -81,48 +83,14 @@ func trigger_night_stalker_smoke_evade() -> void:
 			ps_ev.emit("smoke", global_position.x, global_position.y, 6)
 
 static func format_hit_feedback(dmg: float, armor_mult: float = 1.0) -> Dictionary:
-	var dmg_int: int = max(1, int(round(dmg)))
-	if armor_mult < 0.85:
-		var absorb_pct: int = int(round((1.0 - armor_mult) * 100.0))
-		return {
-			"text": "-%d [방탄 흡수 -%d%%]" % [dmg_int, absorb_pct],
-			"color": Color(0.55, 0.78, 0.98),
-			"absorbed": true
-		}
-	elif armor_mult < 0.999:
-		var absorb_pct2: int = int(round((1.0 - armor_mult) * 100.0))
-		return {
-			"text": "-%d [방탄 -%d%%]" % [dmg_int, absorb_pct2],
-			"color": Color(0.75, 0.82, 0.92),
-			"absorbed": true
-		}
-	else:
-		return {
-			"text": "-%d" % dmg_int,
-			"color": Color(1.0, 0.92, 0.32) if dmg >= 30.0 else Color(1.0, 0.98, 0.92),
-			"absorbed": false
-		}
+	return EnemyVisualHelper.format_hit_feedback(dmg, armor_mult)
 
 func show_hit_feedback(dmg: float, armor_mult: float = 1.0) -> Dictionary:
-	var fb := format_hit_feedback(dmg, armor_mult)
+	var fb: Dictionary = EnemyVisualHelper.format_hit_feedback(dmg, armor_mult)
 	last_hit_floating_text = String(fb["text"])
 	last_hit_floating_color = fb["color"]
 	_hit_feedback_already_shown = true
-	if is_inside_tree() and get_parent() != null:
-		var lbl := Label.new()
-		lbl.text = last_hit_floating_text
-		lbl.add_theme_font_size_override("font_size", 11 if bool(fb["absorbed"]) else 13)
-		lbl.add_theme_color_override("font_color", last_hit_floating_color)
-		lbl.add_theme_color_override("font_outline_color", Color(0.05, 0.05, 0.08, 0.95))
-		lbl.add_theme_constant_override("outline_size", 3)
-		lbl.z_index = 45
-		lbl.global_position = global_position + Vector2(randf_range(-14.0, 14.0), -28.0)
-		get_parent().add_child(lbl)
-		var tw := lbl.create_tween()
-		tw.set_parallel(true)
-		tw.tween_property(lbl, "global_position:y", lbl.global_position.y - 26.0, 0.65)
-		tw.tween_property(lbl, "modulate:a", 0.0, 0.65)
-		tw.chain().tween_callback(lbl.queue_free)
+	EnemyVisualHelper.spawn_hit_feedback_label(self, fb)
 	return fb
 
 # 소음 및 느낌표 시스템
@@ -145,76 +113,20 @@ func _exit_tree() -> void:
 		EventBus.noise_created.disconnect(_on_noise_created)
 
 func _setup_stats_by_type() -> void:
-	is_ranged_human = false
-	armor_tier = 0
-	armor_value = 0.0
 	has_used_medkit = false
-	match enemy_type:
-		EnemyType.ZOMBIE:
-			max_hp = 32.0
-			speed = 62.0
-			damage = 8.0
-			detection_radius = 200.0
-			attack_radius = 28.0
-		EnemyType.RUNNER:
-			max_hp = 20.0
-			speed = 115.0
-			damage = 6.0
-			detection_radius = 220.0
-			attack_radius = 26.0
-		EnemyType.TANK:
-			max_hp = 90.0
-			speed = 40.0
-			damage = 16.0
-			armor_tier = 1
-			armor_value = 10.0
-			detection_radius = 190.0
-			attack_radius = 34.0
-		EnemyType.SCAV:
-			is_ranged_human = true
-			armor_tier = 1
-			armor_value = 10.0
-			max_hp = 42.0
-			speed = 72.0
-			damage = 7.0
-			attack_cooldown = 1.25
-			detection_radius = 250.0
-			attack_radius = 200.0
-			max_mag_ammo = 8
-			mag_ammo = 8
-		EnemyType.RAIDER:
-			is_ranged_human = true
-			armor_tier = 2
-			armor_value = 20.0
-			max_hp = 72.0
-			speed = 82.0
-			damage = 10.0
-			attack_cooldown = 0.72
-			detection_radius = 290.0
-			attack_radius = 240.0
-			max_mag_ammo = 15
-			mag_ammo = 15
-		EnemyType.BOSS:
-			is_ranged_human = true
-			armor_tier = 3
-			armor_value = 32.0
-			max_hp = 190.0
-			speed = 80.0
-			damage = 12.0
-			attack_cooldown = 0.45
-			detection_radius = 290.0
-			attack_radius = 225.0
-			max_mag_ammo = 30
-			mag_ammo = 30
-		EnemyType.NIGHT_STALKER:
-			max_hp = 65.0
-			speed = 130.0
-			damage = 13.0
-			armor_tier = 1
-			armor_value = 14.0
-			attack_cooldown = 0.85
-			detection_radius = 300.0
-			attack_radius = 30.0
+	attack_cooldown = 1.0
+	var preset: Dictionary = EnemyData.get_stats_preset(int(enemy_type))
+	max_hp = float(preset.get("max_hp", 32.0))
+	speed = float(preset.get("speed", 62.0))
+	damage = float(preset.get("damage", 8.0))
+	armor_tier = int(preset.get("armor_tier", 0))
+	armor_value = float(preset.get("armor_value", 0.0))
+	attack_cooldown = float(preset.get("attack_cooldown", 1.0))
+	detection_radius = float(preset.get("detection_radius", 200.0))
+	attack_radius = float(preset.get("attack_radius", 28.0))
+	is_ranged_human = bool(preset.get("is_ranged_human", false))
+	max_mag_ammo = int(preset.get("max_mag_ammo", 8))
+	mag_ammo = max_mag_ammo
 	hp = max_hp
 	strafe_sign = 1.0 if randf() > 0.5 else -1.0
 	faction_scan_timer = randf_range(0.1, 0.5)
@@ -461,17 +373,10 @@ func _physics_process(delta: float) -> void:
 					# 앞쪽 창문 타일 감지 및 파괴 침입
 					var forward_pos = global_position + Vector2.RIGHT.rotated(rotation) * 20.0
 					var chunk_mgr = get_node_or_null("/root/MainWorld/ChunkManager")
-					if chunk_mgr and chunk_mgr.object_layer:
+					if chunk_mgr and chunk_mgr.object_layer and attack_timer <= 0:
 						var t_pos = chunk_mgr.object_layer.local_to_map(forward_pos)
-						var win_coords: Vector2i = chunk_mgr.object_layer.get_cell_atlas_coords(t_pos)
-						if TileManager.is_window(win_coords):
-							if attack_timer <= 0:
-								chunk_mgr.object_layer.set_cell(t_pos, 0, TileManager.get_window_broken_tile(win_coords))
-								EventBus.noise_created.emit(forward_pos, 400.0, "break")
-								EventBus.window_broken.emit(t_pos)
-								EventBus.event_logged.emit("[icon:explosion] 적이 창문을 깨부수고 침입합니다!")
-								if SoundManager: SoundManager.play("hit_melee")
-								attack_timer = 1.0
+						if TileManager.break_window_at(chunk_mgr.object_layer, t_pos, forward_pos, "[icon:explosion] 적이 창문을 깨부수고 침입합니다!", 400.0, 6, false):
+							attack_timer = 1.0
 					
 					var exposed_now := (enemy_type == EnemyType.NIGHT_STALKER and active_target == target_player and is_exposed_to_player_flashlight())
 					if enemy_type == EnemyType.NIGHT_STALKER:
@@ -520,278 +425,39 @@ func _physics_process(delta: float) -> void:
 				if _glow_overlay.visible:
 					_glow_overlay.queue_redraw()
 
+var _layer_refs: Dictionary = {}
+var _cached_laser_end: Vector2 = Vector2(145.0, 1.0)
+
 func _get_type_scale() -> float:
-	match enemy_type:
-		EnemyType.TANK:
-			return 1.25
-		EnemyType.RUNNER:
-			return 0.88
-		EnemyType.RAIDER:
-			return 1.06
-		EnemyType.BOSS:
-			return 1.24
-		EnemyType.NIGHT_STALKER:
-			return 1.06
-		_:
-			return 1.0
+	return EnemyData.get_type_scale(int(enemy_type))
 
 func _setup_enemy_pixel_layers(visuals: Node2D) -> void:
 	if _enemy_sprites_ready or not visuals:
 		return
 	_enemy_sprites_ready = true
-	if PixelAssetManager:
-		_enemies_tex = PixelAssetManager.get_canvas_texture("entities/enemies")
-	var parts_tex: CanvasTexture = PixelAssetManager.get_canvas_texture("entities/player_parts") if PixelAssetManager else null
-
-	_shadow_spr = Sprite2D.new()
-	_shadow_spr.name = "ContactShadow"
-	_shadow_spr.centered = true
-	_shadow_spr.region_enabled = true
-	_shadow_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_shadow_spr.use_parent_material = false
-	_shadow_spr.z_index = -2
-	if parts_tex:
-		_shadow_spr.texture = parts_tex
-	_shadow_spr.region_rect = Rect2(0, 0, 32, 32)
-	_shadow_spr.modulate = Color(1.0, 1.0, 1.0, 0.72)
-	visuals.add_child(_shadow_spr)
-
-	_boot_left_spr = Sprite2D.new()
-	_boot_left_spr.name = "BootLeft"
-	_boot_left_spr.centered = true
-	_boot_left_spr.region_enabled = true
-	_boot_left_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_boot_left_spr.use_parent_material = true
-	_boot_left_spr.z_index = -1
-	if _enemies_tex:
-		_boot_left_spr.texture = _enemies_tex
-	_boot_left_spr.region_rect = Rect2(0, 48, 48, 48)
-	visuals.add_child(_boot_left_spr)
-
-	_boot_right_spr = Sprite2D.new()
-	_boot_right_spr.name = "BootRight"
-	_boot_right_spr.centered = true
-	_boot_right_spr.region_enabled = true
-	_boot_right_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_boot_right_spr.use_parent_material = true
-	_boot_right_spr.z_index = -1
-	if _enemies_tex:
-		_boot_right_spr.texture = _enemies_tex
-	_boot_right_spr.region_rect = Rect2(0, 48, 48, 48)
-	visuals.add_child(_boot_right_spr)
-
-	_body_spr = Sprite2D.new()
-	_body_spr.name = "BodySprite"
-	_body_spr.centered = true
-	_body_spr.region_enabled = true
-	_body_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_body_spr.use_parent_material = true
-	_body_spr.z_index = 0
-	if _enemies_tex:
-		_body_spr.texture = _enemies_tex
-	visuals.add_child(_body_spr)
-
-	_blood_spr = Sprite2D.new()
-	_blood_spr.name = "BloodOverlay"
-	_blood_spr.centered = true
-	_blood_spr.region_enabled = true
-	_blood_spr.texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
-	_blood_spr.use_parent_material = true
-	_blood_spr.z_index = 1
-	if _enemies_tex:
-		_blood_spr.texture = _enemies_tex
-	_blood_spr.region_rect = Rect2(7 * 48, 0, 48, 48)
-	_blood_spr.visible = false
-	visuals.add_child(_blood_spr)
-
-	_glow_overlay = Node2D.new()
-	_glow_overlay.name = "GlowOverlay"
-	_glow_overlay.z_index = 2
-	var unshaded := CanvasItemMaterial.new()
-	unshaded.light_mode = CanvasItemMaterial.LIGHT_MODE_UNSHADED
-	_glow_overlay.material = unshaded
-	_glow_overlay.draw.connect(_on_glow_overlay_draw)
-	visuals.add_child(_glow_overlay)
-
-	_hud_overlay = Node2D.new()
-	_hud_overlay.name = "HudOverlay"
-	_hud_overlay.z_index = 5
-	_hud_overlay.use_parent_material = false
-	_hud_overlay.draw.connect(_on_hud_overlay_draw)
-	visuals.add_child(_hud_overlay)
-
+	_layer_refs = EnemyVisualHelper.setup_pixel_layers(visuals, _on_glow_overlay_draw, _on_hud_overlay_draw)
+	_enemies_tex = _layer_refs.get("enemies_tex") as CanvasTexture
+	_shadow_spr = _layer_refs.get("shadow_spr") as Sprite2D
+	_boot_left_spr = _layer_refs.get("boot_left_spr") as Sprite2D
+	_boot_right_spr = _layer_refs.get("boot_right_spr") as Sprite2D
+	_body_spr = _layer_refs.get("body_spr") as Sprite2D
+	_blood_spr = _layer_refs.get("blood_spr") as Sprite2D
+	_glow_overlay = _layer_refs.get("glow_overlay") as Node2D
+	_hud_overlay = _layer_refs.get("hud_overlay") as Node2D
 	_sync_enemy_pixel_layers(visuals)
 
 func _sync_enemy_pixel_layers(visuals: Node2D) -> void:
 	if not _enemy_sprites_ready:
 		_setup_enemy_pixel_layers(visuals)
-	var scale_f := _get_type_scale()
-	if _last_synced_type != int(enemy_type):
-		_last_synced_type = int(enemy_type)
-		var col_idx := clampi(int(enemy_type), 0, 6)
-		if _body_spr:
-			_body_spr.region_rect = Rect2(col_idx * 48, 0, 48, 48)
-		if _shadow_spr:
-			_shadow_spr.scale = Vector2(scale_f * 1.05, scale_f * 1.15)
-		if _boot_left_spr and _boot_right_spr:
-			var bscale := Vector2(scale_f * 0.9, scale_f * 0.9)
-			_boot_left_spr.scale = bscale
-			_boot_right_spr.scale = bscale
-			_boot_left_spr.position = Vector2(0.0, -5.0 * scale_f)
-			_boot_right_spr.position = Vector2(0.0, 5.0 * scale_f)
-		if visuals and visuals.material:
-			var oc := Color(0.05, 0.06, 0.08, 0.95)
-			if enemy_type == EnemyType.BOSS:
-				oc = Color(0.95, 0.75, 0.15, 0.98)
-			elif enemy_type == EnemyType.NIGHT_STALKER:
-				oc = Color(0.45, 0.22, 0.75, 0.92)
-			visuals.material.set_shader_parameter("outline_color", oc)
-
-	if _blood_spr:
-		var hp_ratio: float = hp / maxf(max_hp, 1.0)
-		_blood_spr.visible = hp_ratio < 0.7
-		if _blood_spr.visible:
-			_blood_spr.modulate.a = 0.95 if hp_ratio < 0.4 else 0.72
-			_blood_spr.scale = Vector2(scale_f, scale_f)
-
-	if visuals and visuals.material:
-		if enemy_type == EnemyType.NIGHT_STALKER:
-			var ns_alpha := get_night_stalker_body_alpha()
-			visuals.material.set_shader_parameter("stealth_dissolve", clampf(1.0 - ns_alpha, 0.0, 0.72))
-		else:
-			visuals.material.set_shader_parameter("stealth_dissolve", 0.0)
-
-	_update_cached_laser_end()
-
-var _cached_laser_end: Vector2 = Vector2(145.0, 1.0)
-
-func _update_cached_laser_end() -> void:
-	if not is_ranged_human or not (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) or current_state != State.CHASE or reload_timer > 0:
-		return
-	var is_boss_lockon := (enemy_type == EnemyType.BOSS and boss_telegraph_timer > 0.0)
-	var muzzle_start := Vector2(28.0, 1.0)
-	var laser_end := Vector2(attack_radius if is_boss_lockon else 145.0, 1.0)
-	if is_inside_tree():
-		var world_2d: World2D = get_world_2d()
-		if world_2d != null and world_2d.direct_space_state:
-			var q := PhysicsRayQueryParameters2D.create(to_global(muzzle_start), to_global(laser_end), 1, [self])
-			var hit: Dictionary = world_2d.direct_space_state.intersect_ray(q)
-			if not hit.is_empty():
-				laser_end = to_local(hit["position"])
-	_cached_laser_end = laser_end
+	_last_synced_type = EnemyVisualHelper.sync_pixel_layers(self, visuals, _layer_refs, _last_synced_type)
+	_cached_laser_end = EnemyVisualHelper.update_cached_laser_end(self)
 
 func _on_glow_overlay_draw() -> void:
-	if not _glow_overlay:
-		return
-	for g_info in active_boss_grenades:
-		var local_g := _glow_overlay.to_local(g_info["pos"])
-		var g_rad := float(g_info.get("radius", 120.0))
-		var g_ratio := 1.0 - clampf(float(g_info.get("timer", 0.0)) / float(g_info.get("max_time", 1.8)), 0.0, 1.0)
-		_glow_overlay.draw_circle(local_g, g_rad, Color(0.95, 0.15, 0.15, 0.14 + 0.18 * g_ratio))
-		_glow_overlay.draw_arc(local_g, g_rad, 0, TAU, 32, Color(1.6, 0.3, 0.2, 0.88), 2.0)
-		if _enemies_tex:
-			_glow_overlay.draw_texture_rect_region(_enemies_tex, Rect2(local_g - Vector2(24, 24), Vector2(48, 48)), Rect2(3 * 48, 48, 48, 48))
-		else:
-			_glow_overlay.draw_circle(local_g, 5.0, Color(0.2, 0.25, 0.2, 0.95))
-
-	var visuals := get_node_or_null("Visuals")
-	if visuals and visuals.modulate.a < 0.05:
-		return
-
-	if is_ranged_human:
-		if enemy_type == EnemyType.BOSS:
-			_glow_overlay.draw_rect(Rect2(2.5, -4.5, 4.0, 9.0), Color(2.2, 0.28, 0.22, 0.92))
-		elif enemy_type == EnemyType.RAIDER:
-			_glow_overlay.draw_rect(Rect2(4.0, -3.5, 3.0, 2.5), Color(0.28, 2.0, 0.50, 0.88))
-			_glow_overlay.draw_rect(Rect2(4.0, 1.0, 3.0, 2.5), Color(0.28, 2.0, 0.50, 0.88))
-
-		if (enemy_type == EnemyType.RAIDER or enemy_type == EnemyType.BOSS) and current_state == State.CHASE and reload_timer <= 0:
-			var is_boss_lockon := (enemy_type == EnemyType.BOSS and boss_telegraph_timer > 0.0)
-			var laser_col := Color(2.2, 1.5, 0.22, 0.62) if enemy_type == EnemyType.BOSS else Color(2.2, 0.24, 0.24, 0.52)
-			var laser_w := 1.2
-			var muzzle_start := Vector2(28.0, 1.0)
-			var laser_end := _cached_laser_end
-			if is_boss_lockon:
-				var pulse := 0.55 + 0.45 * sin(float(Time.get_ticks_msec()) * 0.025)
-				laser_col = Color(2.6, 0.32 + 0.9 * pulse, 0.18, 0.94)
-				laser_w = 2.6
-				_glow_overlay.draw_arc(Vector2.ZERO, 26.0 + 4.0 * pulse, 0.0, TAU, 24, Color(2.4, 0.28, 0.18, 0.25 + 0.72 * pulse), 2.0)
-			_glow_overlay.draw_line(muzzle_start, laser_end, laser_col, laser_w)
-	else:
-		if enemy_type == EnemyType.NIGHT_STALKER:
-			var ns_alpha := get_night_stalker_body_alpha()
-			var aura_a := 0.28 if ns_alpha < 0.5 else 0.14
-			_glow_overlay.draw_circle(Vector2(5.5, -2.5), 3.2, Color(0.35, 1.6, 2.0, aura_a))
-			_glow_overlay.draw_circle(Vector2(5.5, 2.5), 3.2, Color(0.35, 1.6, 2.0, aura_a))
-			_glow_overlay.draw_rect(Rect2(4.5, -3.5, 2.0, 2.0), Color(0.5, 2.4, 2.6, 0.98))
-			_glow_overlay.draw_rect(Rect2(4.5, 1.5, 2.0, 2.0), Color(0.5, 2.4, 2.6, 0.98))
-		else:
-			var eye_x := 6.0 if enemy_type == EnemyType.TANK else 4.0
-			var eye_y := 3.2 if enemy_type == EnemyType.TANK else 2.4
-			_glow_overlay.draw_rect(Rect2(eye_x, -eye_y - 1.0, 2.0, 2.0), Color(2.2, 0.22, 0.22, 0.95))
-			_glow_overlay.draw_rect(Rect2(eye_x, eye_y - 1.0, 2.0, 2.0), Color(2.2, 0.22, 0.22, 0.95))
+	EnemyVisualHelper.draw_glow_overlay(self, _glow_overlay, _enemies_tex)
 
 func _update_tactical_visibility(delta: float, dist: float, visuals: Node2D) -> void:
-	if not is_instance_valid(target_player):
-		return
-	var has_los = _has_line_of_sight(target_player.global_position)
-	if not has_los:
-		visuals.modulate.a = lerp(visuals.modulate.a, 0.0, clamp(delta * 14.0, 0.0, 1.0))
-		return
-
-	var p_forward = Vector2.RIGHT.rotated(target_player.rotation)
-	var dir_from_p = target_player.global_position.direction_to(global_position)
-	var dot_p = p_forward.dot(dir_from_p)
-
-	# 어둠/야간 여부 판단
-	var is_darkness = false
-	var current_scene = get_tree().current_scene
-	var day_night = current_scene.get_node_or_null("DayNightModulate") if current_scene else null
-	if day_night and day_night is CanvasModulate:
-		if day_night.color.v < 0.45:
-			is_darkness = true
-	elif current_scene and "Interior" in current_scene.name:
-		is_darkness = true
-
-	var target_alpha = 0.0
-
-	if is_darkness:
-		var flashlight_on = false
-		var nvg_on = false
-		if target_player.get("player_lighting") != null:
-			var pl = target_player.player_lighting
-			flashlight_on = bool(pl.flashlight_enabled)
-			nvg_on = bool(pl.nvg_enabled)
-		elif target_player.get("flashlight_enabled") != null:
-			flashlight_on = bool(target_player.flashlight_enabled)
-			if target_player.get("nvg_enabled") != null:
-				nvg_on = bool(target_player.nvg_enabled)
-
-		# 야간 및 암흑: 손전등 콘(전방 62도 각도 및 340px 거리 이내) 또는 NVG 활성화 또는 근접 35px 이외에는 어둠 속에 완전히 은폐
-		var in_nvg = nvg_on and (dot_p >= 0.34 or dist <= 85.0)
-		var in_flashlight_cone = flashlight_on and (dist <= 340.0) and (dot_p >= 0.85)
-		var in_close_touch = dist <= 35.0
-
-		if in_nvg or in_flashlight_cone or in_close_touch:
-			target_alpha = 1.0
-		elif enemy_type == EnemyType.NIGHT_STALKER and dist <= 180.0 and dot_p >= 0.35:
-			# 야간 추격자는 어둠 속에서도 안광이 희미하게 번뜩임
-			target_alpha = 0.35
-		else:
-			target_alpha = 0.0
-	else:
-		# 주간: 140도 전방 시야 (dot >= 0.34) 또는 근접 85px 내 감지 시
-		var in_fov = dot_p >= 0.34
-		var in_close = dist <= 85.0
-		if in_fov or in_close:
-			target_alpha = 1.0
-		else:
-			target_alpha = 0.0
-
-	var prev_a = visuals.modulate.a
-	visuals.modulate.a = lerp(visuals.modulate.a, target_alpha, clamp(delta * 14.0, 0.0, 1.0))
-	if abs(visuals.modulate.a - prev_a) > 0.01:
-		visuals.queue_redraw()
+	var has_los := _has_line_of_sight(target_player.global_position) if is_instance_valid(target_player) else false
+	EnemyVisualHelper.update_tactical_visibility(self, target_player, delta, dist, visuals, has_los)
 
 func _get_steered_direction(target_pos: Vector2) -> Vector2:
 	var desired_dir = global_position.direction_to(target_pos)
@@ -974,311 +640,31 @@ func _die() -> void:
 	if current_state == State.DEAD:
 		return
 	current_state = State.DEAD
-	var type_str = "zombie"
-	var faction_str = "infected"
-	match enemy_type:
-		EnemyType.RUNNER: type_str = "runner"
-		EnemyType.TANK: type_str = "tank"
-		EnemyType.SCAV:
-			type_str = "scav"
-			faction_str = "scav"
-		EnemyType.RAIDER:
-			type_str = "raider"
-			faction_str = "raider"
-		EnemyType.BOSS:
-			type_str = "boss"
-			faction_str = "raider"
-			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("[icon:star] [icon:skull] [보스 처치] 구역 지휘관 '강철의 보스'를 사살했습니다! 최고급 전리품을 확인하십시오!")
-		EnemyType.NIGHT_STALKER:
-			type_str = "night_stalker"
-			faction_str = "infected"
-			if EventBus.has_signal("event_logged"):
-				EventBus.event_logged.emit("[icon:moon] [변이체 처치] 어둠 속의 '야간 추격자'를 사살했습니다!")
-	EventBus.enemy_killed.emit(type_str, faction_str, global_position)
+	var meta: Dictionary = EnemyData.get_death_meta(int(enemy_type))
+	var log_msg: String = String(meta.get("log_msg", ""))
+	if log_msg != "" and EventBus.has_signal("event_logged"):
+		EventBus.event_logged.emit(log_msg)
+	EventBus.enemy_killed.emit(String(meta.get("type_str", "zombie")), String(meta.get("faction_str", "infected")), global_position)
 	_spawn_loot_drop()
 	queue_free()
 
 func _spawn_loot_drop() -> void:
 	if not GroundItemScene or not get_parent():
 		return
-	var drops: Array = []
-	match enemy_type:
-		EnemyType.ZOMBIE, EnemyType.RUNNER:
-			if randf() < 0.55:
-				var pool = [
-					{"id": "천", "amount": randi_range(1, 2)},
-					{"id": "붕대", "amount": 1},
-					{"id": "고철", "amount": 1},
-					{"id": "마른 빵", "amount": 1},
-					{"id": "9mm", "amount": randi_range(5, 12)}
-				]
-				drops.append(pool.pick_random())
-		EnemyType.TANK:
-			var pool = [
-				{"id": "구급상자", "amount": 1},
-				{"id": "진통제", "amount": 1},
-				{"id": "화약", "amount": randi_range(1, 2)},
-				{"id": "12게이지_벅샷", "amount": randi_range(4, 8)}
-			]
-			drops.append(pool.pick_random())
-		EnemyType.SCAV:
-			drops.append({"id": "Scav 인식표", "amount": 1})
-			var ammo_pool = [
-				{"id": "9mm", "amount": randi_range(12, 24)},
-				{"id": ".45ACP", "amount": randi_range(10, 20)},
-				{"id": "12게이지_벅샷", "amount": randi_range(6, 12)}
-			]
-			drops.append(ammo_pool.pick_random())
-			if randf() < 0.60:
-				var scav_guns = ["M9_리시버", "레밍턴_리시버", "MP5_리시버"]
-				var g_id: String = scav_guns.pick_random()
-				drops.append({"id": g_id, "amount": 1, "custom_data": WeaponPartsDatabase.create_loot_weapon(g_id, 0.05)})
-			if randf() < 0.75:
-				var gear_pool = [
-					{"id": "붕대", "amount": 1},
-					{"id": "진통제", "amount": 1},
-					{"id": "생수", "amount": 1},
-					{"id": "식량통조림", "amount": 1},
-					{"id": "레드닷_사이트", "amount": 1},
-					{"id": "수직_포어그립", "amount": 1}
-				]
-				drops.append(gear_pool.pick_random())
-		EnemyType.RAIDER:
-			drops.append({"id": "Scav 인식표", "amount": 1})
-			var ammo_pool = [
-				{"id": "5.56mm", "amount": randi_range(18, 30)},
-				{"id": "7.62mm", "amount": randi_range(18, 30)},
-				{"id": "12게이지_슬러그", "amount": randi_range(8, 14)}
-			]
-			drops.append(ammo_pool.pick_random())
-			if randf() < 0.80:
-				var raider_guns = ["AK_리시버", "M4_리시버", "MP5_리시버", "레버액션_리시버"]
-				var r_id: String = raider_guns.pick_random()
-				drops.append({"id": r_id, "amount": 1, "custom_data": WeaponPartsDatabase.create_loot_weapon(r_id, 0.10)})
-			var high_pool = [
-				{"id": "구급상자", "amount": 1},
-				{"id": "고급 치료킷", "amount": 1},
-				{"id": "수류탄", "amount": 1},
-				{"id": "2레벨_방탄복", "amount": 1},
-				{"id": "2레벨_헬멧", "amount": 1},
-				{"id": "2배율_조준경", "amount": 1},
-				{"id": "대용량_확장_탄창", "amount": 1},
-				{"id": "소음기", "amount": 1}
-			]
-			drops.append(high_pool.pick_random())
-			if randf() < 0.32:
-				drops.append({"id": "보안 키카드" if randf() < 0.35 else "무기고 열쇠", "amount": 1})
-		EnemyType.NIGHT_STALKER:
-			var night_pool = [
-				{"id": "고급 치료킷", "amount": 1},
-				{"id": "암호화된 SSD", "amount": 1},
-				{"id": "금시계", "amount": 1}
-			]
-			drops.append(night_pool.pick_random())
-			if randf() < 0.35:
-				drops.append({"id": "보안 키카드" if randf() < 0.5 else "무기고 열쇠", "amount": 1})
-		EnemyType.BOSS:
-			drops.append({"id": "Scav 인식표", "amount": 2})
-			var boss_parts = {
-				"barrel": "정밀_롱헤비_총열",
-				"muzzle": "소음기",
-				"optic": "4배율_ACOG",
-				"stock": "PRS_정밀_저격_스톡",
-				"grip": "RK-1_인체공학_그립",
-				"magazine": "50발_드럼_탄창",
-				"rail": ["적색_레이저_표적지시기"]
-			}
-			var boss_stats = WeaponPartsDatabase.compute_weapon_stats("M4_리시버", boss_parts, "5.56mm")
-			var boss_wep_custom = {
-				"id": "M4_리시버",
-				"receiver": "M4_리시버",
-				"name": "보스 특제 M4A1 전술소총",
-				"parts": boss_parts,
-				"attachments": boss_parts,
-				"computed_stats": boss_stats,
-				"current_magazine_ammo": int(boss_stats.get("magazine_size", 50)),
-				"loaded_ammo": "5.56mm",
-				"durability": 100.0
-			}
-			drops.append({"id": "M4_리시버", "amount": 1, "custom_data": boss_wep_custom})
-			drops.append({"id": "3레벨_방탄복", "amount": 1})
-			drops.append({"id": "3레벨_헬멧", "amount": 1})
-			drops.append({"id": "고급 치료킷", "amount": 1})
-			drops.append({"id": "암호화된 SSD", "amount": 1})
-			drops.append({"id": "장거리 무전기", "amount": 1})
-			drops.append({"id": "보안 키카드", "amount": 1})
-			drops.append({"id": "무기고 열쇠", "amount": 1})
-			
+	var drops: Array = EnemyData.roll_loot_drops(int(enemy_type))
 	if is_ranged_human or enemy_type in [EnemyType.SCAV, EnemyType.RAIDER, EnemyType.BOSS]:
 		_spawn_corpse_loot_box(drops)
 		return
 
-	for i in range(drops.size()):
-		var d = drops[i]
+	for d in drops:
 		var g_item = GroundItemScene.instantiate()
-		var offset = Vector2(randf_range(-14, 14), randf_range(-14, 14))
+		var offset := Vector2(randf_range(-14, 14), randf_range(-14, 14))
 		g_item.global_position = global_position + offset
 		get_parent().call_deferred("add_child", g_item)
 		g_item.call_deferred("setup", d["id"], d["amount"], d.get("custom_data", {}))
 
 func _spawn_corpse_loot_box(drops: Array) -> void:
-	if not get_parent() or drops.is_empty():
-		return
-	var scene: Node = get_tree().current_scene if get_tree() else null
-	if scene == null or not ("container_inventories" in scene):
-		var p := get_parent()
-		while p != null:
-			if "container_inventories" in p:
-				scene = p
-				break
-			p = p.get_parent()
-
-	var base_tile := Vector2i(int(floor(global_position.x / 32.0)), int(floor(global_position.y / 32.0)))
-	var chosen_tile := base_tile
-	if scene and "container_inventories" in scene:
-		var c_dict: Dictionary = scene.container_inventories
-		if c_dict.has(chosen_tile):
-			var found_free := false
-			for rad in range(1, 5):
-				for dy in range(-rad, rad + 1):
-					for dx in range(-rad, rad + 1):
-						var cand := base_tile + Vector2i(dx, dy)
-						if not c_dict.has(cand):
-							chosen_tile = cand
-							found_free = true
-							break
-					if found_free:
-						break
-				if found_free:
-					break
-
-	var title := "[icon:backpack] 스캐브 유품 가방"
-	var rank := 3
-	if enemy_type == EnemyType.RAIDER:
-		title = "[icon:backpack] 정예 레이더 군장 상자"
-		rank = 4
-	elif enemy_type == EnemyType.BOSS:
-		title = "[icon:skull] 보스 지휘관 특수 군장함"
-		rank = 5
-
-	var inv := Inventory.new()
-	inv.max_slots = 12 if enemy_type == EnemyType.BOSS else 8
-	inv.clear()
-	inv.set_meta("custom_title", title)
-	if scene:
-		scene.add_child(inv)
-	else:
-		get_parent().add_child(inv)
-
-	var corpse_equipment := {
-		"primary1": {},
-		"helmet": {},
-		"vest": {},
-		"backpack": {}
-	}
-	var bag_drops: Array = []
-	for d in drops:
-		if not (d is Dictionary):
-			continue
-		var item_id := String(d.get("id", ""))
-		if item_id == "":
-			continue
-		var amt := maxi(1, int(d.get("amount", 1)))
-		var c_data: Dictionary = d.get("custom_data", {}).duplicate(true)
-		if c_data.is_empty() and WeaponPartsDatabase.RECEIVERS.has(item_id):
-			c_data = WeaponPartsDatabase.create_loot_weapon(item_id, 0.06)
-		var idata := ItemDatabase.get_item_data(item_id)
-		var sz := ItemDatabase.get_item_grid_size(item_id)
-		var clean_cd := InventoryGrid.sanitize_custom_data(c_data)
-		var item_dict := {
-			"uid": InventoryGrid.next_uid(),
-			"id": item_id,
-			"amount": amt,
-			"w": sz.x,
-			"h": sz.y,
-			"custom_data": clean_cd.duplicate(true)
-		}
-		for pk in InventoryGrid.PRESERVED_CUSTOM_KEYS:
-			if clean_cd.has(pk):
-				item_dict[pk] = clean_cd[pk]
-		InventoryGrid.ensure_container_defaults(item_dict)
-
-		var equip_slot := ItemDatabase.get_item_equip_slot(item_id)
-		if equip_slot in ["primary", "sidearm"] and corpse_equipment["primary1"].is_empty():
-			corpse_equipment["primary1"] = item_dict
-		elif equip_slot == "helmet" and corpse_equipment["helmet"].is_empty():
-			corpse_equipment["helmet"] = item_dict
-		elif equip_slot == "vest" and corpse_equipment["vest"].is_empty():
-			corpse_equipment["vest"] = item_dict
-		elif equip_slot == "backpack" and corpse_equipment["backpack"].is_empty():
-			corpse_equipment["backpack"] = item_dict
-		else:
-			bag_drops.append(item_dict)
-
-	# 인간형 적의 착용 방탄복/가방 보강 (루팅 슬롯 분리)
-	if corpse_equipment["vest"].is_empty():
-		var vest_chance := 0.35 if enemy_type == EnemyType.SCAV else (0.55 if enemy_type == EnemyType.RAIDER else 1.0)
-		if randf() < vest_chance:
-			var vest_id := "1레벨_방탄복" if enemy_type == EnemyType.SCAV else ("2레벨_방탄복" if enemy_type == EnemyType.RAIDER else "3레벨_방탄복")
-			var vsz := ItemDatabase.get_item_grid_size(vest_id)
-			var v_item := {"uid": InventoryGrid.next_uid(), "id": vest_id, "amount": 1, "w": vsz.x, "h": vsz.y, "custom_data": {}}
-			InventoryGrid.ensure_container_defaults(v_item)
-			corpse_equipment["vest"] = v_item
-
-	if corpse_equipment["backpack"].is_empty() and not bag_drops.is_empty():
-		var bp_id := "3레벨_가방" if enemy_type == EnemyType.BOSS else ("2레벨_가방" if enemy_type == EnemyType.RAIDER else "1레벨_가방")
-		var bsz := ItemDatabase.get_item_grid_size(bp_id)
-		var bp_item := {"uid": InventoryGrid.next_uid(), "id": bp_id, "amount": 1, "w": bsz.x, "h": bsz.y, "custom_data": {}}
-		InventoryGrid.ensure_container_defaults(bp_item)
-		corpse_equipment["backpack"] = bp_item
-
-	# 가방 내부 그리드에 전리품 수납 및 미탐색("unsearched") 마킹
-	var overflow_drops: Array = []
-	var bp_slot: Dictionary = corpse_equipment.get("backpack", {})
-	if not bp_slot.is_empty() and not bag_drops.is_empty():
-		var spec := InventoryGrid.get_container_spec(bp_slot)
-		var gw := maxi(1, int(spec.get("grid_w", 4)))
-		var gh := maxi(1, int(spec.get("grid_h", 4)))
-		var tmp_grid := InventoryGrid.new()
-		tmp_grid.grid_width = gw
-		tmp_grid.grid_height = gh
-		tmp_grid._init_grid_map()
-		for bd in bag_drops:
-			var b_id := str(bd.get("id", ""))
-			var b_amt := int(bd.get("amount", 1))
-			var rem := tmp_grid.auto_add_item(b_id, b_amt, bd)
-			if rem > 0:
-				var ov: Dictionary = (bd as Dictionary).duplicate(true)
-				ov["amount"] = rem
-				overflow_drops.append(ov)
-		for git in tmp_grid.items:
-			if git is Dictionary and not git.is_empty():
-				git["unsearched"] = true
-				if not (git.get("custom_data", null) is Dictionary):
-					git["custom_data"] = {}
-				git["custom_data"]["unsearched"] = true
-		InventoryGrid.sync_container_item_contents(bp_slot, tmp_grid)
-		tmp_grid.free()
-	else:
-		overflow_drops = bag_drops
-
-	inv.set_meta("is_corpse", true)
-	inv.set_meta("corpse_equipment", corpse_equipment)
-	for ov_item in overflow_drops:
-		if ov_item is Dictionary:
-			inv.add_item(String(ov_item.get("id", "")), int(ov_item.get("amount", 1)), ov_item)
-
-	if scene and "container_inventories" in scene:
-		scene.container_inventories[chosen_tile] = inv
-		if "container_titles" in scene and scene.container_titles is Dictionary:
-			scene.container_titles[chosen_tile] = title
-
-	var box := StaticBody2D.new()
-	box.set_script(CorpseBoxScript)
-	box.global_position = global_position
-	box.call("setup_corpse_box", chosen_tile, inv, title, rank)
-	get_parent().call_deferred("add_child", box)
+	EnemyData.spawn_corpse_loot_box(self, int(enemy_type), drops, CorpseBoxScript)
 
 func _on_visuals_draw() -> void:
 	var visuals = get_node("Visuals")
@@ -1287,53 +673,4 @@ func _on_visuals_draw() -> void:
 		_hud_overlay.queue_redraw()
 
 func _on_hud_overlay_draw() -> void:
-	if not _hud_overlay:
-		return
-	var visuals := get_node_or_null("Visuals")
-	if not visuals:
-		return
-
-	# 은폐 상태(modulate.a < 0.05)일 때 머리 위 느낌표, HP 바까지 일괄 숨김 처리
-	if visuals.modulate.a < 0.05:
-		return
-
-	var scale_f := _get_type_scale()
-	# 머리 위 UI(재장전 게이지, HP 바, ! / ? 경고)는 항상 정방향(회전 무효화) 렌더링
-	_hud_overlay.draw_set_transform(Vector2(0.0, -visuals.position.y), -rotation - visuals.rotation, Vector2.ONE)
-
-	# 재장전 게이지 표시 (인간형 무장 적)
-	if is_ranged_human and reload_timer > 0:
-		var r_w := 24.0
-		var r_pos := Vector2(-r_w / 2.0, -18.0 * scale_f - 16.0)
-		_hud_overlay.draw_rect(Rect2(r_pos, Vector2(r_w, 3.0)), Color(0.15, 0.15, 0.2, 0.85))
-		var r_ratio := clampf(1.0 - (reload_timer / 1.9), 0.0, 1.0)
-		_hud_overlay.draw_rect(Rect2(r_pos, Vector2(r_w * r_ratio, 3.0)), Color(1.0, 0.85, 0.25))
-
-	# HP 바 (보스는 상시 표시, 일반 적은 피격 시 표시)
-	if (hp < max_hp or enemy_type == EnemyType.BOSS) and hp > 0:
-		var bar_w := 38.0 if enemy_type == EnemyType.BOSS else 26.0
-		var bar_h := 5.0 if enemy_type == EnemyType.BOSS else 4.0
-		var bar_pos := Vector2(-bar_w / 2.0, -18.0 * scale_f - 10.0)
-		_hud_overlay.draw_rect(Rect2(bar_pos + Vector2(-1, -1), Vector2(bar_w + 2, bar_h + 2)), Color(0.05, 0.05, 0.08, 0.9))
-		_hud_overlay.draw_rect(Rect2(bar_pos, Vector2(bar_w, bar_h)), Color(0.15, 0.15, 0.18))
-		var fill_w := clampf(hp / maxf(max_hp, 1.0), 0.0, 1.0) * bar_w
-		var bar_col := Color(1.0, 0.75, 0.15) if enemy_type == EnemyType.BOSS else Color(0.9, 0.2, 0.2)
-		_hud_overlay.draw_rect(Rect2(bar_pos, Vector2(fill_w, bar_h)), bar_col)
-
-	# 느낌표/물음표 경고 아이콘 (소음 감지 또는 플레이어 발견 시)
-	if alert_timer > 0:
-		var icon_pos := Vector2(0, -22.0 * scale_f - 12.0)
-		var icon_col := Color(1.0, 0.2, 0.2) if alert_icon_type == "!" else Color(1.0, 0.8, 0.2)
-		var bg_alpha := clampf(alert_timer, 0.0, 1.0)
-		_hud_overlay.draw_circle(icon_pos, 8.0, Color(0.1, 0.1, 0.1, 0.8 * bg_alpha))
-		_hud_overlay.draw_arc(icon_pos, 8.0, 0, TAU, 16, icon_col * Color(1, 1, 1, bg_alpha), 1.5)
-
-		if alert_icon_type == "!":
-			_hud_overlay.draw_line(icon_pos + Vector2(0, -4), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.5)
-			_hud_overlay.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
-		else:
-			_hud_overlay.draw_circle(icon_pos + Vector2(0, 4), 1.2, icon_col * Color(1, 1, 1, bg_alpha))
-			_hud_overlay.draw_arc(icon_pos + Vector2(0, -2), 3.0, -PI, 0, 8, icon_col * Color(1, 1, 1, bg_alpha), 2.0)
-			_hud_overlay.draw_line(icon_pos + Vector2(3, -2), icon_pos + Vector2(0, 1), icon_col * Color(1, 1, 1, bg_alpha), 2.0)
-
-	_hud_overlay.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	EnemyVisualHelper.draw_hud_overlay(self, _hud_overlay)
