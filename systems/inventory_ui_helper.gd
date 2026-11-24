@@ -632,3 +632,226 @@ static func render_equip_slot_button(btn: Button, slot_name: String, default_tex
 			dur_bar.visible = true
 		elif dur_bar:
 			dur_bar.visible = false
+
+static func compute_fit_cell_size(scroll_ctrl: Control, grid_cols: int, min_cell: float = CELL_SIZE, max_cell: float = 56.0) -> float:
+	if not is_instance_valid(scroll_ctrl) or grid_cols <= 0:
+		return min_cell
+	var avail_w: float = scroll_ctrl.size.x - 14.0
+	if avail_w <= 60.0:
+		return min_cell
+	return clampf(floorf(avail_w / float(grid_cols)), min_cell, max_cell)
+
+static func add_context_menu_btn(vbox: VBoxContainer, text_str: String, callback: Callable, is_disabled: bool = false, icon_key: String = "") -> Button:
+	var btn := Button.new()
+	btn.theme_type_variation = &"SmallButton"
+	btn.text = text_str
+	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	btn.custom_minimum_size = Vector2(156, 26)
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.disabled = is_disabled
+	if icon_key != "" and UiIconManager:
+		UiIconManager.set_button(btn, icon_key, text_str, 15)
+	btn.pressed.connect(callback)
+	vbox.add_child(btn)
+	return btn
+
+static func create_context_menu_shell(title_text: String, panel_name: String = "ContextMenuPanel", title_color: Color = Color(0.92, 0.86, 0.42)) -> Dictionary:
+	var panel := PanelContainer.new()
+	panel.name = panel_name
+	panel.z_index = 300
+	if PixelAssetManager:
+		var sb: StyleBox = PixelAssetManager.get_pixel_stylebox("context_menu", 8.0, 6.0, 8.0, 6.0, 4)
+		if sb != null:
+			panel.add_theme_stylebox_override("panel", sb)
+
+	var vbox := VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 4)
+	panel.add_child(vbox)
+
+	var header_lbl := Label.new()
+	header_lbl.text = title_text
+	if PixelAssetManager:
+		header_lbl.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
+	header_lbl.add_theme_font_size_override("font_size", 12)
+	header_lbl.add_theme_color_override("font_color", title_color)
+	header_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(header_lbl)
+	vbox.add_child(HSeparator.new())
+	return {"panel": panel, "vbox": vbox}
+
+static func open_split_dialog(host: Node, split_dialog_scene: PackedScene, item: Dictionary, on_confirm: Callable) -> Node:
+	if host == null or split_dialog_scene == null:
+		return null
+	var diag: Node = split_dialog_scene.instantiate()
+	host.add_child(diag)
+	diag.setup(int(item.get("amount", 1)))
+	diag.split_confirmed.connect(on_confirm)
+	return diag
+
+static func prepare_split_drag_item(item: Dictionary, split_amt: int, src_grid: InventoryGrid) -> Dictionary:
+	var split_item: Dictionary = item.duplicate(true)
+	split_item["uid"] = InventoryGrid.next_uid()
+	split_item["amount"] = split_amt
+	item["amount"] = int(item.get("amount", 0)) - split_amt
+	if src_grid:
+		src_grid.grid_changed.emit()
+	return split_item
+
+static func rollback_split_drag(drag_data: Dictionary, fallback_grid: InventoryGrid = null) -> void:
+	if bool(drag_data.get("is_split", false)):
+		var orig: Variant = drag_data.get("split_source_item", {})
+		var split_amt: int = int(drag_data.get("split_amount", 0))
+		if orig is Dictionary and not orig.is_empty() and split_amt > 0:
+			orig["amount"] = int(orig.get("amount", 0)) + split_amt
+			var sp_grid: InventoryGrid = drag_data.get("split_source_grid", fallback_grid) as InventoryGrid
+			if sp_grid == null:
+				sp_grid = fallback_grid
+			if sp_grid:
+				sp_grid.grid_changed.emit()
+		drag_data["is_split"] = false
+
+static func update_drag_preview_position(preview: Control, drag_data: Dictionary, mouse_global_pos: Vector2, cell_size: float) -> void:
+	if not is_instance_valid(preview):
+		return
+	var item_dict: Dictionary = drag_data.get("item", {})
+	var is_rot: bool = bool(drag_data.get("rotated", false))
+	var base_size: Vector2i = ItemDatabase.get_item_grid_size(str(item_dict.get("id", "")))
+	var cur_w: int = int(item_dict.get("h", base_size.y)) if is_rot else int(item_dict.get("w", base_size.x))
+	var cur_h: int = int(item_dict.get("w", base_size.x)) if is_rot else int(item_dict.get("h", base_size.y))
+	var center_offset := Vector2(float(cur_w) * cell_size * 0.5, float(cur_h) * cell_size * 0.5)
+	preview.global_position = mouse_global_pos - center_offset
+
+static func sync_all_open_popups(open_popups: Dictionary) -> void:
+	for p in open_popups.values():
+		if is_instance_valid(p) and p.inner_grid and not p.container_item.is_empty():
+			InventoryGrid.sync_container_item_contents(p.container_item, p.inner_grid)
+
+static func close_all_container_popups(open_popups: Dictionary) -> void:
+	for p in open_popups.values():
+		if is_instance_valid(p):
+			p.queue_free()
+	open_popups.clear()
+
+static func prune_and_rebind_popups(open_popups: Dictionary, search_grids: Array, extra_container_items: Array) -> void:
+	var stale: Array[String] = []
+	for cuid in open_popups.keys():
+		var p = open_popups[cuid]
+		if not is_instance_valid(p):
+			stale.append(str(cuid))
+			continue
+		var s_uid: String = str(p.container_item.get("uid", ""))
+		if s_uid != "":
+			var live_item: Dictionary = {}
+			var live_grid: InventoryGrid = null
+			for g in search_grids:
+				if g is InventoryGrid:
+					var found_item: Dictionary = (g as InventoryGrid).get_item_by_uid(s_uid)
+					if not found_item.is_empty():
+						live_item = found_item
+						live_grid = g as InventoryGrid
+						break
+			if live_item.is_empty():
+				for ex in extra_container_items:
+					if ex is Dictionary and not ex.is_empty() and str(ex.get("uid", "")) == s_uid:
+						live_item = ex
+						live_grid = null
+						break
+			if live_item.is_empty():
+				stale.append(str(cuid))
+			else:
+				p.container_item = live_item
+				p.source_grid = live_grid
+				if p.inner_grid:
+					InventoryGrid.sync_container_item_contents(live_item, p.inner_grid)
+	for ek in stale:
+		var p = open_popups.get(ek, null)
+		if is_instance_valid(p):
+			p.queue_free()
+		open_popups.erase(ek)
+
+static func try_quick_transfer_to_open_popup(host: Node, open_popups: Dictionary, item: Dictionary, src_grid: InventoryGrid) -> bool:
+	if host == null or open_popups.is_empty() or src_grid == null:
+		return false
+	var item_id: String = str(item.get("id", ""))
+	var children: Array[Node] = host.get_children()
+	for ci in range(children.size() - 1, -1, -1):
+		var p_win: ContainerPopupWindow = children[ci] as ContainerPopupWindow
+		if p_win and is_instance_valid(p_win) and p_win.inner_grid:
+			var acc: Dictionary = p_win.inner_grid.can_accept_item(item, item_id)
+			if bool(acc.get("ok", false)):
+				var amt: int = maxi(1, int(item.get("amount", 1)))
+				var rem: int = p_win.inner_grid.auto_add_item(item_id, amt, item)
+				if amt - rem > 0:
+					if rem <= 0:
+						src_grid.remove_item_by_uid(str(item.get("uid", "")))
+					else:
+						item["amount"] = rem
+						src_grid.grid_changed.emit()
+					if SoundManager:
+						SoundManager.play("menu_select")
+					return true
+	return false
+
+static func toggle_lock_in_top_popup(host: Node, mouse_pos: Vector2, tooltip: Control = null, emit_log: bool = false) -> int:
+	if host == null:
+		return 0
+	var children: Array[Node] = host.get_children()
+	for ci in range(children.size() - 1, -1, -1):
+		var p_win: ContainerPopupWindow = children[ci] as ContainerPopupWindow
+		if p_win and is_instance_valid(p_win) and p_win.is_visible_in_tree() and p_win.get_global_rect().has_point(mouse_pos):
+			var h_it: Dictionary = p_win.get_hovered_item()
+			if not h_it.is_empty() and p_win.inner_grid:
+				var now_l: bool = p_win.inner_grid.toggle_item_lock(str(h_it.get("uid", "")))
+				var d: Dictionary = ItemDatabase.get_item_data(str(h_it.get("id", "")))
+				if emit_log and EventBus.has_signal("event_logged"):
+					EventBus.event_logged.emit(("[icon:lock] [%s] 잠금됨" if now_l else "[icon:unlock] [%s] 잠금 해제") % str(d.get("name", h_it.get("id", ""))))
+				if tooltip and is_instance_valid(tooltip) and tooltip.visible:
+					tooltip.display_item(h_it, d)
+				if SoundManager:
+					SoundManager.play("menu_select")
+				return 1
+			return -1
+	return 0
+
+static func log_container_reject_reason(reason: String) -> void:
+	if not EventBus.has_signal("event_logged"):
+		return
+	match reason:
+		"self_drop":
+			EventBus.event_logged.emit("[icon:warn] 자기 자신의 내부에는 수납할 수 없습니다.")
+		"max_depth_exceeded":
+			EventBus.event_logged.emit("[icon:warn] 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
+		"filter_mismatch":
+			EventBus.event_logged.emit("[icon:lock] 해당 특수 보관함의 전용 카테고리에 맞는 아이템만 수납할 수 있습니다.")
+		_:
+			EventBus.event_logged.emit("[icon:warn] 해당 위치에 아이템을 보관할 수 없습니다.")
+
+static func log_grid_place_failure(dest_grid: InventoryGrid, item: Dictionary, cell_x: int, cell_y: int, place_w: int, place_h: int) -> void:
+	if dest_grid == null:
+		return
+	var accept: Dictionary = dest_grid.can_accept_item(item, str(item.get("id", "")))
+	if not bool(accept.get("ok", true)):
+		log_container_reject_reason(str(accept.get("reason", "")))
+	elif dest_grid.has_secure_container and cell_x < 2 and cell_y < 2:
+		if not dest_grid.is_allowed_in_secure_container(str(item.get("id", ""))):
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
+		elif cell_x + place_w > 2 or cell_y + place_h > 2:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
+		else:
+			if EventBus.has_signal("event_logged"):
+				EventBus.event_logged.emit("[icon:warn] 해당 슬롯에 이미 다른 아이템이 있습니다.")
+
+static func clear_popup_drag_hover(open_popups: Dictionary) -> void:
+	for p in open_popups.values():
+		if is_instance_valid(p) and p.grid_control:
+			p.hovered_cell = Vector2i(-1, -1)
+			p.grid_control.queue_redraw()
+
+static func update_popup_drag_hover(open_popups: Dictionary, mouse_pos: Vector2, drag_data: Dictionary) -> void:
+	var drag_item: Dictionary = drag_data.get("item", {})
+	var is_rot: bool = bool(drag_data.get("rotated", false))
+	for p in open_popups.values():
+		if is_instance_valid(p):
+			p.update_drag_hover(mouse_pos, drag_item, is_rot)

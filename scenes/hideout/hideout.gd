@@ -375,12 +375,7 @@ var service_record_tab: Control = null
 var _is_loading_data: bool = false
 
 func _compute_fit_cell_size(scroll_ctrl: Control, grid_cols: int, min_cell: float = CELL_SIZE, max_cell: float = 56.0) -> float:
-	if not is_instance_valid(scroll_ctrl) or grid_cols <= 0:
-		return min_cell
-	var avail_w := scroll_ctrl.size.x - 14.0
-	if avail_w <= 60.0:
-		return min_cell
-	return clampf(floorf(avail_w / float(grid_cols)), min_cell, max_cell)
+	return InventoryUIHelper.compute_fit_cell_size(scroll_ctrl, grid_cols, min_cell, max_cell)
 
 func _get_grid_cell_size(ctrl: Control) -> float:
 	if ctrl == player_grid_control:
@@ -821,11 +816,7 @@ func _handle_grid_input(event: InputEvent, ctrl: Control, grid_mgr: InventoryGri
 					_handle_hideout_quick_action(item, is_player_grid, true)
 				elif Input.is_key_pressed(KEY_SHIFT) and item.get("amount", 1) > 1:
 					_open_split_dialog(item, func(split_amt):
-						var split_item = item.duplicate(true)
-						split_item["uid"] = InventoryGrid.next_uid()
-						split_item["amount"] = split_amt
-						item["amount"] -= split_amt
-						grid_mgr.grid_changed.emit()
+						var split_item: Dictionary = InventoryUIHelper.prepare_split_drag_item(item, int(split_amt), grid_mgr)
 						_start_drag("split", split_item, Vector2i(cell_x, cell_y), "", grid_mgr)
 						drag_data["is_split"] = true
 						drag_data["split_source_item"] = item
@@ -848,23 +839,8 @@ func _handle_hideout_quick_action(item: Dictionary, is_from_player: bool, allow_
 	var src_grid = player_grid_mgr if is_from_player else stash_grid_mgr
 
 	# 0. Ctrl+좌클릭 시 열려있는 호환 중첩 컨테이너 팝업으로 빠른 수납 시도
-	if allow_popup_transfer and not open_container_popups.is_empty():
-		var children := get_children()
-		for ci in range(children.size() - 1, -1, -1):
-			var p_win := children[ci] as ContainerPopupWindow
-			if p_win and is_instance_valid(p_win) and p_win.inner_grid:
-				var acc := p_win.inner_grid.can_accept_item(item, item_id)
-				if bool(acc.get("ok", false)):
-					var amt := maxi(1, int(item.get("amount", 1)))
-					var p_rem := p_win.inner_grid.auto_add_item(item_id, amt, item)
-					if amt - p_rem > 0:
-						if p_rem <= 0:
-							src_grid.remove_item_by_uid(str(item.get("uid", "")))
-						else:
-							item["amount"] = p_rem
-							src_grid.grid_changed.emit()
-						if SoundManager: SoundManager.play("menu_select")
-						return
+	if allow_popup_transfer and InventoryUIHelper.try_quick_transfer_to_open_popup(self, open_container_popups, item, src_grid):
+		return
 
 	var target_slot = ItemDatabase.get_item_equip_slot(item_id)
 	
@@ -935,9 +911,7 @@ func _input(event: InputEvent) -> void:
 			drag_data["rotated"] = not drag_data.get("rotated", false)
 			_rebuild_drag_preview()
 			var m_pos := get_global_mouse_position()
-			for p in open_container_popups.values():
-				if is_instance_valid(p):
-					p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
+			InventoryUIHelper.update_popup_drag_hover(open_container_popups, m_pos, drag_data)
 			if SoundManager: SoundManager.play("menu_move")
 			if player_grid_control: player_grid_control.queue_redraw()
 			if stash_grid_control: stash_grid_control.queue_redraw()
@@ -947,9 +921,7 @@ func _input(event: InputEvent) -> void:
 	if is_dragging and event is InputEventMouseMotion:
 		var m_pos = event.global_position
 		_update_drag_preview_pos()
-		for p in open_container_popups.values():
-			if is_instance_valid(p):
-				p.update_drag_hover(m_pos, drag_data.get("item", {}), drag_data.get("rotated", false))
+		InventoryUIHelper.update_popup_drag_hover(open_container_popups, m_pos, drag_data)
 			
 		if player_grid_control:
 			hovered_player_cell = InventoryUIHelper.calc_drag_drop_cell(player_grid_control, m_pos, player_grid_mgr, drag_data, player_cell_size)
@@ -1044,23 +1016,11 @@ func _rebuild_drag_preview() -> void:
 func _update_drag_preview_pos() -> void:
 	if not drag_preview_node or not is_dragging or not is_inside_tree():
 		return
-	var item_dict: Dictionary = drag_data.get("item", {})
-	var is_rot := bool(drag_data.get("rotated", false))
-	var base_size := ItemDatabase.get_item_grid_size(str(item_dict.get("id", "")))
-	var cur_w := int(item_dict.get("h", base_size.y)) if is_rot else int(item_dict.get("w", base_size.x))
-	var cur_h := int(item_dict.get("w", base_size.x)) if is_rot else int(item_dict.get("h", base_size.y))
-	var center_offset := Vector2(float(cur_w) * _drag_preview_cell_size * 0.5, float(cur_h) * _drag_preview_cell_size * 0.5)
-	drag_preview_node.global_position = get_global_mouse_position() - center_offset
+	InventoryUIHelper.update_drag_preview_position(drag_preview_node, drag_data, get_global_mouse_position(), _drag_preview_cell_size)
 
 func _end_drag() -> void:
-	if is_dragging and drag_data.get("is_split", false):
-		var orig = drag_data.get("split_source_item", {})
-		var split_amt = int(drag_data.get("split_amount", 0))
-		if not orig.is_empty() and split_amt > 0:
-			orig["amount"] = int(orig.get("amount", 0)) + split_amt
-			var sp_grid: InventoryGrid = drag_data.get("split_source_grid") as InventoryGrid
-			if sp_grid: sp_grid.grid_changed.emit()
-		drag_data["is_split"] = false
+	if is_dragging:
+		InventoryUIHelper.rollback_split_drag(drag_data)
 	is_dragging = false
 	drag_data.clear()
 	hovered_player_cell = Vector2i(-1, -1)
@@ -1074,10 +1034,7 @@ func _end_drag() -> void:
 	_clear_slot_highlights()
 	if player_grid_control and is_instance_valid(player_grid_control): player_grid_control.queue_redraw()
 	if stash_grid_control and is_instance_valid(stash_grid_control): stash_grid_control.queue_redraw()
-	for p in open_container_popups.values():
-		if is_instance_valid(p) and p.grid_control:
-			p.hovered_cell = Vector2i(-1, -1)
-			p.grid_control.queue_redraw()
+	InventoryUIHelper.clear_popup_drag_hover(open_container_popups)
 
 func _highlight_compatible_slots(item: Dictionary, hovered_ctrl: Control = null) -> void:
 	InventoryUIHelper.highlight_compatible_slots(drop_targets, item, hovered_ctrl)
@@ -1173,19 +1130,7 @@ func _try_drop_on_hideout_grid(dest_grid: InventoryGrid, cell_x: int, cell_y: in
 				if SoundManager: SoundManager.play("hit_melee")
 	else:
 		# 배치 불가 사유 안내 (중첩 제한 & 2x2 세이프 파우치 구역)
-		var accept := dest_grid.can_accept_item(item, str(item.get("id", "")))
-		if not bool(accept.get("ok", true)):
-			_log_container_reject_reason(str(accept.get("reason", "")))
-		elif dest_grid.has_secure_container and cell_x < 2 and cell_y < 2:
-			if not dest_grid.is_allowed_in_secure_container(item.get("id", "")):
-				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 무기, 방어구 및 리시버는 세이프 파우치에 보관할 수 없습니다.")
-			elif cell_x + place_w > 2 or cell_y + place_h > 2:
-				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("[icon:lock] [보안 컨테이너] 2x2 안전 파우치 경계를 벗어나는 크기의 아이템입니다.")
-			else:
-				if EventBus.has_signal("event_logged"):
-					EventBus.event_logged.emit("[icon:warn] 해당 슬롯에 이미 다른 아이템이 있습니다.")
+		InventoryUIHelper.log_grid_place_failure(dest_grid, item, cell_x, cell_y, place_w, place_h)
 		if SoundManager: SoundManager.play("hit_melee")
 		
 	_end_drag()
@@ -1339,10 +1284,7 @@ func _render_equip_slot_button(btn: Button, slot_name: String, default_text: Str
 	InventoryUIHelper.render_equip_slot_button(btn, slot_name, default_text, equipment_data)
 
 func _open_split_dialog(item: Dictionary, on_confirm_callback: Callable) -> void:
-	var dialog = SplitDialogScene.instantiate()
-	add_child(dialog)
-	dialog.setup(int(item.get("amount", 1)))
-	dialog.split_confirmed.connect(on_confirm_callback)
+	InventoryUIHelper.open_split_dialog(self, SplitDialogScene, item, on_confirm_callback)
 	_refresh_stash_ui()
 
 # ============================================================
@@ -2823,55 +2765,18 @@ func _register_market_item(uid: String, is_stash: bool, item_id: String, amount:
 # 중첩 컨테이너 팝업창 & 잠금 [L] & 컨텍스트 메뉴
 # ============================================================
 func _sync_all_open_popups() -> void:
-	for p in open_container_popups.values():
-		if is_instance_valid(p) and p.inner_grid and not p.container_item.is_empty():
-			InventoryGrid.sync_container_item_contents(p.container_item, p.inner_grid)
+	InventoryUIHelper.sync_all_open_popups(open_container_popups)
 
 func close_all_container_popups() -> void:
-	for p in open_container_popups.values():
-		if is_instance_valid(p):
-			p.queue_free()
-	open_container_popups.clear()
+	InventoryUIHelper.close_all_container_popups(open_container_popups)
 
 func _prune_stale_popups() -> void:
-	var stale: Array[String] = []
 	var eq_vest: Dictionary = equipment_data.get("vest", {})
-	var eq_vest_uid: String = str(eq_vest.get("uid", ""))
-	for cuid in open_container_popups.keys():
-		var p = open_container_popups[cuid]
-		if not is_instance_valid(p):
-			stale.append(str(cuid))
-			continue
-		var s_uid := str(p.container_item.get("uid", ""))
-		if s_uid != "":
-			var live_item: Dictionary = {}
-			var live_grid: InventoryGrid = null
-			if player_grid_mgr:
-				var pi := player_grid_mgr.get_item_by_uid(s_uid)
-				if not pi.is_empty():
-					live_item = pi
-					live_grid = player_grid_mgr
-			if live_item.is_empty() and stash_grid_mgr:
-				var si := stash_grid_mgr.get_item_by_uid(s_uid)
-				if not si.is_empty():
-					live_item = si
-					live_grid = stash_grid_mgr
-			if live_item.is_empty() and not eq_vest.is_empty() and eq_vest_uid == s_uid:
-				live_item = eq_vest
-				live_grid = null
-			if live_item.is_empty():
-				stale.append(str(cuid))
-			else:
-				# sort_items() 등으로 딕셔너리 참조가 교체된 경우에도 열린 팝업 바인딩 유지
-				p.container_item = live_item
-				p.source_grid = live_grid
-				if p.inner_grid:
-					InventoryGrid.sync_container_item_contents(live_item, p.inner_grid)
-	for ek in stale:
-		var p = open_container_popups.get(ek, null)
-		if is_instance_valid(p):
-			p.queue_free()
-		open_container_popups.erase(ek)
+	InventoryUIHelper.prune_and_rebind_popups(
+		open_container_popups,
+		[player_grid_mgr, stash_grid_mgr],
+		[eq_vest]
+	)
 
 func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = null) -> void:
 	if container_item.is_empty() or not InventoryGrid.is_container_item(container_item):
@@ -2906,12 +2811,7 @@ func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = 
 	)
 	popup.item_split_requested.connect(func(p_win: ContainerPopupWindow, it: Dictionary, c_pos: Vector2i):
 		_open_split_dialog(it, func(split_amt):
-			var split_item := it.duplicate(true)
-			split_item["uid"] = InventoryGrid.next_uid()
-			split_item["amount"] = split_amt
-			it["amount"] -= split_amt
-			if p_win.inner_grid:
-				p_win.inner_grid.grid_changed.emit()
+			var split_item: Dictionary = InventoryUIHelper.prepare_split_drag_item(it, int(split_amt), p_win.inner_grid)
 			_start_drag("split", split_item, c_pos, "", p_win.inner_grid)
 			drag_data["is_split"] = true
 			drag_data["split_source_item"] = it
@@ -2937,18 +2837,9 @@ func open_container_popup(container_item: Dictionary, src_grid: InventoryGrid = 
 
 func _toggle_lock_at_mouse() -> bool:
 	var m_pos := get_global_mouse_position()
-	var children := get_children()
-	for ci in range(children.size() - 1, -1, -1):
-		var p_win := children[ci] as ContainerPopupWindow
-		if p_win and is_instance_valid(p_win) and p_win.is_visible_in_tree() and p_win.get_global_rect().has_point(m_pos):
-			var h_it: Dictionary = p_win.get_hovered_item()
-			if not h_it.is_empty() and p_win.inner_grid:
-				p_win.inner_grid.toggle_item_lock(str(h_it.get("uid", "")))
-				if tooltip and tooltip.visible:
-					tooltip.display_item(h_it, ItemDatabase.get_item_data(str(h_it.get("id", ""))))
-				if SoundManager: SoundManager.play("menu_select")
-				return true
-			return false
+	var pop_lock: int = InventoryUIHelper.toggle_lock_in_top_popup(self, m_pos, tooltip, false)
+	if pop_lock != 0:
+		return pop_lock > 0
 	var targets := [
 		[player_grid_control, player_grid_mgr],
 		[stash_grid_control, stash_grid_mgr],
@@ -2975,17 +2866,7 @@ func _toggle_lock_at_mouse() -> bool:
 	return false
 
 func _log_container_reject_reason(reason: String) -> void:
-	if not EventBus.has_signal("event_logged"):
-		return
-	match reason:
-		"self_drop":
-			EventBus.event_logged.emit("[icon:warn] 자기 자신의 내부에는 수납할 수 없습니다.")
-		"max_depth_exceeded":
-			EventBus.event_logged.emit("[icon:warn] 컨테이너는 최대 2단계(가방 -> 서브 컨테이너)까지만 중첩할 수 있습니다.")
-		"filter_mismatch":
-			EventBus.event_logged.emit("[icon:lock] 해당 보관함 전용 카테고리 아이템만 넣을 수 있습니다.")
-		_:
-			EventBus.event_logged.emit("[icon:warn] 해당 위치에 보관할 수 없습니다.")
+	InventoryUIHelper.log_container_reject_reason(reason)
 
 func _try_drop_on_popup(popup: ContainerPopupWindow, cell_x: int, cell_y: int) -> void:
 	if not is_dragging or not popup or not popup.inner_grid:
@@ -3126,26 +3007,9 @@ func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String 
 	var idata := ItemDatabase.get_item_data(item_id)
 	var item_name := str(idata.get("name", item_id))
 
-	context_menu_panel = PanelContainer.new()
-	context_menu_panel.z_index = 300
-	if PixelAssetManager:
-		var sb: StyleBox = PixelAssetManager.get_pixel_stylebox("context_menu", 8.0, 6.0, 8.0, 6.0, 4)
-		if sb != null:
-			context_menu_panel.add_theme_stylebox_override("panel", sb)
-
-	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 4)
-	context_menu_panel.add_child(vbox)
-
-	var hdr := Label.new()
-	hdr.text = item_name
-	if PixelAssetManager:
-		hdr.add_theme_font_override("font", PixelAssetManager.get_pixel_font_bold())
-	hdr.add_theme_font_size_override("font_size", 12)
-	hdr.add_theme_color_override("font_color", Color(0.92, 0.86, 0.42))
-	hdr.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	vbox.add_child(hdr)
-	vbox.add_child(HSeparator.new())
+	var shell: Dictionary = InventoryUIHelper.create_context_menu_shell(item_name, "ContextMenuPanel", Color(0.92, 0.86, 0.42))
+	context_menu_panel = shell["panel"] as PanelContainer
+	var vbox: VBoxContainer = shell["vbox"] as VBoxContainer
 
 	if InventoryGrid.is_container_item(item) and (source_type in ["player_grid", "stash_grid"] or (source_type == "equipment" and slot_ref == "vest")):
 		_add_context_menu_btn(vbox, "포켓 열기" if source_type == "equipment" else "컨테이너 열기", func():
@@ -3198,17 +3062,7 @@ func _show_context_menu(item: Dictionary, source_type: String, slot_ref: String 
 	context_menu_panel.position = InventoryUIHelper.clamp_popup_position(context_menu_panel, mpos, size, 8.0)
 
 func _add_context_menu_btn(vbox: VBoxContainer, text_str: String, cb: Callable, icon_key: String = "") -> void:
-	var btn := Button.new()
-	btn.theme_type_variation = &"SmallButton"
-	if UiIconManager and icon_key != "":
-		UiIconManager.set_button(btn, icon_key, text_str, 15)
-	else:
-		btn.text = text_str
-	btn.alignment = HORIZONTAL_ALIGNMENT_LEFT
-	btn.custom_minimum_size = Vector2(156, 26)
-	btn.focus_mode = Control.FOCUS_NONE
-	btn.pressed.connect(cb)
-	vbox.add_child(btn)
+	InventoryUIHelper.add_context_menu_btn(vbox, text_str, cb, false, icon_key)
 
 # ============================================================
 # 결과 팝업 및 네비게이션
